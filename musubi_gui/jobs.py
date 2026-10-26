@@ -202,11 +202,16 @@ class JobStore:
 
     def get(self, job_id: str, revision: int | None = None) -> Job:
         directory = self.root / identifier(job_id)
-        files = list(directory.glob("*.json"))
+        files = []
+        for file in directory.iterdir() if directory.is_dir() else []:
+            if file.name.startswith(".pending-") and file.suffix == ".json" and not file.is_dir():
+                # Atomic staging files may disappear during discovery; they are never revisions.
+                continue
+            if not file.is_file() or file.suffix != ".json" or not file.stem.isdigit():
+                raise ValueError("Unrecognised job storage; preserve the files before repair.")
+            files.append(file)
         if not files:
             raise FileNotFoundError("Job not found.")
-        if any(not file.stem.isdigit() for file in files):
-            raise ValueError("Unrecognised job storage; preserve the files before repair.")
         number = revision if revision is not None else max(int(file.stem) for file in files)
         job = Job.model_validate_json((directory / f"{number}.json").read_text(encoding="utf-8"))
         if job.id != job_id or job.revision != number:
@@ -214,7 +219,16 @@ class JobStore:
         return job
 
     def list(self) -> list[Job]:
-        return [self.get(directory.name) for directory in sorted(self.root.glob("*")) if directory.is_dir()]
+        jobs = []
+        for directory in sorted(self.root.glob("*")):
+            if not directory.is_dir():
+                continue
+            try:
+                jobs.append(self.get(directory.name))
+            except FileNotFoundError:
+                # The first revision has not been published, or disappeared during discovery.
+                continue
+        return jobs
 
     def create(self, draft: JobDraft) -> Job:
         with _lock:

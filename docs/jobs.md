@@ -8,6 +8,8 @@ cannot overwrite a newer revision.
 Revision allocation is serialized across backend processes sharing the same state
 directory, including saved drafts, confirmed model conversions and preset application.
 The version-one revision JSON files remain unchanged.
+Interrupted writes retain their temporary files; only published revisions appear
+in the library. Unknown storage remains blocked and preserved for repair.
 
 Review configuration shows effective included videos, resolved component/output
 paths, native dataset TOML and each upstream argument array. Errors block preparation

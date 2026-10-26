@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -223,3 +224,51 @@ def test_model_review_discloses_lossy_weight_conversion_provenance(tmp_path: Pat
     review = client.post(f"/api/jobs/{job['id']}/review", json={}).json()
     assert "LOSSY FP8" in review["model_provenance"]["wan_low"]["source_precision"]
     assert any("full precision" in warning for warning in review["warnings"])
+
+
+def test_unpublished_revision_tempfiles_do_not_hide_or_replace_published_jobs(tmp_path: Path) -> None:
+    client = client_for(tmp_path)
+    original = client.post("/api/jobs", json={"name": "Published job"}).json()
+    pending = tmp_path / "jobs" / original["id"] / ".pending-interrupted.json"
+    pending.write_text('{"incomplete":', encoding="utf-8")
+    assert client.get(f"/api/jobs/{original['id']}").json() == original
+    assert client.get("/api/jobs").json() == [original]
+    saved = client.put(f"/api/jobs/{original['id']}", json={"name": "Next published revision", "revision": 1})
+    assert saved.status_code == 200
+    assert saved.json()["revision"] == 2
+    assert client.get(f"/api/jobs/{original['id']}/revisions/1").json() == original
+    assert pending.read_text(encoding="utf-8") == '{"incomplete":'
+
+
+def test_unpublished_job_directories_do_not_hide_the_published_library(tmp_path: Path) -> None:
+    client = client_for(tmp_path)
+    original = client.post("/api/jobs", json={"name": "Existing job"}).json()
+    empty = tmp_path / "jobs" / ("a" * 32)
+    empty.mkdir()
+    staging = tmp_path / "jobs" / ("b" * 32)
+    staging.mkdir()
+    pending = staging / ".pending-first-revision.json"
+    pending.write_bytes(b"unfinished first revision")
+    response = client.get("/api/jobs")
+    assert response.status_code == 200
+    assert response.json() == [original]
+    assert client.get(f"/api/jobs/{empty.name}").status_code == 404
+    assert client.get(f"/api/jobs/{staging.name}").status_code == 404
+    assert list(empty.iterdir()) == []
+    assert pending.read_bytes() == b"unfinished first revision"
+
+
+@pytest.mark.parametrize("filename", ["future.json", "unknown.txt", ".pending-unknown.txt"])
+@pytest.mark.parametrize("published", [True, False])
+def test_unknown_job_storage_remains_blocked_and_preserved(tmp_path: Path, filename: str, published: bool) -> None:
+    client = client_for(tmp_path)
+    original = client.post("/api/jobs", json={"name": "Keep this revision"}).json()
+    job_id = original["id"] if published else "c" * 32
+    directory = tmp_path / "jobs" / job_id
+    directory.mkdir(exist_ok=True)
+    unknown = directory / filename
+    unknown.write_bytes(b'{"version":99,"unknown":"preserve me"}')
+    assert client.get(f"/api/jobs/{job_id}").status_code == 422
+    assert client.get("/api/jobs").status_code == 422
+    assert unknown.read_bytes() == b'{"version":99,"unknown":"preserve me"}'
+    assert json.loads((tmp_path / "jobs" / original["id"] / "1.json").read_text(encoding="utf-8")) == original
