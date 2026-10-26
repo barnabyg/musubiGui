@@ -101,13 +101,14 @@ class DeviceLease:
             )
             return True
 
-    def update(self, run_id: str, processes: list[dict[str, Any]]) -> None:
+    def update(self, run_id: str, processes: list[dict[str, Any]], **details: Any) -> None:
         with database(self.path) as connection:
             row = connection.execute("SELECT data FROM records WHERE id='gpu-0'").fetchone()
             if row:
                 data = json.loads(row[0])
                 if data["state"] == self.state and data["run_id"] == run_id:
                     data["processes"] = processes
+                    data.update(details)
                     connection.execute("UPDATE records SET data=? WHERE id='gpu-0'", (json.dumps(data),))
 
     def release(self, run_id: str) -> None:

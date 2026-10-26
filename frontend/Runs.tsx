@@ -259,6 +259,33 @@ export function Runs({ selectedId }: { selectedId?: string }) {
             </p>
             {run.error && <p className="error">{run.error}</p>}
             <div className="actions">
+              {['orphaned', 'uncertain', 'interrupted'].includes(
+                run.status,
+              ) && (
+                <>
+                  <button
+                    disabled={busy}
+                    onClick={() => void action('reconcile')}
+                  >
+                    Reconcile processes
+                  </button>
+                  {run.status !== 'interrupted' && (
+                    <button
+                      disabled={busy}
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            'Terminate the recovered processes belonging to this run? Unsaved work may be lost.',
+                          )
+                        )
+                          void action('terminate-orphan', { confirmed: true });
+                      }}
+                    >
+                      Terminate recovered work
+                    </button>
+                  )}
+                </>
+              )}
               {['training', 'generating', 'stopping'].includes(run.status) && (
                 <>
                   <button
@@ -305,7 +332,7 @@ export function Runs({ selectedId }: { selectedId?: string }) {
                   Cancel preparation
                 </button>
               )}
-              {['failed', 'cancelled'].includes(run.status) && (
+              {['failed', 'cancelled', 'interrupted'].includes(run.status) && (
                 <button disabled={busy} onClick={() => void action('retry')}>
                   Retry frozen preparation
                 </button>

@@ -118,6 +118,16 @@ def runs_router(service: RunService) -> APIRouter:
                 run_id, request.state_id, request.additional_steps, confirmed=request.confirmed
             )
 
+    @router.post("/{run_id}/reconcile")
+    def reconcile(run_id: str) -> dict[str, Any]:
+        with run_errors():
+            return service.reconcile(run_id)
+
+    @router.post("/{run_id}/terminate-orphan")
+    def terminate_orphan(run_id: str, request: StopRequest) -> dict[str, Any]:
+        with run_errors():
+            return service.terminate_orphan(run_id, confirmed=request.confirmed)
+
     @router.post("/{run_id}/cancel")
     def cancel(run_id: str) -> dict[str, Any]:
         with run_errors():

@@ -15,13 +15,16 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import psutil
+
 from musubi_gui.media_probe import inspect as inspect_media
-from musubi_gui.processes import observed_tree, process_identity, terminate_owned
+from musubi_gui.processes import identity_status, observed_tree, process_identity, terminate_owned
 from musubi_gui.reference import Stage, redact, reference_environment
 from musubi_gui.run_store import DeviceLease, RunStore
 from musubi_gui.saved_state import discover_states
 from musubi_gui.settings import Settings, atomic_json
 from musubi_gui.snapshots import digest_file, snapshot_plan, verify_inputs
+from musubi_gui.windows_job import CREATE_SUSPENDED, ProcessJob
 
 
 @dataclass
@@ -51,12 +54,24 @@ class RunService:
         self.store = RunStore(root)
         self.device = DeviceLease(root, device_path)
         self.identity = process_identity()
+        self.identity["instance"] = uuid.uuid4().hex
         self.stopping = threading.Event()
         self.thread = threading.Thread(target=self._schedule, name="musubi-worker", daemon=True)
         if autostart:
-            self.thread.start()
+            self.start_worker()
 
     def start_worker(self) -> None:
+        for run in self.list():
+            if run["status"] in {
+                "preparing",
+                "training",
+                "generating",
+                "stopping",
+                "interrupted",
+                "orphaned",
+                "uncertain",
+            }:
+                self.reconcile(run["id"])
         self.thread.start()
 
     def list(self) -> list[dict[str, Any]]:
@@ -89,7 +104,8 @@ class RunService:
             return run
         if run["status"] != "prepared":
             raise ValueError("Prepare this immutable run successfully before starting training.")
-        if self.device.owner() and not allow_wait:
+        owner = self.device.owner()
+        if owner and owner["run_id"] != run_id and not allow_wait:
             raise ValueError("The GPU is owned by another operation. Wait for it to finish.")
         verify_inputs(run)
         if not any(stage["name"] == "train" for stage in run["stages"]):
@@ -151,7 +167,7 @@ class RunService:
 
     def retry(self, run_id: str) -> dict[str, Any]:
         previous = self.get(run_id)
-        if previous["status"] not in {"failed", "cancelled"}:
+        if previous["status"] not in {"failed", "cancelled", "interrupted"} or previous.get("processes"):
             raise ValueError("Only failed or cancelled preparation can be retried. Reconcile interrupted work first.")
         directory = Path(previous["directory"]).parent / ("retry-" + uuid.uuid4().hex)
         cache = Path(previous["cache"]).parent / ("retry-" + uuid.uuid4().hex)
@@ -186,6 +202,86 @@ class RunService:
         )
         retried = self.submit(plan)
         return self.store.update(retried["id"], lambda r: r.update(retry_of=run_id))
+
+    def reconcile(self, run_id: str) -> dict[str, Any]:
+        run = self.get(run_id)
+        if run["status"] not in {
+            "preparing",
+            "training",
+            "generating",
+            "stopping",
+            "interrupted",
+            "orphaned",
+            "uncertain",
+        }:
+            return run
+        controller = run.get("controller")
+        if (
+            run["status"] in {"preparing", "training", "generating", "stopping"}
+            and controller
+            and identity_status(controller) != "dead"
+        ):
+            return run
+        identities = list(run.get("processes", []))
+        uncertain = False
+        for name in run.get("job_objects", []):
+            try:
+                job = ProcessJob(name, create=False)
+                try:
+                    for pid in job.pids():
+                        try:
+                            identities.append(process_identity(pid))
+                        except psutil.NoSuchProcess:
+                            pass
+                finally:
+                    job.close()
+            except (OSError, ValueError, psutil.AccessDenied):
+                uncertain = True
+        live = [identity for identity in identities if identity_status(identity) == "alive"]
+        uncertain = uncertain or any(identity_status(identity) == "uncertain" for identity in identities)
+        owner = self.device.owner()
+        if owner and owner["run_id"] == run_id and owner["state"] == str(self.root.resolve()):
+            uncertain = uncertain or bool(owner.get("launch_pending"))
+        if live or uncertain:
+            status = "uncertain" if uncertain else "orphaned"
+            self.device.update(run_id, identities)
+            return self.store.update(
+                run_id,
+                lambda r: r.update(
+                    status=status,
+                    processes=identities,
+                    error="Recorded work is still alive or cannot be safely identified. No replacement GPU work will start. Reconcile again or confirm termination of known owned processes.",
+                ),
+            )
+        self.device.release(run_id)
+        return self.store.update(
+            run_id,
+            lambda r: r.update(
+                status="interrupted",
+                processes=[],
+                error="The original processes are gone. Inspect outputs/state, then retry frozen preparation or restore validated optimizer state as a new segment.",
+            ),
+        )
+
+    def terminate_orphan(self, run_id: str, *, confirmed: bool = False) -> dict[str, Any]:
+        if not confirmed:
+            raise ValueError("Explicit confirmation is required to terminate recovered owned processes.")
+        run = self.reconcile(run_id)
+        if run["status"] not in {"orphaned", "uncertain"}:
+            raise ValueError("This run has no recovered orphan process to terminate.")
+        for name in run.get("job_objects", []):
+            job = ProcessJob(name, create=False)
+            try:
+                job.terminate()
+            finally:
+                job.close()
+        terminate_owned(run.get("processes", []), force=True)
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            if all(identity_status(identity) == "dead" for identity in run.get("processes", [])):
+                break
+            time.sleep(0.05)
+        return self.reconcile(run_id)
 
     def cancel(self, run_id: str) -> dict[str, Any]:
         run = self.get(run_id)
@@ -294,6 +390,7 @@ class RunService:
     def _execute(self, run: dict[str, Any]) -> None:
         run_id = run["id"]
         release = True
+        job_object: ProcessJob | None = None
         preparing = run["phase"] == "prepare"
 
         def claim(record: dict[str, Any]) -> None:
@@ -320,6 +417,17 @@ class RunService:
                     self.store.update(run_id, lambda r: r.update(status="generating"))
                 self.store.update(run_id, lambda r: r["stages"][index].update(status="running", started=utc_now()))
                 settings = Settings.model_validate(run["settings"])
+                if job_object:
+                    job_object.close()
+                name = (
+                    "Local\\MusubiGui-" + fingerprint(str(self.root.resolve()))[:12] + "-" + run_id + "-" + str(index)
+                )
+                job_object = ProcessJob(name)
+                names = list(self.get(run_id).get("job_objects", []))
+                if name not in names:
+                    names.append(name)
+                self.store.update(run_id, lambda r: r.update(job_objects=names, launch_pending=True))
+                self.device.update(run_id, [], job_objects=names, launch_pending=True)
                 log_file = Path(run["directory"]) / f"{stage['name']}.log"
                 with log_file.open("a", encoding="utf-8") as log:
                     # B603: trusted recipe adapter builds arrays; no API accepts executable commands.
@@ -330,22 +438,41 @@ class RunService:
                         stdout=log,
                         stderr=subprocess.STDOUT,
                         text=True,
-                        creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0,
+                        creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | CREATE_SUSPENDED if os.name == "nt" else 0,
                         start_new_session=os.name != "nt",
                     )
                     identities = observed_tree(process.pid)
-                    self.device.update(run_id, identities)
                     self.store.update(run_id, lambda r: r.update(processes=identities))
+                    try:
+                        job_object.assign_and_resume(process.pid)
+                    except BaseException:
+                        process.kill()
+                        process.wait(timeout=10)
+                        raise
+                    self.device.update(run_id, identities)
+                    self.store.update(run_id, lambda r: r.update(processes=identities, launch_pending=False))
+                    self.device.update(run_id, identities, launch_pending=False)
                     signalled = ""
                     while process.poll() is None:
-                        identities = observed_tree(process.pid)
+                        fresh = observed_tree(process.pid)
+                        for pid in job_object.pids():
+                            try:
+                                fresh.append(process_identity(pid))
+                            except psutil.NoSuchProcess:
+                                pass
+                        identities = list(
+                            {(item["pid"], item["created"]): item for item in [*identities, *fresh]}.values()
+                        )
                         self.device.update(run_id, identities)
                         self.store.update(run_id, lambda r: r.update(processes=identities))
                         if self.get(run_id).get("cancel_requested"):
+                            job_object.terminate()
                             terminate_owned(identities, force=True)
                         stop = self.get(run_id).get("stop_requested", "")
                         if stop and stop != signalled:
                             try:
+                                if stop == "force":
+                                    job_object.terminate()
                                 terminate_owned(identities, force=stop == "force")
                                 signalled = stop
                             except OSError:
@@ -368,6 +495,18 @@ class RunService:
                             threading.Thread(target=process.wait, name="musubi-child-reaper", daemon=True).start()
                             return
                     code = process.wait()
+                    remaining = job_object.pids()
+                    if remaining or any(identity_status(identity) != "dead" for identity in identities):
+                        release = False
+                        self.store.update(
+                            run_id,
+                            lambda r: r.update(
+                                status="orphaned",
+                                processes=identities,
+                                error="The launcher exited but a descendant remains active. Reconcile before starting another GPU operation.",
+                            ),
+                        )
+                        return
                 self.store.update(
                     run_id,
                     lambda r: r["stages"][index].update(
@@ -420,11 +559,22 @@ class RunService:
                     status="prepared" if preparing else "completed", processes=[], exit_code=0, finished=utc_now()
                 ),
             )
-        except (OSError, ValueError) as error:
+        except Exception as error:
             message = redact(str(error))
             self.store.update(run_id, lambda r: r.update(status="failed", error=message, finished=utc_now()))
         finally:
+            if job_object:
+                try:
+                    if job_object.pids():
+                        release = False
+                        self.store.update(
+                            run_id, lambda r: r.update(status="uncertain" if r["status"] == "failed" else r["status"])
+                        )
+                except (OSError, ValueError):
+                    release = False
+                job_object.close()
             if release:
+                self.store.update(run_id, lambda r: r.update(processes=[], launch_pending=False))
                 self.device.release(run_id)
 
     def _cache_artifacts(self, run: dict[str, Any], stage: str) -> builtins.list[dict[str, str]]:

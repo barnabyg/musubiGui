@@ -48,3 +48,16 @@ Restore as new segment preserves the original Job/Run and records lineage and
 the requested additional steps. The pinned upstream restores optimizer state
 but resets its displayed step counter and data position; seamless continuation
 is unsupported. Loading a LoRA checkpoint alone is not optimizer restoration.
+
+On Windows each stage starts suspended and joins a named Windows Job Object before
+running. Descendants remain associated even when their launcher exits or the service
+stops. The job name plus process creation time and executable identity allow safe
+reconciliation after restart. Browser-independent logs can still be inspected.
+
+If a process survives, the Run is orphaned and the GPU remains owned. Reconcile
+processes refreshes observed state; Terminate recovered work requires confirmation
+and targets only those owned processes. Uncertain identity/access or a crash during
+launch blocks replacement GPU work. A known dead process/PID reuse does not count
+as live ownership. Once all recorded work is gone, the Run becomes interrupted and
+can be retried using frozen inputs or a validated saved optimizer state. No retry
+or replacement is launched automatically during uncertain recovery.

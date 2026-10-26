@@ -52,3 +52,10 @@ def terminate_owned(identities: list[dict[str, Any]], force: bool) -> None:
                 process.send_signal(signal.CTRL_BREAK_EVENT if os.name == "nt" else signal.SIGINT)
         except psutil.NoSuchProcess:
             pass
+
+
+def identity_status(identity: dict[str, Any]) -> str:
+    try:
+        return "alive" if matching_process(identity) else "dead"
+    except (psutil.AccessDenied, OSError, KeyError, ValueError):
+        return "uncertain"
