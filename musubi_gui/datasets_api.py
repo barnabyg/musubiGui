@@ -7,7 +7,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict
 
-from musubi_gui.datasets import DatasetStore
+from musubi_gui.datasets import CaptionConflict, DatasetStore
 
 T = TypeVar("T")
 
@@ -15,6 +15,8 @@ T = TypeVar("T")
 def result(action: Callable[[], T]) -> T:
     try:
         return action()
+    except CaptionConflict as error:
+        raise HTTPException(409, str(error)) from error
     except KeyError as error:
         raise HTTPException(404, str(error)) from error
     except ValueError as error:
@@ -30,6 +32,18 @@ class RegisterDataset(BaseModel):
     model_config = ConfigDict(extra="forbid")
     name: str
     path: str
+
+
+class CaptionWrite(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    text: str
+    revision: str
+
+
+class CaptionRestore(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    history_id: str
+    revision: str
 
 
 def dataset_router(root: Path) -> APIRouter:
@@ -64,6 +78,22 @@ def dataset_router(root: Path) -> APIRouter:
     def media(dataset_id: str, item_id: str) -> FileResponse:
         path = result(lambda: store.media_path(dataset_id, item_id))
         return FileResponse(path, media_type=store.mime_type(dataset_id, item_id))
+
+    @router.get("/{dataset_id}/items/{item_id}/caption")
+    def caption(dataset_id: str, item_id: str) -> dict[str, Any]:
+        return result(lambda: store.caption(dataset_id, item_id))
+
+    @router.put("/{dataset_id}/items/{item_id}/caption")
+    def save_caption(dataset_id: str, item_id: str, request: CaptionWrite) -> dict[str, Any]:
+        return result(lambda: store.save_caption(dataset_id, item_id, request.text, request.revision))
+
+    @router.get("/{dataset_id}/items/{item_id}/caption/history")
+    def history(dataset_id: str, item_id: str) -> list[dict[str, Any]]:
+        return result(lambda: store.caption_history(dataset_id, item_id))
+
+    @router.post("/{dataset_id}/items/{item_id}/caption/restore")
+    def restore(dataset_id: str, item_id: str, request: CaptionRestore) -> dict[str, Any]:
+        return result(lambda: store.restore_caption(dataset_id, item_id, request.history_id, request.revision))
 
     @router.get("/{dataset_id}/items/{item_id}/thumbnail")
     def thumbnail(dataset_id: str, item_id: str) -> FileResponse:

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import './datasets.css';
+import { CaptionEditor, type CaptionEditorHandle } from './CaptionEditor';
 
 export type Dataset = {
   id: string;
@@ -50,7 +51,7 @@ async function api<T>(url: string, data?: object): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export function Datasets() {
+export function Datasets({ visible = true }: { visible?: boolean }) {
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [dataset, setDataset] = useState<Dataset | null>(null);
   const [items, setItems] = useState<DatasetItem[]>([]);
@@ -60,7 +61,9 @@ export function Datasets() {
   const [error, setError] = useState('');
   const [status, setStatus] = useState('');
   const [scroll, setScroll] = useState(0);
+  const [columns, setColumns] = useState(3);
   const gallery = useRef<HTMLDivElement>(null);
+  const editor = useRef<CaptionEditorHandle>(null);
   const refresh = useCallback(async (id?: string) => {
     const list = await api<Dataset[]>('/api/datasets');
     setDatasets(list);
@@ -70,8 +73,18 @@ export function Datasets() {
     }
   }, []);
   useEffect(() => {
-    void refresh().catch((reason: Error) => setError(reason.message));
-  }, [refresh]);
+    void api<Dataset[]>('/api/datasets')
+      .then(setDatasets)
+      .catch((reason: Error) => setError(reason.message));
+  }, []);
+  useEffect(() => {
+    if (!gallery.current) return;
+    const observer = new ResizeObserver((entries) =>
+      setColumns(Math.max(1, Math.floor(entries[0].contentRect.width / 170))),
+    );
+    observer.observe(gallery.current);
+    return () => observer.disconnect();
+  }, [dataset?.id, visible]);
   useEffect(() => {
     if (!dataset || !['pending', 'scanning'].includes(dataset.scan.state))
       return;
@@ -82,7 +95,15 @@ export function Datasets() {
     }, 700);
     return () => window.clearInterval(timer);
   }, [dataset, refresh]);
+  useEffect(() => {
+    if (!visible) void editor.current?.flush();
+  }, [visible]);
+  async function select(item: DatasetItem | null) {
+    if (editor.current && !(await editor.current.flush())) return;
+    setActive(item);
+  }
   async function open(id: string) {
+    if (editor.current && !(await editor.current.flush())) return;
     setActive(null);
     setScroll(0);
     setError('');
@@ -116,10 +137,6 @@ export function Datasets() {
       setError((reason as Error).message);
     }
   }
-  const columns = Math.max(
-    1,
-    Math.floor((gallery.current?.clientWidth ?? 600) / 170),
-  );
   const rowHeight = 170;
   const start = Math.max(0, Math.floor(scroll / rowHeight) - 1) * columns;
   const end = Math.min(items.length, start + columns * 5);
@@ -219,7 +236,7 @@ export function Datasets() {
                         width: `${100 / columns}%`,
                         height: rowHeight - 8,
                       }}
-                      onClick={() => setActive(item)}
+                      onClick={() => void select(item)}
                     >
                       {item.valid ? (
                         <img
@@ -244,7 +261,23 @@ export function Datasets() {
               </div>
             </div>
             {active && (
-              <div className="media-viewer" key={active.id}>
+              <div
+                className="media-viewer"
+                key={active.id}
+                tabIndex={0}
+                onKeyDown={(event) => {
+                  if (
+                    event.altKey &&
+                    ['ArrowLeft', 'ArrowRight'].includes(event.key)
+                  ) {
+                    event.preventDefault();
+                    const index =
+                      items.findIndex((item) => item.id === active.id) +
+                      (event.key === 'ArrowRight' ? 1 : -1);
+                    if (items[index]) void select(items[index]);
+                  }
+                }}
+              >
                 <h2>{active.name}</h2>
                 {active.valid ? (
                   active.kind === 'image' ? (
@@ -264,19 +297,50 @@ export function Datasets() {
                 )}
                 <div className="actions">
                   <button
-                    disabled={items.indexOf(active) <= 0}
-                    onClick={() => setActive(items[items.indexOf(active) - 1])}
+                    disabled={
+                      items.findIndex((item) => item.id === active.id) <= 0
+                    }
+                    onClick={() =>
+                      void select(
+                        items[
+                          items.findIndex((item) => item.id === active.id) - 1
+                        ],
+                      )
+                    }
                   >
                     Previous
                   </button>
                   <button
-                    disabled={items.indexOf(active) >= items.length - 1}
-                    onClick={() => setActive(items[items.indexOf(active) + 1])}
+                    disabled={
+                      items.findIndex((item) => item.id === active.id) >=
+                      items.length - 1
+                    }
+                    onClick={() =>
+                      void select(
+                        items[
+                          items.findIndex((item) => item.id === active.id) + 1
+                        ],
+                      )
+                    }
                   >
                     Next
                   </button>
                 </div>
-                <p>{active.caption.text || 'No caption'}</p>
+                <CaptionEditor
+                  ref={editor}
+                  datasetId={dataset.id}
+                  item={active}
+                  onSaved={(caption) => {
+                    setActive((value) =>
+                      value?.id === active.id ? { ...value, caption } : value,
+                    );
+                    setItems((values) =>
+                      values.map((item) =>
+                        item.id === active.id ? { ...item, caption } : item,
+                      ),
+                    );
+                  }}
+                />
                 <details>
                   <summary>Media metadata</summary>
                   <pre>{JSON.stringify(active.metadata, null, 2)}</pre>

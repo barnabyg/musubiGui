@@ -177,7 +177,7 @@ function App() {
           <span className="badge">LoRA · Windows</span>
         </header>
         <div hidden={screen !== 'Datasets'}>
-          <Datasets />
+          <Datasets visible={screen === 'Datasets'} />
         </div>
         {screen === 'Jobs' ? (
           <Jobs

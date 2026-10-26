@@ -1,5 +1,6 @@
 import base64
 import json
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -49,3 +50,50 @@ def test_register_preview_rescan_and_restart_preserve_dataset(tmp_path: Path) ->
     assert client.post(f"/api/datasets/{dataset_id}/scan", json={}).status_code == 200
     missing = client.get(f"/api/datasets/{dataset_id}/items/{image['id']}/media")
     assert missing.status_code == 404
+
+
+def test_captions_save_atomically_detect_conflicts_and_restore_exact_revision(tmp_path: Path) -> None:
+    client, media, _ = fixture(tmp_path)
+    dataset = client.post("/api/datasets", json={"name": "Caption edits", "path": str(media)}).json()
+    image = next(
+        item for item in client.get(f"/api/datasets/{dataset['id']}/items").json() if item["name"] == "red.png"
+    )
+    url = f"/api/datasets/{dataset['id']}/items/{image['id']}/caption"
+    original = client.get(url).json()
+    changed = client.put(url, json={"text": "红色\nsecond line", "revision": original["revision"]})
+    assert changed.status_code == 200, changed.text
+    assert (media / "red.txt").read_text(encoding="utf-8") == "红色\nsecond line"
+    assert client.put(url, json={"text": "stale", "revision": original["revision"]}).status_code == 409
+    history = client.get(url + "/history").json()
+    (media / "red.txt").write_text("external editor", encoding="utf-8")
+    assert (
+        client.post(
+            url + "/restore", json={"history_id": history[0]["id"], "revision": changed.json()["revision"]}
+        ).status_code
+        == 409
+    )
+    external = client.get(url).json()
+    restored = client.post(url + "/restore", json={"history_id": history[0]["id"], "revision": external["revision"]})
+    assert restored.status_code == 200
+    assert (media / "red.txt").read_text(encoding="utf-8") == "A red square"
+    empty = client.put(url, json={"text": "", "revision": restored.json()["revision"]})
+    assert empty.status_code == 200
+    assert (media / "red.txt").read_bytes() == b""
+
+
+def test_concurrent_caption_writes_never_silently_replace_each_other(tmp_path: Path) -> None:
+    client, media, _ = fixture(tmp_path)
+    dataset = client.post("/api/datasets", json={"name": "Concurrent captions", "path": str(media)}).json()
+    image = next(
+        item for item in client.get(f"/api/datasets/{dataset['id']}/items").json() if item["name"] == "red.png"
+    )
+    url = f"/api/datasets/{dataset['id']}/items/{image['id']}/caption"
+    revision = client.get(url).json()["revision"]
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        responses = list(
+            executor.map(
+                lambda text: client.put(url, json={"text": text, "revision": revision}), ["First draft", "Second draft"]
+            )
+        )
+    assert sorted(response.status_code for response in responses) == [200, 409]
+    assert (media / "red.txt").read_text(encoding="utf-8") in {"First draft", "Second draft"}

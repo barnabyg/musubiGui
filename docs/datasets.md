@@ -13,3 +13,11 @@ symlink/junction resolution. If the source folder disappears, its library entry 
 
 The gallery renders a bounded window of tiles. Browser codec support depends on Edge; containers accepted
 by PyAV may need re-encoding for playback. The original file is preserved when Edge cannot play it.
+
+Captions autosave after 350 ms and flush before selecting another item or dataset. Switching application
+sections also flushes the mounted editor. Alt+Left/Right navigates the viewer. Saved appears only after
+the backend confirms an atomic `.txt` replacement. Failed writes block item navigation and retain the
+draft for retry. External changes produce a conflict: review the current sidecar before explicitly
+choosing it or saving the retained draft over that revision. Caption history can restore an earlier
+text only against the current revision; concurrent edits are rejected. Original/replacement text is
+recorded before writing so interruption evidence stays recoverable in the state directory.

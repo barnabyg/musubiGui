@@ -4,15 +4,18 @@ import builtins
 import hashlib
 import json
 import mimetypes
+import os
 import sqlite3
 import subprocess  # nosec B404
 import sys
+import tempfile
 import uuid
 from contextlib import contextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Iterator
 
-from musubi_gui.settings import load_settings, within_root
+from musubi_gui.settings import atomic_json, load_settings, within_root
 
 IMAGES = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff", ".gif"}
 VIDEOS = {".mp4", ".mov", ".mkv", ".avi", ".webm"}
@@ -22,6 +25,20 @@ AUDIO = {".aac", ".flac", ".m4a", ".mp3", ".ogg", ".opus", ".wav"}
 def content_hash(path: Path) -> str:
     with path.open("rb") as stream:
         return hashlib.file_digest(stream, "sha256").hexdigest()
+
+
+class CaptionConflict(ValueError):
+    """The authoritative sidecar changed after the user loaded it."""
+
+
+def read_caption(path: Path) -> dict[str, Any]:
+    exists = path.exists()
+    data = path.read_bytes() if exists else b""
+    return {
+        "text": data.decode("utf-8-sig"),
+        "revision": hashlib.sha256((b"exists:" if exists else b"missing:") + data).hexdigest(),
+        "exists": exists,
+    }
 
 
 class DatasetStore:
@@ -208,13 +225,78 @@ class DatasetStore:
     def caption(self, dataset_id: str, item_id: str) -> dict[str, Any]:
         media = self.media_path(dataset_id, item_id)
         path = within_root(media.with_suffix(".txt"), [self._folder(self.get(dataset_id)["path"])])
-        exists = path.exists()
-        data = path.read_bytes() if exists else b""
-        return {
-            "text": data.decode("utf-8-sig"),
-            "revision": hashlib.sha256((b"exists:" if exists else b"missing:") + data).hexdigest(),
-            "exists": exists,
-        }
+        return read_caption(path)
+
+    def save_caption(
+        self, dataset_id: str, item_id: str, text: str, revision: str, exists: bool = True
+    ) -> dict[str, Any]:
+        if len(text.encode("utf-8")) > 2 * 1024**2:
+            raise ValueError("Caption exceeds the 2 MiB text limit.")
+        media = self.media_path(dataset_id, item_id)
+        folder = self._folder(self.get(dataset_id)["path"])
+        path = within_root(media.with_suffix(".txt"), [folder])
+        history_root = self.root / "caption-history" / item_id
+        history_root.mkdir(parents=True, exist_ok=True)
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            original = read_caption(path)
+            if original["revision"] != revision:
+                raise CaptionConflict(
+                    "Caption changed outside this editor. Your text is retained. Reload the current sidecar before deciding which text to save."
+                )
+            history_id = uuid.uuid4().hex
+            record = {
+                "version": 1,
+                "id": history_id,
+                "dataset_id": dataset_id,
+                "item_id": item_id,
+                "created_utc": datetime.now(UTC).isoformat(),
+                "before": original,
+                "after": {"text": text, "exists": exists},
+                "state": "prepared",
+            }
+            history_file = history_root / f"{history_id}.json"
+            atomic_json(history_file, record)
+            descriptor, temporary = tempfile.mkstemp(dir=path.parent, prefix=".pending-caption-", suffix=".txt")
+            try:
+                with os.fdopen(descriptor, "w", encoding="utf-8", newline="") as stream:
+                    stream.write(text)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                within_root(media.with_suffix(".txt"), [folder])
+                if read_caption(path)["revision"] != revision:
+                    raise CaptionConflict(
+                        "Caption changed during save. Your text is retained; reload and review the external edit."
+                    )
+                if exists:
+                    os.replace(temporary, path)
+                else:
+                    path.unlink(missing_ok=True)
+                saved = read_caption(path)
+                record.update(state="applied", after=saved)
+                atomic_json(history_file, record)
+                return saved
+            finally:
+                Path(temporary).unlink(missing_ok=True)
+
+    def caption_history(self, dataset_id: str, item_id: str) -> builtins.list[dict[str, Any]]:
+        self.media_path(dataset_id, item_id)
+        records = []
+        for path in (self.root / "caption-history" / item_id).glob("*.json"):
+            record = json.loads(path.read_text(encoding="utf-8"))
+            if record.get("version") != 1:
+                raise ValueError("Unsupported caption history version. Preserve the history files.")
+            records.append(record)
+        return sorted(records, key=lambda value: value["created_utc"], reverse=True)
+
+    def restore_caption(self, dataset_id: str, item_id: str, history_id: str, revision: str) -> dict[str, Any]:
+        history = next(
+            (value for value in self.caption_history(dataset_id, item_id) if value["id"] == history_id), None
+        )
+        if history is None:
+            raise KeyError("Caption revision was not found.")
+        before = history["before"]
+        return self.save_caption(dataset_id, item_id, before["text"], revision, before["exists"])
 
     def items(self, dataset_id: str) -> builtins.list[dict[str, Any]]:
         dataset = self.get(dataset_id)
