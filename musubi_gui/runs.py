@@ -169,16 +169,27 @@ class RunService:
         previous = self.get(run_id)
         if previous["status"] not in {"failed", "cancelled", "interrupted"} or previous.get("processes"):
             raise ValueError("Only failed or cancelled preparation can be retried. Reconcile interrupted work first.")
+        verify_inputs(previous)
         directory = Path(previous["directory"]).parent / ("retry-" + uuid.uuid4().hex)
         cache = Path(previous["cache"]).parent / ("retry-" + uuid.uuid4().hex)
         directory.mkdir(parents=True)
-        for name in ["dataset.toml", "samples.txt"]:
+        native_names = ["dataset.toml", "dataset.jsonl", "samples.txt"]
+        old_native = {str(Path(previous["directory"]) / name) for name in native_names}
+        input_files = {path: value for path, value in previous.get("input_files", {}).items() if path not in old_native}
+        for name in native_names:
             source = Path(previous["directory"]) / name
             if source.is_file():
-                text = source.read_text(encoding="utf-8").replace(
-                    previous["cache"].replace("\\", "/"), cache.as_posix()
-                )
-                (directory / name).write_text(text, encoding="utf-8")
+                text = source.read_text(encoding="utf-8")
+                if name == "dataset.toml":
+                    text = text.replace(previous["cache"].replace("\\", "/"), cache.as_posix())
+                    text = text.replace(
+                        json.dumps((Path(previous["directory"]) / "dataset.jsonl").as_posix(), ensure_ascii=False),
+                        json.dumps((directory / "dataset.jsonl").as_posix(), ensure_ascii=False),
+                    )
+                target = directory / name
+                target.write_text(text, encoding="utf-8")
+                input_files[str(target)] = digest_file(target)
+        verify_inputs(previous)
         stages = []
         for stage in previous["stages"]:
             args = [
@@ -197,7 +208,7 @@ class RunService:
             stages,
             previous["fingerprint"] + ":retry:" + uuid.uuid4().hex,
             stage_keys=previous.get("stage_keys", {}),
-            input_files=previous.get("input_files", {}),
+            input_files=input_files,
             provenance=previous.get("provenance", {}),
         )
         retried = self.submit(plan)
