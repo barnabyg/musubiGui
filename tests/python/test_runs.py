@@ -98,3 +98,51 @@ def test_start_runs_training_once_and_keeps_the_prepared_job_revision(tmp_path: 
         assert "step 1/2" in service.logs(run["id"])
     finally:
         service.close()
+
+
+def test_h3_preparation_rejects_missing_unconditional_guidance_cache(tmp_path: Path) -> None:
+    service = RunService(tmp_path / "state", device_path=tmp_path / "gpu.sqlite")
+    try:
+        execution = plan(tmp_path)
+        execution.job["family"] = "h3"
+        execution.stages = [Stage("text_cache", [sys.executable, "-c", "print('partial cache')"])]
+        run = service.submit(execution)
+        failed = wait_for(service, run["id"], "failed")
+        assert "unconditional guidance cache" in failed["error"]
+    finally:
+        service.close()
+
+
+def test_queue_order_and_cancellation_survive_restart(tmp_path: Path) -> None:
+    state, device = tmp_path / "state", tmp_path / "gpu.sqlite"
+    service = RunService(state, device_path=device)
+    ids = []
+    try:
+        for name in ["first", "second"]:
+            execution = plan(tmp_path, name)
+            script = execution.directory / "train.py"
+            script.write_text(
+                "import pathlib\npathlib.Path('checkpoints').mkdir()\npathlib.Path('checkpoints/final.safetensors').write_bytes(b'checkpoint')\n",
+                encoding="utf-8",
+            )
+            execution.stages.append(Stage("train", [sys.executable, str(script)]))
+            run = service.submit(execution)
+            wait_for(service, run["id"], "prepared")
+            ids.append(run["id"])
+    finally:
+        service.close()
+    paused = RunService(state, device_path=device, autostart=False)
+    for run_id in ids:
+        paused.enqueue(run_id)
+    paused.reorder(list(reversed(ids)))
+    assert [run["id"] for run in paused.queue()] == list(reversed(ids))
+    paused.cancel(ids[1])
+    paused.close()
+    restarted = RunService(state, device_path=device)
+    try:
+        wait_for(restarted, ids[0], "completed")
+        assert restarted.get(ids[1])["status"] == "cancelled"
+        assert not (tmp_path / "second/checkpoints").exists()
+        assert restarted.device.owner() is None
+    finally:
+        restarted.close()

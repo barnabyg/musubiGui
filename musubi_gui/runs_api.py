@@ -14,6 +14,11 @@ class PrepareRequest(BaseModel):
     job_id: str
 
 
+class QueueOrder(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    run_ids: list[str]
+
+
 @contextmanager
 def run_errors() -> Iterator[None]:
     try:
@@ -47,6 +52,17 @@ def runs_router(service: RunService) -> APIRouter:
         with run_errors():
             return service.prepare(request.job_id)
 
+    @router.get("/queue")
+    def queue() -> list[dict[str, Any]]:
+        with run_errors():
+            return service.queue()
+
+    @router.post("/queue/order")
+    def order(request: QueueOrder) -> list[dict[str, Any]]:
+        with run_errors():
+            service.reorder(request.run_ids)
+            return service.queue()
+
     @router.get("/{run_id}")
     def get_run(run_id: str) -> dict[str, Any]:
         with run_errors():
@@ -66,6 +82,11 @@ def runs_router(service: RunService) -> APIRouter:
     def start(run_id: str) -> dict[str, Any]:
         with run_errors():
             return service.start(run_id)
+
+    @router.post("/{run_id}/queue")
+    def enqueue(run_id: str) -> dict[str, Any]:
+        with run_errors():
+            return service.enqueue(run_id)
 
     @router.post("/{run_id}/cancel")
     def cancel(run_id: str) -> dict[str, Any]:

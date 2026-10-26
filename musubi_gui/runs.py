@@ -67,6 +67,21 @@ class RunService:
         return self.submit(ExecutionPlan(**snapshot_plan(self.root, job_id, fixture_mode=self.fixture_mode)))
 
     def start(self, run_id: str) -> dict[str, Any]:
+        return self._request_training(run_id, allow_wait=False)
+
+    def enqueue(self, run_id: str) -> dict[str, Any]:
+        return self._request_training(run_id, allow_wait=True)
+
+    def queue(self) -> builtins.list[dict[str, Any]]:
+        return sorted(
+            [run for run in self.list() if run["status"] in {"pending_preparation", "pending_training"}],
+            key=lambda run: run["order"],
+        )
+
+    def reorder(self, run_ids: builtins.list[str]) -> None:
+        self.store.reorder(run_ids)
+
+    def _request_training(self, run_id: str, *, allow_wait: bool) -> dict[str, Any]:
         run = self.get(run_id)
         if run["status"] in {"pending_training", "training", "generating", "completed"}:
             return run
@@ -74,7 +89,7 @@ class RunService:
             raise ValueError("Prepare this immutable run successfully before starting training.")
         if run["job"]["family"] != "wan":
             raise ValueError("H3 training is not yet available.")
-        if self.device.owner():
+        if self.device.owner() and not allow_wait:
             raise ValueError("The GPU is owned by another operation. Wait for it to finish.")
         verify_inputs(run)
         if not any(stage["name"] == "train" for stage in run["stages"]):
@@ -174,7 +189,7 @@ class RunService:
 
     def cancel(self, run_id: str) -> dict[str, Any]:
         run = self.get(run_id)
-        if run["status"] == "pending_preparation":
+        if run["status"] in {"pending_preparation", "pending_training"}:
             return self.store.update(run_id, lambda r: r.update(status="cancelled"))
         if run["status"] != "preparing":
             raise ValueError("Only queued or active preparation can be cancelled.")
@@ -201,9 +216,15 @@ class RunService:
         run_id = run["id"]
         release = True
         preparing = run["phase"] == "prepare"
-        self.store.update(
-            run_id, lambda r: r.update(status="preparing" if preparing else "training", controller=self.identity)
-        )
+
+        def claim(record: dict[str, Any]) -> None:
+            if record["status"] in {"pending_preparation", "pending_training"}:
+                record.update(status="preparing" if preparing else "training", controller=self.identity)
+
+        claimed = self.store.update(run_id, claim)
+        if claimed["status"] not in {"preparing", "training"}:
+            self.device.release(run_id)
+            return
         try:
             verify_inputs(run)
             for index, stage in enumerate(run["stages"]):

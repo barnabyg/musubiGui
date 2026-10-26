@@ -30,3 +30,8 @@ browser. The job can be edited while the Run retains its original revision. Repe
 Start requests select the same Run. Logs display upstream progress without guessing
 missing step counts; nonzero exits and missing checkpoints are explicit failures.
 Checkpoint/sample locations stay associated with the originating Run.
+
+Add prepared runs to the pending queue while another operation owns the GPU. Move
+entries earlier or cancel pending entries without changing active work. Ordering
+and the exact enqueued revision survive service restarts. Preparation shares this
+same GPU lease, so it cannot overlap training. Failures remain visible in history.

@@ -17,6 +17,7 @@ type Run = {
     reused_from?: string;
   }[];
   directory: string;
+  order: number;
 };
 
 async function request<T>(url: string, body?: object): Promise<T> {
@@ -94,6 +95,24 @@ export function Runs({ selectedId }: { selectedId?: string }) {
       setBusy(false);
     }
   }
+  async function moveEarlier(id: string) {
+    const pending = runs
+      .filter((record) =>
+        ['pending_preparation', 'pending_training'].includes(record.status),
+      )
+      .sort((a, b) => a.order - b.order);
+    const index = pending.findIndex((record) => record.id === id);
+    if (index < 1) return;
+    [pending[index - 1], pending[index]] = [pending[index], pending[index - 1]];
+    try {
+      await request('/api/runs/queue/order', {
+        run_ids: pending.map((record) => record.id),
+      });
+      setRuns(await request<Run[]>('/api/runs'));
+    } catch (reason) {
+      setError((reason as Error).message);
+    }
+  }
   return (
     <>
       <section className="title">
@@ -119,6 +138,27 @@ export function Runs({ selectedId }: { selectedId?: string }) {
         {owner ? `GPU owned by run ${owner.run_id}` : 'GPU available'}
       </p>
       <div className="columns">
+        <section className="panel">
+          <h2>Pending queue</h2>
+          {runs
+            .filter((record) =>
+              ['pending_preparation', 'pending_training'].includes(
+                record.status,
+              ),
+            )
+            .sort((a, b) => a.order - b.order)
+            .map((record, index) => (
+              <p key={record.id}>
+                {index + 1}. {record.job.name} · {record.status}{' '}
+                <button
+                  disabled={index === 0}
+                  onClick={() => void moveEarlier(record.id)}
+                >
+                  Move earlier
+                </button>
+              </p>
+            ))}
+        </section>
         <section className="panel">
           <h2>Persistent run history</h2>
           {runs.length === 0 && (
@@ -158,7 +198,16 @@ export function Runs({ selectedId }: { selectedId?: string }) {
                   Start training
                 </button>
               )}
-              {['pending_preparation', 'preparing'].includes(run.status) && (
+              {run.status === 'prepared' && (
+                <button disabled={busy} onClick={() => void action('queue')}>
+                  Add to queue
+                </button>
+              )}
+              {[
+                'pending_preparation',
+                'pending_training',
+                'preparing',
+              ].includes(run.status) && (
                 <button disabled={busy} onClick={() => void action('cancel')}>
                   Cancel preparation
                 </button>

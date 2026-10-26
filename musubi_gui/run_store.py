@@ -1,5 +1,6 @@
 """Transactional run history and host-wide, durable GPU ownership."""
 
+import builtins
 import json
 import sqlite3
 import tempfile
@@ -63,6 +64,21 @@ class RunStore:
             change(data)
             connection.execute("UPDATE records SET data=? WHERE id=?", (json.dumps(data), run_id))
             return data
+
+    def reorder(self, run_ids: builtins.list[str]) -> None:
+        with database(self.path) as connection:
+            records = [json.loads(row[0]) for row in connection.execute("SELECT data FROM records")]
+            pending = {
+                record["id"]: record
+                for record in records
+                if record["status"] in {"pending_preparation", "pending_training"}
+            }
+            if len(set(run_ids)) != len(run_ids) or set(run_ids) != set(pending):
+                raise ValueError("The queue changed. Refresh and include every pending entry exactly once.")
+            for order, run_id in enumerate(run_ids):
+                record = pending[run_id]
+                record["order"] = order
+                connection.execute("UPDATE records SET data=? WHERE id=?", (json.dumps(record), run_id))
 
 
 class DeviceLease:
