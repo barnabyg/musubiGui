@@ -1,5 +1,18 @@
 # Preparation and immutable inputs
 
+Preparation reserves snapshot creation through a separate state-scoped SQLite gate.
+Duplicate requests from tabs or backend processes return the existing Run before
+allocating another media/cache directory. Content hashes, effective settings, source
+digest and stable runtime versions identify the snapshot; changing media bytes creates
+a new identity even before an index re-scan. A request waiting over 30 seconds reports
+that another snapshot is being created and can be retried safely.
+
+Before copying media, each new snapshot writes a versioned `snapshot.json` containing
+its source manifest, settings and provenance. A directory with no published Run remains
+an incomplete snapshot; caught failures mark it `incomplete` and retain the evidence.
+The application preserves these directories for inspection rather than deleting their
+contents automatically.
+
 Save and review a Job, then choose Prepare. Runs persist the exact job revision,
 effective included media, caption text, generated dataset TOML, model identities,
 upstream revision and selected Python/package environment. Source media and captions

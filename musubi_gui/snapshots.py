@@ -3,14 +3,18 @@
 import hashlib
 import json
 import shutil
+import sqlite3
 import subprocess  # nosec B404
 import uuid
+from collections.abc import Iterator
+from contextlib import closing, contextmanager
+from dataclasses import dataclass
 from importlib import import_module
 from pathlib import Path
 from typing import Any
 
 from musubi_gui.diagnostics import training_environment, upstream_revision
-from musubi_gui.jobs import build_stages, dataset_toml, effective_settings, load_job, review_job
+from musubi_gui.jobs import Job, build_stages, dataset_toml, effective_settings, load_job, review_job
 from musubi_gui.reference import safetensors_header
 from musubi_gui.settings import Settings, atomic_json, load_settings, within_root
 
@@ -74,7 +78,35 @@ def cache_environment_identity(settings: Settings, environment: dict[str, Any]) 
     }
 
 
-def snapshot_plan(root: Path, job_id: str, *, fixture_mode: bool = False) -> dict[str, Any]:
+@dataclass
+class SnapshotIdentity:
+    root: Path
+    job: Job
+    settings: Settings
+    manifest: dict[str, Any]
+    provenance: dict[str, Any]
+    stage_keys: dict[str, str]
+    fingerprint: str
+
+
+@contextmanager
+def preparation_transaction(root: Path) -> Iterator[None]:
+    """A separate SQLite gate reserves identification/materialization across backends."""
+    root.mkdir(parents=True, exist_ok=True)
+    with closing(sqlite3.connect(root / "snapshot-lock.sqlite3", timeout=30, isolation_level=None)) as connection:
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+        except sqlite3.OperationalError as error:
+            raise ValueError(
+                "Another request is creating a frozen snapshot. Wait for preparation to finish and retry; source files are preserved."
+            ) from error
+        try:
+            yield
+        finally:
+            connection.rollback()
+
+
+def identify_snapshot(root: Path, job_id: str, *, fixture_mode: bool = False) -> SnapshotIdentity:
     job = load_job(root, job_id)
     settings = effective_settings(job, load_settings(root))
     review = review_job(root, job, settings, fixture_mode=fixture_mode)
@@ -141,16 +173,46 @@ def snapshot_plan(root: Path, job_id: str, *, fixture_mode: bool = False) -> dic
             }
         ),
     }
-    identity = digest({"job": job.model_dump(), "media": media, "captions": captions, "provenance": provenance})
+    stable_provenance: dict[str, Any] = {**provenance}
+    stable_provenance["environment"] = provenance["cache_environment"]
+    identity = digest(
+        {
+            "job": job.model_dump(),
+            "settings": settings.model_dump(),
+            "media": media,
+            "captions": captions,
+            "provenance": stable_provenance,
+        }
+    )
+    return SnapshotIdentity(root, job, settings, manifest, provenance, keys, identity)
+
+
+def materialize_snapshot(inputs: SnapshotIdentity) -> dict[str, Any]:
+    job, settings, manifest = inputs.job, inputs.settings, inputs.manifest
+    provenance, keys, identity = inputs.provenance, inputs.stage_keys, inputs.fingerprint
+    store: Any = import_module("musubi_gui.datasets").DatasetStore(inputs.root)
     token = uuid.uuid4().hex
     directory = within_root(Path(settings.output_root) / "runs" / token, [Path(settings.output_root)])
     cache = within_root(Path(settings.cache_root) / "runs" / token, [Path(settings.cache_root)])
     directory.mkdir(parents=True)
-    media_directory = directory / "media"
-    media_directory.mkdir()
-    cache.mkdir(parents=True)
+    snapshot_record: dict[str, Any] = {
+        "version": 1,
+        "status": "materializing",
+        "fingerprint": identity,
+        "job": job.model_dump(),
+        "settings": settings.model_dump(),
+        "manifest": manifest,
+        "provenance": provenance,
+        "cache": str(cache),
+        "notice": "A snapshot without a published Run is incomplete; source files are preserved.",
+    }
+    atomic_json(directory / "snapshot.json", snapshot_record)
     files: dict[str, str] = {}
     try:
+        atomic_json(directory / "provenance.json", provenance)
+        media_directory = directory / "media"
+        media_directory.mkdir()
+        cache.mkdir(parents=True)
         for index, item in enumerate(manifest["items"]):
             source = store.media_path(job.dataset_id, item["id"])
             target = media_directory / f"item{index:06d}{source.suffix.lower()}"
@@ -196,7 +258,8 @@ def snapshot_plan(root: Path, job_id: str, *, fixture_mode: bool = False) -> dic
             )
         native.write_text(native_text, encoding="utf-8")
         files[str(native)] = digest_file(native)
-        atomic_json(directory / "provenance.json", provenance)
+        snapshot_record.update(status="materialized", input_files=files)
+        atomic_json(directory / "snapshot.json", snapshot_record)
         return {
             "job": job.model_dump(),
             "settings": settings,
@@ -210,6 +273,8 @@ def snapshot_plan(root: Path, job_id: str, *, fixture_mode: bool = False) -> dic
             "provenance": provenance,
         }
     except BaseException:
+        snapshot_record.update(status="incomplete")
+        atomic_json(directory / "snapshot.json", snapshot_record)
         atomic_json(
             directory / "snapshot-error.json",
             {
@@ -218,6 +283,10 @@ def snapshot_plan(root: Path, job_id: str, *, fixture_mode: bool = False) -> dic
             },
         )
         raise
+
+
+def snapshot_plan(root: Path, job_id: str, *, fixture_mode: bool = False) -> dict[str, Any]:
+    return materialize_snapshot(identify_snapshot(root, job_id, fixture_mode=fixture_mode))
 
 
 def verify_inputs(run: dict[str, Any]) -> None:

@@ -23,7 +23,13 @@ from musubi_gui.reference import Stage, redact, reference_environment
 from musubi_gui.run_store import DeviceLease, RunStore
 from musubi_gui.saved_state import discover_states
 from musubi_gui.settings import Settings, atomic_json
-from musubi_gui.snapshots import digest_file, snapshot_plan, verify_inputs
+from musubi_gui.snapshots import (
+    digest_file,
+    identify_snapshot,
+    materialize_snapshot,
+    preparation_transaction,
+    verify_inputs,
+)
 from musubi_gui.windows_job import CREATE_SUSPENDED, ProcessJob
 
 
@@ -81,7 +87,12 @@ class RunService:
         return self.store.get(run_id)
 
     def prepare(self, job_id: str) -> dict[str, Any]:
-        return self.submit(ExecutionPlan(**snapshot_plan(self.root, job_id, fixture_mode=self.fixture_mode)))
+        with preparation_transaction(self.root):
+            inputs = identify_snapshot(self.root, job_id, fixture_mode=self.fixture_mode)
+            for previous in self.list():
+                if previous["fingerprint"] == inputs.fingerprint and previous["status"] not in {"failed", "cancelled"}:
+                    return previous
+            return self.submit(ExecutionPlan(**materialize_snapshot(inputs)))
 
     def start(self, run_id: str) -> dict[str, Any]:
         return self._request_training(run_id, allow_wait=False)
