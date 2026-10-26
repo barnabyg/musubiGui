@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -206,3 +207,19 @@ def test_export_redacts_recognised_credentials_and_requires_a_known_format(tmp_p
     assert exported["draft"]["config"]["sample_prompt"] == "[REDACTED]"
     assert client.post("/api/jobs/import", json={"draft": exported["draft"]}).status_code == 422
     assert client.post("/api/jobs/import", json={**exported, "format": "other-trainer"}).status_code == 422
+
+
+def test_model_review_discloses_lossy_weight_conversion_provenance(tmp_path: Path) -> None:
+    models = tmp_path / "models"
+    models.mkdir()
+    header = json.dumps(
+        {"__metadata__": {"source_precision": "LOSSY FP8; dequantization does not recover original full precision"}}
+    ).encode()
+    weight = models / "low.safetensors"
+    weight.write_bytes(len(header).to_bytes(8, "little") + header)
+    save_settings(tmp_path, Settings(model_roots=[str(models)], models={"wan_low": str(weight)}))
+    client = client_for(tmp_path)
+    job = client.post("/api/jobs", json={"name": "Converted weights"}).json()
+    review = client.post(f"/api/jobs/{job['id']}/review", json={}).json()
+    assert "LOSSY FP8" in review["model_provenance"]["wan_low"]["source_precision"]
+    assert any("full precision" in warning for warning in review["warnings"])

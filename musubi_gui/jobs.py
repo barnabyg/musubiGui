@@ -16,7 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from musubi_gui.diagnostics import upstream_revision
 from musubi_gui.h3 import h3_stages, validate_h3
-from musubi_gui.reference import CAPTION, UPSTREAM, Stage, redact, validate_wan, wan_stages
+from musubi_gui.reference import CAPTION, UPSTREAM, Stage, redact, safetensors_header, validate_wan, wan_stages
 from musubi_gui.settings import Settings, atomic_json, load_settings, validate_paths, within_root
 
 _lock = threading.RLock()
@@ -467,6 +467,25 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
             errors.extend(validate_wan(settings) if job.family == "wan" else validate_h3(settings))
     except (ValueError, OSError, KeyError, TypeError) as error:
         errors.append(f"Model paths/format: {error}")
+    model_provenance: dict[str, dict[str, str]] = {}
+    for name, value in settings.models.items():
+        if not name.startswith(job.family + "_") or not value.endswith(".safetensors"):
+            continue
+        try:
+            file = within_root(Path(value), [Path(location) for location in settings.model_roots])
+            metadata = safetensors_header(file).get("__metadata__", {})
+            if isinstance(metadata, dict):
+                model_provenance[name] = {
+                    key: redact(item)
+                    for key, item in metadata.items()
+                    if isinstance(key, str) and isinstance(item, str)
+                }
+                precision = model_provenance[name].get("source_precision", "")
+                if "lossy" in precision.lower():
+                    warnings.append(f"{name}: {precision}")
+        except (ValueError, OSError, TypeError):
+            # Format/path diagnostics are already reported above; provenance never grants compatibility.
+            continue
     actual_revision = ""
     try:
         actual_revision = upstream_revision(Path(settings.checkout))
@@ -543,6 +562,7 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
         "effective_count": len(effective_items),
         "audio_coverage": audio_coverage,
         "models": {key: value for key, value in settings.models.items() if key.startswith(job.family + "_")},
+        "model_provenance": model_provenance,
         "expected_upstream": UPSTREAM,
         "upstream_revision": actual_revision,
         "paths": {"output": str(output), "cache": str(cache), "snapshot": str(snapshot)},

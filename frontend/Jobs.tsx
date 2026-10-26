@@ -51,6 +51,7 @@ type Review = {
   warnings: string[];
   effective_count: number;
   models: Record<string, string>;
+  model_provenance: Record<string, Record<string, string>>;
   paths: Record<string, string>;
   dataset_toml: string;
   stages: { name: string; args: string[] }[];
@@ -775,6 +776,12 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
                   2,
                 )}
               </pre>
+              {Object.keys(review.model_provenance).length > 0 && (
+                <details>
+                  <summary>Model precision and conversion provenance</summary>
+                  <pre>{JSON.stringify(review.model_provenance, null, 2)}</pre>
+                </details>
+              )}
               <h3>Native dataset TOML</h3>
               <pre data-testid="dataset-toml">{review.dataset_toml}</pre>
               <p>
