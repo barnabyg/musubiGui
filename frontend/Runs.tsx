@@ -357,7 +357,7 @@ export function Runs({ selectedId }: { selectedId?: string }) {
       </div>
       {run && (
         <SavedStates
-          key={run.id}
+          key={`states-${run.id}`}
           runId={run.id}
           onRestore={(stateId, steps) =>
             action('restore-state', {
@@ -368,7 +368,7 @@ export function Runs({ selectedId }: { selectedId?: string }) {
           }
         />
       )}
-      {run && <Outputs key={run.id} runId={run.id} />}
+      {run && <Outputs key={`outputs-${run.id}`} runId={run.id} />}
       {run && (
         <section className="panel">
           <h2>Live stage logs</h2>
