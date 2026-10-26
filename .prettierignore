@@ -1,0 +1,15 @@
+.cache
+.venv
+.worktrees
+node_modules
+musubi_gui/web
+uv.lock
+package-lock.json
+docs/proposals
+AGENTS.md
+test-results
+dist
+.state
+outputs
+cache
+models

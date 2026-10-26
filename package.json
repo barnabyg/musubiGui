@@ -1,0 +1,45 @@
+{
+  "name": "musubi-gui",
+  "version": "0.1.0",
+  "description": "Local Windows setup and reference workflows for musubi-tuner",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint . --max-warnings 0",
+    "format:check": "prettier --check frontend tests/browser *.ts *.js *.json README.md docs/reference docs/verification.md .github",
+    "test:browser": "playwright test",
+    "verify": "uv run --locked python tools/verify.py"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/barnabyg/musubiGui.git"
+  },
+  "keywords": [],
+  "author": "",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/barnabyg/musubiGui/issues"
+  },
+  "homepage": "https://github.com/barnabyg/musubiGui#readme",
+  "dependencies": {
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@playwright/test": "1.64.1",
+    "@types/node": "26.6.5",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "eslint": "10.13.0",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "prettier": "3.9.10",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.72.1",
+    "vite": "8.3.5"
+  },
+  "private": true
+}
