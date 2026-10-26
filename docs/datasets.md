@@ -21,3 +21,19 @@ draft for retry. External changes produce a conflict: review the current sidecar
 choosing it or saving the retained draft over that revision. Caption history can restore an earlier
 text only against the current revision; concurrent edits are rejected. Original/replacement text is
 recorded before writing so interruption evidence stays recoverable in the state directory.
+
+For H3 inspection, add `--h3-audio` to the fixture command. It creates sidecar, embedded,
+missing, ambiguous, malformed, short and offset-audio examples alongside the base media.
+Open a video and expand **H3 audio and media inspector**. Inspect the chosen source, play
+the resolved audio and review the geometry/timeline diagnostics. Set the explicit path to
+the fixture's `chosen.wav` to resolve an ambiguous pair; an empty path restores automatic
+resolution. **H3 dataset audio coverage** reports included/excluded items and valid audio
+supervision. Missing audio is allowed only by an explicit job policy; malformed supplied
+audio remains an error. Source media is never repaired or discarded by inspection.
+
+The inspector follows the pinned upstream's explicit → exactly one same-stem sidecar →
+embedded → absent precedence, 24 fps frame grid, `17*n+5` frames from 124–345, 32-pixel
+geometry, 50 ms audio discontinuity limit and 200 ms missing-audio budget. It decodes media
+in an isolated application subprocess with a 45-second timeout. Long clips that exceed it
+need shorter source clips. Geometry, timestamps and playback are preflight evidence;
+actual upstream caching remains the final authority for crop-specific supervision.

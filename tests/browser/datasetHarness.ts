@@ -5,13 +5,22 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createServer } from 'node:net';
 
-export async function datasetHarness() {
+export async function datasetHarness(options: { h3Audio?: boolean } = {}) {
   const root = await mkdtemp(path.join(tmpdir(), 'musubi-dataset-'));
   const fixture = path.join(root, 'fixture');
   const python = path.resolve('.venv/Scripts/python.exe');
-  const creator = spawn(python, ['-m', 'musubi_gui.dataset_fixture', fixture], {
-    stdio: 'pipe',
-  });
+  const creator = spawn(
+    python,
+    [
+      '-m',
+      'musubi_gui.dataset_fixture',
+      fixture,
+      ...(options.h3Audio ? ['--h3-audio'] : []),
+    ],
+    {
+      stdio: 'pipe',
+    },
+  );
   const exitCode = await new Promise<number | null>((resolve) =>
     creator.once('exit', resolve),
   );

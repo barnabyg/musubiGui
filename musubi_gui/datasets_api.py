@@ -46,6 +46,11 @@ class CaptionRestore(BaseModel):
     revision: str
 
 
+class AudioSource(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    path: str
+
+
 def dataset_router(root: Path) -> APIRouter:
     router = APIRouter(prefix="/api/datasets")
     store = DatasetStore(root)
@@ -74,6 +79,29 @@ def dataset_router(root: Path) -> APIRouter:
     def items(dataset_id: str) -> list[dict[str, Any]]:
         return result(lambda: store.items(dataset_id))
 
+    @router.get("/{dataset_id}/h3")
+    def h3_summary(dataset_id: str, frames: int = 124) -> dict[str, Any]:
+        def inspect() -> dict[str, Any]:
+            items = store.items(dataset_id)
+            inspected = [
+                {"id": item["id"], "name": item["name"], **store.inspect_h3(dataset_id, item["id"], frames)}
+                for item in items
+                if item["valid"] and not item["excluded"]
+            ]
+            supervised = sum(
+                1 for item in inspected if item["source"] not in {"missing", "ambiguous"} and not item["errors"]
+            )
+            return {
+                "items": inspected,
+                "included": len(inspected),
+                "excluded": sum(1 for item in items if item["excluded"]),
+                "invalid": sum(1 for item in items if not item["valid"]),
+                "supervised": supervised,
+                "coverage": supervised / len(inspected) if inspected else 0.0,
+            }
+
+        return result(inspect)
+
     @router.get("/{dataset_id}/items/{item_id}/media")
     def media(dataset_id: str, item_id: str) -> FileResponse:
         path = result(lambda: store.media_path(dataset_id, item_id))
@@ -82,6 +110,21 @@ def dataset_router(root: Path) -> APIRouter:
     @router.get("/{dataset_id}/items/{item_id}/caption")
     def caption(dataset_id: str, item_id: str) -> dict[str, Any]:
         return result(lambda: store.caption(dataset_id, item_id))
+
+    @router.get("/{dataset_id}/items/{item_id}/h3")
+    def inspect_h3(dataset_id: str, item_id: str, frames: int = 124) -> dict[str, Any]:
+        return result(lambda: store.inspect_h3(dataset_id, item_id, frames))
+
+    @router.put("/{dataset_id}/items/{item_id}/audio")
+    def set_audio(dataset_id: str, item_id: str, request: AudioSource) -> dict[str, Any]:
+        return result(lambda: store.set_audio(dataset_id, item_id, request.path))
+
+    @router.get("/{dataset_id}/items/{item_id}/audio")
+    def audio(dataset_id: str, item_id: str) -> FileResponse:
+        inspection = result(lambda: store.inspect_h3(dataset_id, item_id))
+        if not inspection["audio_path"]:
+            raise HTTPException(404, "No unambiguous audio source is available.")
+        return FileResponse(inspection["audio_path"])
 
     @router.put("/{dataset_id}/items/{item_id}/caption")
     def save_caption(dataset_id: str, item_id: str, request: CaptionWrite) -> dict[str, Any]:

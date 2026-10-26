@@ -136,11 +136,13 @@ class DatasetStore:
         with self._db() as db:
             db.execute("UPDATE datasets SET scan=? WHERE id=?", (json.dumps(status), dataset_id))
 
-    def probe(self, path: Path, thumbnail: Path | None = None) -> dict[str, Any]:
+    def probe(self, path: Path, thumbnail: Path | None = None, timeline: bool = False) -> dict[str, Any]:
         args = [sys.executable, "-I", "-B", "-X", "utf8", str(Path(__file__).with_name("media_probe.py")), str(path)]
         if thumbnail:
             thumbnail.parent.mkdir(parents=True, exist_ok=True)
             args.extend(["--thumbnail", str(thumbnail)])
+        if timeline:
+            args.append("--timeline")
         # B603: selected local training interpreter, fixed read-only media probe, and contained file paths.
         result = subprocess.run(args, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=45)  # nosec B603
         for line in reversed(result.stdout.splitlines()):
@@ -334,7 +336,8 @@ class DatasetStore:
         for item in items:
             if item["valid"] and not item["excluded"]:
                 path = self.media_path(dataset_id, item["id"])
-                included.append({**item, "absolute_path": str(path), "sha256": content_hash(path)})
+                audio = self.inspect_h3(dataset_id, item["id"]) if item["kind"] == "video" else None
+                included.append({**item, "absolute_path": str(path), "sha256": content_hash(path), "audio": audio})
         manifest = {
             "dataset": self.get(dataset_id),
             "items": included,
@@ -344,3 +347,130 @@ class DatasetStore:
             ],
         }
         return {**manifest, "digest": hashlib.sha256(json.dumps(manifest, sort_keys=True).encode()).hexdigest()}
+
+    def set_audio(self, dataset_id: str, item_id: str, path: str) -> dict[str, Any]:
+        self.media_path(dataset_id, item_id)
+        if path:
+            if not Path(path).is_absolute():
+                raise ValueError("Use an absolute audio path inside this registered dataset folder.")
+            within_root(Path(path), [self._folder(self.get(dataset_id)["path"])])
+        with self._db() as db:
+            db.execute("UPDATE items SET explicit_audio=? WHERE id=? AND dataset=?", (path, item_id, dataset_id))
+        return self.inspect_h3(dataset_id, item_id)
+
+    def inspect_h3(self, dataset_id: str, item_id: str, frames: int = 124) -> dict[str, Any]:
+        path = self.media_path(dataset_id, item_id)
+        folder = self._folder(self.get(dataset_id)["path"])
+        errors: builtins.list[str] = []
+        warnings: builtins.list[str] = []
+        checked = self.probe(path, timeline=True)
+        metadata = checked.get("metadata", {})
+        inspection: dict[str, Any] = {
+            "source": "missing",
+            "audio_path": None,
+            "errors": errors,
+            "warnings": warnings,
+            "coverage": 0.0,
+            "metadata": metadata,
+            "target_frames": frames,
+            "target_fps": 24,
+        }
+        if not checked["valid"]:
+            errors.append(checked.get("error", "Media cannot be decoded."))
+            return inspection
+        if path.suffix.lower() not in VIDEOS:
+            errors.append("The initial H3 T2VA recipe requires video targets.")
+        width, height = int(metadata.get("width", 0)), int(metadata.get("height", 0))
+        if width <= 0 or height <= 0 or width % 32 or height % 32:
+            errors.append(
+                "H3 geometry requires positive width and height in multiples of 32. Re-encode or choose compatible training geometry."
+            )
+        if frames < 124 or frames > 345 or (frames - 5) % 17:
+            errors.append("H3 target frames must follow 17*n+5 from 124 through 345 at 24 fps.")
+        required = frames / 24
+        if float(metadata.get("duration", 0)) + 1 / 48 < required:
+            errors.append(f"Video is too short for {frames} frames at 24 fps; supply at least {required:.3f} seconds.")
+        if float(metadata.get("max_video_backwards_seconds", 0)) > 4 / max(float(metadata.get("fps", 24)), 1):
+            errors.append("Video timestamps must be nondecreasing. Re-encode the source timeline.")
+        with self._db() as db:
+            row = db.execute(
+                "SELECT explicit_audio FROM items WHERE id=? AND dataset=?", (item_id, dataset_id)
+            ).fetchone()
+        explicit = str(row["explicit_audio"])
+        audio_path: Path | None = None
+        if explicit:
+            inspection["source"] = "explicit"
+            audio_path = within_root(Path(explicit), [folder])
+        else:
+            candidates = sorted(
+                candidate
+                for candidate in path.parent.iterdir()
+                if candidate.is_file() and candidate.stem == path.stem and candidate.suffix.lower() in AUDIO
+            )
+            if len(candidates) > 1:
+                errors.append(
+                    "Multiple same-stem audio sidecars are ambiguous: "
+                    + ", ".join(candidate.name for candidate in candidates)
+                    + ". Choose an explicit audio source."
+                )
+                inspection["source"] = "ambiguous"
+                return inspection
+            if candidates:
+                inspection["source"] = "sidecar"
+                audio_path = within_root(candidates[0], [folder])
+            elif metadata.get("audio"):
+                inspection["source"] = "embedded"
+                audio_path = path
+        if audio_path is None:
+            warnings.append(
+                "No audio is supplied. Upstream uses a silence placeholder excluded from audio supervision; choose allow-missing audio policy to prepare this item."
+            )
+            return inspection
+        inspection["audio_path"] = str(audio_path)
+        try:
+            audio_checked = checked if audio_path == path else self.probe(audio_path, timeline=True)
+        except (OSError, subprocess.SubprocessError):
+            audio_checked = {
+                "valid": False,
+                "error": "Supplied audio cannot be decoded. Restore or re-encode that source.",
+            }
+        audio = audio_checked.get("metadata", {}).get("audio")
+        if not audio_checked["valid"] or not audio:
+            errors.append(audio_checked.get("error", "Supplied audio contains no decodable audio stream."))
+            return inspection
+        inspection["audio_metadata"] = audio
+        inspection["audio_sha256"] = content_hash(audio_path)
+        offset = (
+            float(audio["start"]) - float(metadata.get("video_start", 0)) if inspection["source"] == "embedded" else 0.0
+        )
+        inspection["offset_seconds"] = offset
+        if abs(offset) > 0.025:
+            warnings.append(
+                f"Embedded audio is offset by {offset:.3f} seconds from the first video frame; inspect alignment before preparation."
+            )
+        jumps = audio.get("timestamp_jumps", [])
+        wobble = (
+            jumps
+            and any(jump["seconds"] > 0 for jump in jumps)
+            and any(jump["seconds"] < 0 for jump in jumps)
+            and max(abs(jump["seconds"]) for jump in jumps) <= 0.05
+        )
+        missing = max(0.0, offset) + max(0.0, required - (offset + float(audio["duration"])))
+        if not wobble:
+            for jump in jumps:
+                if abs(jump["seconds"]) > 0.05:
+                    errors.append(
+                        "Audio stream is discontinuous beyond the pinned 50 ms tolerance. Re-encode its timestamps."
+                    )
+                    break
+                if 0 <= float(jump["at"]) + offset <= required:
+                    missing += abs(float(jump["seconds"]))
+        if missing <= 800 / 32000:
+            missing = 0.0
+        inspection["missing_seconds"] = missing
+        inspection["coverage"] = round(max(0.0, min(1.0, (required - missing) / required)), 6)
+        if missing > 0.2:
+            errors.append(
+                f"Audio is materially short or misaligned: {missing:.3f} seconds missing in this training window exceeds the pinned 200 ms limit. Re-encode aligned audio or exclude the item."
+            )
+        return inspection

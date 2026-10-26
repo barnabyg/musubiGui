@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 
-def inspect(path: Path, thumbnail: Path | None = None) -> dict[str, Any]:
+def inspect(path: Path, thumbnail: Path | None = None, timeline: bool = False) -> dict[str, Any]:
     import av
     from PIL import Image
 
@@ -39,6 +39,22 @@ def inspect(path: Path, thumbnail: Path | None = None) -> dict[str, Any]:
                 else float(media.duration or 0) / 1e6,
                 video_start=float(first.time or 0),
             )
+            if timeline:
+                count = 1
+                previous = float(first.time or 0)
+                backwards = 0.0
+                for decoded in media.decode(video=0):
+                    timestamp = (
+                        float(decoded.time) if decoded.time is not None else previous + 1 / max(result["fps"], 1)
+                    )
+                    backwards = max(backwards, previous - timestamp)
+                    previous = timestamp
+                    count += 1
+                result.update(
+                    frames=count,
+                    duration=previous - result["video_start"] + 1 / max(result["fps"], 1),
+                    max_video_backwards_seconds=backwards,
+                )
         elif path.suffix.lower() not in {".aac", ".flac", ".m4a", ".mp3", ".ogg", ".opus", ".wav"}:
             raise ValueError("No video stream found.")
     with av.open(str(path)) as media:
@@ -56,6 +72,21 @@ def inspect(path: Path, thumbnail: Path | None = None) -> dict[str, Any]:
                 "start": float(first_audio.time or 0),
                 "codec": audio.codec_context.name,
             }
+            if timeline:
+                first_time = float(first_audio.time or 0)
+                end = first_time + first_audio.samples / first_audio.sample_rate
+                samples = first_audio.samples
+                jumps = []
+                for decoded_audio in media.decode(audio=0):
+                    timestamp = float(decoded_audio.time) if decoded_audio.time is not None else end
+                    delta = timestamp - end
+                    if abs(delta) > 2 / decoded_audio.sample_rate:
+                        jumps.append({"at": timestamp - first_time, "seconds": delta})
+                    samples += decoded_audio.samples
+                    end = timestamp + decoded_audio.samples / decoded_audio.sample_rate
+                result["audio"].update(
+                    duration=end - first_time, decoded_seconds=samples / first_audio.sample_rate, timestamp_jumps=jumps
+                )
     return result
 
 
@@ -63,9 +94,10 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("path", type=Path)
     parser.add_argument("--thumbnail", type=Path)
+    parser.add_argument("--timeline", action="store_true")
     args = parser.parse_args()
     try:
-        result = {"valid": True, "metadata": inspect(args.path, args.thumbnail)}
+        result = {"valid": True, "metadata": inspect(args.path, args.thumbnail, args.timeline)}
     except Exception as error:
         result = {
             "valid": False,

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import './datasets.css';
 import { CaptionEditor, type CaptionEditorHandle } from './CaptionEditor';
+import { H3Coverage, H3Inspector } from './H3Inspector';
 
 export type Dataset = {
   id: string;
@@ -210,6 +211,7 @@ export function Datasets({ visible = true }: { visible?: boolean }) {
             {dataset.counts.included} included · {dataset.counts.excluded}{' '}
             excluded · {dataset.counts.total - dataset.counts.valid} invalid
           </p>
+          <H3Coverage key={dataset.id} datasetId={dataset.id} />
           <div className="dataset-workspace">
             <div
               className="dataset-gallery"
@@ -341,6 +343,9 @@ export function Datasets({ visible = true }: { visible?: boolean }) {
                     );
                   }}
                 />
+                {active.kind === 'video' && (
+                  <H3Inspector datasetId={dataset.id} itemId={active.id} />
+                )}
                 <details>
                   <summary>Media metadata</summary>
                   <pre>{JSON.stringify(active.metadata, null, 2)}</pre>
