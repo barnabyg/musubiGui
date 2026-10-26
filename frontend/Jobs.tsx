@@ -20,6 +20,8 @@ type JobConfig = {
   gradient_checkpointing: boolean;
   fp8_scaled: boolean;
   offload_inactive_dit: boolean;
+  block_swap_h2d_only: boolean;
+  audio_policy: 'require' | 'allow-missing';
   save_every: number;
   save_state: boolean;
   sample_enabled: boolean;
@@ -32,7 +34,7 @@ type Job = {
   id: string;
   revision: number;
   name: string;
-  family: 'wan';
+  family: 'wan' | 'h3';
   dataset_id: string;
   config: JobConfig;
 };
@@ -46,6 +48,12 @@ type Review = {
   paths: Record<string, string>;
   dataset_toml: string;
   stages: { name: string; args: string[] }[];
+  audio_coverage: {
+    included: number;
+    supervised: number;
+    missing: number;
+    items: unknown[];
+  };
 };
 type Props = {
   onRun?: (id: string) => void;
@@ -173,7 +181,7 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
       </label>
     );
   }
-  async function create() {
+  async function create(family: 'wan' | 'h3') {
     if (
       dirty &&
       !window.confirm('Discard unsaved job edits and create a new draft?')
@@ -181,8 +189,8 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
       return;
     await perform(async () => {
       const created = await request<Job>('/api/jobs', 'POST', {
-        name: 'New Wan job',
-        family: 'wan',
+        name: family === 'wan' ? 'New Wan job' : 'New H3 job',
+        family,
       });
       setJobs(await request<Job[]>('/api/jobs'));
       setJob(created);
@@ -236,8 +244,11 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
           Create a LoRA draft, review its resolved inputs, then prepare a frozen
           run.
         </p>
-        <button disabled={busy} onClick={() => void create()}>
+        <button disabled={busy} onClick={() => void create('wan')}>
           New Wan job
+        </button>{' '}
+        <button disabled={busy} onClick={() => void create('h3')}>
+          New H3 job
         </button>
       </section>
       {error && (
@@ -293,14 +304,28 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
                 value={job.config.recipe}
                 onChange={(event) => config('recipe', event.target.value)}
               >
-                <option value="low-noise">
-                  Wan low-noise expert · T2V A14B
-                </option>
+                {job.family === 'wan' ? (
+                  <option value="low-noise">
+                    Wan low-noise expert · T2V A14B
+                  </option>
+                ) : (
+                  <option value="guidance-loss">H3 guidance loss · T2VA</option>
+                )}
               </select>
               <small>
-                Native FP16 experts; one expert is trained and both experts are
-                used for sampling. Target-PC support is awaiting reference
-                proof.
+                {job.family === 'wan' ? (
+                  <>
+                    Native FP16 experts; one expert is trained and both experts
+                    are used for sampling. Target-PC support is awaiting
+                    reference proof.
+                  </>
+                ) : (
+                  <>
+                    Released FL2VA base used for the T2VA task, joint
+                    video/audio losses, unconditional text caching, guidance
+                    scale 4 and sigma minimum 0.15.
+                  </>
+                )}
               </small>
             </label>
             <details>
@@ -309,7 +334,10 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
                 Paths inherit Settings unless overridden here. Overrides must
                 remain inside configured model roots.
               </p>
-              {['wan_low', 'wan_high', 'wan_vae', 'wan_t5'].map((key) => (
+              {(job.family === 'wan'
+                ? ['wan_low', 'wan_high', 'wan_vae', 'wan_t5']
+                : ['h3_dit', 'h3_video_vae', 'h3_audio_vae', 'h3_text']
+              ).map((key) => (
                 <label className="field" key={key}>
                   {key}
                   <input
@@ -329,12 +357,20 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
           <section className="panel">
             <h2>Dataset preparation</h2>
             <div className="columns">
-              {number('Width', 'width', 'Wan requires multiples of 16.')}
+              {number(
+                'Width',
+                'width',
+                job.family === 'wan'
+                  ? 'Wan requires multiples of 16.'
+                  : 'H3 requires multiples of 32.',
+              )}
               {number('Height', 'height')}
               {number(
                 'Frames',
                 'frames',
-                '4*n+1 frames; 17 is the smoke default.',
+                job.family === 'wan'
+                  ? '4*n+1 frames; 17 is the smoke default.'
+                  : '17*n+5 frames between 124 and 345; smoke default 124.',
               )}
               {number('Repeats', 'repeats')}
               {number(
@@ -345,6 +381,33 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
             </div>
             {toggle('Enable bucketing', 'enable_bucket')}
             {toggle('Do not upscale buckets', 'bucket_no_upscale')}
+            {job.family === 'h3' && (
+              <label className="field">
+                Audio policy
+                <select
+                  value={job.config.audio_policy}
+                  disabled={busy}
+                  onChange={(event) =>
+                    config(
+                      'audio_policy',
+                      event.target.value as JobConfig['audio_policy'],
+                    )
+                  }
+                >
+                  <option value="require">
+                    Require valid supervised audio for every included video
+                  </option>
+                  <option value="allow-missing">
+                    Allow absent audio; exclude missing audio from supervision
+                  </option>
+                </select>
+                <small>
+                  Malformed supplied audio always blocks preparation. Sources
+                  resolve explicit → same-stem sidecar → embedded track.
+                  Original media is never repaired.
+                </small>
+              </label>
+            )}
           </section>
           <section className="panel">
             <h2>LoRA & training</h2>
@@ -362,18 +425,30 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
             {number(
               'Blocks to swap',
               'blocks_to_swap',
-              '36 of 40 blocks is the reference default.',
+              job.family === 'wan'
+                ? '36 of 40 blocks is the reference default.'
+                : '48 of 54 blocks is the reference default; H2D-only swapping is required.',
             )}
             {toggle('Gradient checkpointing', 'gradient_checkpointing')}
-            {toggle(
-              'Runtime FP8 scaling',
-              'fp8_scaled',
-              'Converts native FP16 sources at load time. Saved scaled-FP8 artifacts are incompatible.',
-            )}
-            {toggle(
-              'Offload inactive DiT',
-              'offload_inactive_dit',
-              'Not supported by this single-expert recipe; review will explain conflicts.',
+            {job.family === 'wan' ? (
+              <>
+                {toggle(
+                  'Runtime FP8 scaling',
+                  'fp8_scaled',
+                  'Converts native FP16 sources at load time. Saved scaled-FP8 artifacts are incompatible.',
+                )}
+                {toggle(
+                  'Offload inactive DiT',
+                  'offload_inactive_dit',
+                  'Not supported by this single-expert recipe; review will explain conflicts.',
+                )}
+              </>
+            ) : (
+              toggle(
+                'H2D-only block swapping',
+                'block_swap_h2d_only',
+                'Required for the guidance-loss restart forward; classic swapping failed in the reference scenario.',
+              )
             )}
           </section>
           <section className="panel">
@@ -442,6 +517,22 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
                   <li key={index}>{message}</li>
                 ))}
               </ul>
+              {job.family === 'h3' && (
+                <>
+                  <h3>Audio coverage</h3>
+                  <p>
+                    {review.audio_coverage.supervised} supervised /{' '}
+                    {review.audio_coverage.included} included;{' '}
+                    {review.audio_coverage.missing} without audio.
+                  </p>
+                  <details>
+                    <summary>Per-item audio diagnostics</summary>
+                    <pre>
+                      {JSON.stringify(review.audio_coverage.items, null, 2)}
+                    </pre>
+                  </details>
+                </>
+              )}
               <h3>Resolved paths</h3>
               <pre>
                 {JSON.stringify(

@@ -11,9 +11,10 @@ from pathlib import Path
 from typing import Any, Iterator, Literal
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from musubi_gui.diagnostics import upstream_revision
+from musubi_gui.h3 import h3_stages, validate_h3
 from musubi_gui.reference import CAPTION, UPSTREAM, Stage, validate_wan, wan_stages
 from musubi_gui.settings import Settings, atomic_json, load_settings, validate_paths, within_root
 
@@ -41,6 +42,8 @@ class JobConfig(BaseModel):
     gradient_checkpointing: bool = True
     fp8_scaled: bool = True
     offload_inactive_dit: bool = False
+    block_swap_h2d_only: bool = False
+    audio_policy: Literal["require", "allow-missing"] = "require"
     save_every: int = 1
     save_state: bool = False
     sample_enabled: bool = True
@@ -49,13 +52,37 @@ class JobConfig(BaseModel):
     seed: int = 42
 
 
+def default_config(family: str) -> JobConfig:
+    if family == "h3":
+        return JobConfig(
+            recipe="guidance-loss",
+            frames=124,
+            rank=4,
+            alpha=4,
+            blocks_to_swap=48,
+            fp8_scaled=False,
+            block_swap_h2d_only=True,
+            sample_prompt=CAPTION + " A steady sine tone plays.",
+        )
+    return JobConfig()
+
+
 class JobDraft(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = "Untitled job"
-    family: Literal["wan"] = "wan"
+    family: Literal["wan", "h3"] = "wan"
     dataset_id: str = ""
     config: JobConfig = Field(default_factory=JobConfig)
+
+    @model_validator(mode="before")
+    @classmethod
+    def family_defaults(cls, value: Any) -> Any:
+        if isinstance(value, dict) and value.get("family") == "h3":
+            supplied = value.get("config", {})
+            if isinstance(supplied, dict):
+                return {**value, "config": {**default_config("h3").model_dump(), **supplied}}
+        return value
 
 
 class Job(JobDraft):
@@ -135,14 +162,38 @@ def configuration_errors(job: Job) -> list[str]:
         errors.append("Name: enter a job name.")
     if not job.dataset_id:
         errors.append("Dataset: select a registered dataset.")
-    if config.recipe != "low-noise":
-        errors.append(
-            "Recipe: only low-noise Wan training is currently available; high-noise/combined are unqualified."
-        )
-    if config.width < 64 or config.height < 64 or config.width % 16 or config.height % 16:
-        errors.append("Geometry: Wan width and height must be at least 64 and multiples of 16.")
-    if config.frames < 1 or (config.frames - 1) % 4:
-        errors.append("Frames: Wan requires 4*n+1 frames.")
+    if job.family == "wan":
+        if config.recipe != "low-noise":
+            errors.append(
+                "Recipe: only low-noise Wan training is currently available; high-noise/combined are unqualified."
+            )
+        if config.width < 64 or config.height < 64 or config.width % 16 or config.height % 16:
+            errors.append("Geometry: Wan width and height must be at least 64 and multiples of 16.")
+        if config.frames < 1 or (config.frames - 1) % 4:
+            errors.append("Frames: Wan requires 4*n+1 frames.")
+        if not 0 <= config.blocks_to_swap <= 39:
+            errors.append("Block swapping: select between 0 and 39 Wan blocks.")
+        if not config.fp8_scaled:
+            errors.append("Memory: runtime FP8 scaling from native FP16 weights is required by this Wan recipe.")
+        if config.block_swap_h2d_only:
+            errors.append("Memory: H2D-only swapping belongs to the H3 recipe, not the initial Wan recipe.")
+        allowed_components = {"wan_low", "wan_high", "wan_vae", "wan_t5"}
+    else:
+        if config.recipe != "guidance-loss":
+            errors.append(
+                "Recipe: initial H3 T2VA supports guidance loss only; other recipes need separate validation."
+            )
+        if config.width < 64 or config.height < 64 or config.width % 32 or config.height % 32:
+            errors.append("Geometry: H3 width and height must be at least 64 and multiples of 32.")
+        if not 124 <= config.frames <= 345 or (config.frames - 5) % 17:
+            errors.append("Frames: H3 requires 17*n+5 frames in the released 124–345 range.")
+        if not 0 <= config.blocks_to_swap <= 53:
+            errors.append("Block swapping: select between 0 and 53 H3 blocks.")
+        if config.fp8_scaled:
+            errors.append("Memory: H3 does not support FP8 transformer weights/runtime scaling.")
+        if not config.block_swap_h2d_only:
+            errors.append("Memory: H3 guidance loss requires H2D-only swapping for the validated target-PC recipe.")
+        allowed_components = {"h3_dit", "h3_video_vae", "h3_audio_vae", "h3_text"}
     if config.batch_size != 1:
         errors.append(
             "Batch size: the target-PC recipe supports one; use gradient accumulation for effective batch size."
@@ -160,37 +211,50 @@ def configuration_errors(job: Job) -> list[str]:
             errors.append(f"{field.capitalize()}: enter a positive integer.")
     if not math.isfinite(config.learning_rate) or not 0 < config.learning_rate <= 1:
         errors.append("Learning rate: enter a finite number greater than zero and at most one.")
-    if not 0 <= config.blocks_to_swap <= 39:
-        errors.append("Block swapping: select between 0 and 39 Wan blocks.")
     if not config.gradient_checkpointing:
         errors.append("Memory: gradient checkpointing is required by this target-PC recipe.")
-    if not config.fp8_scaled:
-        errors.append("Memory: runtime FP8 scaling from native FP16 weights is required by this Wan recipe.")
     if config.offload_inactive_dit:
         errors.append(
             "Memory: inactive-DiT offload is outside this single-expert recipe and conflicts with block swapping."
         )
     if config.sample_enabled and not config.sample_prompt.strip():
         errors.append("Sampling: enter a prompt or disable the final sample.")
-    if any(key not in {"wan_low", "wan_high", "wan_vae", "wan_t5"} for key in config.components):
-        errors.append("Components: only the four supported Wan component keys are accepted.")
+    if any(key not in allowed_components for key in config.components):
+        errors.append("Components: only the four supported component keys for the selected model are accepted.")
     return errors
 
 
-def dataset_toml(job: Job, directory: Path, cache: Path) -> str:
+def dataset_toml(job: Job, directory: Path, cache: Path, *, kinds: set[str] | None = None) -> str:
     """Directory is an immutable managed snapshot, never the mutable source dataset."""
     config = job.config
 
     def quote(path: Path) -> str:
         return json.dumps(path.as_posix(), ensure_ascii=False)
 
-    return (
+    general = (
         f"[general]\nresolution = [{config.width}, {config.height}]\nbatch_size = {config.batch_size}\n"
         f"num_repeats = {config.repeats}\nenable_bucket = {str(config.enable_bucket).lower()}\n"
         f"bucket_no_upscale = {str(config.bucket_no_upscale).lower()}\n\n"
-        f"[[datasets]]\nvideo_directory = {quote(directory)}\ncache_directory = {quote(cache / 'dataset')}\n"
-        f'caption_extension = ".txt"\ntarget_frames = [{config.frames}]\nframe_extraction = "head"\n'
     )
+    if kinds is None:
+        files = list(directory.rglob("*")) if directory.exists() else []
+        images = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
+        videos = {".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v"}
+        kinds = {"image" for file in files if file.suffix.lower() in images}
+        kinds.update("video" for file in files if file.suffix.lower() in videos)
+        if not kinds:
+            kinds = {"video"}
+    sections = []
+    for kind in ["image", "video"]:
+        if kind not in kinds:
+            continue
+        cache_directory = cache / ("dataset-images" if kind == "image" else "dataset")
+        sections.append(
+            f"[[datasets]]\n{kind}_directory = {quote(directory)}\ncache_directory = {quote(cache_directory)}\n"
+            'caption_extension = ".txt"\n'
+            + (f'target_frames = [{config.frames}]\nframe_extraction = "head"\n' if kind == "video" else "")
+        )
+    return general + "\n".join(sections)
 
 
 def _set_argument(args: list[str], flag: str, value: str) -> None:
@@ -203,7 +267,8 @@ def _set_argument(args: list[str], flag: str, value: str) -> None:
 def build_stages(job: Job, settings: Settings, run: Path, cache: Path) -> list[Stage]:
     settings = effective_settings(job, settings)
     config = job.config
-    stages = [stage for stage in wan_stages(settings, run, cache) if stage.name != "fixture"]
+    recipe_stages = wan_stages if job.family == "wan" else h3_stages
+    stages = [stage for stage in recipe_stages(settings, run, cache) if stage.name != "fixture"]
     for stage in stages:
         args = stage.args
         if stage.name == "train":
@@ -236,7 +301,9 @@ def build_stages(job: Job, settings: Settings, run: Path, cache: Path) -> list[S
 def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool = False) -> dict[str, Any]:
     errors = configuration_errors(job)
     warnings = [
-        "Wan support remains unresolved until the reference scenario passes on the specified 96 GB host.",
+        "Wan support remains unresolved until the reference scenario passes on the specified 96 GB host."
+        if job.family == "wan"
+        else "H3 has short-run execution evidence on the 96 GB host; training quality and larger workloads remain unqualified.",
         "Changes to geometry, duration or memory controls need their own capacity validation.",
     ]
     settings = effective_settings(job, settings)
@@ -249,12 +316,17 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
             marker = Path(settings.checkout) / ".musubi-gui-fixture.json"
             if json.loads(marker.read_text(encoding="utf-8")) != {"version": 1, "kind": "synthetic-worker"}:
                 errors.append("Fixture marker is not the expected synthetic-worker format.")
-            for name in ["wan_low", "wan_high", "wan_vae", "wan_t5"]:
+            component_names = (
+                ["wan_low", "wan_high", "wan_vae", "wan_t5"]
+                if job.family == "wan"
+                else ["h3_dit", "h3_video_vae", "h3_audio_vae", "h3_text"]
+            )
+            for name in component_names:
                 if not settings.models.get(name) or not Path(settings.models[name]).is_file():
                     errors.append(f"Fixture component missing: {name}.")
             warnings.insert(0, "SYNTHETIC FIXTURE: these subprocesses do not establish GPU/model support.")
         else:
-            errors.extend(validate_wan(settings))
+            errors.extend(validate_wan(settings) if job.family == "wan" else validate_h3(settings))
     except (ValueError, OSError, KeyError, TypeError) as error:
         errors.append(f"Model paths/format: {error}")
     actual_revision = ""
@@ -270,6 +342,7 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
         errors.append("Training Python: select an existing executable in Settings.")
     effective_items: list[dict[str, Any]] = []
     dataset: dict[str, Any] = {}
+    audio_coverage: dict[str, Any] = {"included": 0, "supervised": 0, "missing": 0, "items": []}
     if job.dataset_id:
         try:
             store: Any = import_module("musubi_gui.datasets").DatasetStore(root)
@@ -277,13 +350,36 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
             effective_items = [item for item in store.items(job.dataset_id) if not item["excluded"] and item["valid"]]
             if not effective_items:
                 errors.append("Dataset: no valid, included media remain.")
-            if any(item["kind"] != "video" for item in effective_items):
+            if job.family == "h3" and any(item["kind"] != "video" for item in effective_items):
                 errors.append(
                     "Dataset: this initial video recipe requires videos; exclude images or select another dataset."
                 )
             for item in effective_items:
                 if not item["caption"]["exists"]:
                     warnings.append(f"{item['name']}: no caption sidecar; the frozen caption will be empty.")
+                frames = item.get("metadata", {}).get("frames")
+                if item["kind"] == "video" and isinstance(frames, int) and frames < job.config.frames:
+                    errors.append(
+                        f"{item['name']}: {frames} decoded frames cannot supply the requested {job.config.frames}; shorten the job or choose a longer video."
+                    )
+                if job.family == "h3" and item["kind"] == "video":
+                    inspection: dict[str, Any] = store.inspect_h3(job.dataset_id, item["id"])
+                    audio_coverage["included"] += 1
+                    audio_coverage["items"].append({"id": item["id"], "name": item["name"], **inspection})
+                    errors.extend(f"{item['name']}: {message}" for message in inspection.get("errors", []))
+                    warnings.extend(f"{item['name']}: {message}" for message in inspection.get("warnings", []))
+                    if inspection.get("source") == "missing":
+                        audio_coverage["missing"] += 1
+                        if job.config.audio_policy == "require":
+                            errors.append(
+                                f"{item['name']}: audio policy requires supervised audio; supply valid aligned audio or allow missing audio explicitly."
+                            )
+                        else:
+                            warnings.append(
+                                f"{item['name']}: absent audio is allowed and excluded from audio supervision; no audio is synthesized."
+                            )
+                    elif not inspection.get("errors"):
+                        audio_coverage["supervised"] += 1
         except (ValueError, OSError, ImportError, HTTPException) as error:
             errors.append(f"Dataset: {error}")
     output = Path(settings.output_root) / "jobs" / job.id
@@ -307,11 +403,14 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
         "dataset": dataset,
         "effective_items": effective_items,
         "effective_count": len(effective_items),
-        "models": {key: value for key, value in settings.models.items() if key.startswith("wan_")},
+        "audio_coverage": audio_coverage,
+        "models": {key: value for key, value in settings.models.items() if key.startswith(job.family + "_")},
         "expected_upstream": UPSTREAM,
         "upstream_revision": actual_revision,
         "paths": {"output": str(output), "cache": str(cache), "snapshot": str(snapshot)},
-        "dataset_toml": dataset_toml(job, snapshot / "media", cache),
+        "dataset_toml": dataset_toml(
+            job, snapshot / "media", cache, kinds={item["kind"] for item in effective_items} or None
+        ),
         "stages": [{"name": stage.name, "args": stage.args} for stage in stages],
     }
 
@@ -340,8 +439,8 @@ def jobs_router(root: Path, *, fixture_mode: bool = False) -> APIRouter:
             return store.list()
 
     @router.get("/defaults/{family}")
-    def get_defaults(family: Literal["wan"]) -> JobConfig:
-        return JobConfig()
+    def get_defaults(family: Literal["wan", "h3"]) -> JobConfig:
+        return default_config(family)
 
     @router.post("")
     def create_job(draft: JobDraft) -> Job:

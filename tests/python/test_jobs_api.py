@@ -91,3 +91,52 @@ def test_incompatible_wan_options_remain_editable_but_review_blocks_execution(tm
     assert review["valid"] is False
     assert any("offload" in error for error in review["errors"])
     assert any("4*n+1" in error for error in review["errors"])
+
+
+def test_h3_draft_defaults_and_native_stages_match_guidance_loss_recipe(tmp_path: Path) -> None:
+    save_settings(
+        tmp_path,
+        Settings(
+            models={
+                name: str(tmp_path / f"{name}.safetensors")
+                for name in ["h3_dit", "h3_video_vae", "h3_audio_vae", "h3_text"]
+            }
+        ),
+    )
+    client = client_for(tmp_path)
+    response = client.post("/api/jobs", json={"name": "Joint video/audio", "family": "h3"})
+    assert response.status_code == 200
+    job = response.json()
+    assert job["config"]["frames"] == 124
+    assert job["config"]["blocks_to_swap"] == 48
+    assert job["config"]["rank"] == 4
+    reopened = client_for(tmp_path).get(f"/api/jobs/{job['id']}").json()
+    assert reopened == job
+    review = client.post(f"/api/jobs/{job['id']}/review", json={}).json()
+    for stage in review["stages"]:
+        args = stage["args"]
+        assert args[args.index("--task") + 1] == "t2va"
+    train = next(stage["args"] for stage in review["stages"] if stage["name"] == "train")
+    assert "--block_swap_h2d_only" in train
+    assert train[train.index("--h3_guidance_loss_scale") + 1] == "4"
+    text = next(stage["args"] for stage in review["stages"] if stage["name"] == "text_cache")
+    assert "--uncond_output" in text
+    assert "target_frames = [124]" in review["dataset_toml"]
+
+
+def test_h3_invalid_geometry_and_memory_are_saved_but_not_executable(tmp_path: Path) -> None:
+    client = client_for(tmp_path)
+    job = client.post(
+        "/api/jobs",
+        json={
+            "name": "Repair H3",
+            "family": "h3",
+            "config": {"width": 272, "frames": 125, "fp8_scaled": True, "block_swap_h2d_only": False},
+        },
+    ).json()
+    review = client.post(f"/api/jobs/{job['id']}/review", json={}).json()
+    assert review["valid"] is False
+    assert any("32" in error for error in review["errors"])
+    assert any("17*n+5" in error for error in review["errors"])
+    assert any("FP8" in error for error in review["errors"])
+    assert any("H2D" in error for error in review["errors"])

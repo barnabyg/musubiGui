@@ -28,3 +28,16 @@ the reviewed TOML and arguments with the controls, and verify reopening retains 
 Real preparation/training requires the compatible model files and environment described
 in [reference workflows](reference/README.md); fake acceptance fixtures do not prove
 model support.
+
+New H3 job uses the proven T2VA guidance-loss recipe: 124 frames, rank/alpha four,
+BF16, 48 H2D-only swapped blocks, unconditional text caching and both video/audio
+losses. Geometry must be a multiple of 32; the released frame lengths are `17*n+5`
+between 124 and 345. Unsupported CFG, negative prompts, Ref2VA, FL2VA training and
+full fine-tuning are not offered. H3 drafts require video items; Wan may use images
+and videos, emitted as separate native dataset sections.
+
+H3's audio policy defaults to requiring supervised audio for every included video.
+Review shows item-specific source/alignment diagnostics and supervision totals.
+Explicitly allowing missing audio produces an audio-less item excluded from audio
+supervision; malformed supplied audio still blocks preparation. No original audio
+is repaired or silently discarded. The selected audio VAE remains mandatory.
