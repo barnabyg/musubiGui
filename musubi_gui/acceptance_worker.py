@@ -55,7 +55,15 @@ def main(stage: str | None = None) -> None:
         architecture = "mmh3" if args.task == "t2va" else "wan"
         for dataset in data.get("datasets", []):
             media_root = Path(dataset.get("video_directory", dataset.get("image_directory", "")))
-            for media in media_root.iterdir():
+            media_files = (
+                [
+                    Path(json.loads(line)["video_path"])
+                    for line in Path(dataset["video_jsonl_file"]).read_text(encoding="utf-8").splitlines()
+                ]
+                if "video_jsonl_file" in dataset
+                else list(media_root.iterdir())
+            )
+            for media in media_files:
                 if media.suffix.lower() not in {
                     ".mp4",
                     ".mov",

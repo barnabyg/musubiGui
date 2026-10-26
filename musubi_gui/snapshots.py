@@ -146,7 +146,9 @@ def snapshot_plan(root: Path, job_id: str, *, fixture_mode: bool = False) -> dic
             audio = item.get("audio") if job.family == "h3" else None
             if audio and audio.get("source") in {"explicit", "sidecar"}:
                 source_audio = Path(audio["audio_path"])
-                target_audio = target.with_suffix(source_audio.suffix.lower())
+                audio_directory = directory / "audio"
+                audio_directory.mkdir(exist_ok=True)
+                target_audio = audio_directory / (target.stem + source_audio.suffix.lower())
                 shutil.copyfile(source_audio, target_audio)
                 actual_audio = digest_file(target_audio)
                 if actual_audio != audio["audio_sha256"]:
@@ -154,7 +156,25 @@ def snapshot_plan(root: Path, job_id: str, *, fixture_mode: bool = False) -> dic
                 audio["snapshot_path"] = str(target_audio)
                 files[str(target_audio)] = actual_audio
         native = directory / "dataset.toml"
-        native.write_text(dataset_toml(job, media_directory, cache), encoding="utf-8")
+        native_text = dataset_toml(job, media_directory, cache)
+        if job.family == "h3":
+            records = []
+            for item in manifest["items"]:
+                record = {"video_path": item["snapshot_path"], "caption": item["caption"]["text"]}
+                audio = item.get("audio")
+                if audio and audio.get("source") in {"explicit", "sidecar"}:
+                    record["audio_path"] = audio["snapshot_path"]
+                records.append(record)
+            metadata = directory / "dataset.jsonl"
+            metadata.write_text(
+                "\n".join(json.dumps(record, ensure_ascii=False) for record in records) + "\n", encoding="utf-8"
+            )
+            files[str(metadata)] = digest_file(metadata)
+            native_text = native_text.replace(
+                "video_directory = " + json.dumps(media_directory.as_posix(), ensure_ascii=False),
+                "video_jsonl_file = " + json.dumps(metadata.as_posix(), ensure_ascii=False),
+            )
+        native.write_text(native_text, encoding="utf-8")
         files[str(native)] = digest_file(native)
         atomic_json(directory / "provenance.json", provenance)
         return {

@@ -1,8 +1,10 @@
 import json
+import shutil
 import time
 from pathlib import Path
 
 from musubi_gui.acceptance import prepare
+from musubi_gui.datasets import DatasetStore
 from musubi_gui.runs import RunService
 
 
@@ -34,5 +36,27 @@ def test_h3_preparation_freezes_audio_and_keeps_guidance_stages(tmp_path: Path) 
         assert Path(prepared["cache"], "uncond.safetensors").is_file()
         frozen = json.loads(Path(prepared["directory"], "inputs.json").read_text(encoding="utf-8"))
         assert frozen["manifest"]["items"][0]["caption"]["text"].endswith("tone plays.")
+    finally:
+        service.close()
+
+
+def test_explicit_audio_in_a_video_container_cannot_replace_the_frozen_target_video(tmp_path: Path) -> None:
+    fixture = prepare(tmp_path / "acceptance", "fixture", None)
+    root = Path(fixture["state"])
+    job = next(job for job in fixture["jobs"] if job["family"] == "h3")
+    store = DatasetStore(root)
+    item = store.items(job["dataset_id"])[0]
+    explicit = Path(item["absolute_path"]).with_name("explicit-audio.mp4")
+    shutil.copyfile(tmp_path / "acceptance/sample.mp4", explicit)
+    store.set_audio(job["dataset_id"], item["id"], str(explicit))
+    service = RunService(root, fixture_mode=True, device_path=tmp_path / "device.sqlite")
+    try:
+        run = service.prepare(job["id"])
+        prepared = wait(service, run["id"], "prepared")
+        frozen = prepared["manifest"]["items"][0]
+        assert Path(frozen["snapshot_path"]).read_bytes() == Path(item["absolute_path"]).read_bytes()
+        assert frozen["snapshot_path"] != frozen["audio"]["snapshot_path"]
+        metadata = json.loads(Path(prepared["directory"], "dataset.jsonl").read_text(encoding="utf-8"))
+        assert metadata["audio_path"] == frozen["audio"]["snapshot_path"]
     finally:
         service.close()
