@@ -39,3 +39,12 @@ def test_unknown_persisted_version_is_not_overwritten(tmp_path: Path) -> None:
     client = TestClient(create_app(state, assets))
     assert client.get("/api/settings").status_code == 409
     assert client.put("/api/settings", json={}).status_code == 409
+
+
+def test_partial_setup_cannot_write_inside_training_checkout(tmp_path: Path) -> None:
+    assets = tmp_path / "web"
+    assets.mkdir()
+    client = TestClient(create_app(tmp_path / "state", assets))
+    settings = client.get("/api/settings").json()
+    settings.update(checkout=str(tmp_path / "upstream"), output_root=str(tmp_path / "upstream/generated"))
+    assert client.put("/api/settings", json=settings).status_code == 422

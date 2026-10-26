@@ -74,8 +74,8 @@ def validate_paths(settings: Settings) -> None:
     for value in paths:
         if value.startswith(("\\\\", "//")) or "://" in value:
             raise ValueError("Network paths and URLs are not supported; select a local path.")
-    if settings.output_root and settings.cache_root:
-        writes = [Path(settings.output_root).resolve(), Path(settings.cache_root).resolve()]
+    writes = [Path(value).resolve() for value in [settings.output_root, settings.cache_root] if value]
+    if writes:
         protected = [Path(p).resolve() for p in [settings.checkout, *settings.model_roots] if p]
         for target in writes:
             if target == Path(target.anchor) or any(
@@ -84,6 +84,8 @@ def validate_paths(settings: Settings) -> None:
                 raise ValueError(
                     "Output/cache roots must be dedicated directories outside the checkout and model roots."
                 )
+        if len(writes) == 2 and (writes[0].is_relative_to(writes[1]) or writes[1].is_relative_to(writes[0])):
+            raise ValueError("Output and cache roots must be separate, non-overlapping directories.")
     for value in settings.models.values():
         if value:
             within_root(Path(value), [Path(p) for p in settings.model_roots])
