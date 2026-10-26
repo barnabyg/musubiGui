@@ -1,0 +1,39 @@
+.job-library {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.job-library [aria-pressed='true'] {
+  border-color: #c1a4ef;
+}
+.jobs-workspace select {
+  display: block;
+  width: 100%;
+  padding: 11px 12px;
+  margin: 9px 0 7px;
+  border: 1px solid #373d49;
+  border-radius: 5px;
+  background: #11141a;
+  color: #e8e4f5;
+}
+.job-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 18px 0;
+  font-size: 13px;
+}
+.job-toggle input {
+  width: auto;
+}
+.job-toggle small {
+  display: block;
+  margin-top: 4px;
+}
+.jobs-workspace li {
+  font-size: 13px;
+  line-height: 1.7;
+}
+.jobs-workspace .error {
+  padding-left: 32px;
+}
