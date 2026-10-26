@@ -4,6 +4,7 @@ import { mkdtemp, mkdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createServer } from 'node:net';
+import { stopBackendTree } from './processes';
 
 async function workspace() {
   const root = await mkdtemp(path.join(tmpdir(), 'musubi-jobs-'));
@@ -41,7 +42,7 @@ async function workspace() {
       const exited = new Promise<void>((resolve) =>
         backend!.once('exit', () => resolve()),
       );
-      backend.kill();
+      await stopBackendTree(backend.pid!);
       await exited;
     }
   };
@@ -80,7 +81,12 @@ async function workspace() {
     stop,
     close: async () => {
       await stop();
-      await rm(root, { recursive: true, force: true });
+      await rm(root, {
+        recursive: true,
+        force: true,
+        maxRetries: 5,
+        retryDelay: 150,
+      });
     },
   };
 }

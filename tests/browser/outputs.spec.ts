@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createServer } from 'node:net';
 import { promisify } from 'node:util';
+import { stopBackendTree } from './processes';
 
 type FixtureRun = {
   id: string;
@@ -60,7 +61,7 @@ test('Wan and H3 output playback comparison download and missing states retain r
       const exited = new Promise<void>((resolve) =>
         backend!.once('exit', () => resolve()),
       );
-      backend.kill();
+      await stopBackendTree(backend.pid!);
       await exited;
     }
   };
