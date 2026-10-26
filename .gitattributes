@@ -1,0 +1,15 @@
+# Keep formatter inputs stable on Windows; native launchers use Windows newlines.
+*.py text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.js text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.json text eol=lf
+*.toml text eol=lf
+*.yml text eol=lf
+uv.lock text eol=lf
+README.md text eol=lf
+docs/verification.md text eol=lf
+docs/reference/** text eol=lf
+*.cmd text eol=crlf
