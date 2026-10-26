@@ -6,6 +6,7 @@ import shutil
 import subprocess  # nosec B404
 import sys
 from pathlib import Path
+from zipfile import ZipFile
 
 
 def run(*args: str) -> None:
@@ -36,12 +37,51 @@ def main() -> None:
     run(npm, "run", "test:browser")
     run("uv", "lock", "--check")
     run(npm, "ls", "--all")
-    run(python, "-m", "pip_audit", "--disable-pip", "--progress-spinner", "off")
+    audit_requirements = str(Path(".cache/audit-requirements.txt").resolve())
+    run(
+        "uv",
+        "export",
+        "--locked",
+        "--all-groups",
+        "--no-emit-project",
+        "--quiet",
+        "--output-file",
+        audit_requirements,
+    )
+    run(
+        python,
+        "-m",
+        "pip_audit",
+        "--disable-pip",
+        "--require-hashes",
+        "-r",
+        audit_requirements,
+        "--progress-spinner",
+        "off",
+    )
     run(npm, "audit", "--audit-level=low")
     scanner = shutil.which("detect-secrets") or str(Path(sys.executable).parent / "detect-secrets.exe")
+    git = shutil.which("git")
+    if not git:
+        raise SystemExit("Git is required to enumerate tracked and new source files for secret checks.")
+    # B603: fixed read-only enumeration, includes new files but excludes ignored runtime artifacts.
+    tracked = subprocess.run(
+        [git, "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )  # nosec B603
+    sources = [name for name in tracked.stdout.split("\x00") if name and Path(name).is_file()]
     # B603: fixed scanner and source paths; review if external arguments are added.
     result = subprocess.run(  # nosec B603
-        [scanner, "scan", "--all-files", "musubi_gui", "frontend", "tools", "tests"],
+        [
+            scanner,
+            "scan",
+            "--all-files",
+            "--exclude-lines",
+            r'^\s*"(?:expected_upstream|upstream_revision|header_sha256)": "[a-f0-9]{40}(?:[a-f0-9]{24})?",?$',
+            *sources,
+        ],
         capture_output=True,
         text=True,
         check=True,
@@ -50,6 +90,13 @@ def main() -> None:
     if findings:
         raise SystemExit("Secret scanner found possible secrets in: " + ", ".join(findings))
     run(python, "-m", "build", "--no-isolation")
+    with ZipFile(next(Path("dist").glob("*.whl"))) as wheel:
+        names = wheel.namelist()
+        if "musubi_gui/web/index.html" not in names or not all(
+            any(name.startswith("musubi_gui/web/assets/") and name.endswith(suffix) for name in names)
+            for suffix in [".js", ".css"]
+        ):
+            raise SystemExit("Wheel is missing the built browser application.")
     print("\nVerification passed.")
 
 
