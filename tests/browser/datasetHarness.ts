@@ -4,6 +4,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createServer } from 'node:net';
+import { stopBackendTree } from './processes';
 
 export async function datasetHarness(options: { h3Audio?: boolean } = {}) {
   const root = await mkdtemp(path.join(tmpdir(), 'musubi-dataset-'));
@@ -54,17 +55,34 @@ export async function datasetHarness(options: { h3Audio?: boolean } = {}) {
       .toBe(200);
   };
   const stop = async () => {
-    if (backend && backend.exitCode === null) {
+    const current = backend;
+    backend = undefined;
+    if (current && current.exitCode === null && current.signalCode === null) {
       const exited = new Promise<void>((resolve) =>
-        backend!.once('exit', () => resolve()),
+        current.once('exit', () => resolve()),
       );
-      backend.kill();
+      if (!current.pid) throw new Error('Missing backend PID');
+      await stopBackendTree(current.pid);
       await exited;
+      await expect
+        .poll(async () => {
+          try {
+            return (await fetch(`${url}/api/settings`)).status;
+          } catch {
+            return 0;
+          }
+        })
+        .toBe(0);
     }
   };
   const cleanup = async () => {
     await stop();
-    await rm(root, { recursive: true, force: true });
+    await rm(root, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 100,
+    });
   };
   await start();
   return {

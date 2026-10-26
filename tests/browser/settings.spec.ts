@@ -4,6 +4,7 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createServer } from 'node:net';
+import { stopBackendTree } from './processes';
 
 test('settings survive backend restart and invalid installations explain corrections', async ({
   page,
@@ -49,11 +50,12 @@ test('settings survive backend restart and invalid installations explain correct
       .toBe(200);
   };
   const stop = async () => {
-    if (backend && backend.exitCode === null) {
+    if (backend && backend.exitCode === null && backend.signalCode === null) {
       const exited = new Promise<void>((resolve) =>
         backend!.once('exit', () => resolve()),
       );
-      backend.kill();
+      if (!backend.pid) throw new Error('Missing backend PID');
+      await stopBackendTree(backend.pid);
       await exited;
     }
   };
@@ -94,6 +96,11 @@ test('settings survive backend restart and invalid installations explain correct
     ).toBeVisible();
   } finally {
     await stop();
-    await rm(root, { recursive: true, force: true });
+    await rm(root, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 100,
+    });
   }
 });
