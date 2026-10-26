@@ -1,0 +1,109 @@
+{
+  "version": 1,
+  "target_ram_gb": 96,
+  "status": "conversion_and_real_gpu_scenario_passed",
+  "conversions": [
+    {
+      "version": 1,
+      "family": "dit",
+      "source": "C:\\ai\\ai-toolkit\\models\\diffusion_models\\wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors",
+      "source_bytes": 14293923632,
+      "source_mtime_ns": 1790879498065727900,
+      "destination": "C:\\docs\\git\\musubiGui\\.worktrees\\reference-release\\.cache\\derived-models\\wan-high-dequantized-fp16.safetensors",
+      "destination_bytes": 28577090648,
+      "converted_tensors": 1095,
+      "lossy_source": true,
+      "activation_scales_applied": false,
+      "support_gate": "unresolved",
+      "created_utc": "2026-10-26T23:17:25.772619+00:00",
+      "method": "weight_fp16 = float(weight_fp8) * scalar_scale_weight; activation scale metadata omitted",
+      "source_identity": {
+        "header_sha256": "08e4f6e2b85092f49ef41225aa5f471be2ab7b31591497fd16b9c40df2a801dc"
+      },
+      "destination_identity": {
+        "header_sha256": "c1bd1c5e034bb08a5f08e8836163ab6299b48fac7f0b61e90cf1bf9b44d23e48"
+      }
+    },
+    {
+      "version": 1,
+      "family": "dit",
+      "source": "C:\\ai\\ai-toolkit\\models\\diffusion_models\\wan2.2_t2v_low_noise_14B_fp8_scaled.safetensors",
+      "source_bytes": 14293923632,
+      "source_mtime_ns": 1790884038629763500,
+      "destination": "C:\\docs\\git\\musubiGui\\.worktrees\\reference-release\\.cache\\derived-models\\wan-low-dequantized-fp16.safetensors",
+      "destination_bytes": 28577090648,
+      "converted_tensors": 1095,
+      "lossy_source": true,
+      "activation_scales_applied": false,
+      "support_gate": "unresolved",
+      "created_utc": "2026-10-26T23:17:06.208799+00:00",
+      "method": "weight_fp16 = float(weight_fp8) * scalar_scale_weight; activation scale metadata omitted",
+      "source_identity": {
+        "header_sha256": "08e4f6e2b85092f49ef41225aa5f471be2ab7b31591497fd16b9c40df2a801dc"
+      },
+      "destination_identity": {
+        "header_sha256": "c1bd1c5e034bb08a5f08e8836163ab6299b48fac7f0b61e90cf1bf9b44d23e48"
+      }
+    },
+    {
+      "version": 1,
+      "family": "t5",
+      "source": "C:\\ai\\ai-toolkit\\models\\text_encoders\\umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+      "source_bytes": 6735906897,
+      "source_mtime_ns": 1790884814706733400,
+      "destination": "C:\\docs\\git\\musubiGui\\.worktrees\\reference-release\\.cache\\derived-models\\wan-t5-dequantized-fp16.safetensors",
+      "destination_bytes": 11361844840,
+      "converted_tensors": 242,
+      "lossy_source": true,
+      "activation_scales_applied": false,
+      "support_gate": "unresolved",
+      "created_utc": "2026-10-26T23:16:34.598505+00:00",
+      "method": "weight_fp16 = float(weight_fp8) * scalar_scale_weight; activation scale metadata omitted",
+      "source_identity": {
+        "header_sha256": "4e3fa720eac1408dc0c234f861d0aace354423cce42d13b1cf5839465402d804"
+      },
+      "destination_identity": {
+        "header_sha256": "09dd5784ddfc18b4a1470e04de2bdbbca8c2dcd1788766c350bec7315c95943d"
+      }
+    }
+  ],
+  "architecture_validation": {
+    "dit": {
+      "expected_tensors": 1095,
+      "supplied_tensors": 1095,
+      "missing": [],
+      "unexpected": [],
+      "shape_mismatches": []
+    },
+    "t5": {
+      "expected_tensors": 242,
+      "supplied_tensors": 242,
+      "missing": [],
+      "unexpected": [],
+      "shape_mismatches": []
+    }
+  },
+  "numerical_validation": [
+    {
+      "family": "low",
+      "source_key": "blocks.0.cross_attn.k.weight",
+      "destination_key": "blocks.0.cross_attn.k.weight",
+      "sample_values": 10240,
+      "max_abs_error": 0.0,
+      "all_equal": true
+    },
+    {
+      "family": "t5",
+      "source_key": "encoder.block.0.layer.0.SelfAttention.k.weight",
+      "destination_key": "blocks.0.attn.k.weight",
+      "sample_values": 8192,
+      "max_abs_error": 0.0,
+      "all_equal": true
+    }
+  ],
+  "limitations": [
+    "Original FP8 quantization loss is not recovered.",
+    "The synthetic two-step scenario establishes execution, not training quality.",
+    "Header identities are not complete tensor-content hashes."
+  ]
+}

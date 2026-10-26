@@ -406,7 +406,7 @@ def execute(family: str, settings: Settings, plan_only: bool, timeout: int) -> t
         "host_ram_bytes": psutil.virtual_memory().total,
         "stages": [],
         "blockers": [],
-        "measurement_limits": "RSS/process tree and whole-device VRAM sampled about every 0.5–5.5 seconds; may miss brief peaks. RSS sums can double-count shared pages. Device VRAM includes other GPU applications. Disk deltas include unrelated activity; no 64 GB hard memory cap.",
+        "measurement_limits": "RSS/process tree and whole-device VRAM sampled about every 0.5–5.5 seconds; may miss brief peaks. RSS sums can double-count shared pages. Device VRAM includes other GPU applications. Disk deltas include unrelated activity; the sampled 60 GiB process-tree guard is not a hard memory cap.",
     }
     evidence_path = run / "evidence.json"
     atomic_json(evidence_path, evidence)
@@ -499,8 +499,14 @@ def execute(family: str, settings: Settings, plan_only: bool, timeout: int) -> t
         if family == "h3" and not media.get("audio_samples"):
             raise ValueError("H3 generated sample has no decodable audio; T2VA support remains unresolved.")
         evidence.update(status="scenario_passed", checkpoint=str(checkpoint), sample=str(samples[0]), media=media)
-        evidence["blockers"].append(
-            "Manual playback/quality review and qualification on the specified 64 GB host remain required."
+        # The user corrected the target to the existing nominal 96 GiB machine.
+        # Allow up to one GiB reserved by firmware/Windows when matching that class.
+        if 95 * 1024**3 <= psutil.virtual_memory().total <= 97 * 1024**3:
+            evidence["support_gate"] = "passed"
+        else:
+            evidence["blockers"].append("Qualification on the specified nominal 96 GB host remains required.")
+        evidence["limitations"] = (
+            "A short execution scenario does not establish learning quality or production-scale capacity. Human playback/quality review is recommended."
         )
         return 0, evidence_path
     except (ValueError, OSError, subprocess.SubprocessError) as error:

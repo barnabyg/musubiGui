@@ -122,8 +122,8 @@ def diagnostics(settings: Settings) -> dict[str, Any]:
     environment["host_ram_bytes"] = ram
     check(
         "Host RAM",
-        "ok" if ram >= 60 * 1024**3 else "warning",
-        f"{ram / 1024**3:.1f} GiB installed; per-stage measurements must establish the 64 GB recipe budget.",
+        "ok" if ram >= 95 * 1024**3 else "warning",
+        f"{ram / 1024**3:.1f} GiB installed; per-stage measurements must establish the nominal 96 GB recipe budget.",
     )
     for name, location in [("Output", settings.output_root), ("Cache", settings.cache_root)]:
         if not location:

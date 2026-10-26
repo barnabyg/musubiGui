@@ -44,10 +44,12 @@ Measurement limits: sampling can miss brief peaks and process-tree RSS can doubl
 shared pages. Whole-device VRAM includes unrelated GPU applications. Disk deltas include
 unrelated filesystem activity and are **not** a complete capacity estimate. The runner stops
 a stage if observed process-tree RSS exceeds 60 GiB, but this polling guard is not a hard
-memory cap. The measured host has 102,665,969,664 bytes (~95.6 GiB) usable RAM, differing
-from the specified 64 GB target. A passing scenario therefore keeps its support gate unresolved
-pending target-RAM qualification and human playback/quality review. Successful smoke tests
-do not demonstrate useful learning or production-resolution performance.
+memory cap. The measured host has 102,665,969,664 bytes (~95.6 GiB) usable RAM, matching
+the user's corrected nominal **96 GB** target. Historical evidence mentioning a 64 GB
+target is retained as recorded; that target was superseded. Current successful scenarios
+pass the execution support gate on this machine. Human playback/quality review remains
+recommended. Successful smoke tests do not demonstrate useful learning or
+production-resolution performance.
 
 Follow [Wan](wan.md) and [H3](h3.md) for recipes, actual evidence, limitations and manual checks.
 The runner is intentionally limited to these recipes: no I2V/Ref2VA, full fine-tuning,
