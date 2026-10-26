@@ -3,12 +3,13 @@
 import hashlib
 import json
 import shutil
+import subprocess  # nosec B404
 import uuid
 from importlib import import_module
 from pathlib import Path
 from typing import Any
 
-from musubi_gui.diagnostics import training_environment
+from musubi_gui.diagnostics import training_environment, upstream_revision
 from musubi_gui.jobs import build_stages, dataset_toml, effective_settings, load_job, review_job
 from musubi_gui.reference import safetensors_header
 from musubi_gui.settings import atomic_json, load_settings, within_root
@@ -37,6 +38,28 @@ def model_identity(path: str) -> dict[str, Any]:
     }
 
 
+def checkout_identity(checkout: Path) -> dict[str, str]:
+    git = shutil.which("git")
+    if not git:
+        raise ValueError("Git is required to validate the prepared training source.")
+    # B603: fixed read-only source enumeration; no shell or user command arguments.
+    result = subprocess.run(
+        [git, "-C", str(checkout), "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=30,
+    )  # nosec B603
+    files = {}
+    for name in result.stdout.split("\0"):
+        if name and (name.endswith(".py") or name in {"pyproject.toml", "uv.lock"}):
+            path = within_root(checkout / name, [checkout])
+            if not path.is_file():
+                raise ValueError("Training source disappeared during preparation. Retry after the checkout is stable.")
+            files[name] = digest_file(path)
+    return {"revision": upstream_revision(checkout), "source_digest": digest(files)}
+
+
 def snapshot_plan(root: Path, job_id: str, *, fixture_mode: bool = False) -> dict[str, Any]:
     job = load_job(root, job_id)
     settings = effective_settings(job, load_settings(root))
@@ -58,6 +81,7 @@ def snapshot_plan(root: Path, job_id: str, *, fixture_mode: bool = False) -> dic
         "upstream_revision": review["upstream_revision"],
         "models": models,
         "environment": {"synthetic_fixture": True} if fixture_mode else training_environment(settings),
+        "checkout": checkout_identity(Path(settings.checkout)),
     }
     preparation_settings = job.config.model_dump(
         include={"width", "height", "frames", "batch_size", "repeats", "enable_bucket", "bucket_no_upscale", "recipe"}
@@ -143,3 +167,8 @@ def verify_inputs(run: dict[str, Any]) -> None:
     for identity in run.get("provenance", {}).get("models", {}).values():
         if model_identity(identity["path"]) != identity:
             raise ValueError("A model component changed after preparation. Prepare a new revision.")
+    previous = run.get("provenance", {}).get("checkout")
+    if previous and checkout_identity(Path(run["settings"]["checkout"])) != previous:
+        raise ValueError(
+            "The training checkout changed after preparation. Prepare a new revision to record its actual code."
+        )

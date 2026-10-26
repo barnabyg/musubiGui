@@ -1,3 +1,5 @@
+import shutil
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -5,6 +7,7 @@ from pathlib import Path
 from musubi_gui.reference import Stage
 from musubi_gui.runs import ExecutionPlan, RunService
 from musubi_gui.settings import Settings
+from musubi_gui.snapshots import checkout_identity
 
 
 def plan(root: Path, name: str = "one", delay: float = 0.05) -> ExecutionPlan:
@@ -146,3 +149,37 @@ def test_queue_order_and_cancellation_survive_restart(tmp_path: Path) -> None:
         assert restarted.device.owner() is None
     finally:
         restarted.close()
+
+
+def test_changed_training_source_blocks_execution_of_prepared_inputs(tmp_path: Path) -> None:
+    service = RunService(tmp_path / "state", device_path=tmp_path / "gpu.sqlite", autostart=False)
+    execution = plan(tmp_path)
+    git = shutil.which("git")
+    assert git
+    for arguments in [
+        ["init", "--quiet"],
+        ["add", "."],
+        [
+            "-c",
+            "user.name=Fixture",
+            "-c",
+            "user.email=fixture@localhost",
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "--quiet",
+            "-m",
+            "fixture",
+        ],
+    ]:
+        subprocess.run([git, "-C", str(execution.directory), *arguments], check=True, capture_output=True)
+    execution.provenance["checkout"] = checkout_identity(execution.directory)
+    run = service.submit(execution)
+    (execution.directory / "stage.py").write_text("print('changed source')", encoding="utf-8")
+    service.start_worker()
+    try:
+        failed = wait_for(service, run["id"], "failed")
+        assert "checkout changed" in failed["error"]
+        assert not (execution.directory / "latent_cache.log").exists()
+    finally:
+        service.close()
