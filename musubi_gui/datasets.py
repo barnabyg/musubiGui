@@ -191,8 +191,13 @@ class DatasetStore:
                 info = resolved.stat()
                 stamp = f"{info.st_mtime_ns}:{info.st_size}"
                 with self._db() as db:
-                    old = db.execute("SELECT stamp FROM items WHERE id=?", (item_id,)).fetchone()
-                if old and old["stamp"] == stamp:
+                    old = db.execute("SELECT stamp,valid FROM items WHERE id=?", (item_id,)).fetchone()
+                if (
+                    old
+                    and old["valid"]
+                    and old["stamp"] == stamp
+                    and (self.root / "thumbnails" / f"{item_id}.jpg").is_file()
+                ):
                     continue
                 inspected = self.probe(resolved, self.root / "thumbnails" / f"{item_id}.jpg")
             except (ValueError, OSError, subprocess.SubprocessError):

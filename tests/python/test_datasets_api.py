@@ -1,8 +1,11 @@
 import base64
 import json
+import subprocess
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from typing import Any
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -97,3 +100,35 @@ def test_concurrent_caption_writes_never_silently_replace_each_other(tmp_path: P
         )
     assert sorted(response.status_code for response in responses) == [200, 409]
     assert (media / "red.txt").read_text(encoding="utf-8") in {"First draft", "Second draft"}
+
+
+def test_rescan_retries_unchanged_invalid_media_after_decoder_recovers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client, media, _ = fixture(tmp_path)
+    actual_run = subprocess.run
+
+    def unavailable(args: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        if any("media_probe.py" in value for value in args) and str(media / "red.png") in args:
+            return subprocess.CompletedProcess(args, 1, stdout="", stderr="Temporary decoder failure")
+        return actual_run(args, **kwargs)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(subprocess, "run", unavailable)
+        dataset_id = client.post("/api/datasets", json={"name": "Decoder recovery", "path": str(media)}).json()["id"]
+    before = client.get(f"/api/datasets/{dataset_id}/items").json()
+    assert not next(item for item in before if item["name"] == "red.png")["valid"]
+    assert client.post(f"/api/datasets/{dataset_id}/scan", json={}).status_code == 200
+    after = client.get(f"/api/datasets/{dataset_id}/items").json()
+    assert next(item for item in after if item["name"] == "red.png")["valid"]
+    assert (media / "red.png").read_bytes() == PNG
+    called: list[list[str]] = []
+
+    def observed(args: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        called.append(args)
+        return actual_run(args, **kwargs)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(subprocess, "run", observed)
+        assert client.post(f"/api/datasets/{dataset_id}/scan", json={}).status_code == 200
+    assert not any(str(media / "red.png") in command for command in called)
