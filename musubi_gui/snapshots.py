@@ -66,8 +66,6 @@ def snapshot_plan(root: Path, job_id: str, *, fixture_mode: bool = False) -> dic
     review = review_job(root, job, settings, fixture_mode=fixture_mode)
     if not review["valid"]:
         raise ValueError("Preparation blocked: " + " ".join(review["errors"]))
-    if job.family != "wan":
-        raise ValueError("Only Wan preparation is available.")
     store: Any = import_module("musubi_gui.datasets").DatasetStore(root)
     manifest: dict[str, Any] = store.manifest(job.dataset_id)
     if not manifest["items"]:
@@ -82,11 +80,25 @@ def snapshot_plan(root: Path, job_id: str, *, fixture_mode: bool = False) -> dic
         "models": models,
         "environment": {"synthetic_fixture": True} if fixture_mode else training_environment(settings),
         "checkout": checkout_identity(Path(settings.checkout)),
+        "audio_coverage": review.get("audio_coverage", {}),
     }
     preparation_settings = job.config.model_dump(
-        include={"width", "height", "frames", "batch_size", "repeats", "enable_bucket", "bucket_no_upscale", "recipe"}
+        include={
+            "width",
+            "height",
+            "frames",
+            "batch_size",
+            "repeats",
+            "enable_bucket",
+            "bucket_no_upscale",
+            "recipe",
+            "audio_policy",
+        }
     )
-    media = [{"path": item["path"], "sha256": item["sha256"]} for item in manifest["items"]]
+    media = [
+        {"path": item["path"], "sha256": item["sha256"], "audio": item.get("audio") if job.family == "h3" else None}
+        for item in manifest["items"]
+    ]
     captions = [
         {"path": item["path"], "text": item["caption"]["text"], "exists": item["caption"]["exists"]}
         for item in manifest["items"]
@@ -131,6 +143,16 @@ def snapshot_plan(root: Path, job_id: str, *, fixture_mode: bool = False) -> dic
             caption = target.with_suffix(".txt")
             caption.write_text(item["caption"]["text"], encoding="utf-8")
             files[str(caption)] = digest_file(caption)
+            audio = item.get("audio") if job.family == "h3" else None
+            if audio and audio.get("source") in {"explicit", "sidecar"}:
+                source_audio = Path(audio["audio_path"])
+                target_audio = target.with_suffix(source_audio.suffix.lower())
+                shutil.copyfile(source_audio, target_audio)
+                actual_audio = digest_file(target_audio)
+                if actual_audio != audio["audio_sha256"]:
+                    raise ValueError(f"{item['name']}: audio changed while freezing the dataset. Rescan and retry.")
+                audio["snapshot_path"] = str(target_audio)
+                files[str(target_audio)] = actual_audio
         native = directory / "dataset.toml"
         native.write_text(dataset_toml(job, media_directory, cache), encoding="utf-8")
         files[str(native)] = digest_file(native)

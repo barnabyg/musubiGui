@@ -520,7 +520,7 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
                         f"{item['name']}: {frames} decoded frames cannot supply the requested {job.config.frames}; shorten the job or choose a longer video."
                     )
                 if job.family == "h3" and item["kind"] == "video":
-                    inspection: dict[str, Any] = store.inspect_h3(job.dataset_id, item["id"])
+                    inspection: dict[str, Any] = store.inspect_h3(job.dataset_id, item["id"], frames=job.config.frames)
                     audio_coverage["included"] += 1
                     audio_coverage["items"].append({"id": item["id"], "name": item["name"], **inspection})
                     errors.extend(f"{item['name']}: {message}" for message in inspection.get("errors", []))
