@@ -6,6 +6,7 @@ import json
 import mimetypes
 import os
 import sqlite3
+import stat
 import subprocess  # nosec B404
 import sys
 import tempfile
@@ -39,6 +40,29 @@ def read_caption(path: Path) -> dict[str, Any]:
         "revision": hashlib.sha256((b"exists:" if exists else b"missing:") + data).hexdigest(),
         "exists": exists,
     }
+
+
+def regular_path(path: Path, root: Path) -> Path:
+    """Reject redirection even inside a root so one item's sidecar cannot target another file."""
+    candidate = path.absolute()
+    resolved = within_root(candidate, [root])
+    error = "Linked or redirected dataset paths cannot be edited or served. Use regular local media/sidecars, or register the resolved physical folder. Linked targets are preserved."
+    if candidate != resolved:
+        raise ValueError(error)
+    current = candidate
+    while current.is_relative_to(root):
+        try:
+            info = current.lstat()
+        except FileNotFoundError:
+            info = None
+        if info and (
+            stat.S_ISLNK(info.st_mode) or getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT
+        ):
+            raise ValueError(error)
+        if current == root:
+            break
+        current = current.parent
+    return candidate
 
 
 class DatasetStore:
@@ -166,8 +190,7 @@ class DatasetStore:
         }
 
     def scan(self, dataset_id: str) -> dict[str, Any]:
-        dataset = self.get(dataset_id)
-        folder = self._folder(dataset["path"])
+        folder = self.folder(dataset_id)
         if not folder.is_dir():
             self._progress(
                 dataset_id,
@@ -187,7 +210,7 @@ class DatasetStore:
             seen.add(relative)
             item_id = hashlib.sha256((dataset_id + "/" + relative).encode()).hexdigest()[:32]
             try:
-                resolved = within_root(path, [folder])
+                resolved = regular_path(path, folder)
                 info = resolved.stat()
                 stamp = f"{info.st_mtime_ns}:{info.st_size}"
                 with self._db() as db:
@@ -200,7 +223,10 @@ class DatasetStore:
                 ):
                     continue
                 inspected = self.probe(resolved, self.root / "thumbnails" / f"{item_id}.jpg")
-            except (ValueError, OSError, subprocess.SubprocessError):
+            except ValueError as error:
+                stamp = ""
+                inspected = {"valid": False, "error": str(error)}
+            except (OSError, subprocess.SubprocessError):
                 stamp = ""
                 inspected = {
                     "valid": False,
@@ -231,22 +257,24 @@ class DatasetStore:
         return self.get(dataset_id)
 
     def media_path(self, dataset_id: str, item_id: str) -> Path:
-        folder = self._folder(self.get(dataset_id)["path"])
+        folder = self.folder(dataset_id)
         with self._db() as db:
             row = db.execute("SELECT relative FROM items WHERE dataset=? AND id=?", (dataset_id, item_id)).fetchone()
         if row is None:
             raise KeyError("Dataset item was not found.")
-        path = within_root(folder / row["relative"], [folder])
+        path = regular_path(folder / row["relative"], folder)
         if not path.is_file():
             raise KeyError("Source media is missing. Restore it and re-scan.")
         return path
 
     def folder(self, dataset_id: str) -> Path:
-        return self._folder(self.get(dataset_id)["path"])
+        stored = Path(self.get(dataset_id)["path"])
+        self._folder(str(stored))
+        return regular_path(stored, stored)
 
     def caption(self, dataset_id: str, item_id: str) -> dict[str, Any]:
         media = self.media_path(dataset_id, item_id)
-        path = within_root(media.with_suffix(".txt"), [self._folder(self.get(dataset_id)["path"])])
+        path = regular_path(media.with_suffix(".txt"), self.folder(dataset_id))
         return read_caption(path)
 
     def save_caption(
@@ -255,8 +283,8 @@ class DatasetStore:
         if len(text.encode("utf-8")) > 2 * 1024**2:
             raise ValueError("Caption exceeds the 2 MiB text limit.")
         media = self.media_path(dataset_id, item_id)
-        folder = self._folder(self.get(dataset_id)["path"])
-        path = within_root(media.with_suffix(".txt"), [folder])
+        folder = self.folder(dataset_id)
+        path = regular_path(media.with_suffix(".txt"), folder)
         history_root = self.root / "caption-history" / item_id
         history_root.mkdir(parents=True, exist_ok=True)
         with self._db() as db:
@@ -285,7 +313,8 @@ class DatasetStore:
                     stream.write(text)
                     stream.flush()
                     os.fsync(stream.fileno())
-                within_root(media.with_suffix(".txt"), [folder])
+                regular_path(media, folder)
+                regular_path(media.with_suffix(".txt"), folder)
                 if read_caption(path)["revision"] != revision:
                     raise CaptionConflict(
                         "Caption changed during save. Your text is retained; reload and review the external edit."

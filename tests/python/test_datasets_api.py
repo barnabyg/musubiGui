@@ -1,5 +1,6 @@
 import base64
 import json
+import os
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -132,3 +133,69 @@ def test_rescan_retries_unchanged_invalid_media_after_decoder_recovers(
         patch.setattr(subprocess, "run", observed)
         assert client.post(f"/api/datasets/{dataset_id}/scan", json={}).status_code == 200
     assert not any(str(media / "red.png") in command for command in called)
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Native Windows junction containment contract")
+def test_caption_editor_rejects_inside_root_junction_retarget_without_touching_either_sidecar(tmp_path: Path) -> None:
+    client, media, _ = fixture(tmp_path)
+    routed, target = media / "source folder", media / "other folder"
+    routed.mkdir()
+    target.mkdir()
+    for folder, text in [(routed, "Original intended caption"), (target, "Do not change this target")]:
+        (folder / "item.png").write_bytes(PNG)
+        (folder / "item.txt").write_text(text, encoding="utf-8")
+    dataset_id = client.post("/api/datasets", json={"name": "Junction boundaries", "path": str(media)}).json()["id"]
+    item = next(
+        item
+        for item in client.get(f"/api/datasets/{dataset_id}/items").json()
+        if item["name"] == "source folder/item.png"
+    )
+    url = f"/api/datasets/{dataset_id}/items/{item['id']}/caption"
+    revision = client.get(url).json()["revision"]
+    original = media / "original folder"
+    routed.rename(original)
+    cmd = Path(os.environ.get("SystemRoot", "C:/Windows")) / "System32/cmd.exe"
+    subprocess.run(
+        [str(cmd), "/d", "/c", "mklink", "/J", str(routed), str(target)],
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
+        check=True,
+    )
+    try:
+        assert client.get(url).status_code == 422
+        assert client.put(url, json={"text": "Wrong destination", "revision": revision}).status_code == 422
+        assert (target / "item.txt").read_text(encoding="utf-8") == "Do not change this target"
+        assert (original / "item.txt").read_text(encoding="utf-8") == "Original intended caption"
+    finally:
+        routed.rmdir()
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Native Windows sidecar reparse-point contract")
+def test_caption_editor_rejects_a_sidecar_reparse_point_without_deleting_the_target(tmp_path: Path) -> None:
+    client, media, _ = fixture(tmp_path)
+    dataset_id = client.post("/api/datasets", json={"name": "Sidecar boundary", "path": str(media)}).json()["id"]
+    image = next(item for item in client.get(f"/api/datasets/{dataset_id}/items").json() if item["name"] == "red.png")
+    url = f"/api/datasets/{dataset_id}/items/{image['id']}/caption"
+    revision = client.get(url).json()["revision"]
+    target = media / "preserved target"
+    target.mkdir()
+    (target / "keep.txt").write_text("Original unrelated data", encoding="utf-8")
+    sidecar = media / "red.txt"
+    sidecar.unlink()
+    cmd = Path(os.environ.get("SystemRoot", "C:/Windows")) / "System32/cmd.exe"
+    subprocess.run(
+        [str(cmd), "/d", "/c", "mklink", "/J", str(sidecar), str(target)],
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
+        check=True,
+    )
+    try:
+        response = client.put(url, json={"text": "Wrong target", "revision": revision})
+        assert response.status_code == 422
+        assert "Linked" in response.json()["detail"]
+        assert (target / "keep.txt").read_text(encoding="utf-8") == "Original unrelated data"
+        assert (media / "red.png").read_bytes() == PNG
+    finally:
+        sidecar.rmdir()

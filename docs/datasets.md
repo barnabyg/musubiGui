@@ -60,3 +60,8 @@ hard-link publication inside the managed root. The destination filesystem must s
 (for example NTFS). Existing destinations are never overwritten. Media is limited to 64 GiB per file,
 captions to 2 MiB, and long media inspection has the same 45-second decoder limit. Captions require an
 already uploaded matching media stem; the browser orders caption uploads after media automatically.
+
+Dataset item paths and caption sidecars must remain regular local files/directories. The application
+rejects links/reparse-point redirection even when a target stays inside an allowed root, so replacing a
+folder with an inside-root junction cannot redirect an already opened item's caption to another file.
+Register the physical folder or restore regular files before continuing; linked targets are preserved.
