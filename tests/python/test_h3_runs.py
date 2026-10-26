@@ -5,6 +5,7 @@ from pathlib import Path
 
 from musubi_gui.acceptance import prepare
 from musubi_gui.datasets import DatasetStore
+from musubi_gui.media_probe import inspect
 from musubi_gui.runs import RunService
 
 
@@ -58,5 +59,24 @@ def test_explicit_audio_in_a_video_container_cannot_replace_the_frozen_target_vi
         assert frozen["snapshot_path"] != frozen["audio"]["snapshot_path"]
         metadata = json.loads(Path(prepared["directory"], "dataset.jsonl").read_text(encoding="utf-8"))
         assert metadata["audio_path"] == frozen["audio"]["snapshot_path"]
+    finally:
+        service.close()
+
+
+def test_h3_training_outputs_a_checkpoint_and_decodable_video_with_audio(tmp_path: Path) -> None:
+    fixture = prepare(tmp_path / "acceptance", "fixture", None)
+    service = RunService(Path(fixture["state"]), fixture_mode=True, device_path=tmp_path / "device.sqlite")
+    try:
+        job = next(job for job in fixture["jobs"] if job["family"] == "h3")
+        run = service.prepare(job["id"])
+        wait(service, run["id"], "prepared")
+        service.start(run["id"])
+        completed = wait(service, run["id"], "completed")
+        assert completed["checkpoints"]
+        sample = Path(completed["directory"], "samples/sample.mp4")
+        metadata = inspect(sample, timeline=True)
+        assert metadata["frames"] == 124
+        assert metadata["audio"]["decoded_seconds"] >= 5
+        assert completed["samples"][0]["status"] == "playable"
     finally:
         service.close()

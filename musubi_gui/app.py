@@ -16,6 +16,7 @@ from starlette.responses import Response
 from musubi_gui.datasets_api import dataset_router
 from musubi_gui.diagnostics import diagnostics
 from musubi_gui.jobs import jobs_router
+from musubi_gui.outputs import output_router
 from musubi_gui.runs import RunService
 from musubi_gui.runs_api import runs_router
 from musubi_gui.settings import Settings, load_settings, save_settings, state_root, validate_paths
@@ -93,6 +94,7 @@ def create_app(
 
     app.include_router(jobs_router(root, fixture_mode=fixture_mode))
     app.include_router(runs_router(service))
+    app.include_router(output_router(service))
     app.include_router(dataset_router(root))
     app.mount("/", StaticFiles(directory=assets or Path(__file__).parent / "web", html=True), name="ui")
     return app

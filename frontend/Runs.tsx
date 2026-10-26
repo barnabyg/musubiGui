@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Outputs } from './Outputs';
 
 type Run = {
   id: string;
@@ -340,6 +341,7 @@ export function Runs({ selectedId }: { selectedId?: string }) {
           }
         />
       )}
+      {run && <Outputs key={run.id} runId={run.id} />}
       {run && (
         <section className="panel">
           <h2>Live stage logs</h2>

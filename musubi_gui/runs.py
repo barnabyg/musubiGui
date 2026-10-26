@@ -15,6 +15,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from musubi_gui.media_probe import inspect as inspect_media
 from musubi_gui.processes import observed_tree, process_identity, terminate_owned
 from musubi_gui.reference import Stage, redact, reference_environment
 from musubi_gui.run_store import DeviceLease, RunStore
@@ -88,8 +89,6 @@ class RunService:
             return run
         if run["status"] != "prepared":
             raise ValueError("Prepare this immutable run successfully before starting training.")
-        if run["job"]["family"] != "wan":
-            raise ValueError("H3 training is not yet available.")
         if self.device.owner() and not allow_wait:
             raise ValueError("The GPU is owned by another operation. Wait for it to finish.")
         verify_inputs(run)
@@ -401,8 +400,20 @@ class RunService:
                     self.store.update(run_id, lambda r: r.update(checkpoints=[str(file) for file in checkpoints]))
                 elif stage["name"] == "generate":
                     samples = list((Path(run["directory"]) / "samples").rglob("*"))
-                    if not any(file.is_file() and file.stat().st_size > 0 for file in samples):
+                    media_files = [
+                        file
+                        for file in samples
+                        if file.is_file() and file.suffix.lower() in {".mp4", ".mov", ".webm", ".wav", ".png", ".jpg"}
+                    ]
+                    if not media_files:
                         raise ValueError("Sampling exited successfully but no sample was found.")
+                    inspected = []
+                    for file in media_files:
+                        metadata = inspect_media(file, timeline=True)
+                        if run["job"]["family"] == "h3" and (not metadata.get("frames") or not metadata.get("audio")):
+                            raise ValueError("H3 sample is incomplete: decodable video and audio are both required.")
+                        inspected.append({"path": str(file), "status": "playable", "metadata": metadata})
+                    self.store.update(run_id, lambda r: r.update(samples=inspected))
             self.store.update(
                 run_id,
                 lambda r: r.update(
