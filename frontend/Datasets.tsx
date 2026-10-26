@@ -3,6 +3,7 @@ import './datasets.css';
 import { CaptionEditor, type CaptionEditorHandle } from './CaptionEditor';
 import { H3Coverage, H3Inspector } from './H3Inspector';
 import { DatasetBulkActions } from './DatasetBulkActions';
+import { DatasetUploads } from './DatasetUploads';
 
 export type Dataset = {
   id: string;
@@ -137,6 +138,21 @@ export function Datasets({ visible = true }: { visible?: boolean }) {
       setError((reason as Error).message);
     }
   }
+  async function createManaged() {
+    setError('');
+    try {
+      const created = await api<Dataset>('/api/datasets/managed', {
+        name,
+        root: folder,
+      });
+      await open(created.id);
+      setStatus(
+        'Managed dataset created. Upload media and matching captions below.',
+      );
+    } catch (reason) {
+      setError((reason as Error).message);
+    }
+  }
   async function rescan() {
     if (!dataset) return;
     try {
@@ -209,6 +225,16 @@ export function Datasets({ visible = true }: { visible?: boolean }) {
         <button onClick={() => void register()} disabled={!name || !folder}>
           Register folder
         </button>
+        <button
+          onClick={() => void createManaged()}
+          disabled={!name || !folder}
+        >
+          Create managed dataset
+        </button>
+        <p>
+          Register uses the existing folder. Create managed dataset makes a new
+          isolated subfolder inside it for uploads.
+        </p>
         <div className="dataset-library">
           {datasets.map((value) => (
             <button
@@ -243,6 +269,19 @@ export function Datasets({ visible = true }: { visible?: boolean }) {
             excluded · {dataset.counts.total - dataset.counts.valid} invalid
           </p>
           <H3Coverage key={dataset.id} datasetId={dataset.id} />
+          {dataset.managed && (
+            <DatasetUploads
+              key={dataset.id}
+              datasetId={dataset.id}
+              beforeAction={async () =>
+                editor.current ? editor.current.flush() : true
+              }
+              onChanged={async () => {
+                setActive(null);
+                await refresh(dataset.id);
+              }}
+            />
+          )}
           <div className="columns">
             <label className="field">
               Search media and captions

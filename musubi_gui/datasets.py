@@ -136,21 +136,33 @@ class DatasetStore:
         with self._db() as db:
             db.execute("UPDATE datasets SET scan=? WHERE id=?", (json.dumps(status), dataset_id))
 
-    def probe(self, path: Path, thumbnail: Path | None = None, timeline: bool = False) -> dict[str, Any]:
+    def probe(
+        self, path: Path, thumbnail: Path | None = None, timeline: bool = False, extension: str | None = None
+    ) -> dict[str, Any]:
         args = [sys.executable, "-I", "-B", "-X", "utf8", str(Path(__file__).with_name("media_probe.py")), str(path)]
         if thumbnail:
             thumbnail.parent.mkdir(parents=True, exist_ok=True)
             args.extend(["--thumbnail", str(thumbnail)])
         if timeline:
             args.append("--timeline")
-        # B603: selected local training interpreter, fixed read-only media probe, and contained file paths.
-        result = subprocess.run(args, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=45)  # nosec B603
+        if extension:
+            args.extend(["--extension", extension])
+        # B603: app interpreter, fixed read-only media probe, and contained file paths.
+        try:
+            result = subprocess.run(
+                args, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=45
+            )  # nosec B603
+        except subprocess.TimeoutExpired:
+            return {
+                "valid": False,
+                "error": "Media inspection exceeded 45 seconds. Use a shorter clip or exclude this item; the original source is preserved.",
+            }
         for line in reversed(result.stdout.splitlines()):
             if line.startswith("MUSUBI_MEDIA=") and result.returncode == 0:
                 return dict(json.loads(line.removeprefix("MUSUBI_MEDIA=")))
         return {
             "valid": False,
-            "error": "The selected training Python could not inspect this media. Check PyAV/Pillow in that environment.",
+            "error": "The application media decoder failed. Repair the locked application environment and re-scan this item.",
         }
 
     def scan(self, dataset_id: str) -> dict[str, Any]:
@@ -223,6 +235,9 @@ class DatasetStore:
         if not path.is_file():
             raise KeyError("Source media is missing. Restore it and re-scan.")
         return path
+
+    def folder(self, dataset_id: str) -> Path:
+        return self._folder(self.get(dataset_id)["path"])
 
     def caption(self, dataset_id: str, item_id: str) -> dict[str, Any]:
         media = self.media_path(dataset_id, item_id)
@@ -366,6 +381,18 @@ class DatasetStore:
             for item_id in set(item_ids):
                 db.execute("UPDATE items SET excluded=? WHERE dataset=? AND id=?", (int(excluded), dataset_id, item_id))
         return self.get(dataset_id)
+
+    def create_managed(self, name: str, root: str) -> dict[str, Any]:
+        folder = self._folder(root)
+        if not folder.is_dir():
+            raise ValueError("Choose an existing configured dataset root for managed uploads.")
+        destination = within_root(folder / ("managed-" + uuid.uuid4().hex), [folder])
+        destination.mkdir()
+        try:
+            return self.register(name, str(destination), managed=True)
+        except Exception:
+            destination.rmdir()
+            raise
 
     def inspect_h3(self, dataset_id: str, item_id: str, frames: int = 124) -> dict[str, Any]:
         path = self.media_path(dataset_id, item_id)

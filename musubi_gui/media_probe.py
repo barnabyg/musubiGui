@@ -6,20 +6,25 @@ from pathlib import Path
 from typing import Any
 
 
-def inspect(path: Path, thumbnail: Path | None = None, timeline: bool = False) -> dict[str, Any]:
+def inspect(
+    path: Path, thumbnail: Path | None = None, timeline: bool = False, extension: str | None = None
+) -> dict[str, Any]:
     import av
     from PIL import Image
 
-    if path.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff", ".gif"}:
+    suffix = (extension or path.suffix).lower()
+    if suffix in {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff", ".gif"}:
         with Image.open(path) as image:
             image.load()
             width, height = image.size
             if thumbnail:
                 image.thumbnail((256, 192))
                 image.convert("RGB").save(thumbnail, "JPEG")
-        return {"width": width, "height": height, "frames": 1, "duration": 0, "audio": None}
+            image_format = image.format
+        return {"width": width, "height": height, "frames": 1, "duration": 0, "audio": None, "format": image_format}
     result: dict[str, Any] = {"audio": None}
     with av.open(str(path)) as media:
+        result["format"] = media.format.name
         if media.streams.video:
             video = media.streams.video[0]
             first: Any = next(media.decode(video=0), None)
@@ -55,7 +60,7 @@ def inspect(path: Path, thumbnail: Path | None = None, timeline: bool = False) -
                     duration=previous - result["video_start"] + 1 / max(result["fps"], 1),
                     max_video_backwards_seconds=backwards,
                 )
-        elif path.suffix.lower() not in {".aac", ".flac", ".m4a", ".mp3", ".ogg", ".opus", ".wav"}:
+        elif suffix not in {".aac", ".flac", ".m4a", ".mp3", ".ogg", ".opus", ".wav"}:
             raise ValueError("No video stream found.")
     with av.open(str(path)) as media:
         if media.streams.audio:
@@ -95,9 +100,10 @@ def main() -> None:
     parser.add_argument("path", type=Path)
     parser.add_argument("--thumbnail", type=Path)
     parser.add_argument("--timeline", action="store_true")
+    parser.add_argument("--extension")
     args = parser.parse_args()
     try:
-        result = {"valid": True, "metadata": inspect(args.path, args.thumbnail, args.timeline)}
+        result = {"valid": True, "metadata": inspect(args.path, args.thumbnail, args.timeline, args.extension)}
     except Exception as error:
         result = {
             "valid": False,

@@ -5,8 +5,9 @@ from typing import Any, Callable, TypeVar
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
+from musubi_gui.dataset_uploads import DatasetUploads
 from musubi_gui.datasets import CaptionConflict, DatasetStore
 from musubi_gui.datasets_bulk import DatasetBulk
 
@@ -77,10 +78,29 @@ class BulkRestore(BaseModel):
     operation_id: str
 
 
+class ManagedDataset(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str
+    root: str
+
+
+class UploadStart(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    filename: str
+    size: int
+
+
+class UploadChunk(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    offset: int
+    data: str = Field(max_length=700000)
+
+
 def dataset_router(root: Path) -> APIRouter:
     router = APIRouter(prefix="/api/datasets")
     store = DatasetStore(root)
     bulk = DatasetBulk(store)
+    uploads = DatasetUploads(store)
 
     @router.get("")
     def datasets() -> list[dict[str, Any]]:
@@ -95,6 +115,38 @@ def dataset_router(root: Path) -> APIRouter:
     @router.get("/{dataset_id}")
     def dataset(dataset_id: str) -> dict[str, Any]:
         return result(lambda: store.get(dataset_id))
+
+    @router.post("/managed")
+    def managed(request: ManagedDataset) -> dict[str, Any]:
+        def create() -> dict[str, Any]:
+            dataset = store.create_managed(request.name, request.root)
+            return store.scan(dataset["id"])
+
+        return result(create)
+
+    @router.get("/{dataset_id}/uploads")
+    def upload_list(dataset_id: str) -> list[dict[str, Any]]:
+        return result(lambda: uploads.list(dataset_id))
+
+    @router.post("/{dataset_id}/uploads")
+    def upload_begin(dataset_id: str, request: UploadStart) -> dict[str, Any]:
+        return result(lambda: uploads.begin(dataset_id, request.filename, request.size))
+
+    @router.get("/{dataset_id}/uploads/{upload_id}")
+    def upload_status(dataset_id: str, upload_id: str) -> dict[str, Any]:
+        return result(lambda: uploads.status(dataset_id, upload_id))
+
+    @router.put("/{dataset_id}/uploads/{upload_id}")
+    def upload_chunk(dataset_id: str, upload_id: str, request: UploadChunk) -> dict[str, Any]:
+        return result(lambda: uploads.chunk(dataset_id, upload_id, request.offset, request.data))
+
+    @router.post("/{dataset_id}/uploads/{upload_id}/complete")
+    def upload_complete(dataset_id: str, upload_id: str) -> dict[str, Any]:
+        return result(lambda: uploads.complete(dataset_id, upload_id))
+
+    @router.post("/{dataset_id}/uploads/{upload_id}/cancel")
+    def upload_cancel(dataset_id: str, upload_id: str) -> dict[str, Any]:
+        return result(lambda: uploads.cancel(dataset_id, upload_id))
 
     @router.post("/{dataset_id}/scan")
     def scan(dataset_id: str, background: BackgroundTasks) -> dict[str, Any]:

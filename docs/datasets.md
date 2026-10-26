@@ -46,3 +46,17 @@ exact literal prefix/suffix/find/replace changes. Applying the saved preview che
 caption revision and reports saved/conflict/failed outcomes independently. Preview again after resolving
 a failed/conflicting item. **Restore successful captions** restores only that operation's successful
 items and refuses any item edited afterward. Sidecar history remains available for individual recovery.
+
+For uploads, use the same fixture command and choose **Create managed dataset** with the printed folder
+as its storage root. Upload the fixture's `red.png`/`red.txt` and `invalid.mp4`; expect the media/caption
+to appear immediately and the invalid file to fail independently. Upload the same filename again to
+see an explicit collision. Restart and reopen the managed dataset to confirm persistence.
+
+Uploads use bounded 512 KiB JSON chunks and private `.part` files. A pause, network failure or disk error
+preserves the partial upload; select the same file and retry to verify the existing byte prefix before
+resuming. A changed prefix is rejected. **Cancel partial** removes only that session's temporary file;
+completed uploads are retained. Media/container types and UTF-8 captions are checked before an exclusive
+hard-link publication inside the managed root. The destination filesystem must support local hard links
+(for example NTFS). Existing destinations are never overwritten. Media is limited to 64 GiB per file,
+captions to 2 MiB, and long media inspection has the same 45-second decoder limit. Captions require an
+already uploaded matching media stem; the browser orders caption uploads after media automatically.
