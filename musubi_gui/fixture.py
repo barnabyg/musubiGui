@@ -10,7 +10,7 @@ from typing import Any
 
 
 def prepare(root: Path, family: str) -> None:
-    import av  # type: ignore[import-not-found]
+    import av
     import numpy as np  # type: ignore[import-not-found]
 
     root.mkdir(parents=True, exist_ok=True)

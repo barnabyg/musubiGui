@@ -15,6 +15,7 @@ class Settings(BaseModel):
     checkout: str = ""
     python: str = ""
     model_roots: list[str] = Field(default_factory=list)
+    dataset_roots: list[str] = Field(default_factory=list)
     models: dict[str, str] = Field(default_factory=dict)
     output_root: str = ""
     cache_root: str = ""
@@ -67,6 +68,7 @@ def validate_paths(settings: Settings) -> None:
         settings.output_root,
         settings.cache_root,
         *settings.model_roots,
+        *settings.dataset_roots,
         *settings.models.values(),
     ]
     if any(value and (not Path(value).is_absolute() or "\x00" in value) for value in paths):
@@ -76,7 +78,9 @@ def validate_paths(settings: Settings) -> None:
             raise ValueError("Network paths and URLs are not supported; select a local path.")
     writes = [Path(value).resolve() for value in [settings.output_root, settings.cache_root] if value]
     if writes:
-        protected = [Path(p).resolve() for p in [settings.checkout, *settings.model_roots] if p]
+        protected = [
+            Path(p).resolve() for p in [settings.checkout, *settings.model_roots, *settings.dataset_roots] if p
+        ]
         for target in writes:
             if target == Path(target.anchor) or any(
                 target.is_relative_to(p) or p.is_relative_to(target) for p in protected

@@ -13,6 +13,7 @@ from starlette.middleware.base import RequestResponseEndpoint
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.responses import Response
 
+from musubi_gui.datasets_api import dataset_router
 from musubi_gui.diagnostics import diagnostics
 from musubi_gui.jobs import jobs_router
 from musubi_gui.runs import RunService
@@ -54,7 +55,7 @@ def create_app(
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Content-Security-Policy"] = (
-            "default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+            "default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:; media-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
         )
         response.headers["Cache-Control"] = "no-store"
         return response
@@ -92,5 +93,6 @@ def create_app(
 
     app.include_router(jobs_router(root, fixture_mode=fixture_mode))
     app.include_router(runs_router(service))
+    app.include_router(dataset_router(root))
     app.mount("/", StaticFiles(directory=assets or Path(__file__).parent / "web", html=True), name="ui")
     return app

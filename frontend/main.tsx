@@ -3,12 +3,14 @@ import { createRoot } from 'react-dom/client';
 import './style.css';
 import { Jobs } from './Jobs';
 import { Runs } from './Runs';
+import { Datasets } from './Datasets';
 
 type Settings = {
   version: number;
   checkout: string;
   python: string;
   model_roots: string[];
+  dataset_roots: string[];
   models: Record<string, string>;
   output_root: string;
   cache_root: string;
@@ -158,7 +160,7 @@ function App() {
               className={screen === name ? 'active' : ''}
               onClick={() => navigate(name)}
             >
-              <span>
+              <span aria-hidden="true">
                 {name === 'Datasets' ? '▦' : name === 'Jobs' ? '▷' : '⚙'}
               </span>
               {name}
@@ -174,6 +176,9 @@ function App() {
           <span>WORKSPACE / {screen.toUpperCase()}</span>
           <span className="badge">LoRA · Windows</span>
         </header>
+        <div hidden={screen !== 'Datasets'}>
+          <Datasets />
+        </div>
         {screen === 'Jobs' ? (
           <Jobs
             onDirtyChange={setJobDirty}
@@ -184,18 +189,7 @@ function App() {
           />
         ) : screen === 'Runs' ? (
           <Runs key={runId} selectedId={runId} />
-        ) : screen !== 'Settings' ? (
-          <section>
-            <p className="eyebrow">COMING IN A LATER MILESTONE</p>
-            <h1>{screen}</h1>
-            <p>
-              Connect your training installation in Settings first. Dataset
-              management and job execution are not available in this setup
-              release.
-            </p>
-            <button onClick={() => setScreen('Settings')}>Open Settings</button>
-          </section>
-        ) : (
+        ) : screen === 'Datasets' ? null : (
           <>
             <section className="title">
               <p className="eyebrow">YOUR MACHINE, YOUR MODELS</p>
@@ -274,6 +268,27 @@ function App() {
                     />
                     <small>
                       All component paths must be contained in one of these
+                      directories.
+                    </small>
+                  </label>
+                  <label className="field">
+                    Dataset roots (one per line)
+                    <textarea
+                      disabled={busy}
+                      value={settings.dataset_roots.join('\n')}
+                      onChange={(event) =>
+                        update({
+                          ...settings,
+                          dataset_roots: event.target.value
+                            .split('\n')
+                            .filter(Boolean),
+                        })
+                      }
+                      placeholder="C:\datasets"
+                    />
+                    <small>
+                      Registered folders and managed uploads stay within these
+                      local roots. Keep them separate from output/cache
                       directories.
                     </small>
                   </label>
