@@ -1,0 +1,295 @@
+import { test, expect, type Page } from '@playwright/test';
+import { spawn, type ChildProcess } from 'node:child_process';
+import { mkdtemp, mkdir, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { createServer } from 'node:net';
+
+async function workspace() {
+  const root = await mkdtemp(path.join(tmpdir(), 'musubi-jobs-'));
+  const reservation = createServer();
+  await new Promise<void>((resolve) =>
+    reservation.listen(0, '127.0.0.1', resolve),
+  );
+  const address = reservation.address();
+  if (typeof address !== 'object' || !address) throw new Error('No test port');
+  const port = address.port;
+  await new Promise<void>((resolve) => reservation.close(() => resolve()));
+  const url = `http://127.0.0.1:${port}`;
+  let backend: ChildProcess | undefined;
+  const start = async () => {
+    backend = spawn(
+      path.resolve('.venv/Scripts/python.exe'),
+      ['-m', 'musubi_gui', '--port', String(port), '--no-browser'],
+      {
+        env: { ...process.env, MUSUBI_GUI_STATE: path.join(root, 'state') },
+        stdio: 'pipe',
+      },
+    );
+    await expect
+      .poll(async () => {
+        try {
+          return (await fetch(`${url}/api/jobs`)).status;
+        } catch {
+          return 0;
+        }
+      })
+      .toBe(200);
+  };
+  const stop = async () => {
+    if (backend && backend.exitCode === null) {
+      const exited = new Promise<void>((resolve) =>
+        backend!.once('exit', () => resolve()),
+      );
+      backend.kill();
+      await exited;
+    }
+  };
+  await mkdir(path.join(root, 'models'));
+  await start();
+  const settings = (await (
+    await fetch(`${url}/api/settings`)
+  ).json()) as Record<string, unknown>;
+  const configured = await fetch(`${url}/api/settings`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      ...settings,
+      output_root: path.join(root, 'output'),
+      cache_root: path.join(root, 'cache'),
+      model_roots: [path.join(root, 'models')],
+      models: Object.fromEntries(
+        [
+          'wan_low',
+          'wan_high',
+          'wan_vae',
+          'wan_t5',
+          'h3_dit',
+          'h3_video_vae',
+          'h3_audio_vae',
+          'h3_text',
+        ].map((key) => [key, path.join(root, 'models', `${key}.safetensors`)]),
+      ),
+    }),
+  });
+  expect(configured.status).toBe(200);
+  return {
+    root,
+    url,
+    start,
+    stop,
+    close: async () => {
+      await stop();
+      await rm(root, { recursive: true, force: true });
+    },
+  };
+}
+
+async function openJobs(page: Page, url: string) {
+  await page.goto(url);
+  await page.getByRole('button', { name: 'Jobs', exact: true }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Jobs', exact: true }),
+  ).toBeVisible();
+}
+
+test('Wan draft controls, validation and reviewed native configuration survive service restart', async ({
+  page,
+}) => {
+  const app = await workspace();
+  try {
+    await openJobs(page, app.url);
+    await page
+      .getByRole('button', { name: 'New Wan job', exact: true })
+      .click();
+    await page.getByLabel('Job name', { exact: true }).fill('Browser Wan');
+    await page.getByLabel('LoRA rank', { exact: true }).fill('16');
+    await page.getByLabel('Frames', { exact: false }).fill('18');
+    await page.getByRole('button', { name: 'Save draft', exact: true }).click();
+    await expect(page.getByRole('status')).toContainText('Draft saved');
+    await page
+      .getByRole('button', { name: 'Review configuration', exact: true })
+      .click();
+    await expect(
+      page.getByText('Frames: Wan requires 4*n+1 frames.', { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: 'Prepare run', exact: true }),
+    ).toBeDisabled();
+    await page.getByLabel('Frames', { exact: false }).fill('33');
+    await page.getByLabel('Width', { exact: false }).fill('320');
+    await page.getByRole('button', { name: 'Save draft', exact: true }).click();
+    await expect(page.getByRole('status')).toContainText('Draft saved');
+    await page
+      .getByRole('button', { name: 'Review configuration', exact: true })
+      .click();
+    await expect(page.getByTestId('dataset-toml')).toContainText(
+      'resolution = [320, 256]',
+    );
+    await expect(page.getByTestId('dataset-toml')).toContainText(
+      'target_frames = [33]',
+    );
+    await page.getByText('train arguments', { exact: true }).click();
+    await expect(
+      page
+        .locator('details')
+        .filter({ has: page.getByText('train arguments', { exact: true }) })
+        .locator('pre'),
+    ).toContainText('"--network_dim",\n  "16"');
+    const jobs = (await (
+      await page.request.get(`${app.url}/api/jobs`)
+    ).json()) as { id: string; revision: number }[];
+    const stored = JSON.parse(
+      await readFile(
+        path.join(
+          app.root,
+          'state',
+          'jobs',
+          jobs[0].id,
+          `${jobs[0].revision}.json`,
+        ),
+        'utf8',
+      ),
+    ) as { config: { frames: number } };
+    expect(stored.config.frames).toBe(33);
+    await app.stop();
+    await app.start();
+    await openJobs(page, app.url);
+    await page.getByRole('button', { name: /Browser Wan · WAN/ }).click();
+    await expect(page.getByLabel('Frames', { exact: false })).toHaveValue('33');
+    await expect(page.getByLabel('LoRA rank', { exact: true })).toHaveValue(
+      '16',
+    );
+  } finally {
+    await app.close();
+  }
+});
+
+test('H3 editor keeps T2VA guidance stages and identifies invalid geometry', async ({
+  page,
+}) => {
+  const app = await workspace();
+  try {
+    await openJobs(page, app.url);
+    await page.getByRole('button', { name: 'New H3 job', exact: true }).click();
+    await expect(page.getByLabel('Frames', { exact: false })).toHaveValue(
+      '124',
+    );
+    await expect(
+      page.getByLabel('H2D-only block swapping', { exact: false }),
+    ).toBeChecked();
+    await expect(
+      page.getByLabel('Runtime FP8 scaling', { exact: false }),
+    ).toHaveCount(0);
+    await expect(page.getByLabel(/negative prompt/i)).toHaveCount(0);
+    await page.getByLabel('Width', { exact: false }).fill('272');
+    await page.getByRole('button', { name: 'Save draft', exact: true }).click();
+    await expect(page.getByRole('status')).toContainText('Draft saved');
+    await page
+      .getByRole('button', { name: 'Review configuration', exact: true })
+      .click();
+    await expect(
+      page.getByText(
+        'Geometry: H3 width and height must be at least 64 and multiples of 32.',
+        { exact: true },
+      ),
+    ).toBeVisible();
+    await page.getByText('text_cache arguments', { exact: true }).click();
+    const args = page
+      .locator('details')
+      .filter({ has: page.getByText('text_cache arguments', { exact: true }) })
+      .locator('pre');
+    await expect(args).toContainText('"--task",\n  "t2va"');
+    await expect(args).toContainText('--uncond_output');
+  } finally {
+    await app.close();
+  }
+});
+
+test('duplication presets cancelled conversion and versioned export import keep independent drafts', async ({
+  page,
+}) => {
+  const app = await workspace();
+  try {
+    await openJobs(page, app.url);
+    await page
+      .getByRole('button', { name: 'New Wan job', exact: true })
+      .click();
+    await page.getByLabel('Job name', { exact: true }).fill('Reusable');
+    await page.getByLabel('LoRA rank', { exact: true }).fill('16');
+    await page.getByRole('button', { name: 'Save draft', exact: true }).click();
+    await expect(page.getByRole('status')).toContainText('Draft saved');
+    await page.getByLabel('Preset name', { exact: true }).fill('Sixteen');
+    await page
+      .getByRole('button', { name: 'Save as preset', exact: true })
+      .click();
+    await expect(page.getByRole('status')).toHaveText('Preset saved');
+    await page
+      .getByRole('button', { name: 'Duplicate job', exact: true })
+      .click();
+    await expect(page.getByLabel('Job name', { exact: true })).toHaveValue(
+      'Reusable copy',
+    );
+    await page.getByLabel('LoRA rank', { exact: true }).fill('32');
+    await page.getByRole('button', { name: 'Save draft', exact: true }).click();
+    await expect(page.getByRole('status')).toContainText('Draft saved');
+    await page
+      .getByLabel('Compatible preset', { exact: true })
+      .selectOption({ label: 'Sixteen' });
+    await page
+      .getByRole('button', { name: 'Apply preset', exact: true })
+      .click();
+    await expect(page.getByLabel('LoRA rank', { exact: true })).toHaveValue(
+      '16',
+    );
+    await page
+      .getByRole('button', { name: 'Change model to H3 T2VA', exact: true })
+      .click();
+    await expect(
+      page.getByRole('dialog', { name: 'Confirm model conversion' }),
+    ).toContainText('frames: 17 → 124');
+    await page
+      .getByRole('button', { name: 'Cancel conversion', exact: true })
+      .click();
+    await expect(page.getByLabel('Recipe', { exact: false })).toHaveValue(
+      'low-noise',
+    );
+    await page
+      .getByText('Import / export configuration', { exact: true })
+      .click();
+    const download = page.waitForEvent('download');
+    await page
+      .getByRole('button', { name: 'Export configuration', exact: true })
+      .click();
+    expect((await download).suggestedFilename()).toMatch(/^musubi-job-/);
+    const exported = JSON.parse(
+      await page.getByLabel('Configuration JSON', { exact: true }).inputValue(),
+    ) as { version: number; draft: { name: string } };
+    expect(exported.version).toBe(1);
+    exported.draft.name = 'Imported draft';
+    await page
+      .getByLabel('Configuration JSON', { exact: true })
+      .fill(JSON.stringify(exported));
+    await page
+      .getByRole('button', { name: 'Import configuration', exact: true })
+      .click();
+    await expect(page.getByLabel('Job name', { exact: true })).toHaveValue(
+      'Imported draft',
+    );
+    await page.getByRole('button', { name: /Reusable · WAN/ }).click();
+    await expect(page.getByLabel('LoRA rank', { exact: true })).toHaveValue(
+      '16',
+    );
+    await page
+      .getByRole('button', { name: 'Change model to H3 T2VA', exact: true })
+      .click();
+    await page
+      .getByRole('button', { name: 'Accept conversion', exact: true })
+      .click();
+    await expect(page.getByLabel('Frames', { exact: false })).toHaveValue(
+      '124',
+    );
+  } finally {
+    await app.close();
+  }
+});

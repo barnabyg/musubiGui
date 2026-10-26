@@ -39,6 +39,12 @@ type Job = {
   config: JobConfig;
 };
 type Dataset = { id: string; name: string };
+type Preset = { id: string; name: string; family: Job['family'] };
+type ConversionPreview = {
+  draft: unknown;
+  changes: { field: string; before: unknown; after: unknown }[];
+  message: string;
+};
 type Review = {
   valid: boolean;
   errors: string[];
@@ -93,17 +99,24 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
   const [status, setStatus] = useState('Loading jobs…');
   const [error, setError] = useState('');
   const [review, setReview] = useState<Review | null>(null);
+  const [presets, setPresets] = useState<Preset[]>([]);
+  const [presetName, setPresetName] = useState('');
+  const [presetId, setPresetId] = useState('');
+  const [transfer, setTransfer] = useState('');
+  const [conversion, setConversion] = useState<ConversionPreview | null>(null);
 
   useEffect(() => {
     void Promise.all([
       request<Job[]>('/api/jobs'),
       request<Dataset[]>('/api/datasets'),
       request<{ models: Record<string, string> }>('/api/settings'),
+      request<Preset[]>('/api/jobs/presets'),
     ])
-      .then(([items, library, settings]) => {
+      .then(([items, library, settings, savedPresets]) => {
         setJobs(items);
         setDatasets(library);
         setModels(settings.models);
+        setPresets(savedPresets);
         setStatus('Jobs loaded');
       })
       .catch((reason: Error) => setError(reason.message));
@@ -139,12 +152,14 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
     setJob(value);
     setDirty(false);
     setReview(null);
+    setConversion(null);
     setStatus(`Opened revision ${value.revision}`);
   }
   function edit(next: Job) {
     setJob(next);
     setDirty(true);
     setReview(null);
+    setConversion(null);
     setStatus('Unsaved draft');
   }
   function config<K extends keyof JobConfig>(key: K, value: JobConfig[K]) {
@@ -235,6 +250,103 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
       onRun?.(run.id);
     });
   }
+  async function duplicate() {
+    if (!job || dirty) return;
+    await perform(async () => {
+      const copied = await request<Job>(
+        `/api/jobs/${job.id}/duplicate`,
+        'POST',
+        {},
+      );
+      setJobs(await request<Job[]>('/api/jobs'));
+      select(copied);
+      setStatus('Independent copy created');
+    });
+  }
+  async function savePreset() {
+    if (!job || dirty) return;
+    await perform(async () => {
+      await request(`/api/jobs/${job.id}/presets`, 'POST', {
+        name: presetName,
+      });
+      setPresets(await request<Preset[]>('/api/jobs/presets'));
+      setPresetName('');
+      setStatus('Preset saved');
+    });
+  }
+  async function applyPreset() {
+    if (!job || dirty) return;
+    await perform(async () => {
+      const updated = await request<Job>(
+        `/api/jobs/${job.id}/apply-preset`,
+        'POST',
+        { preset_id: presetId, revision: job.revision },
+      );
+      setJobs(await request<Job[]>('/api/jobs'));
+      select(updated);
+      setStatus('Preset applied as a new revision');
+    });
+  }
+  async function convert(confirmed: boolean) {
+    if (!job || dirty) return;
+    await perform(async () => {
+      const result = await request<Job | ConversionPreview>(
+        `/api/jobs/${job.id}/convert`,
+        'POST',
+        {
+          family: job.family === 'wan' ? 'h3' : 'wan',
+          revision: job.revision,
+          confirmed,
+        },
+      );
+      if ('id' in result) {
+        setJobs(await request<Job[]>('/api/jobs'));
+        select(result);
+        setStatus('Model conversion saved as a new revision');
+      } else setConversion(result);
+    });
+  }
+  async function exportConfiguration() {
+    if (!job || dirty) return;
+    await perform(async () => {
+      const exported = await request<unknown>(`/api/jobs/${job.id}/export`);
+      const text = JSON.stringify(exported, null, 2);
+      setTransfer(text);
+      const objectUrl = URL.createObjectURL(
+        new Blob([text], { type: 'application/json' }),
+      );
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = `musubi-job-${job.id}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(objectUrl);
+      setStatus(
+        'Versioned configuration exported; recognised credentials redacted',
+      );
+    });
+  }
+  async function importConfiguration() {
+    if (
+      dirty &&
+      !window.confirm('Discard unsaved edits and import an independent draft?')
+    )
+      return;
+    await perform(async () => {
+      const imported = await request<Job>(
+        '/api/jobs/import',
+        'POST',
+        JSON.parse(transfer),
+      );
+      setJobs(await request<Job[]>('/api/jobs'));
+      setJob(imported);
+      setDirty(false);
+      setReview(null);
+      setConversion(null);
+      setStatus('Configuration imported as an independent draft');
+    });
+  }
   return (
     <div className="jobs-workspace">
       <section className="title">
@@ -268,8 +380,130 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
           </button>
         ))}
       </div>
+      <details className="panel">
+        <summary>Import / export configuration</summary>
+        <p>
+          Version 1 JSON preserves supported values. Unsupported formats and
+          unknown fields are rejected. Recognised credentials are redacted;
+          review local paths before sharing.
+        </p>
+        <label className="field">
+          Configuration file
+          <input
+            type="file"
+            accept="application/json,.json"
+            disabled={busy}
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file)
+                void file
+                  .text()
+                  .then(setTransfer)
+                  .catch((reason: Error) => setError(reason.message));
+            }}
+          />
+        </label>
+        <label className="field">
+          Configuration JSON
+          <textarea
+            value={transfer}
+            disabled={busy}
+            onChange={(event) => setTransfer(event.target.value)}
+          />
+        </label>
+        <div className="actions">
+          <button
+            disabled={busy || !transfer}
+            onClick={() => void importConfiguration()}
+          >
+            Import configuration
+          </button>
+          <button
+            disabled={busy || dirty || !job}
+            onClick={() => void exportConfiguration()}
+          >
+            Export configuration
+          </button>
+        </div>
+      </details>
       {job && (
         <>
+          <section className="panel">
+            <h2>Reuse configuration</h2>
+            <div className="actions">
+              <button disabled={busy || dirty} onClick={() => void duplicate()}>
+                Duplicate job
+              </button>
+              <button
+                disabled={busy || dirty}
+                onClick={() => void convert(false)}
+              >
+                Change model to {job.family === 'wan' ? 'H3 T2VA' : 'Wan T2V'}
+              </button>
+            </div>
+            {conversion && (
+              <div role="dialog" aria-label="Confirm model conversion">
+                <p>{conversion.message}</p>
+                <ul>
+                  {conversion.changes.map((change) => (
+                    <li key={change.field}>
+                      {change.field}: {JSON.stringify(change.before)} →{' '}
+                      {JSON.stringify(change.after)}
+                    </li>
+                  ))}
+                </ul>
+                <div className="actions">
+                  <button disabled={busy} onClick={() => setConversion(null)}>
+                    Cancel conversion
+                  </button>
+                  <button disabled={busy} onClick={() => void convert(true)}>
+                    Accept conversion
+                  </button>
+                </div>
+              </div>
+            )}
+            <div className="columns">
+              <label className="field">
+                Preset name
+                <input
+                  disabled={busy}
+                  value={presetName}
+                  onChange={(event) => setPresetName(event.target.value)}
+                />
+              </label>
+              <label className="field">
+                Compatible preset
+                <select
+                  disabled={busy}
+                  value={presetId}
+                  onChange={(event) => setPresetId(event.target.value)}
+                >
+                  <option value="">Select a preset</option>
+                  {presets
+                    .filter((preset) => preset.family === job.family)
+                    .map((preset) => (
+                      <option key={preset.id} value={preset.id}>
+                        {preset.name}
+                      </option>
+                    ))}
+                </select>
+              </label>
+            </div>
+            <div className="actions">
+              <button
+                disabled={busy || dirty || !presetName.trim()}
+                onClick={() => void savePreset()}
+              >
+                Save as preset
+              </button>
+              <button
+                disabled={busy || dirty || !presetId}
+                onClick={() => void applyPreset()}
+              >
+                Apply preset
+              </button>
+            </div>
+          </section>
           <section className="panel">
             <h2>Job & dataset</h2>
             <label className="field">

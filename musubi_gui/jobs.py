@@ -1,5 +1,6 @@
 """Versioned job drafts and deterministic plans for the pinned LoRA recipe."""
 
+import builtins
 import json
 import math
 import re
@@ -15,7 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from musubi_gui.diagnostics import upstream_revision
 from musubi_gui.h3 import h3_stages, validate_h3
-from musubi_gui.reference import CAPTION, UPSTREAM, Stage, validate_wan, wan_stages
+from musubi_gui.reference import CAPTION, UPSTREAM, Stage, redact, validate_wan, wan_stages
 from musubi_gui.settings import Settings, atomic_json, load_settings, validate_paths, within_root
 
 _lock = threading.RLock()
@@ -95,6 +96,91 @@ class JobUpdate(JobDraft):
     revision: int
 
 
+class JobExport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    version: Literal[1]
+    format: Literal["musubi-gui-job"]
+    draft: JobDraft
+
+
+class NamedPreset(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=200)
+
+
+class Preset(NamedPreset):
+    version: Literal[1] = 1
+    id: str
+    family: Literal["wan", "h3"]
+    config: JobConfig
+
+
+class PresetSelection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    preset_id: str
+    revision: int
+
+
+class Conversion(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    family: Literal["wan", "h3"]
+    revision: int
+    confirmed: bool = False
+
+
+def as_draft(job: Job) -> JobDraft:
+    return JobDraft.model_validate(job.model_dump(exclude={"id", "version", "revision"}))
+
+
+def export_draft(draft: JobDraft) -> JobExport:
+    def scrub(value: Any) -> Any:
+        if isinstance(value, str):
+            return redact(value)
+        if isinstance(value, dict):
+            return {key: scrub(child) for key, child in value.items()}
+        if isinstance(value, list):
+            return [scrub(child) for child in value]
+        return value
+
+    return JobExport(version=1, format="musubi-gui-job", draft=JobDraft.model_validate(scrub(draft.model_dump())))
+
+
+def conversion_draft(job: Job, family: Literal["wan", "h3"]) -> JobDraft:
+    shared = {
+        key: value
+        for key, value in job.config.model_dump().items()
+        if key
+        in {
+            "batch_size",
+            "repeats",
+            "enable_bucket",
+            "bucket_no_upscale",
+            "rank",
+            "alpha",
+            "learning_rate",
+            "steps",
+            "gradient_accumulation",
+            "gradient_checkpointing",
+            "save_every",
+            "save_state",
+            "sample_enabled",
+            "sample_prompt",
+            "sample_steps",
+            "seed",
+        }
+    }
+    for key in ["width", "height"]:
+        value = getattr(job.config, key)
+        if value >= 64 and value % (32 if family == "h3" else 16) == 0:
+            shared[key] = value
+    config = default_config(family).model_copy(update=shared)
+    return JobDraft(name=job.name, family=family, dataset_id=job.dataset_id, config=config)
+
+
 def identifier(value: str) -> str:
     if not re.fullmatch(r"[a-f0-9]{32}", value):
         raise ValueError("Invalid job identity.")
@@ -141,6 +227,58 @@ class JobStore:
             job = Job(**draft.model_dump(), id=old.id, revision=old.revision + 1)
             atomic_json(self.root / old.id / f"{job.revision}.json", job.model_dump())
             return job
+
+    def convert(self, job_id: str, conversion: Conversion) -> dict[str, Any] | Job:
+        with _lock:
+            old = self.get(job_id)
+            if conversion.revision != old.revision:
+                raise HTTPException(409, "The draft changed. Reopen it and preview the conversion again.")
+            if conversion.family == old.family:
+                raise ValueError("Select a different model for conversion.")
+            draft = conversion_draft(old, conversion.family)
+            if not conversion.confirmed:
+                return {
+                    "draft": draft.model_dump(),
+                    "changes": [
+                        {"field": key, "before": value, "after": draft.config.model_dump()[key]}
+                        for key, value in old.config.model_dump().items()
+                        if draft.config.model_dump()[key] != value
+                    ],
+                    "message": "Model/task-specific recipe, components, frame count and memory options are replaced. Shared controls and the previous revision are retained. Review the converted draft before preparing.",
+                }
+            job = Job(**draft.model_dump(), id=old.id, revision=old.revision + 1)
+            atomic_json(self.root / old.id / f"{job.revision}.json", job.model_dump())
+            return job
+
+    def presets(self) -> builtins.list[Preset]:
+        return [
+            Preset.model_validate_json(file.read_text(encoding="utf-8"))
+            for file in sorted((self.root.parent / "presets").glob("*.json"))
+        ]
+
+    def create_preset(self, job_id: str, name: str) -> Preset:
+        job = self.get(job_id)
+        preset = Preset(
+            name=name, id=uuid.uuid4().hex, family=job.family, config=export_draft(as_draft(job)).draft.config
+        )
+        directory = self.root.parent / "presets"
+        directory.mkdir(parents=True, exist_ok=True)
+        atomic_json(directory / f"{preset.id}.json", preset.model_dump())
+        return preset
+
+    def apply_preset(self, job_id: str, selection: PresetSelection) -> Job:
+        with _lock:
+            job = self.get(job_id)
+            identifier(selection.preset_id)
+            preset = Preset.model_validate_json(
+                (self.root.parent / "presets" / f"{selection.preset_id}.json").read_text(encoding="utf-8")
+            )
+            if preset.id != selection.preset_id:
+                raise ValueError("Preset identity mismatch; preserve its file before repair.")
+            if job.family != preset.family:
+                raise ValueError("This preset belongs to another model. Preview and accept a model conversion first.")
+            draft = as_draft(job).model_copy(update={"config": preset.config})
+            return self.save(job_id, draft, selection.revision)
 
 
 def load_job(root: Path, job_id: str) -> Job:
@@ -442,6 +580,16 @@ def jobs_router(root: Path, *, fixture_mode: bool = False) -> APIRouter:
     def get_defaults(family: Literal["wan", "h3"]) -> JobConfig:
         return default_config(family)
 
+    @router.get("/presets")
+    def get_presets() -> list[Preset]:
+        with job_errors():
+            return store.presets()
+
+    @router.post("/import")
+    def import_job(value: JobExport) -> Job:
+        with job_errors():
+            return store.create(export_draft(value.draft).draft)
+
     @router.post("")
     def create_job(draft: JobDraft) -> Job:
         with job_errors():
@@ -456,6 +604,32 @@ def jobs_router(root: Path, *, fixture_mode: bool = False) -> APIRouter:
     def get_revision(job_id: str, revision: int) -> Job:
         with job_errors():
             return store.get(job_id, revision)
+
+    @router.get("/{job_id}/export")
+    def export_job(job_id: str) -> JobExport:
+        with job_errors():
+            return export_draft(as_draft(store.get(job_id)))
+
+    @router.post("/{job_id}/duplicate")
+    def duplicate_job(job_id: str) -> Job:
+        with job_errors():
+            draft = as_draft(store.get(job_id))
+            return store.create(draft.model_copy(update={"name": draft.name + " copy"}))
+
+    @router.post("/{job_id}/presets")
+    def post_preset(job_id: str, value: NamedPreset) -> Preset:
+        with job_errors():
+            return store.create_preset(job_id, value.name)
+
+    @router.post("/{job_id}/apply-preset")
+    def apply_preset(job_id: str, selection: PresetSelection) -> Job:
+        with job_errors():
+            return store.apply_preset(job_id, selection)
+
+    @router.post("/{job_id}/convert")
+    def convert_job(job_id: str, conversion: Conversion) -> dict[str, Any] | Job:
+        with job_errors():
+            return store.convert(job_id, conversion)
 
     @router.put("/{job_id}")
     def put_job(job_id: str, update: JobUpdate) -> Job:

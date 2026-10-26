@@ -41,3 +41,24 @@ Review shows item-specific source/alignment diagnostics and supervision totals.
 Explicitly allowing missing audio produces an audio-less item excluded from audio
 supervision; malformed supplied audio still blocks preparation. No original audio
 is repaired or silently discarded. The selected audio VAE remains mandatory.
+
+Duplicate job creates an independent identity and output destination. Save as preset
+records named model-specific controls; Apply preset creates a new job revision while
+retaining that job's name and dataset selection. Model conversion first previews every
+changed model/task-specific field. Cancel leaves the previous draft intact; Accept
+creates a revision while retaining the old revision for comparison. Incompatible
+components and memory/recipe/frame defaults reset, and shared controls remain.
+
+Import / export configuration downloads or accepts strict `musubi-gui-job` version 1
+JSON. Reimport creates an independent job. Unknown versions, formats and fields are
+rejected; missing optional controls in earlier version 1 exports receive documented
+family defaults. Recognised credential strings are redacted on export/import and in
+presets. Review local filesystem paths before sharing a configuration. No model,
+dataset or training-state payload is embedded in the export.
+
+Browser checks: `npm.cmd run test:browser -- tests/browser/jobs.spec.ts`. The scenarios
+cover restart persistence and generated configuration for both models, invalid draft
+feedback, duplication, presets, cancelled/accepted conversion and configuration
+round-trip. These UI scenarios intentionally do not launch GPU work; the separate
+release-acceptance fixtures exercise execution and real hardware evidence remains
+separate.

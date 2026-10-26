@@ -140,3 +140,69 @@ def test_h3_invalid_geometry_and_memory_are_saved_but_not_executable(tmp_path: P
     assert any("17*n+5" in error for error in review["errors"])
     assert any("FP8" in error for error in review["errors"])
     assert any("H2D" in error for error in review["errors"])
+
+
+def test_duplicate_presets_and_model_conversion_preserve_original_revisions(tmp_path: Path) -> None:
+    client = client_for(tmp_path)
+    original = client.post("/api/jobs", json={"name": "Original", "family": "wan", "config": {"rank": 16}}).json()
+    copied_response = client.post(f"/api/jobs/{original['id']}/duplicate", json={})
+    assert copied_response.status_code == 200
+    copied = copied_response.json()
+    assert copied["id"] != original["id"]
+    assert copied["config"]["rank"] == 16
+    original_review = client.post(f"/api/jobs/{original['id']}/review", json={}).json()
+    copied_review = client.post(f"/api/jobs/{copied['id']}/review", json={}).json()
+    assert original_review["paths"]["output"] != copied_review["paths"]["output"]
+    preset = client.post(f"/api/jobs/{original['id']}/presets", json={"name": "Rank sixteen"}).json()
+    other = client.post("/api/jobs", json={"name": "Other", "family": "wan"}).json()
+    applied = client.post(
+        f"/api/jobs/{other['id']}/apply-preset", json={"preset_id": preset["id"], "revision": 1}
+    ).json()
+    assert applied["config"]["rank"] == 16
+    assert applied["name"] == "Other"
+    preview = client.post(f"/api/jobs/{other['id']}/convert", json={"family": "h3", "revision": 2}).json()
+    assert "frames" in [change["field"] for change in preview["changes"]]
+    assert client.get(f"/api/jobs/{other['id']}").json()["family"] == "wan"
+    converted = client.post(
+        f"/api/jobs/{other['id']}/convert", json={"family": "h3", "revision": 2, "confirmed": True}
+    ).json()
+    assert converted["family"] == "h3"
+    assert converted["config"]["frames"] == 124
+    assert client.get(f"/api/jobs/{other['id']}/revisions/2").json()["family"] == "wan"
+    assert client.get(f"/api/jobs/{original['id']}").json() == original
+
+
+def test_versioned_export_roundtrip_and_unknown_fields_are_not_silently_discarded(tmp_path: Path) -> None:
+    client = client_for(tmp_path)
+    job = client.post(
+        "/api/jobs",
+        json={
+            "name": "Round trip",
+            "family": "h3",
+            "config": {"seed": 789, "sample_prompt": "雪と音\nsecond line", "audio_policy": "allow-missing"},
+        },
+    ).json()
+    exported_response = client.get(f"/api/jobs/{job['id']}/export")
+    assert exported_response.status_code == 200
+    exported = exported_response.json()
+    imported = client.post("/api/jobs/import", json=exported)
+    assert imported.status_code == 200
+    assert imported.json()["config"] == job["config"]
+    assert imported.json()["id"] != job["id"]
+    future = {**exported, "version": 99}
+    assert client.post("/api/jobs/import", json=future).status_code == 422
+    unsupported = {**exported, "draft": {**exported["draft"], "unknown_switch": True}}
+    assert client.post("/api/jobs/import", json=unsupported).status_code == 422
+    older = {**exported, "draft": {**exported["draft"], "config": {"rank": 4, "frames": 124}}}
+    restored = client.post("/api/jobs/import", json=older)
+    assert restored.status_code == 200
+    assert restored.json()["config"]["block_swap_h2d_only"] is True
+
+
+def test_export_redacts_recognised_credentials_and_requires_a_known_format(tmp_path: Path) -> None:
+    client = client_for(tmp_path)
+    job = client.post("/api/jobs", json={"name": "Redaction", "config": {"sample_prompt": "hf_" + "a" * 24}}).json()
+    exported = client.get(f"/api/jobs/{job['id']}/export").json()
+    assert exported["draft"]["config"]["sample_prompt"] == "[REDACTED]"
+    assert client.post("/api/jobs/import", json={"draft": exported["draft"]}).status_code == 422
+    assert client.post("/api/jobs/import", json={**exported, "format": "other-trainer"}).status_code == 422
