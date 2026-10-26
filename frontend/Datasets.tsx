@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import './datasets.css';
 import { CaptionEditor, type CaptionEditorHandle } from './CaptionEditor';
 import { H3Coverage, H3Inspector } from './H3Inspector';
+import { DatasetBulkActions } from './DatasetBulkActions';
 
 export type Dataset = {
   id: string;
@@ -63,6 +64,10 @@ export function Datasets({ visible = true }: { visible?: boolean }) {
   const [status, setStatus] = useState('');
   const [scroll, setScroll] = useState(0);
   const [columns, setColumns] = useState(3);
+  const [query, setQuery] = useState('');
+  const [filter, setFilter] = useState('all');
+  const [sort, setSort] = useState('name');
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const gallery = useRef<HTMLDivElement>(null);
   const editor = useRef<CaptionEditorHandle>(null);
   const refresh = useCallback(async (id?: string) => {
@@ -106,6 +111,9 @@ export function Datasets({ visible = true }: { visible?: boolean }) {
   async function open(id: string) {
     if (editor.current && !(await editor.current.flush())) return;
     setActive(null);
+    setSelected(new Set());
+    setQuery('');
+    setFilter('all');
     setScroll(0);
     setError('');
     try {
@@ -139,8 +147,31 @@ export function Datasets({ visible = true }: { visible?: boolean }) {
     }
   }
   const rowHeight = 170;
+  const visibleItems = items
+    .filter((item) => {
+      const matches = (item.name + '\n' + item.caption.text)
+        .toLowerCase()
+        .includes(query.toLowerCase());
+      return (
+        matches &&
+        (filter === 'all' ||
+          (filter === 'missing' && !item.caption.text.trim()) ||
+          (filter === 'invalid' && !item.valid) ||
+          (filter === 'excluded' && item.excluded) ||
+          (filter === 'included' && item.valid && !item.excluded) ||
+          (filter === 'selected' && selected.has(item.id)))
+      );
+    })
+    .sort((a, b) =>
+      sort === 'name-desc'
+        ? b.name.localeCompare(a.name)
+        : sort === 'caption'
+          ? a.caption.text.localeCompare(b.caption.text) ||
+            a.name.localeCompare(b.name)
+          : a.name.localeCompare(b.name),
+    );
   const start = Math.max(0, Math.floor(scroll / rowHeight) - 1) * columns;
-  const end = Math.min(items.length, start + columns * 5);
+  const end = Math.min(visibleItems.length, start + columns * 5);
   return (
     <>
       <section className="title">
@@ -212,6 +243,90 @@ export function Datasets({ visible = true }: { visible?: boolean }) {
             excluded · {dataset.counts.total - dataset.counts.valid} invalid
           </p>
           <H3Coverage key={dataset.id} datasetId={dataset.id} />
+          <div className="columns">
+            <label className="field">
+              Search media and captions
+              <input
+                value={query}
+                onChange={(event) => {
+                  setQuery(event.target.value);
+                  setScroll(0);
+                }}
+              />
+            </label>
+            <label className="field">
+              Filter media
+              <select
+                aria-label="Filter media"
+                value={filter}
+                onChange={(event) => {
+                  setFilter(event.target.value);
+                  setScroll(0);
+                }}
+              >
+                <option value="all">All media</option>
+                <option value="missing">Missing captions</option>
+                <option value="invalid">Invalid media</option>
+                <option value="excluded">Excluded</option>
+                <option value="included">Included</option>
+                <option value="selected">Selected</option>
+              </select>
+            </label>
+            <label className="field">
+              Sort media
+              <select
+                aria-label="Sort media"
+                value={sort}
+                onChange={(event) => {
+                  setSort(event.target.value);
+                  setScroll(0);
+                }}
+              >
+                <option value="name">Name A–Z</option>
+                <option value="name-desc">Name Z–A</option>
+                <option value="caption">Caption</option>
+              </select>
+            </label>
+          </div>
+          <p>
+            {visibleItems.length} matching · {selected.size} selected (
+            {
+              [...selected].filter(
+                (id) => !visibleItems.some((item) => item.id === id),
+              ).length
+            }{' '}
+            hidden by filters)
+          </p>
+          <div className="actions">
+            <button
+              onClick={() =>
+                setSelected(
+                  (values) =>
+                    new Set([
+                      ...values,
+                      ...visibleItems.map((item) => item.id),
+                    ]),
+                )
+              }
+            >
+              Select visible matches
+            </button>
+            <button onClick={() => setSelected(new Set())}>
+              Clear selection
+            </button>
+          </div>
+          <DatasetBulkActions
+            key={dataset.id}
+            datasetId={dataset.id}
+            selected={[...selected]}
+            beforeAction={async () =>
+              editor.current ? editor.current.flush() : true
+            }
+            onChanged={async () => {
+              setActive(null);
+              await refresh(dataset.id);
+            }}
+          />
           <div className="dataset-workspace">
             <div
               className="dataset-gallery"
@@ -221,15 +336,15 @@ export function Datasets({ visible = true }: { visible?: boolean }) {
             >
               <div
                 style={{
-                  height: Math.ceil(items.length / columns) * rowHeight,
+                  height: Math.ceil(visibleItems.length / columns) * rowHeight,
                   position: 'relative',
                 }}
               >
-                {items.slice(start, end).map((item, offset) => {
+                {visibleItems.slice(start, end).map((item, offset) => {
                   const index = start + offset;
                   return (
-                    <button
-                      className={`media-tile ${active?.id === item.id ? 'selected' : ''}`}
+                    <div
+                      className={`media-card ${selected.has(item.id) ? 'picked' : ''}`}
                       key={item.id}
                       style={{
                         position: 'absolute',
@@ -238,26 +353,44 @@ export function Datasets({ visible = true }: { visible?: boolean }) {
                         width: `${100 / columns}%`,
                         height: rowHeight - 8,
                       }}
-                      onClick={() => void select(item)}
                     >
-                      {item.valid ? (
-                        <img
-                          loading="lazy"
-                          src={`/api/datasets/${dataset.id}/items/${item.id}/thumbnail`}
-                          alt={item.name}
-                        />
-                      ) : (
-                        <span className="invalid-media">Cannot preview</span>
-                      )}
-                      <span>{item.name}</span>
-                      <small>
-                        {item.kind}
-                        {item.caption.exists
-                          ? ' · caption'
-                          : ' · missing caption'}
-                        {item.excluded ? ' · excluded' : ''}
-                      </small>
-                    </button>
+                      <button
+                        className={`media-tile ${active?.id === item.id ? 'selected' : ''}`}
+                        onClick={() => void select(item)}
+                      >
+                        {item.valid ? (
+                          <img
+                            loading="lazy"
+                            src={`/api/datasets/${dataset.id}/items/${item.id}/thumbnail`}
+                            alt={item.name}
+                          />
+                        ) : (
+                          <span className="invalid-media">Cannot preview</span>
+                        )}
+                        <span>{item.name}</span>
+                        <small>
+                          {item.kind}
+                          {item.caption.exists
+                            ? ' · caption'
+                            : ' · missing caption'}
+                          {item.excluded ? ' · excluded' : ''}
+                        </small>
+                      </button>
+                      <input
+                        className="select-item"
+                        aria-label={`Select ${item.name}`}
+                        type="checkbox"
+                        checked={selected.has(item.id)}
+                        onChange={(event) =>
+                          setSelected((values) => {
+                            const next = new Set(values);
+                            if (event.target.checked) next.add(item.id);
+                            else next.delete(item.id);
+                            return next;
+                          })
+                        }
+                      />
+                    </div>
                   );
                 })}
               </div>
@@ -274,9 +407,9 @@ export function Datasets({ visible = true }: { visible?: boolean }) {
                   ) {
                     event.preventDefault();
                     const index =
-                      items.findIndex((item) => item.id === active.id) +
+                      visibleItems.findIndex((item) => item.id === active.id) +
                       (event.key === 'ArrowRight' ? 1 : -1);
-                    if (items[index]) void select(items[index]);
+                    if (visibleItems[index]) void select(visibleItems[index]);
                   }
                 }}
               >
@@ -300,12 +433,15 @@ export function Datasets({ visible = true }: { visible?: boolean }) {
                 <div className="actions">
                   <button
                     disabled={
-                      items.findIndex((item) => item.id === active.id) <= 0
+                      visibleItems.findIndex((item) => item.id === active.id) <=
+                      0
                     }
                     onClick={() =>
                       void select(
-                        items[
-                          items.findIndex((item) => item.id === active.id) - 1
+                        visibleItems[
+                          visibleItems.findIndex(
+                            (item) => item.id === active.id,
+                          ) - 1
                         ],
                       )
                     }
@@ -314,13 +450,15 @@ export function Datasets({ visible = true }: { visible?: boolean }) {
                   </button>
                   <button
                     disabled={
-                      items.findIndex((item) => item.id === active.id) >=
-                      items.length - 1
+                      visibleItems.findIndex((item) => item.id === active.id) >=
+                      visibleItems.length - 1
                     }
                     onClick={() =>
                       void select(
-                        items[
-                          items.findIndex((item) => item.id === active.id) + 1
+                        visibleItems[
+                          visibleItems.findIndex(
+                            (item) => item.id === active.id,
+                          ) + 1
                         ],
                       )
                     }

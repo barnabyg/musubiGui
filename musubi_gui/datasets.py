@@ -277,7 +277,7 @@ class DatasetStore:
                 saved = read_caption(path)
                 record.update(state="applied", after=saved)
                 atomic_json(history_file, record)
-                return saved
+                return {**saved, "history_id": history_id}
             finally:
                 Path(temporary).unlink(missing_ok=True)
 
@@ -357,6 +357,15 @@ class DatasetStore:
         with self._db() as db:
             db.execute("UPDATE items SET explicit_audio=? WHERE id=? AND dataset=?", (path, item_id, dataset_id))
         return self.inspect_h3(dataset_id, item_id)
+
+    def exclude(self, dataset_id: str, item_ids: builtins.list[str], excluded: bool) -> dict[str, Any]:
+        known = {item["id"] for item in self.items(dataset_id)}
+        if not item_ids or not set(item_ids).issubset(known):
+            raise ValueError("Select existing items in this dataset before changing exclusions.")
+        with self._db() as db:
+            for item_id in set(item_ids):
+                db.execute("UPDATE items SET excluded=? WHERE dataset=? AND id=?", (int(excluded), dataset_id, item_id))
+        return self.get(dataset_id)
 
     def inspect_h3(self, dataset_id: str, item_id: str, frames: int = 124) -> dict[str, Any]:
         path = self.media_path(dataset_id, item_id)

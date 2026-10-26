@@ -8,6 +8,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict
 
 from musubi_gui.datasets import CaptionConflict, DatasetStore
+from musubi_gui.datasets_bulk import DatasetBulk
 
 T = TypeVar("T")
 
@@ -51,9 +52,35 @@ class AudioSource(BaseModel):
     path: str
 
 
+class Exclusions(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    item_ids: list[str]
+    excluded: bool
+
+
+class BulkPreview(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    item_ids: list[str]
+    prefix: str = ""
+    suffix: str = ""
+    find: str = ""
+    replace: str = ""
+
+
+class BulkApply(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    preview_id: str
+
+
+class BulkRestore(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    operation_id: str
+
+
 def dataset_router(root: Path) -> APIRouter:
     router = APIRouter(prefix="/api/datasets")
     store = DatasetStore(root)
+    bulk = DatasetBulk(store)
 
     @router.get("")
     def datasets() -> list[dict[str, Any]]:
@@ -78,6 +105,26 @@ def dataset_router(root: Path) -> APIRouter:
     @router.get("/{dataset_id}/items")
     def items(dataset_id: str) -> list[dict[str, Any]]:
         return result(lambda: store.items(dataset_id))
+
+    @router.post("/{dataset_id}/exclusions")
+    def exclusions(dataset_id: str, request: Exclusions) -> dict[str, Any]:
+        return result(lambda: store.exclude(dataset_id, request.item_ids, request.excluded))
+
+    @router.post("/{dataset_id}/bulk/preview")
+    def preview(dataset_id: str, request: BulkPreview) -> dict[str, Any]:
+        return result(
+            lambda: bulk.preview(
+                dataset_id, request.item_ids, request.prefix, request.suffix, request.find, request.replace
+            )
+        )
+
+    @router.post("/{dataset_id}/bulk/apply")
+    def apply(dataset_id: str, request: BulkApply) -> dict[str, Any]:
+        return result(lambda: bulk.apply(dataset_id, request.preview_id))
+
+    @router.post("/{dataset_id}/bulk/restore")
+    def restore_bulk(dataset_id: str, request: BulkRestore) -> dict[str, Any]:
+        return result(lambda: bulk.restore(dataset_id, request.operation_id))
 
     @router.get("/{dataset_id}/h3")
     def h3_summary(dataset_id: str, frames: int = 124) -> dict[str, Any]:

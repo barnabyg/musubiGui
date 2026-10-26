@@ -30,6 +30,38 @@
 .media-tile.selected {
   border-color: #c1a4ef;
 }
+.media-card > .media-tile {
+  width: 100%;
+  height: 100%;
+}
+.media-card.picked {
+  outline: 2px solid #95cdaa;
+  outline-offset: -2px;
+}
+.media-card .select-item {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: #bca7ec;
+}
+.caption-revision {
+  border: 1px solid #373d49;
+  padding: 12px;
+  margin: 12px 0;
+}
+.field select {
+  display: block;
+  margin-top: 9px;
+  width: 100%;
+  background: #11141a;
+  color: #e8e4f5;
+  border: 1px solid #373d49;
+  border-radius: 5px;
+  padding: 11px;
+}
 .media-tile img {
   width: 100%;
   height: 100px;

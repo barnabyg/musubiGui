@@ -37,3 +37,12 @@ geometry, 50 ms audio discontinuity limit and 200 ms missing-audio budget. It de
 in an isolated application subprocess with a 45-second timeout. Long clips that exceed it
 need shorter source clips. Geometry, timestamps and playback are preflight evidence;
 actual upstream caching remains the final authority for crop-specific supervision.
+
+Search names/caption text, sort and filter missing captions, invalid media, exclusions or selected items.
+Checkbox selections remain explicit across filters; the counter identifies selected items hidden by the
+current filter. Excluding changes library metadata without changing or deleting source media. The
+included count is the effective training count. Select **Selection and bulk caption actions** to preview
+exact literal prefix/suffix/find/replace changes. Applying the saved preview checks each authoritative
+caption revision and reports saved/conflict/failed outcomes independently. Preview again after resolving
+a failed/conflicting item. **Restore successful captions** restores only that operation's successful
+items and refuses any item edited afterward. Sidecar history remains available for individual recovery.
