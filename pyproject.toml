@@ -29,8 +29,8 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["musubi_gui"]
 
-[tool.hatch.build.targets.wheel.force-include]
-"musubi_gui/web" = "musubi_gui/web"
+[tool.hatch.build]
+artifacts = ["musubi_gui/web/**"]
 
 [tool.ruff]
 target-version = "py312"
