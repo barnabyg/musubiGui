@@ -262,19 +262,36 @@ def stop_tree(process: subprocess.Popen[str]) -> None:
     psutil.wait_procs(tree, timeout=15)
 
 
-def stage_run(stage: Stage, settings: Settings, run: Path, cache: Path, timeout: int) -> dict[str, Any]:
+def reference_environment(cache: Path) -> dict[str, str]:
     env = os.environ.copy()
     env.update(
         PYTHONDONTWRITEBYTECODE="1",
         PYTHONUTF8="1",
         HF_HOME=str(cache / "huggingface"),
+        HF_HUB_CACHE=str(cache / "huggingface/hub"),
+        HUGGINGFACE_HUB_CACHE=str(cache / "huggingface/hub"),
+        HF_XET_CACHE=str(cache / "huggingface/xet"),
+        HF_ASSETS_CACHE=str(cache / "huggingface/assets"),
+        HUGGINGFACE_ASSETS_CACHE=str(cache / "huggingface/assets"),
         TORCH_HOME=str(cache / "torch"),
         TORCH_EXTENSIONS_DIR=str(cache / "torch_extensions"),
+        TORCHINDUCTOR_CACHE_DIR=str(cache / "torch_inductor"),
+        CUDA_CACHE_PATH=str(cache / "cuda"),
         TRITON_CACHE_DIR=str(cache / "triton"),
+        XDG_CACHE_HOME=str(cache / "xdg"),
         TEMP=str(cache / "tmp"),
         TMP=str(cache / "tmp"),
+        MUSUBI_REFERENCE_PROBE="1",
     )
+    # Deprecated Transformers variables override HF_HOME and emit warnings if inherited.
+    for name in ["TRANSFORMERS_CACHE", "PYTORCH_TRANSFORMERS_CACHE", "PYTORCH_PRETRAINED_BERT_CACHE"]:
+        env.pop(name, None)
     (cache / "tmp").mkdir(parents=True, exist_ok=True)
+    return env
+
+
+def stage_run(stage: Stage, settings: Settings, run: Path, cache: Path, timeout: int) -> dict[str, Any]:
+    env = reference_environment(cache)
     start = time.monotonic()
     free_before = shutil.disk_usage(cache).free
     # B603: stages are fixed CLI argument arrays; only paths come from validated local settings.
@@ -398,7 +415,7 @@ def execute(family: str, settings: Settings, plan_only: bool, timeout: int) -> t
             blockers = validate_h3(settings)
         evidence["blockers"].extend(blockers)
         try:
-            evidence["environment"] = training_environment(settings)
+            evidence["environment"] = training_environment(settings, reference_environment(cache))
         except ValueError as error:
             evidence["blockers"].append(str(error))
         try:

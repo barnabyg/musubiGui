@@ -2,6 +2,7 @@
 
 import importlib.metadata
 import json
+import os
 import platform
 
 
@@ -17,6 +18,10 @@ def main() -> None:
         "platform": platform.platform(),
         "packages": packages,
     }
+    if os.environ.get("MUSUBI_REFERENCE_PROBE") == "1":
+        result["reference_cache_environment"] = {
+            name: os.environ.get(name) for name in ["HF_HOME", "HF_HUB_CACHE", "HUGGINGFACE_HUB_CACHE", "HF_XET_CACHE"]
+        }
     try:
         import torch  # type: ignore[import-not-found]
 
