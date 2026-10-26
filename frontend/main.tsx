@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './style.css';
+import { Jobs } from './Jobs';
+import { Runs } from './Runs';
 
 type Settings = {
   version: number;
@@ -47,6 +49,17 @@ function App() {
   const [dirty, setDirty] = useState(false);
   const [report, setReport] = useState<Report | null>(null);
   const [screen, setScreen] = useState('Settings');
+  const [jobDirty, setJobDirty] = useState(false);
+  const [runId, setRunId] = useState<string>();
+  function navigate(name: string) {
+    if (
+      screen === 'Jobs' &&
+      jobDirty &&
+      !window.confirm('Leave this job and discard unsaved changes?')
+    )
+      return;
+    setScreen(name);
+  }
   useEffect(() => {
     void api<Settings>('/api/settings')
       .then((value) => {
@@ -139,11 +152,11 @@ function App() {
         </a>
         <div className="workspace">WORKSPACE</div>
         <nav>
-          {['Datasets', 'Jobs', 'Settings'].map((name) => (
+          {['Datasets', 'Jobs', 'Runs', 'Settings'].map((name) => (
             <button
               key={name}
               className={screen === name ? 'active' : ''}
-              onClick={() => setScreen(name)}
+              onClick={() => navigate(name)}
             >
               <span>
                 {name === 'Datasets' ? '▦' : name === 'Jobs' ? '▷' : '⚙'}
@@ -161,7 +174,17 @@ function App() {
           <span>WORKSPACE / {screen.toUpperCase()}</span>
           <span className="badge">LoRA · Windows</span>
         </header>
-        {screen !== 'Settings' ? (
+        {screen === 'Jobs' ? (
+          <Jobs
+            onDirtyChange={setJobDirty}
+            onRun={(id) => {
+              setRunId(id);
+              setScreen('Runs');
+            }}
+          />
+        ) : screen === 'Runs' ? (
+          <Runs key={runId} selectedId={runId} />
+        ) : screen !== 'Settings' ? (
           <section>
             <p className="eyebrow">COMING IN A LATER MILESTONE</p>
             <h1>{screen}</h1>

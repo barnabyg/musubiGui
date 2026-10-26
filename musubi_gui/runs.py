@@ -1,0 +1,300 @@
+"""Browser-independent preparation from frozen, provenance-bearing plans."""
+
+import builtins
+import copy
+import hashlib
+import json
+import os
+import shutil
+import subprocess  # nosec B404
+import threading
+import time
+import uuid
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+from musubi_gui.processes import observed_tree, process_identity, terminate_owned
+from musubi_gui.reference import Stage, redact, reference_environment
+from musubi_gui.run_store import DeviceLease, RunStore
+from musubi_gui.settings import Settings, atomic_json
+from musubi_gui.snapshots import digest_file, snapshot_plan, verify_inputs
+
+
+@dataclass
+class ExecutionPlan:
+    job: dict[str, Any]
+    settings: Settings
+    manifest: dict[str, Any]
+    directory: Path
+    cache: Path
+    stages: list[Stage]
+    fingerprint: str
+    stage_keys: dict[str, str] = field(default_factory=dict)
+    input_files: dict[str, str] = field(default_factory=dict)
+    provenance: dict[str, Any] = field(default_factory=dict)
+
+
+def utc_now() -> str:
+    return datetime.now(UTC).isoformat()
+
+
+class RunService:
+    def __init__(
+        self, root: Path, *, device_path: Path | None = None, fixture_mode: bool = False, autostart: bool = True
+    ):
+        self.root = root
+        self.fixture_mode = fixture_mode
+        self.store = RunStore(root)
+        self.device = DeviceLease(root, device_path)
+        self.identity = process_identity()
+        self.stopping = threading.Event()
+        self.thread = threading.Thread(target=self._schedule, name="musubi-worker", daemon=True)
+        if autostart:
+            self.thread.start()
+
+    def start_worker(self) -> None:
+        self.thread.start()
+
+    def list(self) -> list[dict[str, Any]]:
+        return self.store.list()
+
+    def get(self, run_id: str) -> dict[str, Any]:
+        return self.store.get(run_id)
+
+    def prepare(self, job_id: str) -> dict[str, Any]:
+        return self.submit(ExecutionPlan(**snapshot_plan(self.root, job_id, fixture_mode=self.fixture_mode)))
+
+    def submit(self, plan: ExecutionPlan) -> dict[str, Any]:
+        """Trusted local adapter seam; API requests never supply command arrays."""
+        data: dict[str, Any] = {
+            "version": 1,
+            "id": uuid.uuid4().hex,
+            "created": utc_now(),
+            "job": plan.job,
+            "settings": plan.settings.model_dump(),
+            "manifest": plan.manifest,
+            "directory": str(plan.directory.resolve()),
+            "cache": str(plan.cache.resolve()),
+            "fingerprint": plan.fingerprint,
+            "status": "pending_preparation",
+            "phase": "prepare",
+            "order": time.time_ns(),
+            "stages": [{"name": stage.name, "args": stage.args, "status": "pending"} for stage in plan.stages],
+            "processes": [],
+            "error": None,
+            "fixture": self.fixture_mode,
+            "stage_keys": plan.stage_keys,
+            "input_files": plan.input_files,
+            "provenance": plan.provenance,
+        }
+        plan.directory.mkdir(parents=True, exist_ok=True)
+        plan.cache.mkdir(parents=True, exist_ok=True)
+        atomic_json(
+            plan.directory / "inputs.json", {"job": plan.job, "settings": data["settings"], "manifest": plan.manifest}
+        )
+        return self.store.create(data)
+
+    def logs(self, run_id: str) -> str:
+        run = self.get(run_id)
+        directory = Path(run["directory"])
+        parts = []
+        for stage in run["stages"]:
+            file = directory / f"{stage['name']}.log"
+            if file.is_file():
+                with file.open("rb") as stream:
+                    stream.seek(max(0, file.stat().st_size - 256_000))
+                    parts.append(f"--- {stage['name']} ---\n" + redact(stream.read().decode("utf-8", errors="replace")))
+        return "\n".join(parts)
+
+    def close(self) -> None:
+        self.stopping.set()
+        if self.thread.is_alive():
+            self.thread.join(timeout=5)
+
+    def retry(self, run_id: str) -> dict[str, Any]:
+        previous = self.get(run_id)
+        if previous["status"] not in {"failed", "cancelled"}:
+            raise ValueError("Only failed or cancelled preparation can be retried. Reconcile interrupted work first.")
+        directory = Path(previous["directory"]).parent / ("retry-" + uuid.uuid4().hex)
+        cache = Path(previous["cache"]).parent / ("retry-" + uuid.uuid4().hex)
+        directory.mkdir(parents=True)
+        for name in ["dataset.toml", "samples.txt"]:
+            source = Path(previous["directory"]) / name
+            if source.is_file():
+                text = source.read_text(encoding="utf-8").replace(
+                    previous["cache"].replace("\\", "/"), cache.as_posix()
+                )
+                (directory / name).write_text(text, encoding="utf-8")
+        stages = []
+        for stage in previous["stages"]:
+            args = [
+                arg
+                if arg.endswith(".py")
+                else arg.replace(previous["directory"], str(directory)).replace(previous["cache"], str(cache))
+                for arg in stage["args"]
+            ]
+            stages.append(Stage(stage["name"], args))
+        plan = ExecutionPlan(
+            copy.deepcopy(previous["job"]),
+            Settings.model_validate(previous["settings"]),
+            copy.deepcopy(previous["manifest"]),
+            directory,
+            cache,
+            stages,
+            previous["fingerprint"] + ":retry:" + uuid.uuid4().hex,
+            stage_keys=previous.get("stage_keys", {}),
+            input_files=previous.get("input_files", {}),
+            provenance=previous.get("provenance", {}),
+        )
+        retried = self.submit(plan)
+        return self.store.update(retried["id"], lambda r: r.update(retry_of=run_id))
+
+    def cancel(self, run_id: str) -> dict[str, Any]:
+        run = self.get(run_id)
+        if run["status"] == "pending_preparation":
+            return self.store.update(run_id, lambda r: r.update(status="cancelled"))
+        if run["status"] != "preparing":
+            raise ValueError("Only queued or active preparation can be cancelled.")
+        return self.store.update(run_id, lambda r: r.update(cancel_requested=True))
+
+    def _schedule(self) -> None:
+        while not self.stopping.is_set():
+            try:
+                candidates = sorted(
+                    [run for run in self.list() if run["status"] == "pending_preparation"], key=lambda r: r["order"]
+                )
+                if candidates:
+                    run = candidates[0]
+                    if self.device.acquire(run["id"], self.identity):
+                        self._execute(run)
+            except (ValueError, OSError) as error:
+                # Persist scheduler diagnostics without inventing a run outcome.
+                self.root.mkdir(parents=True, exist_ok=True)
+                atomic_json(self.root / "worker-error.json", {"error": redact(str(error)), "time": utc_now()})
+            self.stopping.wait(0.1)
+
+    def _execute(self, run: dict[str, Any]) -> None:
+        run_id = run["id"]
+        release = True
+        self.store.update(run_id, lambda r: r.update(status="preparing", controller=self.identity))
+        try:
+            verify_inputs(run)
+            for index, stage in enumerate(run["stages"]):
+                if stage["name"] not in {"latent_cache", "text_cache"}:
+                    continue
+                verify_inputs(run)
+                if self._reuse(run, stage["name"], index):
+                    continue
+                self.store.update(run_id, lambda r: r["stages"][index].update(status="running", started=utc_now()))
+                settings = Settings.model_validate(run["settings"])
+                log_file = Path(run["directory"]) / f"{stage['name']}.log"
+                with log_file.open("a", encoding="utf-8") as log:
+                    # B603: trusted recipe adapter builds arrays; no API accepts executable commands.
+                    process = subprocess.Popen(  # nosec B603
+                        stage["args"],
+                        cwd=settings.checkout,
+                        env=reference_environment(Path(run["cache"])),
+                        stdout=log,
+                        stderr=subprocess.STDOUT,
+                        text=True,
+                        creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0,
+                        start_new_session=os.name != "nt",
+                    )
+                    identities = observed_tree(process.pid)
+                    self.device.update(run_id, identities)
+                    self.store.update(run_id, lambda r: r.update(processes=identities))
+                    while process.poll() is None:
+                        identities = observed_tree(process.pid)
+                        self.device.update(run_id, identities)
+                        self.store.update(run_id, lambda r: r.update(processes=identities))
+                        if self.get(run_id).get("cancel_requested"):
+                            terminate_owned(identities, force=True)
+                        if self.stopping.wait(0.1):
+                            release = False
+                            self.store.update(
+                                run_id,
+                                lambda r: r.update(
+                                    status="interrupted",
+                                    error="Service stopped; reconcile the recorded process before retrying.",
+                                ),
+                            )
+                            return
+                    code = process.wait()
+                self.store.update(
+                    run_id,
+                    lambda r: r["stages"][index].update(
+                        status="completed" if code == 0 else "failed", exit_code=code, finished=utc_now()
+                    ),
+                )
+                if code:
+                    if self.get(run_id).get("cancel_requested"):
+                        self.store.update(run_id, lambda r: r.update(status="cancelled", processes=[]))
+                        return
+                    raise ValueError(f"{stage['name']} exited {code}. Inspect logs and retry preparation.")
+                artifacts = self._cache_artifacts(run, stage["name"])
+                if run.get("stage_keys") and not artifacts:
+                    raise ValueError(f"{stage['name']} returned success but produced no complete cache artifacts.")
+                self.store.update(run_id, lambda r: r["stages"][index].update(artifacts=artifacts))
+            self.store.update(run_id, lambda r: r.update(status="prepared", processes=[], finished=utc_now()))
+        except (OSError, ValueError) as error:
+            message = redact(str(error))
+            self.store.update(run_id, lambda r: r.update(status="failed", error=message, finished=utc_now()))
+        finally:
+            if release:
+                self.device.release(run_id)
+
+    def _cache_artifacts(self, run: dict[str, Any], stage: str) -> builtins.list[dict[str, str]]:
+        cache = Path(run["cache"])
+        candidates = list((cache / "dataset").glob("*.safetensors"))
+        files = [file for file in candidates if file.name.endswith("_te.safetensors") == (stage == "text_cache")]
+        if run["job"]["family"] == "h3" and stage == "text_cache":
+            uncond = cache / "uncond.safetensors"
+            if not uncond.is_file():
+                raise ValueError("H3 text caching did not produce the unconditional guidance cache.")
+            files.append(uncond)
+        for item in run["manifest"]["items"]:
+            if "snapshot_path" in item and not any(
+                file.name.startswith(Path(item["snapshot_path"]).stem + "_") for file in files
+            ):
+                raise ValueError(
+                    f"{item['name']}: {stage} did not prepare this included item. Inspect the stage log before retrying."
+                )
+        if any(file.stat().st_size == 0 for file in files):
+            raise ValueError(f"{stage} contains empty/incomplete cache files.")
+        return [{"path": str(file.relative_to(cache)), "sha256": digest_file(file)} for file in files]
+
+    def _reuse(self, run: dict[str, Any], stage_name: str, index: int) -> bool:
+        key = run.get("stage_keys", {}).get(stage_name)
+        if not key:
+            return False
+        for previous in self.list():
+            if previous["id"] == run["id"] or previous.get("stage_keys", {}).get(stage_name) != key:
+                continue
+            old: dict[str, Any] = next((stage for stage in previous["stages"] if stage["name"] == stage_name), {})
+            artifacts = old.get("artifacts", [])
+            if not artifacts or old.get("status") not in {"completed", "reused"}:
+                continue
+            if not all(
+                (Path(previous["cache"]) / file["path"]).is_file()
+                and digest_file(Path(previous["cache"]) / file["path"]) == file["sha256"]
+                for file in artifacts
+            ):
+                continue
+            for file in artifacts:
+                target = Path(run["cache"]) / file["path"]
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(Path(previous["cache"]) / file["path"], target)
+            self.store.update(
+                run["id"],
+                lambda r: r["stages"][index].update(
+                    status="reused", artifacts=artifacts, reused_from=previous["id"], exit_code=0
+                ),
+            )
+            return True
+        return False
+
+
+def fingerprint(value: object) -> str:
+    return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False).encode()).hexdigest()

@@ -1,5 +1,7 @@
 """Same-origin loopback API and bundled browser application."""
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -12,12 +14,31 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.responses import Response
 
 from musubi_gui.diagnostics import diagnostics
+from musubi_gui.jobs import jobs_router
+from musubi_gui.runs import RunService
+from musubi_gui.runs_api import runs_router
 from musubi_gui.settings import Settings, load_settings, save_settings, state_root, validate_paths
 
 
-def create_app(state: Path | None = None, assets: Path | None = None) -> FastAPI:
+def create_app(
+    state: Path | None = None,
+    assets: Path | None = None,
+    *,
+    fixture_mode: bool = False,
+    device_path: Path | None = None,
+) -> FastAPI:
     root = state or state_root()
-    app = FastAPI(title="Musubi GUI", docs_url=None, redoc_url=None, openapi_url=None)
+    service = RunService(root, fixture_mode=fixture_mode, device_path=device_path, autostart=False)
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        service.start_worker()
+        try:
+            yield
+        finally:
+            service.close()
+
+    app = FastAPI(title="Musubi GUI", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "testserver"])
 
     @app.middleware("http")
@@ -69,5 +90,7 @@ def create_app(state: Path | None = None, assets: Path | None = None) -> FastAPI
     def post_diagnostics() -> dict[str, Any]:
         return diagnostics(current())
 
+    app.include_router(jobs_router(root, fixture_mode=fixture_mode))
+    app.include_router(runs_router(service))
     app.mount("/", StaticFiles(directory=assets or Path(__file__).parent / "web", html=True), name="ui")
     return app
