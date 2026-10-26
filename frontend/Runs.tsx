@@ -149,6 +149,15 @@ export function Runs({ selectedId }: { selectedId?: string }) {
             </p>
             {run.error && <p className="error">{run.error}</p>}
             <div className="actions">
+              {run.status === 'prepared' && (
+                <button
+                  disabled={busy}
+                  className="primary"
+                  onClick={() => void action('start')}
+                >
+                  Start training
+                </button>
+              )}
               {['pending_preparation', 'preparing'].includes(run.status) && (
                 <button disabled={busy} onClick={() => void action('cancel')}>
                   Cancel preparation

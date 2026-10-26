@@ -62,6 +62,11 @@ def runs_router(service: RunService) -> APIRouter:
         with run_errors():
             return service.retry(run_id)
 
+    @router.post("/{run_id}/start")
+    def start(run_id: str) -> dict[str, Any]:
+        with run_errors():
+            return service.start(run_id)
+
     @router.post("/{run_id}/cancel")
     def cancel(run_id: str) -> dict[str, Any]:
         with run_errors():

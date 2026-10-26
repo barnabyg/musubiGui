@@ -24,3 +24,9 @@ Run `launch.cmd` to open the local application. The release acceptance command a
 synthetic media scenarios are documented with the complete release workflow.
 Synthetic subprocess tests exercise orchestration, never model-support evidence.
 The target hardware requirement is Windows 11, RTX 3090, 96 GB RAM and 400+ GB disk.
+
+Choose Start training on a prepared Wan Run. Its process runs independently of the
+browser. The job can be edited while the Run retains its original revision. Repeated
+Start requests select the same Run. Logs display upstream progress without guessing
+missing step counts; nonzero exits and missing checkpoints are explicit failures.
+Checkpoint/sample locations stay associated with the originating Run.

@@ -66,6 +66,27 @@ class RunService:
     def prepare(self, job_id: str) -> dict[str, Any]:
         return self.submit(ExecutionPlan(**snapshot_plan(self.root, job_id, fixture_mode=self.fixture_mode)))
 
+    def start(self, run_id: str) -> dict[str, Any]:
+        run = self.get(run_id)
+        if run["status"] in {"pending_training", "training", "generating", "completed"}:
+            return run
+        if run["status"] != "prepared":
+            raise ValueError("Prepare this immutable run successfully before starting training.")
+        if run["job"]["family"] != "wan":
+            raise ValueError("H3 training is not yet available.")
+        if self.device.owner():
+            raise ValueError("The GPU is owned by another operation. Wait for it to finish.")
+        verify_inputs(run)
+        if not any(stage["name"] == "train" for stage in run["stages"]):
+            raise ValueError("This run has no supported training stage.")
+
+        def change(record: dict[str, Any]) -> None:
+            if record["status"] != "prepared":
+                return
+            record.update(status="pending_training", phase="train", order=time.time_ns())
+
+        return self.store.update(run_id, change)
+
     def submit(self, plan: ExecutionPlan) -> dict[str, Any]:
         """Trusted local adapter seam; API requests never supply command arrays."""
         data: dict[str, Any] = {
@@ -163,7 +184,8 @@ class RunService:
         while not self.stopping.is_set():
             try:
                 candidates = sorted(
-                    [run for run in self.list() if run["status"] == "pending_preparation"], key=lambda r: r["order"]
+                    [run for run in self.list() if run["status"] in {"pending_preparation", "pending_training"}],
+                    key=lambda r: r["order"],
                 )
                 if candidates:
                     run = candidates[0]
@@ -178,15 +200,20 @@ class RunService:
     def _execute(self, run: dict[str, Any]) -> None:
         run_id = run["id"]
         release = True
-        self.store.update(run_id, lambda r: r.update(status="preparing", controller=self.identity))
+        preparing = run["phase"] == "prepare"
+        self.store.update(
+            run_id, lambda r: r.update(status="preparing" if preparing else "training", controller=self.identity)
+        )
         try:
             verify_inputs(run)
             for index, stage in enumerate(run["stages"]):
-                if stage["name"] not in {"latent_cache", "text_cache"}:
+                if stage["name"] not in ({"latent_cache", "text_cache"} if preparing else {"train", "generate"}):
                     continue
                 verify_inputs(run)
-                if self._reuse(run, stage["name"], index):
+                if preparing and self._reuse(run, stage["name"], index):
                     continue
+                if stage["name"] == "generate":
+                    self.store.update(run_id, lambda r: r.update(status="generating"))
                 self.store.update(run_id, lambda r: r["stages"][index].update(status="running", started=utc_now()))
                 settings = Settings.model_validate(run["settings"])
                 log_file = Path(run["directory"]) / f"{stage['name']}.log"
@@ -233,11 +260,26 @@ class RunService:
                         self.store.update(run_id, lambda r: r.update(status="cancelled", processes=[]))
                         return
                     raise ValueError(f"{stage['name']} exited {code}. Inspect logs and retry preparation.")
-                artifacts = self._cache_artifacts(run, stage["name"])
-                if run.get("stage_keys") and not artifacts:
-                    raise ValueError(f"{stage['name']} returned success but produced no complete cache artifacts.")
-                self.store.update(run_id, lambda r: r["stages"][index].update(artifacts=artifacts))
-            self.store.update(run_id, lambda r: r.update(status="prepared", processes=[], finished=utc_now()))
+                if preparing:
+                    artifacts = self._cache_artifacts(run, stage["name"])
+                    if run.get("stage_keys") and not artifacts:
+                        raise ValueError(f"{stage['name']} returned success but produced no complete cache artifacts.")
+                    self.store.update(run_id, lambda r: r["stages"][index].update(artifacts=artifacts))
+                elif stage["name"] == "train":
+                    checkpoints = list((Path(run["directory"]) / "checkpoints").glob("*.safetensors"))
+                    if not any(file.stat().st_size > 0 for file in checkpoints):
+                        raise ValueError("Training exited successfully but no nonempty checkpoint was found.")
+                    self.store.update(run_id, lambda r: r.update(checkpoints=[str(file) for file in checkpoints]))
+                elif stage["name"] == "generate":
+                    samples = list((Path(run["directory"]) / "samples").rglob("*"))
+                    if not any(file.is_file() and file.stat().st_size > 0 for file in samples):
+                        raise ValueError("Sampling exited successfully but no sample was found.")
+            self.store.update(
+                run_id,
+                lambda r: r.update(
+                    status="prepared" if preparing else "completed", processes=[], exit_code=0, finished=utc_now()
+                ),
+            )
         except (OSError, ValueError) as error:
             message = redact(str(error))
             self.store.update(run_id, lambda r: r.update(status="failed", error=message, finished=utc_now()))
@@ -247,7 +289,10 @@ class RunService:
 
     def _cache_artifacts(self, run: dict[str, Any], stage: str) -> builtins.list[dict[str, str]]:
         cache = Path(run["cache"])
-        candidates = list((cache / "dataset").glob("*.safetensors"))
+        candidates = [
+            *list((cache / "dataset").glob("*.safetensors")),
+            *list((cache / "dataset-images").glob("*.safetensors")),
+        ]
         files = [file for file in candidates if file.name.endswith("_te.safetensors") == (stage == "text_cache")]
         if run["job"]["family"] == "h3" and stage == "text_cache":
             uncond = cache / "uncond.safetensors"

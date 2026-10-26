@@ -76,3 +76,25 @@ def test_failed_preparation_is_visible_and_retry_preserves_the_original_inputs(t
         wait_for(service, retried["id"], "failed")
     finally:
         service.close()
+
+
+def test_start_runs_training_once_and_keeps_the_prepared_job_revision(tmp_path: Path) -> None:
+    service = RunService(tmp_path / "state", device_path=tmp_path / "gpu.sqlite")
+    try:
+        execution = plan(tmp_path)
+        train = execution.directory / "train.py"
+        train.write_text(
+            "import pathlib,time\ntime.sleep(.2)\nprint('step 1/2',flush=True)\npathlib.Path('checkpoints').mkdir(exist_ok=True)\npathlib.Path('checkpoints/test.safetensors').write_bytes(b'checkpoint')\n",
+            encoding="utf-8",
+        )
+        execution.stages.append(Stage("train", [sys.executable, str(train)]))
+        run = service.submit(execution)
+        wait_for(service, run["id"], "prepared")
+        started = service.start(run["id"])
+        assert service.start(run["id"])["id"] == started["id"]
+        completed = wait_for(service, run["id"], "completed")
+        assert completed["job"]["revision"] == 1
+        assert completed["exit_code"] == 0
+        assert "step 1/2" in service.logs(run["id"])
+    finally:
+        service.close()
