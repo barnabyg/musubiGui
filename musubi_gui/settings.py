@@ -29,7 +29,7 @@ def load_settings(root: Path) -> Settings:
     if not file.exists():
         return Settings()
     data = json.loads(file.read_text(encoding="utf-8"))
-    if data.get("version") != 1:
+    if not isinstance(data, dict) or data.get("version") != 1:
         raise ValueError("Unsupported settings version; preserve settings.json and restore a compatible application.")
     return Settings.model_validate(data)
 
