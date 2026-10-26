@@ -172,9 +172,9 @@ test('H3 editor keeps T2VA guidance stages and identifies invalid geometry', asy
   try {
     await openJobs(page, app.url);
     await page.getByRole('button', { name: 'New H3 job', exact: true }).click();
-    await expect(page.getByLabel('Frames', { exact: false })).toHaveValue(
-      '124',
-    );
+    await expect(
+      page.getByRole('spinbutton', { name: /^Frames\b/ }),
+    ).toHaveValue('124');
     await expect(
       page.getByLabel('H2D-only block swapping', { exact: false }),
     ).toBeChecked();
@@ -234,7 +234,7 @@ test('duplication presets cancelled conversion and versioned export import keep 
     await page.getByRole('button', { name: 'Save draft', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('Draft saved');
     await page
-      .getByLabel('Compatible preset', { exact: true })
+      .getByRole('combobox', { name: 'Compatible preset', exact: true })
       .selectOption({ label: 'Sixteen' });
     await page
       .getByRole('button', { name: 'Apply preset', exact: true })
@@ -251,7 +251,7 @@ test('duplication presets cancelled conversion and versioned export import keep 
     await page
       .getByRole('button', { name: 'Cancel conversion', exact: true })
       .click();
-    await expect(page.getByLabel('Recipe', { exact: false })).toHaveValue(
+    await expect(page.getByRole('combobox', { name: /^Recipe/ })).toHaveValue(
       'low-noise',
     );
     await page
@@ -263,12 +263,14 @@ test('duplication presets cancelled conversion and versioned export import keep 
       .click();
     expect((await download).suggestedFilename()).toMatch(/^musubi-job-/);
     const exported = JSON.parse(
-      await page.getByLabel('Configuration JSON', { exact: true }).inputValue(),
+      await page
+        .getByRole('textbox', { name: 'Configuration JSON', exact: true })
+        .inputValue(),
     ) as { version: number; draft: { name: string } };
     expect(exported.version).toBe(1);
     exported.draft.name = 'Imported draft';
     await page
-      .getByLabel('Configuration JSON', { exact: true })
+      .getByRole('textbox', { name: 'Configuration JSON', exact: true })
       .fill(JSON.stringify(exported));
     await page
       .getByRole('button', { name: 'Import configuration', exact: true })
@@ -286,9 +288,9 @@ test('duplication presets cancelled conversion and versioned export import keep 
     await page
       .getByRole('button', { name: 'Accept conversion', exact: true })
       .click();
-    await expect(page.getByLabel('Frames', { exact: false })).toHaveValue(
-      '124',
-    );
+    await expect(
+      page.getByRole('spinbutton', { name: /^Frames\b/ }),
+    ).toHaveValue('124');
   } finally {
     await app.close();
   }
