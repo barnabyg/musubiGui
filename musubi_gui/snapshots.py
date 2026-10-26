@@ -12,7 +12,7 @@ from typing import Any
 from musubi_gui.diagnostics import training_environment, upstream_revision
 from musubi_gui.jobs import build_stages, dataset_toml, effective_settings, load_job, review_job
 from musubi_gui.reference import safetensors_header
-from musubi_gui.settings import atomic_json, load_settings, within_root
+from musubi_gui.settings import Settings, atomic_json, load_settings, within_root
 
 
 def digest_file(path: Path) -> str:
@@ -60,6 +60,20 @@ def checkout_identity(checkout: Path) -> dict[str, str]:
     return {"revision": upstream_revision(checkout), "source_digest": digest(files)}
 
 
+def cache_environment_identity(settings: Settings, environment: dict[str, Any]) -> dict[str, Any]:
+    """Only stable producer identities belong in reusable-cache keys."""
+    executable = Path(settings.python).resolve()
+    stat = executable.stat()
+    return {
+        "executable": {"path": str(executable), "bytes": stat.st_size, "modified_ns": stat.st_mtime_ns},
+        "python": environment.get("python"),
+        "platform": environment.get("platform"),
+        "packages": environment.get("packages", {}),
+        "cuda": environment.get("cuda"),
+        "gpu_name": environment.get("gpu", {}).get("name"),
+    }
+
+
 def snapshot_plan(root: Path, job_id: str, *, fixture_mode: bool = False) -> dict[str, Any]:
     job = load_job(root, job_id)
     settings = effective_settings(job, load_settings(root))
@@ -75,11 +89,15 @@ def snapshot_plan(root: Path, job_id: str, *, fixture_mode: bool = False) -> dic
         for key, value in settings.models.items()
         if key.startswith(job.family + "_") and value
     }
+    environment = training_environment(settings)
+    if fixture_mode:
+        environment["synthetic_fixture"] = True
     provenance = {
         "upstream_revision": review["upstream_revision"],
         "models": models,
-        "environment": {"synthetic_fixture": True} if fixture_mode else training_environment(settings),
+        "environment": environment,
         "checkout": checkout_identity(Path(settings.checkout)),
+        "cache_environment": cache_environment_identity(settings, environment),
         "audio_coverage": review.get("audio_coverage", {}),
     }
     preparation_settings = job.config.model_dump(
@@ -109,7 +127,8 @@ def snapshot_plan(root: Path, job_id: str, *, fixture_mode: bool = False) -> dic
                 "media": media,
                 "settings": preparation_settings,
                 "models": {k: v for k, v in models.items() if "vae" in k},
-                "upstream": provenance["upstream_revision"],
+                "checkout": provenance["checkout"],
+                "environment": provenance["cache_environment"],
             }
         ),
         "text_cache": digest(
@@ -117,7 +136,8 @@ def snapshot_plan(root: Path, job_id: str, *, fixture_mode: bool = False) -> dic
                 "captions": captions,
                 "settings": preparation_settings,
                 "models": {k: v for k, v in models.items() if k.endswith(("_t5", "_text"))},
-                "upstream": provenance["upstream_revision"],
+                "checkout": provenance["checkout"],
+                "environment": provenance["cache_environment"],
             }
         ),
     }
