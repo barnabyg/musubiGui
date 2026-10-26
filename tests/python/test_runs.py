@@ -4,6 +4,9 @@ import sys
 import time
 from pathlib import Path
 
+import pytest
+
+from musubi_gui.acceptance import prepare as prepare_acceptance
 from musubi_gui.reference import Stage
 from musubi_gui.runs import ExecutionPlan, RunService
 from musubi_gui.settings import Settings
@@ -181,5 +184,52 @@ def test_changed_training_source_blocks_execution_of_prepared_inputs(tmp_path: P
         failed = wait_for(service, run["id"], "failed")
         assert "checkout changed" in failed["error"]
         assert not (execution.directory / "latent_cache.log").exists()
+    finally:
+        service.close()
+
+
+def test_force_stop_requires_confirmation_and_releases_only_the_owned_worker(tmp_path: Path) -> None:
+    service = RunService(tmp_path / "state", device_path=tmp_path / "gpu.sqlite")
+    try:
+        execution = plan(tmp_path)
+        execution.stages.append(
+            Stage("train", [sys.executable, "-c", "import time;print('training',flush=True);time.sleep(30)"])
+        )
+        run = service.submit(execution)
+        wait_for(service, run["id"], "prepared")
+        service.start(run["id"])
+        wait_for(service, run["id"], "training")
+        with pytest.raises(ValueError, match="confirm"):
+            service.stop(run["id"], force=True)
+        service.stop(run["id"], force=True, confirmed=True)
+        stopped = wait_for(service, run["id"], "stopped")
+        assert stopped["stop_kind"] == "force"
+        assert service.device.owner() is None
+    finally:
+        service.close()
+
+
+def test_saved_optimizer_state_restores_as_a_new_segment_and_rejects_tampering(tmp_path: Path) -> None:
+    fixture = prepare_acceptance(tmp_path / "acceptance", "fixture", None)
+    service = RunService(Path(fixture["state"]), fixture_mode=True, device_path=tmp_path / "gpu.sqlite")
+    try:
+        run = service.prepare(fixture["jobs"][0]["id"])
+        wait_for(service, run["id"], "prepared")
+        service.start(run["id"])
+        wait_for(service, run["id"], "completed")
+        states = service.saved_states(run["id"])
+        assert states[0]["valid"]
+        assert states[0]["optimizer_step"] == 2
+        with pytest.raises(ValueError, match="confirm"):
+            service.restore_state(run["id"], states[0]["id"], 1)
+        restored = service.restore_state(run["id"], states[0]["id"], 1, confirmed=True)
+        wait_for(service, restored["id"], "completed")
+        assert service.saved_states(restored["id"])[0]["optimizer_step"] == 3
+        assert service.get(restored["id"])["resume_of"] == run["id"]
+        assert service.get(restored["id"])["segment"]["counter_resets"]
+        state_path = Path(states[0]["path"])
+        (state_path / "optimizer.bin").write_bytes(b"incomplete")
+        with pytest.raises(ValueError, match="changed|incomplete"):
+            service.restore_state(run["id"], states[0]["id"], 1, confirmed=True)
     finally:
         service.close()

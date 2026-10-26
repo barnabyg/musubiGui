@@ -18,6 +18,7 @@ from typing import Any
 from musubi_gui.processes import observed_tree, process_identity, terminate_owned
 from musubi_gui.reference import Stage, redact, reference_environment
 from musubi_gui.run_store import DeviceLease, RunStore
+from musubi_gui.saved_state import discover_states
 from musubi_gui.settings import Settings, atomic_json
 from musubi_gui.snapshots import digest_file, snapshot_plan, verify_inputs
 
@@ -195,6 +196,85 @@ class RunService:
             raise ValueError("Only queued or active preparation can be cancelled.")
         return self.store.update(run_id, lambda r: r.update(cancel_requested=True))
 
+    def stop(self, run_id: str, *, force: bool = False, confirmed: bool = False) -> dict[str, Any]:
+        if force and not confirmed:
+            raise ValueError("Force termination requires explicit confirmation; unsaved checkpoints/state may be lost.")
+        run = self.get(run_id)
+        if run["status"] not in {"training", "generating", "stopping"}:
+            raise ValueError("Only an active training or sampling process can be stopped.")
+        return self.store.update(
+            run_id, lambda r: r.update(status="stopping", stop_requested="force" if force else "graceful")
+        )
+
+    def saved_states(self, run_id: str) -> builtins.list[dict[str, Any]]:
+        run = self.get(run_id)
+        if run["status"] not in {"completed", "stopped", "failed", "cancelled", "interrupted"}:
+            return []
+        if run.get("processes"):
+            raise ValueError("Reconcile remaining process ownership before inspecting saved state.")
+        states = discover_states(run)
+        self.store.update(run_id, lambda r: r.update(saved_states=states))
+        return states
+
+    def restore_state(
+        self, run_id: str, state_id: str, additional_steps: int, *, confirmed: bool = False
+    ) -> dict[str, Any]:
+        if not confirmed:
+            raise ValueError(
+                "Please confirm restoration as a new segment: upstream restores optimizer state but resets the displayed counter and data position."
+            )
+        if not 1 <= additional_steps <= 1_000_000:
+            raise ValueError("Choose between 1 and 1000000 additional training steps.")
+        original = self.get(run_id)
+        verify_inputs(original)
+        state = next((state for state in self.saved_states(run_id) if state["id"] == state_id), None)
+        if not state or not state["valid"]:
+            raise ValueError(
+                "Saved state is incomplete or changed. A LoRA checkpoint alone is not resumable optimizer state."
+            )
+        directory = Path(original["directory"]).parent / ("restore-" + uuid.uuid4().hex)
+        directory.mkdir()
+        record = copy.deepcopy(original)
+        record.update(
+            id=uuid.uuid4().hex,
+            directory=str(directory),
+            status="prepared",
+            phase="train",
+            fingerprint=original["fingerprint"] + ":restore:" + uuid.uuid4().hex,
+            created=utc_now(),
+            processes=[],
+            error=None,
+            resume_of=run_id,
+            saved_states=[],
+            segment={
+                "additional_steps": additional_steps,
+                "optimizer_step_before": state["optimizer_step"],
+                "counter_resets": True,
+                "data_position_restored": False,
+            },
+            state_source={"path": state["path"], "files": state["files"]},
+        )
+        for key in ["stop_requested", "stop_kind", "finished", "exit_code", "checkpoints"]:
+            record.pop(key, None)
+        for stage in record["stages"]:
+            if stage["name"] not in {"train", "generate"}:
+                continue
+            stage.update(status="pending")
+            args = stage["args"]
+            for flag in ["--output_dir"] if stage["name"] == "train" else ["--save_path", "--lora_weight"]:
+                if flag in args:
+                    index = args.index(flag) + 1
+                    args[index] = args[index].replace(original["directory"], str(directory))
+            if stage["name"] == "train":
+                args[args.index("--max_train_steps") + 1] = str(additional_steps)
+                args.extend(["--resume", state["path"]])
+        self.store.create(record)
+        atomic_json(
+            directory / "inputs.json",
+            {"job": record["job"], "manifest": record["manifest"], "resume_of": run_id, "segment": record["segment"]},
+        )
+        return self.enqueue(record["id"])
+
     def _schedule(self) -> None:
         while not self.stopping.is_set():
             try:
@@ -227,6 +307,10 @@ class RunService:
             return
         try:
             verify_inputs(run)
+            if run.get("state_source"):
+                for name, expected in run["state_source"]["files"].items():
+                    if digest_file(Path(run["state_source"]["path"]) / name) != expected:
+                        raise ValueError("Saved state changed while queued. Restore a complete state again.")
             for index, stage in enumerate(run["stages"]):
                 if stage["name"] not in ({"latent_cache", "text_cache"} if preparing else {"train", "generate"}):
                     continue
@@ -253,12 +337,26 @@ class RunService:
                     identities = observed_tree(process.pid)
                     self.device.update(run_id, identities)
                     self.store.update(run_id, lambda r: r.update(processes=identities))
+                    signalled = ""
                     while process.poll() is None:
                         identities = observed_tree(process.pid)
                         self.device.update(run_id, identities)
                         self.store.update(run_id, lambda r: r.update(processes=identities))
                         if self.get(run_id).get("cancel_requested"):
                             terminate_owned(identities, force=True)
+                        stop = self.get(run_id).get("stop_requested", "")
+                        if stop and stop != signalled:
+                            try:
+                                terminate_owned(identities, force=stop == "force")
+                                signalled = stop
+                            except OSError:
+                                self.store.update(
+                                    run_id,
+                                    lambda r: r.update(
+                                        error="Graceful console signalling is unavailable. Use confirmed force termination if the process remains active."
+                                    ),
+                                )
+                                signalled = stop
                         if self.stopping.wait(0.1):
                             release = False
                             self.store.update(
@@ -268,6 +366,7 @@ class RunService:
                                     error="Service stopped; reconcile the recorded process before retrying.",
                                 ),
                             )
+                            threading.Thread(target=process.wait, name="musubi-child-reaper", daemon=True).start()
                             return
                     code = process.wait()
                 self.store.update(
@@ -276,6 +375,15 @@ class RunService:
                         status="completed" if code == 0 else "failed", exit_code=code, finished=utc_now()
                     ),
                 )
+                requested = self.get(run_id).get("stop_requested")
+                if requested:
+                    self.store.update(
+                        run_id,
+                        lambda r: r.update(
+                            status="stopped", stop_kind=requested, processes=[], exit_code=code, finished=utc_now()
+                        ),
+                    )
+                    return
                 if code:
                     if self.get(run_id).get("cancel_requested"):
                         self.store.update(run_id, lambda r: r.update(status="cancelled", processes=[]))

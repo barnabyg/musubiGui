@@ -35,3 +35,16 @@ Add prepared runs to the pending queue while another operation owns the GPU. Mov
 entries earlier or cancel pending entries without changing active work. Ordering
 and the exact enqueued revision survive service restarts. Preparation shares this
 same GPU lease, so it cannot overlap training. Failures remain visible in history.
+
+Request graceful stop first. Windows console signalling can be unavailable for
+some launch environments; inspect the reported result and use the separately
+confirmed Force terminate action when necessary. Neither action promises a save
+on stop. Only the observed process tree belonging to that Run is signalled.
+
+Enable saved optimizer state in the Job before training. After completion or a
+fully observed stop, Inspect saved states checks model/optimizer/scheduler/RNG
+files and records hashes. Missing, incomplete or changed files are rejected.
+Restore as new segment preserves the original Job/Run and records lineage and
+the requested additional steps. The pinned upstream restores optimizer state
+but resets its displayed step counter and data position; seamless continuation
+is unsupported. Loading a LoRA checkpoint alone is not optimizer restoration.

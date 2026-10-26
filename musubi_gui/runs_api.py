@@ -19,6 +19,19 @@ class QueueOrder(BaseModel):
     run_ids: list[str]
 
 
+class StopRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    force: bool = False
+    confirmed: bool = False
+
+
+class RestoreRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    state_id: str
+    additional_steps: int
+    confirmed: bool = False
+
+
 @contextmanager
 def run_errors() -> Iterator[None]:
     try:
@@ -87,6 +100,23 @@ def runs_router(service: RunService) -> APIRouter:
     def enqueue(run_id: str) -> dict[str, Any]:
         with run_errors():
             return service.enqueue(run_id)
+
+    @router.post("/{run_id}/stop")
+    def stop(run_id: str, request: StopRequest) -> dict[str, Any]:
+        with run_errors():
+            return service.stop(run_id, force=request.force, confirmed=request.confirmed)
+
+    @router.get("/{run_id}/states")
+    def states(run_id: str) -> list[dict[str, Any]]:
+        with run_errors():
+            return service.saved_states(run_id)
+
+    @router.post("/{run_id}/restore-state")
+    def restore(run_id: str, request: RestoreRequest) -> dict[str, Any]:
+        with run_errors():
+            return service.restore_state(
+                run_id, request.state_id, request.additional_steps, confirmed=request.confirmed
+            )
 
     @router.post("/{run_id}/cancel")
     def cancel(run_id: str) -> dict[str, Any]:

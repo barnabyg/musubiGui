@@ -41,6 +41,75 @@ async function request<T>(url: string, body?: object): Promise<T> {
   return value as T;
 }
 
+function SavedStates({
+  runId,
+  onRestore,
+}: {
+  runId: string;
+  onRestore: (stateId: string, steps: number) => Promise<void>;
+}) {
+  const [states, setStates] = useState<
+    {
+      id: string;
+      name: string;
+      valid: boolean;
+      error: string;
+      optimizer_step?: number;
+    }[]
+  >([]);
+  const [steps, setSteps] = useState(1);
+  const [error, setError] = useState('');
+  async function inspect() {
+    try {
+      setStates(await request(`/api/runs/${runId}/states`));
+      setError('');
+    } catch (reason) {
+      setError((reason as Error).message);
+    }
+  }
+  return (
+    <section className="panel">
+      <h2>Saved optimizer state</h2>
+      <p>
+        Restoration starts a new segment with saved optimizer, scheduler and RNG
+        state. Upstream resets its displayed step counter and data position. A
+        LoRA checkpoint alone cannot restore training state. Stopping does not
+        guarantee a checkpoint or state save.
+      </p>
+      <button onClick={() => void inspect()}>Inspect saved states</button>
+      {error && <p role="alert">{error}</p>}
+      <label className="field">
+        Additional segment steps
+        <input
+          type="number"
+          min={1}
+          value={steps}
+          onChange={(event) => setSteps(Number(event.target.value))}
+        />
+      </label>
+      {states.map((state) => (
+        <p key={state.id}>
+          {state.name} ·{' '}
+          {state.valid ? `optimizer step ${state.optimizer_step}` : state.error}
+          <button
+            disabled={!state.valid || !Number.isInteger(steps) || steps < 1}
+            onClick={() => {
+              if (
+                window.confirm(
+                  'Restore this optimizer state as a new segment? The displayed step counter and data position restart. Original run inputs are preserved.',
+                )
+              )
+                void onRestore(state.id, steps);
+            }}
+          >
+            Restore as new segment
+          </button>
+        </p>
+      ))}
+    </section>
+  );
+}
+
 export function Runs({ selectedId }: { selectedId?: string }) {
   const [runs, setRuns] = useState<Run[]>([]);
   const [selected, setSelected] = useState(selectedId ?? '');
@@ -81,12 +150,12 @@ export function Runs({ selectedId }: { selectedId?: string }) {
     };
   }, [selected]);
   const run = runs.find((record) => record.id === selected);
-  async function action(name: string) {
+  async function action(name: string, body: object = {}) {
     if (!run) return;
     setBusy(true);
     setError('');
     try {
-      const result = await request<Run>(`/api/runs/${run.id}/${name}`, {});
+      const result = await request<Run>(`/api/runs/${run.id}/${name}`, body);
       setSelected(result.id);
       setRuns(await request<Run[]>('/api/runs'));
     } catch (reason) {
@@ -189,6 +258,29 @@ export function Runs({ selectedId }: { selectedId?: string }) {
             </p>
             {run.error && <p className="error">{run.error}</p>}
             <div className="actions">
+              {['training', 'generating', 'stopping'].includes(run.status) && (
+                <>
+                  <button
+                    disabled={busy || run.status === 'stopping'}
+                    onClick={() => void action('stop', { force: false })}
+                  >
+                    Request graceful stop
+                  </button>
+                  <button
+                    disabled={busy}
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          'Force terminate this run process tree? Unsaved checkpoints and optimizer state may be lost.',
+                        )
+                      )
+                        void action('stop', { force: true, confirmed: true });
+                    }}
+                  >
+                    Force terminate
+                  </button>
+                </>
+              )}
               {run.status === 'prepared' && (
                 <button
                   disabled={busy}
@@ -235,6 +327,19 @@ export function Runs({ selectedId }: { selectedId?: string }) {
           </section>
         )}
       </div>
+      {run && (
+        <SavedStates
+          key={run.id}
+          runId={run.id}
+          onRestore={(stateId, steps) =>
+            action('restore-state', {
+              state_id: stateId,
+              additional_steps: steps,
+              confirmed: true,
+            })
+          }
+        />
+      )}
       {run && (
         <section className="panel">
           <h2>Live stage logs</h2>
