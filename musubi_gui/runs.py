@@ -241,7 +241,11 @@ class RunService:
         uncertain = uncertain or any(identity_status(identity) == "uncertain" for identity in identities)
         owner = self.device.owner()
         if owner and owner["run_id"] == run_id and owner["state"] == str(self.root.resolve()):
-            uncertain = uncertain or bool(owner.get("launch_pending"))
+            # Protocol 2 never resumes a process before recording its identity and
+            # assigning its named Job Object. Empty observable jobs prove no GPU
+            # stage survived a crash in the reserved/suspended launch window.
+            observable_launch = owner.get("launch_protocol") == 2 and bool(run.get("job_objects"))
+            uncertain = uncertain or (bool(owner.get("launch_pending")) and not observable_launch)
         if live or uncertain:
             status = "uncertain" if uncertain else "orphaned"
             self.device.update(run_id, identities)
@@ -426,8 +430,8 @@ class RunService:
                 names = list(self.get(run_id).get("job_objects", []))
                 if name not in names:
                     names.append(name)
-                self.store.update(run_id, lambda r: r.update(job_objects=names, launch_pending=True))
-                self.device.update(run_id, [], job_objects=names, launch_pending=True)
+                self.store.update(run_id, lambda r: r.update(job_objects=names, launch_pending=True, launch_protocol=2))
+                self.device.update(run_id, [], job_objects=names, launch_pending=True, launch_protocol=2)
                 log_file = Path(run["directory"]) / f"{stage['name']}.log"
                 with log_file.open("a", encoding="utf-8") as log:
                     # B603: trusted recipe adapter builds arrays; no API accepts executable commands.

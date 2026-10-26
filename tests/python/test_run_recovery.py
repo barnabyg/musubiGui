@@ -8,6 +8,7 @@ from musubi_gui.processes import identity_status, process_identity
 from musubi_gui.reference import Stage
 from musubi_gui.runs import ExecutionPlan, RunService
 from musubi_gui.settings import Settings
+from musubi_gui.windows_job import ProcessJob
 
 
 def wait_status(service: RunService, run_id: str, expected: str) -> dict:
@@ -126,5 +127,46 @@ def test_stale_pid_and_device_lock_are_reconciled_without_touching_reused_proces
         assert restarted.get(run["id"])["status"] == "interrupted"
         assert restarted.device.owner() is None
         assert identity_status(current) == "alive"
+    finally:
+        restarted.close()
+
+
+def test_crash_after_reserving_a_launch_before_process_creation_can_be_reconciled(tmp_path: Path) -> None:
+    root, device = tmp_path / "state", tmp_path / "device.sqlite"
+    service = RunService(root, device_path=device, autostart=False)
+    current = process_identity()
+    stale = {**current, "created": current["created"] - 1000}
+    run = service.submit(
+        ExecutionPlan(
+            job={"id": "job", "revision": 1, "family": "wan"},
+            settings=Settings(),
+            manifest={"items": []},
+            directory=tmp_path / "output",
+            cache=tmp_path / "cache",
+            stages=[],
+            fingerprint="launch-window",
+        )
+    )
+    name = "Local\\MusubiGui-launch-test-" + run["id"]
+    job = ProcessJob(name)
+    job.close()  # An empty named job disappears when the crashed controller's handle closes.
+    record = {
+        **run,
+        "status": "preparing",
+        "controller": stale,
+        "processes": [],
+        "job_objects": [name],
+        "launch_pending": True,
+        "launch_protocol": 2,
+    }
+    with sqlite3.connect(root / "runs.sqlite3") as database:
+        database.execute("UPDATE records SET data=? WHERE id=?", (json.dumps(record), run["id"]))
+    assert service.device.acquire(run["id"], stale)
+    service.device.update(run["id"], [], job_objects=[name], launch_pending=True, launch_protocol=2)
+    service.close()
+    restarted = RunService(root, device_path=device)
+    try:
+        assert restarted.get(run["id"])["status"] == "interrupted"
+        assert restarted.device.owner() is None
     finally:
         restarted.close()
