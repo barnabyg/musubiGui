@@ -76,3 +76,41 @@ def test_reference_child_overrides_inherited_hugging_face_cache_locations(tmp_pa
     report = json.loads(next(output.glob("wan-*/evidence.json")).read_text(encoding="utf-8"))
     actual = report["environment"]["reference_cache_environment"]
     assert all(Path(value).is_relative_to(cache) for value in actual.values())
+
+
+def test_wan_rejects_bf16_sources_before_the_fp16_training_recipe(tmp_path: Path) -> None:
+    models = tmp_path / "models"
+    models.mkdir()
+    model = models / "low-bf16.safetensors"
+    header = {
+        key: {"dtype": "BF16", "shape": [1], "data_offsets": [0, 2]}
+        for key in ["patch_embedding.weight", "blocks.0.cross_attn.k.weight"]
+    }
+    data = json.dumps(header).encode()
+    model.write_bytes(len(data).to_bytes(8, "little") + data + b"\x00\x00")
+    output = tmp_path / "output"
+    state = tmp_path / "settings.json"
+    state.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "checkout": str(tmp_path / "upstream"),
+                "python": sys.executable,
+                "model_roots": [str(models)],
+                "models": {"wan_low": str(model)},
+                "output_root": str(output),
+                "cache_root": str(tmp_path / "cache"),
+            }
+        ),
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        [sys.executable, "-m", "musubi_gui.reference", "wan", "--settings", str(state)],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 2
+    report = json.loads(next(output.glob("wan-*/evidence.json")).read_text(encoding="utf-8"))
+    assert any("wan_low: this reference recipe requires FP16" in message for message in report["blockers"])
+    assert report["stages"] == []

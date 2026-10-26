@@ -57,14 +57,18 @@ def validate_wan(settings: Settings) -> list[str]:
         file = Path(value)
         if name in {"wan_low", "wan_high"}:
             if file.suffix != ".safetensors":
-                errors.append(f"{name}: this recipe requires native FP16/BF16 safetensors DiT weights.")
+                errors.append(f"{name}: this recipe requires native FP16 safetensors DiT weights.")
                 continue
             header = safetensors_header(file)
             if any("scale_weight" in k or "scale_input" in k for k in header) or any(
                 isinstance(v, dict) and str(v.get("dtype", "")).startswith("F8") for v in header.values()
             ):
                 errors.append(
-                    f"{name}: pre-quantized/scaled FP8 input is unsupported by this recipe. Use FP16/BF16 sources; --fp8_scaled converts at load time."
+                    f"{name}: pre-quantized/scaled FP8 input is unsupported by this recipe. Use FP16 sources; --fp8_scaled converts at load time."
+                )
+            elif header.get("blocks.0.cross_attn.k.weight", {}).get("dtype") != "F16":
+                errors.append(
+                    f"{name}: this reference recipe requires FP16 DiT weights to match its FP16 mixed precision. BF16 needs a separately validated recipe."
                 )
             if "patch_embedding.weight" not in header:
                 errors.append(

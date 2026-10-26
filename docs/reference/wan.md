@@ -2,25 +2,33 @@
 
 The initial **candidate** trains the low-noise expert alone. It uses rank/alpha 8, batch one,
 256×256, 17 frames at 16 fps, two optimizer steps, FP16 training, FP8 conversion from native
-FP16/BF16 source, 36 swapped blocks, gradient checkpointing, AdamW and SDPA.
+FP16 source, 36 swapped blocks, gradient checkpointing, AdamW and SDPA.
 `reference.py` is the reusable command/config generator; each run saves resolved arguments
 and dataset TOML. The expected final outputs are `checkpoints/wan-reference.safetensors`
 and an MP4 under `samples/` in the unique configured output directory.
 
 Required Settings components:
 
-| Key        | Compatible input                                                             |
-| ---------- | ---------------------------------------------------------------------------- |
-| `wan_low`  | Native Wan 2.2 T2V low-noise 14B FP16/BF16 safetensors                       |
-| `wan_high` | Native Wan 2.2 T2V high-noise 14B FP16/BF16 safetensors; needed for sampling |
-| `wan_vae`  | Native 16-channel Wan **2.1** VAE, not Wan 2.2 5B VAE                        |
-| `wan_t5`   | Native Wan UMT5 encoder, not unconverted Transformers shards                 |
+| Key        | Compatible input                                                        |
+| ---------- | ----------------------------------------------------------------------- |
+| `wan_low`  | Native Wan 2.2 T2V low-noise 14B FP16 safetensors                       |
+| `wan_high` | Native Wan 2.2 T2V high-noise 14B FP16 safetensors; needed for sampling |
+| `wan_vae`  | Native 16-channel Wan **2.1** VAE, not Wan 2.2 5B VAE                   |
+| `wan_t5`   | Native Wan UMT5 encoder, not unconverted Transformers shards            |
 
 The runner rejects saved scaled-FP8 DiTs, native-key mismatches and safetensors VAEs with
 the wrong latent channels. `.pth` inputs are delegated to the pinned upstream's native loaders.
 The existing local Wan experts use scaled FP8 and cannot be passed to this recipe. Loader
 `--fp8_scaled` converts a supported source at runtime; it does not make saved scaled FP8 valid.
-No conversion or overwrite of the user's existing files is performed.
+No conversion or overwrite of the user's existing files is performed. The fixed FP16 recipe
+rejects BF16 DiTs before training; those require matching mixed precision and separate validation.
+
+Actual preflight on 26 October 2026 recorded the existing revision/environment in
+[wan-preflight.json](evidence/wan-preflight.json). The existing scaled FP8 experts and
+Transformers-key T5 were rejected. No Wan cache, training, checkpoint or sample stage ran;
+support remains **unresolved**, with no conclusion about hardware fit. Attempts to retrieve
+native replacements produced only partial transfers, except for the small native Wan 2.1 VAE.
+Downloads were stopped when the user elected to supply replacement files and continue development.
 
 Compatible public sources are [Comfy-Org/Wan-2.2](https://huggingface.co/Comfy-Org/Wan-2.2/tree/main/split_files/diffusion_models)
 (`wan2.2_t2v_low_noise_14B_fp16.safetensors` and `wan2.2_t2v_high_noise_14B_fp16.safetensors`),
