@@ -4,9 +4,10 @@ import builtins
 import json
 import math
 import re
+import sqlite3
 import threading
 import uuid
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from importlib import import_module
 from pathlib import Path
 from typing import Any, Iterator, Literal
@@ -191,6 +192,14 @@ class JobStore:
     def __init__(self, root: Path):
         self.root = root / "jobs"
 
+    @contextmanager
+    def _mutation(self) -> Iterator[None]:
+        """Keep revision read/check/write atomic across backend processes sharing this state."""
+        self.root.parent.mkdir(parents=True, exist_ok=True)
+        with _lock, closing(sqlite3.connect(self.root.parent / "job-revisions-lock.sqlite3", timeout=30)) as lock, lock:
+            lock.execute("BEGIN IMMEDIATE")
+            yield
+
     def get(self, job_id: str, revision: int | None = None) -> Job:
         directory = self.root / identifier(job_id)
         files = list(directory.glob("*.json"))
@@ -216,7 +225,7 @@ class JobStore:
             return job
 
     def save(self, job_id: str, draft: JobDraft, expected_revision: int) -> Job:
-        with _lock:
+        with self._mutation():
             old = self.get(job_id)
             if expected_revision != old.revision:
                 raise HTTPException(
@@ -229,7 +238,7 @@ class JobStore:
             return job
 
     def convert(self, job_id: str, conversion: Conversion) -> dict[str, Any] | Job:
-        with _lock:
+        with self._mutation():
             old = self.get(job_id)
             if conversion.revision != old.revision:
                 raise HTTPException(409, "The draft changed. Reopen it and preview the conversion again.")
@@ -581,7 +590,7 @@ def job_errors() -> Iterator[None]:
         raise HTTPException(404, str(error)) from error
     except ValueError as error:
         raise HTTPException(422, str(error)) from error
-    except OSError as error:
+    except (OSError, sqlite3.Error) as error:
         raise HTTPException(
             500, "Job storage could not be accessed. Check permissions/free disk; your edits remain here."
         ) from error
