@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "checkout": "C:/ai/musubi-tuner",
+  "python": "C:/ai/musubi-tuner/.venv/Scripts/python.exe",
+  "output_root": "C:\\docs\\git\\musubiGui\\outputs",
+  "cache_root": "C:\\docs\\git\\musubiGui\\cache",
+  "model_roots": [
+    "C:\\ai\\ai-toolkit\\models",
+    "C:\\docs\\git\\musubiGui\\models"
+  ],
+  "models": {
+    "wan_low": "C:\\docs\\git\\musubiGui\\models\\wan-dit\\split_files\\diffusion_models\\wan2.2_t2v_low_noise_14B_fp16.safetensors",
+    "wan_high": "C:\\docs\\git\\musubiGui\\models\\wan-dit\\split_files\\diffusion_models\\wan2.2_t2v_high_noise_14B_fp16.safetensors",
+    "wan_vae": "C:\\docs\\git\\musubiGui\\models\\wan-vae\\split_files\\vae\\wan_2.1_vae.safetensors",
+    "wan_t5": "C:\\docs\\git\\musubiGui\\models\\wan-t5\\models_t5_umt5-xxl-enc-bf16.pth",
+    "h3_dit": "C:\\ai\\ai-toolkit\\models\\diffusion_models\\minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+    "h3_text": "C:\\ai\\ai-toolkit\\models\\text_encoders\\qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+    "h3_video_vae": "C:\\ai\\ai-toolkit\\models\\vae\\minimax_h3_video_vae_fp16.safetensors",
+    "h3_audio_vae": "C:\\ai\\ai-toolkit\\models\\vae\\minimax_h3_audio_vae_fp32.safetensors"
+  }
+}

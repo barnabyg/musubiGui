@@ -35,6 +35,10 @@ the tab prompts about unsaved edits. A failed save retains edits and reports the
 Browser tests exercise real UI → API → disk → backend restart. They use temporary isolated
 state and a non-training fixture checkout. GPU support requires separate reference evidence.
 
+Run the measured Wan/H3 acceptance scenarios with `.venv\Scripts\python.exe -m musubi_gui.reference wan`
+or the same command ending in `h3`. See [reference workflows](docs/reference/README.md)
+for compatible weights, exact recipes, evidence and unresolved support limits.
+
 The interface takes interaction inspiration from [AI Toolkit](https://github.com/ostris/ai-toolkit):
 a persistent sidebar and grouped settings. No AI Toolkit source/assets are copied.
 [musubi-tuner](https://github.com/kohya-ss/musubi-tuner) owns all training; it remains a separate
