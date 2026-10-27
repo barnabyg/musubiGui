@@ -11,5 +11,6 @@
 uv.lock text eol=lf
 README.md text eol=lf
 docs/verification.md text eol=lf
+docs/*.md text eol=lf
 docs/reference/** text eol=lf
 *.cmd text eol=crlf
