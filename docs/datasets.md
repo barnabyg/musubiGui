@@ -60,16 +60,17 @@ see an explicit collision. Restart and reopen the managed dataset to confirm per
 
 Alternatively, drag one or more local images/videos onto the labelled drop area in the
 managed dataset's upload panel. Matching captions and audio sidecars can be dropped together
-with their media. Dropping files selects a replacement queue; choose **Upload selected files**
-to start. The file picker remains available for keyboard selection. During an upload,
+with their media. Dropping files starts their upload immediately, replacing the prior queue.
+The file picker remains available for keyboard selection; choose **Upload selected files**
+to start files selected through that picker. During an upload,
 both selection methods are disabled; pause or finish before choosing another batch.
 Directory import and remote URL drops are not supported.
 
 For a manual drag check, use Windows File Explorer to drag `red.png`, `red.txt` and
 `motion.mp4` over the area. Check its highlight remains while crossing the text/file picker,
 clears when leaving, and clears after dropping without opening a file in the browser.
-Upload and confirm image/video gallery entries and the red caption. Drop an unsupported file
-and a duplicate filename to check the existing per-file errors. While uploading, attempt
+Confirm uploads start without another click, followed by image/video gallery entries and the red
+caption. Drop an unsupported file and a duplicate filename to check the existing per-file errors. While uploading, attempt
 another drop and confirm the active queue is preserved. Also check the file picker with Tab.
 
 Uploads use bounded 512 KiB JSON chunks and private `.part` files. A pause, network failure or disk error

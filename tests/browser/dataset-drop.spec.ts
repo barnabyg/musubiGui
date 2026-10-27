@@ -34,6 +34,14 @@ test('dropped images, video and captions use managed uploads, preserve collision
   try {
     await createDataset(page, app.url, app.media);
     const dropArea = page.getByLabel('Dataset file drop area');
+    await page.getByLabel('Upload files').setInputFiles({
+      name: 'picker-only.png',
+      mimeType: 'image/png',
+      buffer: await readFile(path.join(app.media, 'red.png')),
+    });
+    await expect(
+      page.getByLabel('Upload result picker-only.png', { exact: true }),
+    ).toContainText('Ready');
     // Captions precede media in the drop to exercise the shared upload ordering.
     const transfer = await fileTransfer(page, app.media, [
       'red.txt',
@@ -52,11 +60,7 @@ test('dropped images, video and captions use managed uploads, preserve collision
     await expect(dropArea).not.toHaveClass(/dragging/);
     await expect(
       page.getByLabel('Upload result red.png', { exact: true }),
-    ).toContainText('Ready');
-    await expect(
-      page.getByRole('button', { name: 'red.png image' }),
-    ).toHaveCount(0);
-    await page.getByRole('button', { name: 'Upload selected files' }).click();
+    ).toContainText(/Uploading|Validating media|Uploaded/);
     // This batch validates media sequentially and refreshes the gallery per file.
     await expect(page.getByLabel('Upload files')).toBeEnabled({
       timeout: 45_000,
@@ -89,6 +93,9 @@ test('dropped images, video and captions use managed uploads, preserve collision
       await page.request.get(`${app.url}/api/datasets`)
     ).json()) as { path: string }[];
     const stored = datasets[0].path;
+    await expect(
+      readFile(path.join(stored, 'picker-only.png')),
+    ).rejects.toMatchObject({ code: 'ENOENT' });
     for (const name of [
       'red.png',
       'blue.png',
@@ -106,7 +113,6 @@ test('dropped images, video and captions use managed uploads, preserve collision
       return transfer;
     });
     await dropArea.dispatchEvent('drop', { dataTransfer: collision });
-    await page.getByRole('button', { name: 'Upload selected files' }).click();
     await expect(page.getByLabel('Upload files')).toBeEnabled({
       timeout: 45_000,
     });
@@ -165,14 +171,6 @@ test('drop feedback handles child boundaries and non-file drags, and busy upload
     await expect(
       page.getByLabel('Upload result red.png', { exact: true }),
     ).toContainText('Ready');
-    await dropArea.dispatchEvent('drop', { dataTransfer: transfer });
-    await expect(
-      page.getByLabel('Upload result red.png', { exact: true }),
-    ).toHaveCount(0);
-    await expect(
-      page.getByLabel('Upload result blue.png', { exact: true }),
-    ).toContainText('Ready');
-
     const held = new Promise<void>((resolve) => {
       releaseUpload = resolve;
     });
@@ -180,7 +178,10 @@ test('drop feedback handles child boundaries and non-file drags, and busy upload
       if (route.request().method() === 'PUT') await held;
       await route.continue();
     });
-    await page.getByRole('button', { name: 'Upload selected files' }).click();
+    await dropArea.dispatchEvent('drop', { dataTransfer: transfer });
+    await expect(
+      page.getByLabel('Upload result red.png', { exact: true }),
+    ).toHaveCount(0);
     await expect(
       page.getByLabel('Upload result blue.png', { exact: true }),
     ).toContainText('Uploading');
@@ -212,6 +213,80 @@ test('drop feedback handles child boundaries and non-file drags, and busy upload
     await text.dispose();
   } finally {
     releaseUpload();
+    await app.cleanup();
+  }
+});
+
+test('rapid drops keep the first batch while caption saving is pending', async ({
+  page,
+}) => {
+  const app = await datasetHarness();
+  let releaseCaption = () => {};
+  try {
+    await createDataset(page, app.url, app.media);
+    const area = page.getByLabel('Dataset file drop area');
+    const initial = await fileTransfer(page, app.media, ['blue.png']);
+    await area.dispatchEvent('drop', { dataTransfer: initial });
+    await expect(
+      page.getByLabel('Upload result blue.png', { exact: true }),
+    ).toContainText('Uploaded', { timeout: 45_000 });
+    await expect(page.getByLabel('Upload files')).toBeEnabled({
+      timeout: 45_000,
+    });
+    await page.getByRole('button', { name: 'blue.png image' }).click();
+    const held = new Promise<void>((resolve) => {
+      releaseCaption = resolve;
+    });
+    await page.route('**/caption', async (route) => {
+      if (route.request().method() === 'PUT') await held;
+      await route.continue();
+    });
+    await page
+      .getByLabel('Caption', { exact: true })
+      .fill('Caption before the next upload.');
+    const first = await fileTransfer(page, app.media, ['red.png']);
+    const second = await fileTransfer(page, app.media, ['motion.mp4']);
+    await area.evaluate(
+      (element, { first, second }) => {
+        for (const dataTransfer of [first, second])
+          element.dispatchEvent(
+            new DragEvent('drop', {
+              bubbles: true,
+              cancelable: true,
+              dataTransfer,
+            }),
+          );
+      },
+      { first, second },
+    );
+    await expect(page.getByLabel('Upload files')).toBeDisabled();
+    await expect(
+      page.getByLabel('Upload result red.png', { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByLabel('Upload result motion.mp4', { exact: true }),
+    ).toHaveCount(0);
+    releaseCaption();
+    await expect(
+      page.getByLabel('Upload result red.png', { exact: true }),
+    ).toContainText('Uploaded', { timeout: 45_000 });
+    await expect(page.getByLabel('Upload files')).toBeEnabled({
+      timeout: 45_000,
+    });
+    const records = (await (
+      await page.request.get(`${app.url}/api/datasets`)
+    ).json()) as { path: string }[];
+    expect(await readFile(path.join(records[0].path, 'blue.txt'), 'utf8')).toBe(
+      'Caption before the next upload.',
+    );
+    await expect(
+      readFile(path.join(records[0].path, 'motion.mp4')),
+    ).rejects.toMatchObject({ code: 'ENOENT' });
+    await initial.dispose();
+    await first.dispose();
+    await second.dispose();
+  } finally {
+    releaseCaption();
     await app.cleanup();
   }
 });
