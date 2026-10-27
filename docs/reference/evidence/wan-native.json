@@ -129,14 +129,14 @@
   },
   "restored_low_noise_gui": {
     "run_id": "74cbeca49deb40b7a054872e2b976406",
-    "resume_of": "7e46ddcd1d754aebada6ae64aeb96452",
+    "resume_of_run_id": "7e46ddcd1d754aebada6ae64aeb96452",
     "status": "completed",
     "additional_segment_steps": 1,
     "optimizer_step_before": 2,
     "optimizer_step_after": 3,
     "counter_resets": true,
     "data_position_restored": false,
-    "cache_inputs_reused_from": "7e46ddcd1d754aebada6ae64aeb96452",
+    "cache_source_run_id": "7e46ddcd1d754aebada6ae64aeb96452",
     "stage_seconds": {
       "train": 32.042,
       "generate": 72.12
