@@ -11,6 +11,15 @@ detect-secrets, and sdist/wheel packaging. The browser suite builds the UI befor
 CI uses the same command. Registry access is required by vulnerability and lock checks.
 All diagnostics and warnings must be resolved; pytest warnings and ESLint warnings fail.
 
+Browser assertions have a 15-second integration deadline because they exercise real
+backend requests, SQLite writes and media subprocesses on hosted Windows runners.
+Controlled six-second dataset creation and completed-scan responses reproduce failures
+under Playwright's five-second default and pass with this budget. This is a correctness
+suite, not a latency benchmark: assertions still require the exact expected result.
+Long upload/scan/preparation/training operations use explicit 45-second waits, and the
+two-family preparation/training scenario has a 120-second total budget. Retries remain
+disabled. Review these deadlines if fixture workloads or runner capacity change.
+
 Focused commands: `npm.cmd run typecheck`, `.venv\Scripts\python.exe -m mypy`,
 `.venv\Scripts\python.exe -m pytest tests/python/test_settings_api.py -q`, and
 `npm.cmd run build && npm.cmd run test:browser` (in cmd.exe).
