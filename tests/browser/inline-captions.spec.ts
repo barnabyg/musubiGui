@@ -16,9 +16,10 @@ async function openDataset(
     .fill('Inline captions');
   await page.getByLabel('Dataset folder', { exact: true }).fill(app.media);
   await page.getByRole('button', { name: 'Register folder' }).click();
-  await expect(page.getByText(`Scan: complete ${count}/${count}`)).toBeVisible({
-    timeout: count === 24 ? 90_000 : 45_000,
-  });
+  await expect(page.locator('.dataset-identity [role="status"]')).toHaveText(
+    `Scan: complete ${count}/${count}`,
+    { timeout: 45_000 },
+  );
 }
 
 test('captions edit beneath thumbnails, share the preview draft and flush the latest in-flight edit before leaving', async ({
@@ -128,21 +129,22 @@ test('captions edit beneath thumbnails, share the preview draft and flush the la
 test('virtual scrolling preserves pending and failed inline drafts, with recovery and external conflict review', async ({
   page,
 }) => {
-  // Include the 24-media scan and the subsequent caption recovery workflow.
-  test.setTimeout(120_000);
+  // Keep scan and recovery time separate from the default assertion deadline.
+  test.setTimeout(90_000);
   const app = await datasetHarness();
   let release = () => {};
   try {
     await Promise.all(
-      Array.from({ length: 20 }, (_, index) =>
+      Array.from({ length: 4 }, (_, index) =>
         copyFile(
           path.join(app.media, 'red.png'),
           path.join(app.media, `study-${String(index).padStart(2, '0')}.png`),
         ),
       ),
     );
-    await page.setViewportSize({ width: 1280, height: 900 });
-    await openDataset(page, app, 24);
+    // One column makes eight real files exceed the mounted virtual window.
+    await page.setViewportSize({ width: 640, height: 650 });
+    await openDataset(page, app, 8);
     const blue = page.getByLabel('Caption for blue.png', { exact: true });
     const red = page.getByLabel('Caption for red.png', { exact: true });
     const gallery = page.getByLabel('Dataset gallery');

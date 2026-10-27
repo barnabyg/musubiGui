@@ -6,12 +6,12 @@ import { datasetHarness } from './datasetHarness';
 test('large galleries scroll, resize and filter without losing access to media', async ({
   page,
 }) => {
-  // Twenty-four isolated media probes need an explicit hosted-Windows budget.
-  test.setTimeout(120_000);
+  // Leave room for a real scan and the subsequent gallery interactions.
+  test.setTimeout(90_000);
   const app = await datasetHarness();
   try {
     await Promise.all(
-      Array.from({ length: 20 }, (_, index) =>
+      Array.from({ length: 4 }, (_, index) =>
         copyFile(
           path.join(app.media, 'red.png'),
           path.join(app.media, `study-${String(index).padStart(2, '0')}.png`),
@@ -27,9 +27,10 @@ test('large galleries scroll, resize and filter without losing access to media',
       .fill('Large collection');
     await page.getByLabel('Dataset folder', { exact: true }).fill(app.media);
     await page.getByRole('button', { name: 'Register folder' }).click();
-    await expect(page.getByText('Scan: complete 24/24')).toBeVisible({
-      timeout: 90_000,
-    });
+    await expect(page.locator('.dataset-identity [role="status"]')).toHaveText(
+      'Scan: complete 8/8',
+      { timeout: 45_000 },
+    );
     const gallery = page.getByLabel('Dataset gallery');
     // The gallery starts directly below the compact header and fills the viewport.
     await expect
@@ -38,13 +39,23 @@ test('large galleries scroll, resize and filter without losing access to media',
       )
       .toBeLessThan(80);
     expect((await gallery.boundingBox())?.height).toBeGreaterThan(750);
-    expect(await gallery.getByRole('button').count()).toBeLessThan(24);
+    // A narrow viewport forces recycling with eight real files, without 24 probe startups.
+    await page.setViewportSize({ width: 640, height: 650 });
+    await expect
+      .poll(() =>
+        gallery
+          .getByRole('button')
+          .first()
+          .evaluate((element) => element.getBoundingClientRect().width),
+      )
+      .toBeGreaterThan(300);
+    expect(await gallery.getByRole('button').count()).toBeLessThan(8);
     await gallery.focus();
     await page.keyboard.press('End');
-    const last = page.getByRole('button', { name: 'study-19.png image' });
+    const last = page.getByRole('button', { name: 'study-03.png image' });
     await expect(last).toBeVisible();
     await last.click();
-    await expect(page.getByAltText('Preview study-19.png')).toBeVisible();
+    await expect(page.getByAltText('Preview study-03.png')).toBeVisible();
     await page.getByRole('button', { name: 'Close preview' }).click();
     await gallery.focus();
     await page.keyboard.press('Home');
