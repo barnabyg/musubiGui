@@ -26,6 +26,10 @@ test('managed uploads publish media/captions, reject collisions and invalid file
         path.join(app.media, 'invalid.mp4'),
       ]);
     await page.getByRole('button', { name: 'Upload selected files' }).click();
+    // Uploaded is reported before the final gallery refresh has finished.
+    await expect(page.getByLabel('Upload files')).toBeEnabled({
+      timeout: 45_000,
+    });
     await expect(
       page.getByLabel('Upload result red.png', { exact: true }),
     ).toContainText('Uploaded');
@@ -38,6 +42,9 @@ test('managed uploads publish media/captions, reject collisions and invalid file
     await expect(
       page.getByLabel('Upload result invalid.mp4', { exact: true }),
     ).toContainText('decode');
+    await expect(
+      page.getByRole('button', { name: 'red.png image · caption' }),
+    ).toBeVisible();
     await page.getByRole('button', { name: 'red.png image' }).click();
     await expect(page.getByAltText('Preview red.png')).toBeVisible();
     await expect(page.getByLabel('Caption', { exact: true })).toHaveValue(

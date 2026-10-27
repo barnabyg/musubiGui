@@ -57,6 +57,10 @@ test('dropped images, video and captions use managed uploads, preserve collision
       page.getByRole('button', { name: 'red.png image' }),
     ).toHaveCount(0);
     await page.getByRole('button', { name: 'Upload selected files' }).click();
+    // This batch validates media sequentially and refreshes the gallery per file.
+    await expect(page.getByLabel('Upload files')).toBeEnabled({
+      timeout: 45_000,
+    });
     for (const name of [
       'red.png',
       'blue.png',
@@ -71,8 +75,6 @@ test('dropped images, video and captions use managed uploads, preserve collision
       await expect(
         page.getByLabel(`Upload result ${name}`, { exact: true }),
       ).toContainText('Failed');
-    // A file's Uploaded state precedes the batch's final gallery refresh.
-    await expect(page.getByLabel('Upload files')).toBeEnabled();
     await expect(
       page.getByRole('button', {
         name: 'motion.mp4 video · caption',
@@ -189,10 +191,10 @@ test('drop feedback handles child boundaries and non-file drags, and busy upload
       page.getByLabel('Upload result red.png', { exact: true }),
     ).toHaveCount(0);
     releaseUpload();
+    await expect(picker).toBeEnabled({ timeout: 45_000 });
     await expect(
       page.getByLabel('Upload result blue.png', { exact: true }),
     ).toContainText('Uploaded');
-    await expect(picker).toBeEnabled();
     await expect(dropArea).toHaveAttribute('aria-disabled', 'false');
     // Re-select the file previously chosen before the drop replaced the queue.
     await picker.setInputFiles(path.join(app.media, 'red.png'));
