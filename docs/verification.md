@@ -16,7 +16,9 @@ backend requests, SQLite writes and media subprocesses on hosted Windows runners
 Controlled six-second dataset creation and completed-scan responses reproduce failures
 under Playwright's five-second default and pass with this budget. This is a correctness
 suite, not a latency benchmark: assertions still require the exact expected result.
-Long upload/scan/preparation/training operations use explicit 45-second waits, and the
+Long upload/scan/preparation/training operations use explicit 45-second waits. This
+includes four-media registration scans: an 18-second completed-scan response reproduces
+the 15-second failure and passes with the operation budget. The
 two-family preparation/training scenario has a 120-second total budget. Retries remain
 disabled. Review these deadlines if fixture workloads or runner capacity change.
 

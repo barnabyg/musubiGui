@@ -14,3 +14,4 @@ docs/verification.md text eol=lf
 docs/*.md text eol=lf
 docs/reference/** text eol=lf
 *.cmd text eol=crlf
+*.bat text eol=crlf

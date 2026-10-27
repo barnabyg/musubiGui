@@ -418,8 +418,7 @@ class DatasetStore:
 
     def create_managed(self, name: str, root: str) -> dict[str, Any]:
         folder = self._folder(root)
-        if not folder.is_dir():
-            raise ValueError("Choose an existing configured dataset root for managed uploads.")
+        folder.mkdir(parents=True, exist_ok=True)
         destination = within_root(folder / ("managed-" + uuid.uuid4().hex), [folder])
         destination.mkdir()
         try:

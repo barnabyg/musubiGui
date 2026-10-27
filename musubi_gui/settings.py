@@ -15,7 +15,7 @@ class Settings(BaseModel):
     checkout: str = ""
     python: str = ""
     model_roots: list[str] = Field(default_factory=list)
-    dataset_roots: list[str] = Field(default_factory=list)
+    dataset_roots: list[str] = Field(default_factory=lambda: [str(Path("datasets").resolve())])
     models: dict[str, str] = Field(default_factory=dict)
     output_root: str = ""
     cache_root: str = ""

@@ -18,6 +18,7 @@ export function DatasetUploads({ datasetId, beforeAction, onChanged }: Props) {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [busy, setBusy] = useState(false);
+  const uploading = useRef(false);
   const [dragging, setDragging] = useState(false);
   const dragDepth = useRef(0);
   const [error, setError] = useState('');
@@ -62,14 +63,22 @@ export function DatasetUploads({ datasetId, beforeAction, onChanged }: Props) {
     setSessions(await request<Session[]>(''));
   }
   function selectFiles(files: FileList | null) {
-    if (busy || !files?.length) return;
-    setEntries(
-      Array.from(files).map((file) => ({ file, progress: 0, status: 'Ready' })),
-    );
+    if (uploading.current || !files?.length) return;
+    const selected = Array.from(files).map((file) => ({
+      file,
+      progress: 0,
+      status: 'Ready',
+    }));
+    setEntries(selected);
+    return selected;
   }
-  async function upload() {
-    if (!(await beforeAction())) return;
+  async function upload(batch: Entry[] = entries) {
+    if (uploading.current || !batch.length) return;
+    // Reserve this batch before caption flushing or React's next render.
+    uploading.current = true;
     setBusy(true);
+    setDragging(false);
+    dragDepth.current = 0;
     setError('');
     const controller = new AbortController();
     abort.current = controller;
@@ -79,12 +88,13 @@ export function DatasetUploads({ datasetId, beforeAction, onChanged }: Props) {
           entry.file === file ? { ...entry, ...patch } : entry,
         ),
       );
-    const ordered = [...entries].sort(
+    const ordered = [...batch].sort(
       (a, b) =>
         Number(a.file.name.toLowerCase().endsWith('.txt')) -
         Number(b.file.name.toLowerCase().endsWith('.txt')),
     );
     try {
+      if (!(await beforeAction()) || controller.signal.aborted) return;
       for (const entry of ordered) {
         if (entry.status === 'Uploaded') continue;
         if (controller.signal.aborted) break;
@@ -148,14 +158,17 @@ export function DatasetUploads({ datasetId, beforeAction, onChanged }: Props) {
           });
         }
       }
+    } catch (reason) {
+      setError((reason as Error).message);
     } finally {
       abort.current = null;
-      setBusy(false);
       try {
         await refresh();
       } catch (reason) {
         setError((reason as Error).message);
       }
+      uploading.current = false;
+      setBusy(false);
     }
   }
   async function cancel(id: string) {
@@ -199,18 +212,20 @@ export function DatasetUploads({ datasetId, beforeAction, onChanged }: Props) {
           event.preventDefault();
           dragDepth.current = 0;
           setDragging(false);
-          selectFiles(event.dataTransfer.files);
+          const selected = selectFiles(event.dataTransfer.files);
+          if (selected) void upload(selected);
         }}
       >
         <p>
           {busy
             ? 'Wait for uploads to finish or pause them before selecting files.'
             : dragging
-              ? 'Drop files here to select them for upload.'
+              ? 'Drop files here to start uploading.'
               : 'Drag and drop images, videos, audio sidecars and matching .txt captions here, or choose files below.'}
         </p>
         <p>
-          Selected files replace the queue. Then choose Upload selected files.
+          Dropped files start uploading immediately. Files chosen below start
+          when you choose Upload selected files.
         </p>
         <label className="field">
           Upload files

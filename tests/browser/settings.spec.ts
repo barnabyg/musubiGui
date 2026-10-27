@@ -1,6 +1,14 @@
 import { test, expect } from '@playwright/test';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import {
+  mkdtemp,
+  mkdir,
+  readFile,
+  readdir,
+  realpath,
+  rm,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createServer } from 'node:net';
@@ -9,7 +17,10 @@ import { stopBackendTree } from './processes';
 test('settings survive backend restart and invalid installations explain corrections', async ({
   page,
 }) => {
-  const root = await mkdtemp(path.join(tmpdir(), 'musubi-setup-'));
+  // Windows CI's TEMP can use an 8.3 alias; the backend returns resolved paths.
+  const root = await realpath(
+    await mkdtemp(path.join(tmpdir(), 'musubi-setup-')),
+  );
   const checkout = path.join(root, '安装 with spaces');
   await mkdir(checkout);
   await writeFile(
@@ -35,7 +46,12 @@ test('settings survive backend restart and invalid installations explain correct
       path.resolve('.venv/Scripts/python.exe'),
       ['-m', 'musubi_gui', '--port', String(port), '--no-browser'],
       {
-        env: { ...process.env, MUSUBI_GUI_STATE: path.join(root, 'state') },
+        cwd: root,
+        env: {
+          ...process.env,
+          PYTHONPATH: process.cwd(),
+          MUSUBI_GUI_STATE: path.join(root, 'state'),
+        },
         stdio: 'pipe',
       },
     );
@@ -62,6 +78,15 @@ test('settings survive backend restart and invalid installations explain correct
   try {
     await start();
     await page.goto(url);
+    const defaultDatasets = path.join(root, 'datasets');
+    await expect(page.getByLabel('Dataset roots (one per line)')).toHaveValue(
+      defaultDatasets,
+    );
+    await page.getByRole('button', { name: 'Datasets', exact: true }).click();
+    await expect(
+      page.getByLabel('Dataset folder', { exact: true }),
+    ).toHaveValue(defaultDatasets);
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
     await page
       .getByLabel('musubi-tuner checkout')
       .fill(path.join(root, 'missing'));
@@ -72,6 +97,18 @@ test('settings survive backend restart and invalid installations explain correct
     await page.getByLabel('Cache root').fill(path.join(root, 'cache'));
     await page.getByRole('button', { name: 'Save settings' }).click();
     await expect(page.getByRole('status')).toHaveText('Settings saved');
+    expect(
+      JSON.parse(await readFile(path.join(root, 'state/settings.json'), 'utf8'))
+        .dataset_roots,
+    ).toEqual([defaultDatasets]);
+    await page.getByRole('button', { name: 'Datasets', exact: true }).click();
+    await page
+      .getByLabel('Dataset name', { exact: true })
+      .fill('Default location');
+    await page.getByRole('button', { name: 'Create managed dataset' }).click();
+    await expect(page.getByText('Scan: complete 0/0')).toBeVisible();
+    expect(await readdir(defaultDatasets)).toHaveLength(1);
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
     await page.getByRole('button', { name: 'Run diagnostics' }).click();
     await expect(
       page.getByText(
@@ -84,6 +121,9 @@ test('settings survive backend restart and invalid installations explain correct
     await stop();
     await start();
     await page.reload();
+    await expect(page.getByLabel('Dataset roots (one per line)')).toHaveValue(
+      defaultDatasets,
+    );
     await expect(page.getByLabel('musubi-tuner checkout')).toHaveValue(
       checkout,
     );

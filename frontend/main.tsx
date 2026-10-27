@@ -177,7 +177,10 @@ function App() {
           <span className="badge">LoRA · Windows</span>
         </header>
         <div hidden={screen !== 'Datasets'}>
-          <Datasets visible={screen === 'Datasets'} />
+          <Datasets
+            visible={screen === 'Datasets'}
+            defaultFolder={settings?.dataset_roots[0] ?? ''}
+          />
         </div>
         {screen === 'Jobs' ? (
           <Jobs
