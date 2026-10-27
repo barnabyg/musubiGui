@@ -5,6 +5,7 @@ import {
   mkdir,
   readFile,
   readdir,
+  realpath,
   rm,
   writeFile,
 } from 'node:fs/promises';
@@ -16,7 +17,10 @@ import { stopBackendTree } from './processes';
 test('settings survive backend restart and invalid installations explain corrections', async ({
   page,
 }) => {
-  const root = await mkdtemp(path.join(tmpdir(), 'musubi-setup-'));
+  // Windows CI's TEMP can use an 8.3 alias; the backend returns resolved paths.
+  const root = await realpath(
+    await mkdtemp(path.join(tmpdir(), 'musubi-setup-')),
+  );
   const checkout = path.join(root, '安装 with spaces');
   await mkdir(checkout);
   await writeFile(
