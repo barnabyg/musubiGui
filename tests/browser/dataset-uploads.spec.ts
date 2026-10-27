@@ -57,6 +57,9 @@ test('managed uploads publish media/captions, reject collisions and invalid file
       .getByLabel('Upload files')
       .setInputFiles(path.join(app.media, 'red.png'));
     await page.getByRole('button', { name: 'Upload selected files' }).click();
+    await expect(page.getByLabel('Upload files')).toBeEnabled({
+      timeout: 45_000,
+    });
     await expect(
       page.getByLabel('Upload result red.png', { exact: true }),
     ).toContainText('already exists');

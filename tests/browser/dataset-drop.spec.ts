@@ -107,6 +107,9 @@ test('dropped images, video and captions use managed uploads, preserve collision
     });
     await dropArea.dispatchEvent('drop', { dataTransfer: collision });
     await page.getByRole('button', { name: 'Upload selected files' }).click();
+    await expect(page.getByLabel('Upload files')).toBeEnabled({
+      timeout: 45_000,
+    });
     await expect(
       page.getByLabel('Upload result red.png', { exact: true }),
     ).toContainText('already exists');
