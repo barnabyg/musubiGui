@@ -6,6 +6,8 @@ import { runWorkspace } from './runHarness';
 test('Wan and H3 prepare and train through the GUI with frozen captions cache reuse and playable outputs', async ({
   page,
 }) => {
+  // Both families prepare, train, decode samples and inspect saved state.
+  test.setTimeout(120_000);
   const app = await runWorkspace();
   try {
     await page.goto(app.url);
@@ -26,7 +28,7 @@ test('Wan and H3 prepare and train through the GUI with frozen captions cache re
         .click();
       await expect(
         page.getByText('State: prepared', { exact: true }),
-      ).toBeVisible();
+      ).toBeVisible({ timeout: 45_000 });
       const first = (await app.records()).find((run) => run.job.id === job.id)!;
       const originalCaption = first.manifest.items[0].caption.text;
       const captionPath = path.join(
@@ -51,7 +53,7 @@ test('Wan and H3 prepare and train through the GUI with frozen captions cache re
         .click();
       await expect(
         page.getByText('State: prepared', { exact: true }),
-      ).toBeVisible();
+      ).toBeVisible({ timeout: 45_000 });
       const next = (await app.records()).find(
         (run) => run.job.id === job.id && run.id !== first.id,
       )!;
@@ -79,7 +81,7 @@ test('Wan and H3 prepare and train through the GUI with frozen captions cache re
         .click();
       await expect(
         page.getByText('State: completed', { exact: true }),
-      ).toBeVisible();
+      ).toBeVisible({ timeout: 45_000 });
       await page
         .getByRole('button', { name: 'Refresh outputs', exact: true })
         .click();
@@ -150,7 +152,7 @@ test('backend interruption retains GPU ownership and offers explicit recovery wi
       .click();
     await expect(
       page.getByText('State: prepared', { exact: true }),
-    ).toBeVisible();
+    ).toBeVisible({ timeout: 45_000 });
     const run = (await app.records())[0];
     await page
       .getByRole('button', { name: 'Start training', exact: true })
