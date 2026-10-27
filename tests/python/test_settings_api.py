@@ -4,6 +4,23 @@ import pytest
 from fastapi.testclient import TestClient
 
 from musubi_gui.app import create_app
+from musubi_gui.settings import Settings, load_settings, save_settings
+
+
+def test_default_dataset_root_uses_project_not_state_directory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    state = tmp_path / "separate-state"
+    settings = load_settings(state)
+    assert settings.dataset_roots == [str(tmp_path / "datasets")]
+    save_settings(state, settings)
+    assert load_settings(state).dataset_roots == settings.dataset_roots
+
+
+@pytest.mark.parametrize("roots", [[], ["custom"]])
+def test_saved_dataset_roots_are_preserved(tmp_path: Path, roots: list[str]) -> None:
+    configured = [str(tmp_path / value) for value in roots]
+    save_settings(tmp_path, Settings(dataset_roots=configured))
+    assert load_settings(tmp_path).dataset_roots == configured
 
 
 def test_browser_cannot_change_settings_from_another_origin(tmp_path: Path) -> None:

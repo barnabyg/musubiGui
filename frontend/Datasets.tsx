@@ -54,13 +54,20 @@ async function api<T>(url: string, data?: object): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export function Datasets({ visible = true }: { visible?: boolean }) {
+export function Datasets({
+  visible = true,
+  defaultFolder = '',
+}: {
+  visible?: boolean;
+  defaultFolder?: string;
+}) {
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [dataset, setDataset] = useState<Dataset | null>(null);
   const [items, setItems] = useState<DatasetItem[]>([]);
   const [active, setActive] = useState<DatasetItem | null>(null);
   const [name, setName] = useState('');
-  const [folder, setFolder] = useState('');
+  const [editedFolder, setFolder] = useState<string>();
+  const folder = editedFolder ?? defaultFolder;
   const [error, setError] = useState('');
   const [status, setStatus] = useState('');
   const [scroll, setScroll] = useState(0);
