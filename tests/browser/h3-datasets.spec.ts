@@ -14,7 +14,10 @@ test('H3 inspector plays resolved audio and identifies missing, ambiguous, malfo
       .fill('H3 audio library');
     await page.getByLabel('Dataset folder', { exact: true }).fill(app.media);
     await page.getByRole('button', { name: 'Register folder' }).click();
-    await expect(page.getByText('Scan: complete 11/11')).toBeVisible();
+    // Eleven media probes can exceed the default DOM assertion deadline on CI.
+    await expect(page.getByText('Scan: complete 11/11')).toBeVisible({
+      timeout: 45_000,
+    });
     const inspect = async (name: string) => {
       const gallery = page.getByLabel('Dataset gallery');
       await gallery.evaluate((element) => {
