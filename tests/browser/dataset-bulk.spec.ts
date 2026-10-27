@@ -10,6 +10,7 @@ test('filters retain explicit selection, bulk previews report conflicts, restore
   try {
     await page.goto(app.url);
     await page.getByRole('button', { name: 'Datasets', exact: true }).click();
+    await page.getByRole('button', { name: 'New dataset' }).click();
     await page.getByLabel('Dataset name', { exact: true }).fill('Bulk library');
     await page.getByLabel('Dataset folder', { exact: true }).fill(app.media);
     await page.getByRole('button', { name: 'Register folder' }).click();
@@ -21,6 +22,7 @@ test('filters retain explicit selection, bulk previews report conflicts, restore
       path.join(app.media, 'motion.txt'),
       'utf8',
     );
+    await page.getByRole('button', { name: 'Tools', exact: true }).click();
     await page
       .getByLabel('Filter media', { exact: true })
       .selectOption('missing');
@@ -71,6 +73,9 @@ test('filters retain explicit selection, bulk previews report conflicts, restore
       .poll(() => readFile(path.join(app.media, 'red.txt'), 'utf8'))
       .toBe(originalRed);
     await page.getByRole('button', { name: 'Exclude selection' }).click();
+    await page
+      .getByRole('button', { name: 'Dataset settings', exact: true })
+      .click();
     await expect(
       page.getByText('1 included · 2 excluded · 1 invalid'),
     ).toBeVisible();
@@ -79,6 +84,7 @@ test('filters retain explicit selection, bulk previews report conflicts, restore
     await page.reload();
     await page.getByRole('button', { name: 'Datasets', exact: true }).click();
     await page.getByRole('button', { name: /Bulk library.*4 media/ }).click();
+    await page.getByRole('button', { name: 'Tools', exact: true }).click();
     await page
       .getByLabel('Filter media', { exact: true })
       .selectOption('excluded');

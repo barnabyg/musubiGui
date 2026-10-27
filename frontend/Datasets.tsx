@@ -1,6 +1,14 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import './datasets.css';
-import { CaptionEditor, type CaptionEditorHandle } from './CaptionEditor';
+import { CaptionEditor } from './CaptionEditor';
+import { InlineCaption } from './InlineCaption';
+import { type Caption, useCaptionSession } from './captionSession';
 import { H3Coverage, H3Inspector } from './H3Inspector';
 import { DatasetBulkActions } from './DatasetBulkActions';
 import { DatasetUploads } from './DatasetUploads';
@@ -32,12 +40,12 @@ export type DatasetItem = {
   caption: { text: string; revision: string; exists: boolean; error?: string };
 };
 
-async function api<T>(url: string, data?: object): Promise<T> {
+async function api<T>(url: string, data?: object, method = 'POST'): Promise<T> {
   const response = await fetch(
     url,
     data
       ? {
-          method: 'POST',
+          method,
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(data),
         }
@@ -57,11 +65,21 @@ async function api<T>(url: string, data?: object): Promise<T> {
 export function Datasets({
   visible = true,
   defaultFolder = '',
+  onEditorChange,
 }: {
   visible?: boolean;
   defaultFolder?: string;
+  onEditorChange?: (editing: boolean) => void;
 }) {
   const [datasets, setDatasets] = useState<Dataset[]>([]);
+  const [screen, setScreen] = useState<'library' | 'create' | 'edit'>(
+    'library',
+  );
+  const [busy, setBusy] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [panel, setPanel] = useState<'settings' | 'tools' | 'uploads' | null>(
+    null,
+  );
   const [dataset, setDataset] = useState<Dataset | null>(null);
   const [items, setItems] = useState<DatasetItem[]>([]);
   const [active, setActive] = useState<DatasetItem | null>(null);
@@ -72,33 +90,72 @@ export function Datasets({
   const [status, setStatus] = useState('');
   const [scroll, setScroll] = useState(0);
   const [columns, setColumns] = useState(3);
+  const [galleryHeight, setGalleryHeight] = useState(640);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('all');
   const [sort, setSort] = useState('name');
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [editing, setEditing] = useState<{
+    id: string;
+    order: string[];
+  } | null>(null);
+  const onCaptionSaved = useCallback((id: string, caption: Caption) => {
+    setActive((value) => (value?.id === id ? { ...value, caption } : value));
+    setItems((values) =>
+      values.map((item) => (item.id === id ? { ...item, caption } : item)),
+    );
+  }, []);
+  const captions = useCaptionSession(dataset?.id ?? '', onCaptionSaved);
+  const captionSummary = useSyncExternalStore(
+    captions.subscribeSummary,
+    captions.getSummary,
+  );
+  useEffect(() => {
+    captions.sync(items);
+  }, [captions, items]);
   const gallery = useRef<HTMLDivElement>(null);
-  const editor = useRef<CaptionEditorHandle>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
+  const panelButtons = useRef<Record<string, HTMLButtonElement | null>>({});
+  function closePanel() {
+    if (panel) panelButtons.current[panel]?.focus();
+    setPanel(null);
+  }
+  useEffect(() => {
+    onEditorChange?.(screen === 'edit');
+  }, [screen, onEditorChange]);
   const refresh = useCallback(async (id?: string) => {
     const list = await api<Dataset[]>('/api/datasets');
+    const contents = id
+      ? await api<DatasetItem[]>(`/api/datasets/${id}/items`)
+      : [];
     setDatasets(list);
     if (id) {
       setDataset(list.find((value) => value.id === id) ?? null);
-      setItems(await api<DatasetItem[]>(`/api/datasets/${id}/items`));
+      setItems(contents);
     }
+    return list;
   }, []);
   useEffect(() => {
     void api<Dataset[]>('/api/datasets')
       .then(setDatasets)
-      .catch((reason: Error) => setError(reason.message));
+      .catch((reason: Error) => setError(reason.message))
+      .finally(() => setLoaded(true));
   }, []);
   useEffect(() => {
     if (!gallery.current) return;
-    const observer = new ResizeObserver((entries) =>
-      setColumns(Math.max(1, Math.floor(entries[0].contentRect.width / 170))),
-    );
+    const observer = new ResizeObserver((entries) => {
+      setColumns(Math.max(1, Math.floor(entries[0].contentRect.width / 230)));
+      setGalleryHeight(entries[0].contentRect.height);
+    });
     observer.observe(gallery.current);
     return () => observer.disconnect();
-  }, [dataset?.id, visible]);
+  }, [dataset?.id, visible, screen]);
+  useEffect(() => {
+    if (visible) heading.current?.focus();
+  }, [screen, dataset?.id, visible]);
+  useEffect(() => {
+    if (gallery.current) gallery.current.scrollTop = 0;
+  }, [query, filter, sort, dataset?.id]);
   useEffect(() => {
     if (!dataset || !['pending', 'scanning'].includes(dataset.scan.state))
       return;
@@ -110,67 +167,138 @@ export function Datasets({
     return () => window.clearInterval(timer);
   }, [dataset, refresh]);
   useEffect(() => {
-    if (!visible) void editor.current?.flush();
-  }, [visible]);
+    if (!visible) void captions.flushAll();
+  }, [visible, captions]);
+  useEffect(() => {
+    if (
+      !visible ||
+      screen !== 'library' ||
+      !datasets.some((value) =>
+        ['pending', 'scanning'].includes(value.scan.state),
+      )
+    )
+      return;
+    const timer = window.setInterval(() => {
+      void refresh().catch((reason: Error) => setError(reason.message));
+    }, 700);
+    return () => window.clearInterval(timer);
+  }, [visible, screen, datasets, refresh]);
   async function select(item: DatasetItem | null) {
-    if (editor.current && !(await editor.current.flush())) return;
+    if (!(await captions.flushAll())) return;
     setActive(item);
   }
   async function open(id: string) {
-    if (editor.current && !(await editor.current.flush())) return;
+    if (!(await captions.flushAll())) return;
+    setBusy(true);
     setActive(null);
     setSelected(new Set());
+    setEditing(null);
     setQuery('');
     setFilter('all');
     setScroll(0);
     setError('');
     try {
-      await refresh(id);
+      const list = await refresh(id);
+      setName(list.find((value) => value.id === id)?.name ?? '');
+      setScreen('edit');
+      setPanel(null);
+      setStatus('');
     } catch (reason) {
       setError((reason as Error).message);
+    } finally {
+      setBusy(false);
     }
   }
-  async function register() {
+  async function back() {
+    if (!(await captions.flushAll())) return;
+    setBusy(true);
+    try {
+      await refresh();
+      setActive(null);
+      setDataset(null);
+      setEditing(null);
+      setScreen('library');
+      setError('');
+      setStatus('');
+    } catch (reason) {
+      setError((reason as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function remove(value: Dataset) {
+    if (
+      !window.confirm(
+        `Delete "${value.name}" from the dataset library?\n\nOnly the library entry is removed. Media files, captions and recovery history stay on disk, including uploaded files. Jobs using this dataset will need a dataset selected again.`,
+      )
+    )
+      return;
+    setBusy(true);
     setError('');
     try {
-      const created = await api<Dataset>('/api/datasets', {
-        name,
-        path: folder,
-      });
-      await open(created.id);
+      await api(`/api/datasets/${value.id}`, {}, 'DELETE');
+      await refresh();
       setStatus(
-        'Dataset registered. Source media stays in its original folder.',
+        `Deleted "${value.name}" from the library. Files are preserved.`,
+      );
+      heading.current?.focus();
+    } catch (reason) {
+      setError((reason as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function create(managed: boolean) {
+    setBusy(true);
+    setError('');
+    try {
+      const created = await api<Dataset>(
+        managed ? '/api/datasets/managed' : '/api/datasets',
+        managed ? { name, root: folder } : { name, path: folder },
+      );
+      await open(created.id);
+      setPanel(managed ? 'uploads' : null);
+      setStatus(
+        managed
+          ? 'Managed dataset created. Add media and matching captions to get started.'
+          : 'Dataset registered. Source media stays in its original folder.',
       );
     } catch (reason) {
       setError((reason as Error).message);
+    } finally {
+      setBusy(false);
     }
   }
-  async function createManaged() {
+  async function rename() {
+    if (!dataset) return;
+    setBusy(true);
     setError('');
     try {
-      const created = await api<Dataset>('/api/datasets/managed', {
-        name,
-        root: folder,
-      });
-      await open(created.id);
-      setStatus(
-        'Managed dataset created. Upload media and matching captions below.',
+      setDataset(
+        await api<Dataset>(`/api/datasets/${dataset.id}`, { name }, 'PUT'),
       );
+      setStatus('Dataset name saved.');
     } catch (reason) {
       setError((reason as Error).message);
+    } finally {
+      setBusy(false);
     }
   }
   async function rescan() {
     if (!dataset) return;
+    if (!(await captions.flushAll())) return;
+    setBusy(true);
     try {
       await api(`/api/datasets/${dataset.id}/scan`, {});
       await refresh(dataset.id);
     } catch (reason) {
       setError((reason as Error).message);
+    } finally {
+      setBusy(false);
     }
   }
-  const rowHeight = 170;
-  const visibleItems = items
+  const rowHeight = 370;
+  const matchingItems = items
     .filter((item) => {
       const matches = (item.name + '\n' + item.caption.text)
         .toLowerCase()
@@ -193,252 +321,587 @@ export function Datasets({
             a.name.localeCompare(b.name)
           : a.name.localeCompare(b.name),
     );
+  // Keep the focused caption in place while autosave changes search/filter/sort results.
+  const itemsById = new Map(items.map((item) => [item.id, item]));
+  const visibleItems = editing
+    ? editing.order.flatMap((id) => {
+        const item = itemsById.get(id);
+        return item ? [item] : [];
+      })
+    : matchingItems;
   const start = Math.max(0, Math.floor(scroll / rowHeight) - 1) * columns;
-  const end = Math.min(visibleItems.length, start + columns * 5);
+  const end = Math.min(
+    visibleItems.length,
+    start + columns * (Math.ceil(galleryHeight / rowHeight) + 2),
+  );
+  const renderedItems = visibleItems.slice(start, end);
+  const focusedItem = visibleItems.find((item) => item.id === editing?.id);
+  if (focusedItem && !renderedItems.includes(focusedItem))
+    renderedItems.push(focusedItem);
   return (
-    <>
-      <section className="title">
-        <p className="eyebrow">YOUR MEDIA, YOUR CAPTIONS</p>
-        <h1>Datasets</h1>
-        <p>
-          Register a local folder within the dataset roots configured in
-          Settings.
-        </p>
-      </section>
+    <div
+      className={`datasets-screen ${screen === 'edit' ? 'editor-screen' : ''}`}
+      onKeyDown={(event) => {
+        if (screen === 'edit' && panel && event.key === 'Escape') {
+          event.stopPropagation();
+          closePanel();
+        }
+      }}
+    >
+      {screen !== 'edit' && (
+        <>
+          {screen !== 'library' && (
+            <button
+              className="dataset-back"
+              disabled={busy}
+              onClick={() => void back()}
+            >
+              ← Back to datasets
+            </button>
+          )}
+          <section className="title dataset-heading">
+            <div>
+              <p className="eyebrow">YOUR MEDIA, YOUR CAPTIONS</p>
+              <h1 ref={heading} tabIndex={-1}>
+                {screen === 'library' ? 'Datasets' : 'New dataset'}
+              </h1>
+              <p>
+                {screen === 'library'
+                  ? 'A home for your training images, videos and captions.'
+                  : 'Start with an existing folder or create a dataset for uploads.'}
+              </p>
+            </div>
+            {screen === 'library' && (
+              <button
+                className="primary"
+                disabled={busy}
+                onClick={() => {
+                  setName('');
+                  setFolder(undefined);
+                  setError('');
+                  setStatus('');
+                  setScreen('create');
+                }}
+              >
+                + New dataset
+              </button>
+            )}
+          </section>
+        </>
+      )}
+      {screen === 'edit' && dataset && (
+        <div className="dataset-topbar">
+          <button
+            className="dataset-back-icon"
+            aria-label="Back to datasets"
+            title="Back to datasets"
+            disabled={busy}
+            onClick={() => void back()}
+          >
+            ←
+          </button>
+          <div className="dataset-identity">
+            <h1 ref={heading} tabIndex={-1} title={dataset.name}>
+              {dataset.name}
+            </h1>
+            <small role="status">
+              {captionSummary.failed ? (
+                <button
+                  className="caption-attention"
+                  onClick={() => {
+                    const failed = captions.firstFailed();
+                    if (failed) setActive(itemsById.get(failed.id) ?? failed);
+                  }}
+                >
+                  Review {captionSummary.failed} unsaved{' '}
+                  {captionSummary.failed === 1 ? 'caption' : 'captions'}
+                </button>
+              ) : captionSummary.saving ? (
+                'Saving captions…'
+              ) : captionSummary.unsaved ? (
+                'Unsaved captions'
+              ) : (
+                <>
+                  Scan: {dataset.scan.state} {dataset.scan.completed}/
+                  {dataset.scan.total} {dataset.scan.error}
+                </>
+              )}
+            </small>
+          </div>
+          <div className="dataset-topbar-actions">
+            {dataset.managed && (
+              <button
+                className="primary"
+                ref={(element) => {
+                  panelButtons.current.uploads = element;
+                }}
+                aria-expanded={panel === 'uploads'}
+                aria-controls="dataset-uploads-panel"
+                onClick={() => setPanel(panel === 'uploads' ? null : 'uploads')}
+              >
+                Add media
+              </button>
+            )}
+            <button
+              ref={(element) => {
+                panelButtons.current.tools = element;
+              }}
+              className={
+                query || filter !== 'all' || selected.size ? 'has-filters' : ''
+              }
+              aria-expanded={panel === 'tools'}
+              aria-controls="dataset-tools-panel"
+              onClick={() => setPanel(panel === 'tools' ? null : 'tools')}
+            >
+              Tools
+              {selected.size > 0
+                ? ` · ${selected.size}`
+                : query || filter !== 'all'
+                  ? ' · filtered'
+                  : ''}
+            </button>
+            <button
+              ref={(element) => {
+                panelButtons.current.settings = element;
+              }}
+              aria-label="Dataset settings"
+              title="Dataset settings"
+              aria-expanded={panel === 'settings'}
+              aria-controls="dataset-settings-panel"
+              onClick={() => setPanel(panel === 'settings' ? null : 'settings')}
+            >
+              ⚙
+            </button>
+          </div>
+        </div>
+      )}
       {error && (
         <div role="alert" className="error">
           {error}
         </div>
       )}
-      <section className="panel">
-        <h2>Dataset library</h2>
-        <div className="columns">
-          <label className="field">
-            Dataset name
-            <input
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-            />
-          </label>
-          <label className="field">
-            Dataset folder
-            <input
-              value={folder}
-              onChange={(event) => setFolder(event.target.value)}
-              placeholder="C:\datasets\…"
-            />
-          </label>
-        </div>
-        <button onClick={() => void register()} disabled={!name || !folder}>
-          Register folder
-        </button>
-        <button
-          onClick={() => void createManaged()}
-          disabled={!name || !folder}
-        >
-          Create managed dataset
-        </button>
-        <p>
-          Register uses the existing folder. Create managed dataset makes a new
-          isolated subfolder inside it for uploads.
+      {status && (
+        <p role="status" className={screen === 'edit' ? 'dataset-notice' : ''}>
+          {status}
         </p>
-        <div className="dataset-library">
+      )}
+      {screen === 'library' && (
+        <section
+          className="dataset-library"
+          aria-label="Dataset library"
+          aria-busy={busy}
+        >
+          {!loaded && <p role="status">Loading datasets…</p>}
+          {loaded && !datasets.length && (
+            <div className="dataset-empty">
+              <span aria-hidden="true">▧</span>
+              <h2>Your library starts here</h2>
+              <p>
+                Choose New dataset to register a local folder or start uploading
+                media.
+              </p>
+            </div>
+          )}
           {datasets.map((value) => (
-            <button
-              key={value.id}
-              className={dataset?.id === value.id ? 'primary' : ''}
-              onClick={() => void open(value.id)}
-            >
-              {value.name}
-              <small>
-                {value.counts.total} media · {value.counts.captioned} captioned
-                · {value.counts.included} included
-                {value.missing ? ' · folder missing' : ''}
-              </small>
-            </button>
+            <article className="dataset-library-row" key={value.id}>
+              <button
+                className="dataset-open"
+                disabled={busy}
+                onClick={() => void open(value.id)}
+              >
+                <strong>{value.name}</strong>
+                <small>
+                  {value.counts.total} media · {value.counts.captioned}{' '}
+                  captioned · {value.counts.included} included
+                </small>
+                <span className="dataset-path">{value.path}</span>
+                <span className="dataset-edit-label">Edit dataset →</span>
+              </button>
+              <div className="dataset-row-actions">
+                <span
+                  className={`dataset-kind ${value.missing ? 'missing' : ''}`}
+                >
+                  {value.missing
+                    ? 'Folder missing'
+                    : value.managed
+                      ? 'Managed'
+                      : 'Local folder'}
+                </span>
+                <button
+                  className="dataset-delete"
+                  aria-label={`Delete ${value.name}`}
+                  disabled={
+                    busy || ['pending', 'scanning'].includes(value.scan.state)
+                  }
+                  onClick={() => void remove(value)}
+                >
+                  Delete
+                </button>
+                {['pending', 'scanning'].includes(value.scan.state) && (
+                  <small>Scan in progress; open to check.</small>
+                )}
+              </div>
+            </article>
           ))}
-        </div>
-      </section>
-      <p role="status">{status}</p>
-      {dataset && (
-        <section className="panel">
-          <div className="actions">
-            <h2>{dataset.name}</h2>
-            <button onClick={() => void rescan()}>Re-scan</button>
+        </section>
+      )}
+      {screen === 'create' && (
+        <section className="panel dataset-create">
+          <h2>Dataset settings</h2>
+          <div className="columns">
+            <label className="field">
+              Dataset name
+              <input
+                maxLength={200}
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+              />
+            </label>
+            <label className="field">
+              Dataset folder
+              <input
+                value={folder}
+                onChange={(event) => setFolder(event.target.value)}
+                placeholder="C:\datasets\…"
+              />
+            </label>
           </div>
-          <p>{dataset.path}</p>
-          <p role="status">
-            Scan: {dataset.scan.state} {dataset.scan.completed}/
-            {dataset.scan.total} {dataset.scan.error}
-          </p>
           <p>
-            {dataset.counts.included} included · {dataset.counts.excluded}{' '}
-            excluded · {dataset.counts.total - dataset.counts.valid} invalid
+            Use a folder within the dataset roots configured in Settings.
+            Register an existing folder to edit its media and captions in place,
+            or create an isolated subfolder for uploads.
           </p>
-          <H3Coverage key={dataset.id} datasetId={dataset.id} />
+          <div className="actions">
+            <button
+              className="primary"
+              disabled={busy || !name.trim() || !folder.trim()}
+              onClick={() => void create(true)}
+            >
+              Create managed dataset
+            </button>
+            <button
+              disabled={busy || !name.trim() || !folder.trim()}
+              onClick={() => void create(false)}
+            >
+              Register folder
+            </button>
+          </div>
+          {busy && <p role="status">Opening dataset…</p>}
+        </section>
+      )}
+      {screen === 'edit' && dataset && (
+        <section className="dataset-content">
+          {dataset.missing && (
+            <p role="alert" className="error dataset-missing">
+              Dataset folder is missing. Restore its original location and
+              re-scan.
+            </p>
+          )}
+          <section
+            id="dataset-settings-panel"
+            className="dataset-panel"
+            aria-label="Dataset settings"
+            hidden={panel !== 'settings'}
+          >
+            <div className="dataset-panel-heading">
+              <h2>Dataset settings</h2>
+              <button aria-label="Close settings" onClick={closePanel}>
+                ×
+              </button>
+            </div>
+            <label className="field">
+              Dataset name
+              <input
+                maxLength={200}
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+              />
+            </label>
+            <button
+              disabled={busy || !name.trim() || name.trim() === dataset.name}
+              onClick={() => void rename()}
+            >
+              Save dataset name
+            </button>
+            <p className="dataset-path">{dataset.path}</p>
+            <p>
+              {dataset.managed
+                ? 'Managed dataset · uploads are stored in this folder.'
+                : 'Registered local folder · add media in this folder, then re-scan.'}
+            </p>
+            <H3Coverage key={dataset.id} datasetId={dataset.id} />
+            <button disabled={busy} onClick={() => void rescan()}>
+              Re-scan
+            </button>
+            <p>
+              {dataset.counts.included} included · {dataset.counts.excluded}{' '}
+              excluded · {dataset.counts.total - dataset.counts.valid} invalid
+            </p>
+          </section>
           {dataset.managed && (
-            <DatasetUploads
+            <section
+              id="dataset-uploads-panel"
+              className="dataset-panel"
+              aria-label="Add media"
+              hidden={panel !== 'uploads'}
+            >
+              <div className="dataset-panel-heading">
+                <h2>Add media</h2>
+                <button aria-label="Close uploads" onClick={closePanel}>
+                  ×
+                </button>
+              </div>
+              <DatasetUploads
+                key={dataset.id}
+                datasetId={dataset.id}
+                beforeAction={async () => captions.flushAll()}
+                onChanged={async () => {
+                  setActive(null);
+                  await refresh(dataset.id);
+                }}
+              />
+            </section>
+          )}
+          <section
+            id="dataset-tools-panel"
+            className="dataset-panel"
+            aria-label="Dataset tools"
+            hidden={panel !== 'tools'}
+          >
+            <div className="dataset-panel-heading">
+              <h2>Search and selection</h2>
+              <button aria-label="Close tools" onClick={closePanel}>
+                ×
+              </button>
+            </div>
+            <div className="columns dataset-filters">
+              <label className="field">
+                Search media and captions
+                <input
+                  value={query}
+                  onChange={(event) => {
+                    setQuery(event.target.value);
+                    setScroll(0);
+                  }}
+                />
+              </label>
+              <label className="field">
+                Filter media
+                <select
+                  aria-label="Filter media"
+                  value={filter}
+                  onChange={(event) => {
+                    setFilter(event.target.value);
+                    setScroll(0);
+                  }}
+                >
+                  <option value="all">All media</option>
+                  <option value="missing">Missing captions</option>
+                  <option value="invalid">Invalid media</option>
+                  <option value="excluded">Excluded</option>
+                  <option value="included">Included</option>
+                  <option value="selected">Selected</option>
+                </select>
+              </label>
+              <label className="field">
+                Sort media
+                <select
+                  aria-label="Sort media"
+                  value={sort}
+                  onChange={(event) => {
+                    setSort(event.target.value);
+                    setScroll(0);
+                  }}
+                >
+                  <option value="name">Name A–Z</option>
+                  <option value="name-desc">Name Z–A</option>
+                  <option value="caption">Caption</option>
+                </select>
+              </label>
+            </div>
+            <div className="dataset-selection">
+              <p>
+                {visibleItems.length} matching · {selected.size} selected (
+                {
+                  [...selected].filter(
+                    (id) => !visibleItems.some((item) => item.id === id),
+                  ).length
+                }{' '}
+                hidden by filters)
+              </p>
+              <div className="actions">
+                <button
+                  onClick={() =>
+                    setSelected(
+                      (values) =>
+                        new Set([
+                          ...values,
+                          ...visibleItems.map((item) => item.id),
+                        ]),
+                    )
+                  }
+                >
+                  Select visible matches
+                </button>
+                <button onClick={() => setSelected(new Set())}>
+                  Clear selection
+                </button>
+              </div>
+            </div>
+            <DatasetBulkActions
               key={dataset.id}
               datasetId={dataset.id}
-              beforeAction={async () =>
-                editor.current ? editor.current.flush() : true
-              }
+              selected={[...selected]}
+              beforeAction={async () => captions.flushAll()}
               onChanged={async () => {
                 setActive(null);
                 await refresh(dataset.id);
               }}
             />
-          )}
-          <div className="columns">
-            <label className="field">
-              Search media and captions
-              <input
-                value={query}
-                onChange={(event) => {
-                  setQuery(event.target.value);
-                  setScroll(0);
-                }}
-              />
-            </label>
-            <label className="field">
-              Filter media
-              <select
-                aria-label="Filter media"
-                value={filter}
-                onChange={(event) => {
-                  setFilter(event.target.value);
-                  setScroll(0);
-                }}
-              >
-                <option value="all">All media</option>
-                <option value="missing">Missing captions</option>
-                <option value="invalid">Invalid media</option>
-                <option value="excluded">Excluded</option>
-                <option value="included">Included</option>
-                <option value="selected">Selected</option>
-              </select>
-            </label>
-            <label className="field">
-              Sort media
-              <select
-                aria-label="Sort media"
-                value={sort}
-                onChange={(event) => {
-                  setSort(event.target.value);
-                  setScroll(0);
-                }}
-              >
-                <option value="name">Name A–Z</option>
-                <option value="name-desc">Name Z–A</option>
-                <option value="caption">Caption</option>
-              </select>
-            </label>
-          </div>
-          <p>
-            {visibleItems.length} matching · {selected.size} selected (
-            {
-              [...selected].filter(
-                (id) => !visibleItems.some((item) => item.id === id),
-              ).length
-            }{' '}
-            hidden by filters)
-          </p>
-          <div className="actions">
-            <button
-              onClick={() =>
-                setSelected(
-                  (values) =>
-                    new Set([
-                      ...values,
-                      ...visibleItems.map((item) => item.id),
-                    ]),
-                )
-              }
-            >
-              Select visible matches
-            </button>
-            <button onClick={() => setSelected(new Set())}>
-              Clear selection
-            </button>
-          </div>
-          <DatasetBulkActions
-            key={dataset.id}
-            datasetId={dataset.id}
-            selected={[...selected]}
-            beforeAction={async () =>
-              editor.current ? editor.current.flush() : true
-            }
-            onChanged={async () => {
-              setActive(null);
-              await refresh(dataset.id);
-            }}
-          />
-          <div className="dataset-workspace">
-            <div
-              className="dataset-gallery"
-              ref={gallery}
-              onScroll={(event) => setScroll(event.currentTarget.scrollTop)}
-              aria-label="Dataset gallery"
-            >
-              <div
-                style={{
-                  height: Math.ceil(visibleItems.length / columns) * rowHeight,
-                  position: 'relative',
-                }}
-              >
-                {visibleItems.slice(start, end).map((item, offset) => {
-                  const index = start + offset;
-                  return (
-                    <div
-                      className={`media-card ${selected.has(item.id) ? 'picked' : ''}`}
-                      key={item.id}
-                      style={{
-                        position: 'absolute',
-                        top: Math.floor(index / columns) * rowHeight,
-                        left: `${((index % columns) * 100) / columns}%`,
-                        width: `${100 / columns}%`,
-                        height: rowHeight - 8,
+          </section>
+          <div className={`dataset-workspace ${active ? 'has-viewer' : ''}`}>
+            <div className="dataset-gallery-area">
+              {!visibleItems.length && (
+                <div className="dataset-empty">
+                  <span aria-hidden="true">▧</span>
+                  <h2>
+                    {items.length
+                      ? 'No matching media'
+                      : 'Ready for your media'}
+                  </h2>
+                  <p>
+                    {items.length
+                      ? 'Try a different search or filter to find your media.'
+                      : dataset.managed
+                        ? 'Open Add media to upload images, videos and matching captions.'
+                        : 'Add images and videos to the dataset folder, then choose Re-scan.'}
+                  </p>
+                  {items.length > 0 && (
+                    <button
+                      onClick={() => {
+                        setQuery('');
+                        setFilter('all');
+                        setScroll(0);
                       }}
                     >
-                      <button
-                        className={`media-tile ${active?.id === item.id ? 'selected' : ''}`}
-                        onClick={() => void select(item)}
+                      Clear search and filters
+                    </button>
+                  )}
+                </div>
+              )}
+              <div
+                className="dataset-gallery"
+                hidden={!visibleItems.length}
+                ref={gallery}
+                tabIndex={0}
+                role="region"
+                onScroll={(event) => setScroll(event.currentTarget.scrollTop)}
+                onKeyDown={(event) => {
+                  if (event.target !== event.currentTarget) return;
+                  if (['ArrowDown', 'ArrowUp'].includes(event.key)) {
+                    event.preventDefault();
+                    event.currentTarget.scrollBy(
+                      0,
+                      event.key === 'ArrowDown' ? rowHeight : -rowHeight,
+                    );
+                  }
+                }}
+                aria-label="Dataset gallery"
+              >
+                <div
+                  style={{
+                    height:
+                      Math.ceil(visibleItems.length / columns) * rowHeight,
+                    position: 'relative',
+                  }}
+                >
+                  {renderedItems.map((item) => {
+                    const index = visibleItems.indexOf(item);
+                    return (
+                      <div
+                        className={`media-card ${selected.has(item.id) ? 'picked' : ''} ${active?.id === item.id ? 'active' : ''}`}
+                        key={item.id}
+                        onBlur={(event) => {
+                          if (
+                            !event.currentTarget.contains(event.relatedTarget)
+                          ) {
+                            setEditing((value) =>
+                              value?.id === item.id ? null : value,
+                            );
+                          }
+                        }}
+                        style={{
+                          position: 'absolute',
+                          top: Math.floor(index / columns) * rowHeight,
+                          left: `${((index % columns) * 100) / columns}%`,
+                          width: `${100 / columns}%`,
+                          height: rowHeight - 8,
+                        }}
                       >
-                        {item.valid ? (
-                          <img
-                            loading="lazy"
-                            src={`/api/datasets/${dataset.id}/items/${item.id}/thumbnail`}
-                            alt={item.name}
+                        <div className="media-card-content">
+                          <button
+                            className={`media-tile ${active?.id === item.id ? 'selected' : ''}`}
+                            aria-label={`${item.name} ${item.kind} · ${item.caption.exists ? 'caption' : 'missing caption'}${item.excluded ? ' · excluded' : ''}`}
+                            aria-pressed={active?.id === item.id}
+                            onClick={() => void select(item)}
+                          >
+                            {item.valid ? (
+                              <img
+                                loading="lazy"
+                                src={`/api/datasets/${dataset.id}/items/${item.id}/thumbnail`}
+                                alt={item.name}
+                              />
+                            ) : (
+                              <span className="invalid-media">
+                                Cannot preview
+                              </span>
+                            )}
+                            <span className="media-name" title={item.name}>
+                              {item.name}
+                            </span>
+                            <small>
+                              {item.kind}
+                              {item.caption.exists
+                                ? ' · caption'
+                                : ' · missing caption'}
+                              {item.excluded ? ' · excluded' : ''}
+                            </small>
+                          </button>
+                          <InlineCaption
+                            session={captions}
+                            item={item}
+                            onFocus={() =>
+                              setEditing({
+                                id: item.id,
+                                order: visibleItems.map((value) => value.id),
+                              })
+                            }
+                            onReview={() =>
+                              setActive(
+                                items.find((value) => value.id === item.id) ??
+                                  item,
+                              )
+                            }
                           />
-                        ) : (
-                          <span className="invalid-media">Cannot preview</span>
-                        )}
-                        <span>{item.name}</span>
-                        <small>
-                          {item.kind}
-                          {item.caption.exists
-                            ? ' · caption'
-                            : ' · missing caption'}
-                          {item.excluded ? ' · excluded' : ''}
-                        </small>
-                      </button>
-                      <input
-                        className="select-item"
-                        aria-label={`Select ${item.name}`}
-                        type="checkbox"
-                        checked={selected.has(item.id)}
-                        onChange={(event) =>
-                          setSelected((values) => {
-                            const next = new Set(values);
-                            if (event.target.checked) next.add(item.id);
-                            else next.delete(item.id);
-                            return next;
-                          })
-                        }
-                      />
-                    </div>
-                  );
-                })}
+                        </div>
+                        <input
+                          className="select-item"
+                          aria-label={`Select ${item.name}`}
+                          type="checkbox"
+                          checked={selected.has(item.id)}
+                          onChange={(event) =>
+                            setSelected((values) => {
+                              const next = new Set(values);
+                              if (event.target.checked) next.add(item.id);
+                              else next.delete(item.id);
+                              return next;
+                            })
+                          }
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
             {active && (
@@ -459,7 +922,12 @@ export function Datasets({
                   }
                 }}
               >
-                <h2>{active.name}</h2>
+                <div className="actions viewer-heading">
+                  <h2>{active.name}</h2>
+                  <button onClick={() => void select(null)}>
+                    Close preview
+                  </button>
+                </div>
                 {active.valid ? (
                   active.kind === 'image' ? (
                     <img
@@ -512,21 +980,7 @@ export function Datasets({
                     Next
                   </button>
                 </div>
-                <CaptionEditor
-                  ref={editor}
-                  datasetId={dataset.id}
-                  item={active}
-                  onSaved={(caption) => {
-                    setActive((value) =>
-                      value?.id === active.id ? { ...value, caption } : value,
-                    );
-                    setItems((values) =>
-                      values.map((item) =>
-                        item.id === active.id ? { ...item, caption } : item,
-                      ),
-                    );
-                  }}
-                />
+                <CaptionEditor session={captions} item={active} />
                 {active.kind === 'video' && (
                   <H3Inspector datasetId={dataset.id} itemId={active.id} />
                 )}
@@ -539,6 +993,6 @@ export function Datasets({
           </div>
         </section>
       )}
-    </>
+    </div>
   );
 }

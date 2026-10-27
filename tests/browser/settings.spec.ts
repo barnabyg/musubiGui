@@ -83,6 +83,7 @@ test('settings survive backend restart and invalid installations explain correct
       defaultDatasets,
     );
     await page.getByRole('button', { name: 'Datasets', exact: true }).click();
+    await page.getByRole('button', { name: 'New dataset' }).click();
     await expect(
       page.getByLabel('Dataset folder', { exact: true }),
     ).toHaveValue(defaultDatasets);

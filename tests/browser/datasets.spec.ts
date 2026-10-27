@@ -18,6 +18,7 @@ test('register mixed media, preview, and recover library after service restart',
   try {
     await page.goto(app.url);
     await page.getByRole('button', { name: 'Datasets', exact: true }).click();
+    await page.getByRole('button', { name: 'New dataset' }).click();
     await page
       .getByLabel('Dataset name', { exact: true })
       .fill('Mixed library');
@@ -59,6 +60,7 @@ test('caption autosave flushes navigation, preserves failed drafts, rejects exte
   try {
     await page.goto(app.url);
     await page.getByRole('button', { name: 'Datasets', exact: true }).click();
+    await page.getByRole('button', { name: 'New dataset' }).click();
     await page
       .getByLabel('Dataset name', { exact: true })
       .fill('Caption library');
@@ -93,6 +95,14 @@ test('caption autosave flushes navigation, preserves failed drafts, rejects exte
       'Fixture disk write denied',
     );
     await page.getByRole('button', { name: 'blue.png image' }).click();
+    await expect(page.getByLabel('Caption', { exact: true })).toHaveValue(
+      'Draft survives failure',
+    );
+    await page.getByRole('button', { name: 'Back to datasets' }).click();
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'Caption library' }),
+    ).toBeVisible();
+    await page.getByRole('button', { name: 'Close preview' }).click();
     await expect(page.getByLabel('Caption', { exact: true })).toHaveValue(
       'Draft survives failure',
     );
@@ -156,6 +166,7 @@ test('caption autosave rejects an inside-root Windows junction redirect and reta
   try {
     await page.goto(app.url);
     await page.getByRole('button', { name: 'Datasets', exact: true }).click();
+    await page.getByRole('button', { name: 'New dataset' }).click();
     await page
       .getByLabel('Dataset name', { exact: true })
       .fill('Junction library');

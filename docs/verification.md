@@ -19,7 +19,16 @@ suite, not a latency benchmark: assertions still require the exact expected resu
 Long upload/scan/preparation/training operations use explicit 45-second waits. This
 includes four-media registration scans: an 18-second completed-scan response reproduces
 the 15-second failure and passes with the operation budget. The
-two-family preparation/training scenario has a 120-second total budget. Retries remain
+two-family preparation/training scenario has a 120-second total budget.
+The gallery/inline-caption virtual scrolling fixtures use eight real media files and
+a narrow viewport that forces cards to unmount. This tests recycling and retained
+drafts without requiring 24 separate probe startups just to exceed a desktop
+viewport. Both scenarios allow 90 seconds overall and retain the standard
+45-second scan deadline. Completion assertions target the visible scan status so a
+failure includes its last reported progress or error. The earlier 24-media fixtures
+exceeded even a 90-second scan budget on one hosted runner, while another passed;
+increasing timeouts alone did not make that unrelated setup workload reliable.
+Other fixture deadlines and the 15-second default remain unchanged. Retries remain
 disabled. Review these deadlines if fixture workloads or runner capacity change.
 
 Focused commands: `npm.cmd run typecheck`, `.venv\Scripts\python.exe -m mypy`,
