@@ -462,7 +462,7 @@ def build_stages(job: Job, settings: Settings, run: Path, cache: Path) -> list[S
 def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool = False) -> dict[str, Any]:
     errors = configuration_errors(job)
     warnings = [
-        "Wan support remains unresolved until the reference scenario passes on the specified 96 GB host."
+        "Wan has short-run execution evidence on the 96 GB host using the documented converted weights; other artifacts and larger workloads need qualification."
         if job.family == "wan"
         else "H3 has short-run execution evidence on the 96 GB host; training quality and larger workloads remain unqualified.",
         "Changes to geometry, duration or memory controls need their own capacity validation.",

@@ -551,8 +551,8 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
                 {job.family === 'wan' ? (
                   <>
                     Native FP16 experts; one expert is trained and both experts
-                    are used for sampling. Target-PC support is awaiting
-                    reference proof.
+                    are used for sampling. The documented converted-weight smoke
+                    recipe has target-PC execution evidence.
                   </>
                 ) : (
                   <>

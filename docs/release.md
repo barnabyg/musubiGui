@@ -117,7 +117,8 @@ readable. Unknown future versions are preserved and refused.
 
 Verify `launch.cmd --no-browser` and the acceptance command from a clean checkout
 using declared prerequisites, then inspect packaged file lists. Distributables
-contain application source and built UI, not local model weights, datasets,+credentials, logs, environments or runtime state. Generated assets remain ignored.
+contain application source and built UI, not local model weights, datasets,
+credentials, logs, environments or runtime state. Generated assets remain ignored.
 AI Toolkit supplies interaction inspiration; no source/assets are copied.
 musubi-tuner remains a separate installation and retains its own licence.
 Model weights retain their model-card licences, including the MiniMax H3
