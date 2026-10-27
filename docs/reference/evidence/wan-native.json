@@ -1,0 +1,274 @@
+{
+  "version": 1,
+  "scenario": "Supplied native Wan 2.2 FP16 experts and native T5: GUI low-noise, optimizer restoration and CLI high-noise",
+  "status": "passed",
+  "date": "2026-10-27",
+  "application_revision": "ae0b598be653499d9b33cbd2b184959831a73e43",
+  "upstream_revision": "f8a1b03794a49239a3539015075f5123d6c07d66",
+  "hardware": {
+    "os": "Windows 11",
+    "gpu": "RTX 3090",
+    "vram_gib": 24,
+    "host_ram_bytes": 102665969664,
+    "required_ram_class_gb": 96
+  },
+  "environment": {
+    "python": "3.12.10",
+    "platform": "Windows-11-10.0.26300-SP0",
+    "packages": {
+      "torch": "2.13.0+cu130",
+      "accelerate": "1.15.0",
+      "safetensors": "0.8.0",
+      "transformers": "5.17.0",
+      "av": "17.1.0",
+      "musubi-tuner": "0.3.6"
+    },
+    "preprocessing_packages": {
+      "pillow": "12.3.0",
+      "numpy": "2.5.2",
+      "tokenizers": "0.23.2",
+      "sentencepiece": "0.2.1",
+      "torchvision": "0.28.0+cu130",
+      "torchaudio": null,
+      "scipy": null,
+      "einops": "0.7.0"
+    },
+    "cuda": "13.0",
+    "cuda_available": true,
+    "gpu": {
+      "name": "NVIDIA GeForce RTX 3090",
+      "vram_bytes": 25769279488
+    }
+  },
+  "models": {
+    "wan_low": {
+      "path": "models/wan-dit/split_files/diffusion_models/wan2.2_t2v_low_noise_14B_fp16.safetensors",
+      "bytes": 28577095592,
+      "header_sha256": "557849b1370b34969f6e8152a3516a04277960f834069e6e08e763b4e28b3bd3",
+      "tensor_count": 1095,
+      "dtypes": ["F16"]
+    },
+    "wan_high": {
+      "path": "models/wan-dit/split_files/diffusion_models/wan2.2_t2v_high_noise_14B_fp16.safetensors",
+      "bytes": 28577095592,
+      "header_sha256": "557849b1370b34969f6e8152a3516a04277960f834069e6e08e763b4e28b3bd3",
+      "tensor_count": 1095,
+      "dtypes": ["F16"]
+    },
+    "wan_vae": {
+      "path": "models/wan-vae/split_files/vae/wan_2.1_vae.safetensors",
+      "bytes": 253815318,
+      "header_sha256": "dd36427bd861f8e91f87b193b016e44bb02ab1a56c40a12c22fb3fa99845e655",
+      "tensor_count": 194,
+      "dtypes": ["BF16"]
+    },
+    "wan_t5": {
+      "path": "models/wan-t5/models_t5_umt5-xxl-enc-bf16.pth",
+      "bytes": 11361920418,
+      "header_sha256": null
+    }
+  },
+  "weight_loading": "Supplied native files; no offline conversion. Runtime FP8 DiT/T5 loading remains enabled. File names identify supplied artifacts; remote publisher checksums were not authenticated.",
+  "launcher": {
+    "gui_launch_protocol": 3,
+    "atomic_windows_job_assignment": true,
+    "scope": "Real GUI cache, training and generation stages used the final native launcher; the separate CLI experiment used the reference subprocess runner."
+  },
+  "recipe": {
+    "task": "t2v-A14B",
+    "steps": 2,
+    "width": 256,
+    "height": 256,
+    "frames": 17,
+    "batch_size": 1,
+    "rank": 8,
+    "alpha": 8,
+    "blocks_to_swap": 36,
+    "sample_steps": 4,
+    "seed": 42
+  },
+  "low_noise_gui": {
+    "run_id": "7e46ddcd1d754aebada6ae64aeb96452",
+    "status": "completed",
+    "stage_seconds": {
+      "latent_cache": 27.041,
+      "text_cache": 26.319,
+      "train": 34.496,
+      "generate": 95.667
+    },
+    "checkpoint": {
+      "name": "wan-7988ae6d1a8a4e63a3edb0b3cda4d09b.safetensors",
+      "bytes": 153492472,
+      "header_sha256": "d873275acc05d204db5e9b7c4c679d84d81ff28decbe994b9b26ae1988c3b328"
+    },
+    "sample_bytes": 252994,
+    "playback": {
+      "duration": 1.0625,
+      "width": 256,
+      "height": 256,
+      "current_time": 1.0625,
+      "error": null,
+      "decoded_frames": 17
+    },
+    "peaks": {
+      "samples": 65,
+      "peak_process_tree_rss_bytes": 20477222912,
+      "peak_host_used_bytes": 33336823808,
+      "peak_device_vram_bytes": 8988393472,
+      "started": 1793092324.3965204,
+      "last_sample": 1793092457.380822
+    },
+    "preparation_peaks": {
+      "samples": 32,
+      "peak_process_tree_rss_bytes": 12514492416,
+      "peak_host_used_bytes": 24758394880,
+      "peak_device_vram_bytes": 8994684928,
+      "started": 1793092257.1048858,
+      "last_sample": 1793092322.3835726
+    }
+  },
+  "restored_low_noise_gui": {
+    "run_id": "74cbeca49deb40b7a054872e2b976406",
+    "resume_of": "7e46ddcd1d754aebada6ae64aeb96452",
+    "status": "completed",
+    "additional_segment_steps": 1,
+    "optimizer_step_before": 2,
+    "optimizer_step_after": 3,
+    "counter_resets": true,
+    "data_position_restored": false,
+    "cache_inputs_reused_from": "7e46ddcd1d754aebada6ae64aeb96452",
+    "stage_seconds": {
+      "train": 32.042,
+      "generate": 72.12
+    },
+    "checkpoint": {
+      "name": "wan-7988ae6d1a8a4e63a3edb0b3cda4d09b.safetensors",
+      "bytes": 153492472,
+      "header_sha256": "8d212e79ee1d7c2cab2ac7c4aaed9f455378635a064cf8ae79f7d88ffedb7a23"
+    },
+    "sample_bytes": 253744,
+    "playback": {
+      "duration": 1.0625,
+      "width": 256,
+      "height": 256,
+      "current_time": 1.0625,
+      "error": null,
+      "decoded_frames": 17
+    },
+    "peaks": {
+      "samples": 52,
+      "peak_process_tree_rss_bytes": 19425239040,
+      "peak_host_used_bytes": 32257302528,
+      "peak_device_vram_bytes": 8983150592,
+      "started": 1793092479.9163277,
+      "last_sample": 1793092585.48265
+    }
+  },
+  "high_noise_cli": {
+    "status": "passed",
+    "training_timesteps": [875, 1000],
+    "training_model": "wan_high",
+    "inference_lora_flag": "--lora_weight_high_noise",
+    "preserve_distribution_shape": true,
+    "both_experts_used_for_generation": true,
+    "unmodified_low_noise_expert_for_generation": true,
+    "stage_results": [
+      {
+        "name": "fixture",
+        "exit_code": 0,
+        "elapsed_seconds": 0.547,
+        "peak_process_tree_rss_bytes": 6250496,
+        "peak_host_used_bytes": 12311367680,
+        "peak_device_vram_bytes": 921698304,
+        "monitor_errors": 0,
+        "disk_free_delta_bytes": 8192,
+        "termination": null
+      },
+      {
+        "name": "latent_cache",
+        "exit_code": 0,
+        "elapsed_seconds": 9.796,
+        "peak_process_tree_rss_bytes": 1785167872,
+        "peak_host_used_bytes": 14134988800,
+        "peak_device_vram_bytes": 2531262464,
+        "monitor_errors": 0,
+        "disk_free_delta_bytes": 700416,
+        "termination": null
+      },
+      {
+        "name": "text_cache",
+        "exit_code": 0,
+        "elapsed_seconds": 16.907,
+        "peak_process_tree_rss_bytes": 12534390784,
+        "peak_host_used_bytes": 25013547008,
+        "peak_device_vram_bytes": 9007267840,
+        "monitor_errors": 0,
+        "disk_free_delta_bytes": 23339008,
+        "termination": null
+      },
+      {
+        "name": "train",
+        "exit_code": 0,
+        "elapsed_seconds": 31.562,
+        "peak_process_tree_rss_bytes": 17992151040,
+        "peak_host_used_bytes": 30086668288,
+        "peak_device_vram_bytes": 6749683712,
+        "monitor_errors": 0,
+        "disk_free_delta_bytes": 458936320,
+        "termination": null
+      },
+      {
+        "name": "generate",
+        "exit_code": 0,
+        "elapsed_seconds": 66.219,
+        "peak_process_tree_rss_bytes": 19460538368,
+        "peak_host_used_bytes": 31318523904,
+        "peak_device_vram_bytes": 8929673216,
+        "monitor_errors": 0,
+        "disk_free_delta_bytes": 622592,
+        "termination": null
+      },
+      {
+        "name": "inspect_sample",
+        "exit_code": 0,
+        "elapsed_seconds": 0.547,
+        "peak_process_tree_rss_bytes": 6193152,
+        "peak_host_used_bytes": 11793551360,
+        "peak_device_vram_bytes": 853540864,
+        "monitor_errors": 0,
+        "disk_free_delta_bytes": 0,
+        "termination": null
+      }
+    ],
+    "checkpoint_bytes": 153492432,
+    "media": {
+      "video_frames": 17,
+      "audio_samples": 0
+    },
+    "playback": {
+      "duration": 1.0625,
+      "width": 256,
+      "height": 256,
+      "current_time": 0.2068,
+      "error": null,
+      "decoded_frames": 6
+    },
+    "gui_recipe_added": false,
+    "optimizer_restore_tested": false
+  },
+  "raw_evidence": {
+    "gui": ".cache/wan-native-qualification/gui-evidence.json",
+    "gui_telemetry": ".cache/wan-native-qualification/telemetry.json",
+    "cli": ".cache/wan-native-high-qualification/evidence.json",
+    "cli_playback": ".cache/wan-native-high-qualification/playback.json",
+    "source_integrity": ".cache/wan-native-source-integrity.json"
+  },
+  "measurement_limits": "GUI whole-device VRAM/host RAM and backend process-tree RSS sampled about every 2 seconds. CLI samples about every 0.5-5.5 seconds. Transient peaks may be missed; RSS sums can double-count shared pages. Device/host measurements include other applications; warm caches and different fixtures prevent controlled timing comparisons.",
+  "harness_note": "The restoration action automatically queues training. The initial harness incorrectly waited for prepared; this continuation verified completion, playback and optimizer advancement without re-running or modifying the application.",
+  "limitations": [
+    "Two optimizer steps and four inference steps establish execution, not useful learning, visual quality or production capacity.",
+    "Playback was automated and muted; no human quality review was performed.",
+    "Restoration is a new segment; upstream resets its displayed counter and data position.",
+    "High-noise-only training was tested via CLI, not through a GUI recipe; high-noise optimizer restoration and combined training remain unqualified."
+  ]
+}

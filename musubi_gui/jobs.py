@@ -330,9 +330,7 @@ def configuration_errors(job: Job) -> list[str]:
         errors.append("Dataset: select a registered dataset.")
     if job.family == "wan":
         if config.recipe != "low-noise":
-            errors.append(
-                "Recipe: only low-noise Wan training is currently available; high-noise/combined are unqualified."
-            )
+            errors.append("Recipe: only low-noise Wan training is currently available in the GUI.")
         if config.width < 64 or config.height < 64 or config.width % 16 or config.height % 16:
             errors.append("Geometry: Wan width and height must be at least 64 and multiples of 16.")
         if config.frames < 1 or (config.frames - 1) % 4:
@@ -469,7 +467,7 @@ def build_stages(job: Job, settings: Settings, run: Path, cache: Path) -> list[S
 def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool = False) -> dict[str, Any]:
     errors = configuration_errors(job)
     warnings = [
-        "Wan has short-run execution evidence on the 96 GB host using the documented converted weights; other artifacts and larger workloads need qualification."
+        "Wan has short-run execution evidence on the 96 GB host using the documented native and converted weights; other artifacts and larger workloads need qualification."
         if job.family == "wan"
         else "H3 has short-run execution evidence on the 96 GB host; training quality and larger workloads remain unqualified.",
         "Changes to geometry, duration or memory controls need their own capacity validation.",

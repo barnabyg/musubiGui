@@ -85,6 +85,11 @@ are required. No training dependencies or models are installed by the app.
 The tested environment is Python 3.12.10, PyTorch 2.13.0+cu130, CUDA 13.0 and
 musubi-tuner 0.3.6. Select exact existing component paths in Settings; Wan may use
 the separately validated [offline weight conversion](reference/wan-conversion.md).
+Fresh [native-weight qualification](reference/wan.md#native-weight-qualification)
+also passed with the user-supplied FP16 experts and native T5 encoder on 27 October 2026. It exercised the final atomic Windows launcher through real GUI preparation,
+training, playback and optimizer-state restoration from step 2 to 3. A separate
+high-noise-only CLI training/generation/playback scenario passed. The GUI continues
+to expose its low-noise recipe; combined-expert training remains unqualified.
 
 ```powershell
 .\acceptance.cmd --workspace .cache\gpu-acceptance-1 --mode gpu --settings C:\absolute\settings.json
@@ -100,9 +105,11 @@ environment, manifest, logs, measurements, checkpoint/sample identities and medi
 decode/playback evidence. Synthetic worker results cannot fill this evidence gap.
 
 The committed [GUI acceptance evidence](reference/evidence/gui-acceptance.json)
-records actual preparation, training, checkpoint saving, Edge sample playback and
+records the earlier converted-Wan/native-H3 preparation, training, checkpoint saving, Edge sample playback and
 optimizer-state restoration for both models on the corrected target machine.
-Both optimizers advanced from step 2 to 3 after restoration as new segments. Wan
+Both optimizers advanced from step 2 to 3 after restoration as new segments. The
+additional [native Wan evidence](reference/evidence/wan-native.json) records fresh
+native-file results separately. The earlier converted-weight Wan run
 produced a 153,492,464-byte final checkpoint and a 1.0625-second video; H3 produced
 a 74,617,608-byte checkpoint and a 5.167-second video with decoded audio.
 

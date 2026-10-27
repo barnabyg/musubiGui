@@ -14,8 +14,10 @@ in the library. Unknown storage remains blocked and preserved for repair.
 Review configuration shows effective included videos, resolved component/output
 paths, native dataset TOML and each upstream argument array. Errors block preparation
 while the draft remains editable. Component overrides must stay inside the configured
-model roots. The initial Wan recipe trains the low-noise expert; high-noise-only and
-combined training are not qualified. Runtime FP8 scaling requires native FP16 sources,
+model roots. The GUI's Wan recipe trains the low-noise expert. A separate
+[native-weight CLI acceptance scenario](reference/wan.md#native-weight-qualification)
+also passed high-noise-only training; that recipe is not exposed by the GUI.
+Combined training remains unqualified. Runtime FP8 scaling requires native FP16 sources,
 not saved scaled-FP8 weights. Inactive-DiT offload is not supported by this recipe.
 
 Gallery preview support is broader than the pinned training loader. GIF, TIF and TIFF
