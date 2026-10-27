@@ -1,0 +1,122 @@
+{
+  "version": 1,
+  "scenario": "Real GUI-driven Wan/H3 training and saved optimizer restoration",
+  "status": "passed",
+  "upstream_revision": "f8a1b03794a49239a3539015075f5123d6c07d66",
+  "application_revisions": [
+    {
+      "scenario": "initial_wan_gui_run",
+      "application_revision": "5192a943176adab0491b8edde9abe98414242584"
+    },
+    {
+      "scenario": "restoration_and_h3_gui",
+      "application_revision": "0eae6524e867b41b3e62ce9430e1c2314d33d377"
+    }
+  ],
+  "hardware": {
+    "os": "Windows 11",
+    "gpu": "RTX 3090",
+    "vram_gib": 24,
+    "host_ram_bytes": 102665969664,
+    "required_ram_class_gb": 96
+  },
+  "measurement_limits": "Whole-device VRAM and host RAM sampled about every 2 seconds; transient peaks may be missed. Process-tree RSS sums can double-count shared pages. Disk size is retained run/cache bytes, excludes shared model source weights.",
+  "runs": [
+    {
+      "family": "wan",
+      "run_id": "1d7629411e684db1b904c914d820c3eb",
+      "resume_run_id": "950cdf179e07499b8bf003d8c8c28357",
+      "task": "t2v-A14B",
+      "steps": 2,
+      "checkpoint_bytes": 153492464,
+      "header_sha256": "82dcc94bf93e7fdec5be1c7b24f9c340de30d5c1068293ad2b0b0b10520b6e70",
+      "stage_seconds": {
+        "preparation": 54.632,
+        "training_and_sample": 155.372,
+        "restore_and_sample": 159.965
+      },
+      "restore_peak_bytes": {
+        "peak_device_vram_bytes": 9093251072,
+        "peak_host_used_bytes": 37722947584,
+        "peak_process_tree_rss_bytes": 20749225984
+      },
+      "retained_run_cache_bytes": 3094238681,
+      "playback": {
+        "duration": 1.0625,
+        "width": 256,
+        "height": 256,
+        "current_time": 0.6945,
+        "error": null,
+        "decoded_audio_bytes": 0
+      },
+      "optimizer_step_before": 2,
+      "optimizer_step_after": 3,
+      "counter_resets": true,
+      "data_position_restored": false,
+      "environment": {
+        "python": "3.12.10",
+        "packages": {
+          "torch": "2.13.0+cu130",
+          "accelerate": "1.15.0",
+          "safetensors": "0.8.0",
+          "transformers": "5.17.0",
+          "av": "17.1.0",
+          "musubi-tuner": "0.3.6"
+        },
+        "cuda": "13.0",
+        "platform": "Windows-11-10.0.26300-SP0"
+      }
+    },
+    {
+      "family": "h3",
+      "run_id": "cd91c7f5a8134e8a92102a41c22e5c70",
+      "resume_run_id": "454c980835834ba4b0e3feee83061e95",
+      "task": "t2va",
+      "steps": 2,
+      "checkpoint_bytes": 74617608,
+      "header_sha256": "f15a57963e81755b86ebab6205215c4059aeeec2746052266028d527712aeef2",
+      "stage_seconds": {
+        "preparation": 74.731,
+        "training_and_sample": 172.254,
+        "restore_and_sample": 89.052
+      },
+      "restore_peak_bytes": {
+        "peak_device_vram_bytes": 11248074752,
+        "peak_host_used_bytes": 52543705088,
+        "peak_process_tree_rss_bytes": 36365385728
+      },
+      "retained_run_cache_bytes": 1509459266,
+      "playback": {
+        "duration": 5.167,
+        "width": 256,
+        "height": 256,
+        "current_time": 0.674144,
+        "error": null,
+        "decoded_audio_bytes": 15057
+      },
+      "optimizer_step_before": 2,
+      "optimizer_step_after": 3,
+      "counter_resets": true,
+      "data_position_restored": false,
+      "environment": {
+        "python": "3.12.10",
+        "packages": {
+          "torch": "2.13.0+cu130",
+          "accelerate": "1.15.0",
+          "safetensors": "0.8.0",
+          "transformers": "5.17.0",
+          "av": "17.1.0",
+          "musubi-tuner": "0.3.6"
+        },
+        "cuda": "13.0",
+        "platform": "Windows-11-10.0.26300-SP0"
+      }
+    }
+  ],
+  "limitations": [
+    "Two steps and tiny samples establish execution, not useful learning or production capacity.",
+    "Playback was automated and muted; audible quality was not human-reviewed.",
+    "Upstream restores optimizer state but resets displayed step counter and data position; seamless resume is unsupported.",
+    "The original Wan GUI run completed in the preceding harness attempt; its durable stage timings were retained, but its peak telemetry was not. Separate reference and restoration telemetry remain available."
+  ]
+}

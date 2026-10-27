@@ -1,0 +1,17 @@
+{
+  "settings_version": 1,
+  "assets_served": 2,
+  "source_from_clean_checkout": true,
+  "app_environment_has_torch": false,
+  "port": 52679,
+  "startup": "passed",
+  "version": 1,
+  "application_revision": "0eae6524e867b41b3e62ce9430e1c2314d33d377",
+  "commands": [
+    "launch.cmd --port <isolated-port> --no-browser",
+    "acceptance.cmd --workspace .cache/acceptance-clean --prepare-only"
+  ],
+  "synthetic_jobs": 4,
+  "synthetic_model_families": ["wan", "h3"],
+  "backend_stopped_after_check": true
+}

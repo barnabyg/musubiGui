@@ -22,8 +22,8 @@ Revisit these if command sources change. Missing Torch in the application enviro
 the probe imports Torch only through the selected existing training Python.
 
 The detect-secrets allowlist marks the public upstream Git revision in `reference.py`.
-An exact JSON-field regex also exempts 40/64-character hexadecimal `expected_upstream` / `upstream_revision`
-and `header_sha256` values in reference evidence: these are public revisions/content hashes,
+An exact JSON-field regex also exempts 40/64-character hexadecimal `expected_upstream` / `upstream_revision`,
+`application_revision` and `header_sha256` values in reference evidence: these are public Git revisions/content hashes,
 not credentials. Re-review both exceptions whenever the identity schema or recipe pin changes.
 The scanner checks tracked and new
 non-ignored repository files. Generated bundles and local training assets are ignored,

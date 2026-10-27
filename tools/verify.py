@@ -79,7 +79,7 @@ def main() -> None:
             "scan",
             "--all-files",
             "--exclude-lines",
-            r'^\s*"(?:expected_upstream|upstream_revision|header_sha256)": "[a-f0-9]{40}(?:[a-f0-9]{24})?",?$',
+            r'^\s*"(?:expected_upstream|upstream_revision|application_revision|header_sha256)": "[a-f0-9]{40}(?:[a-f0-9]{24})?",?$',
             *sources,
         ],
         capture_output=True,

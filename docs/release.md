@@ -99,11 +99,32 @@ continuation separately from the reset displayed counter. Retain Run arguments,
 environment, manifest, logs, measurements, checkpoint/sample identities and media
 decode/playback evidence. Synthetic worker results cannot fill this evidence gap.
 
-The committed CLI reference evidence proves both short model workflows on the
-corrected target machine. GUI-driven preparation/training, full release gates
-and clean-checkout installation must be assessed separately on the integrated
-tree before declaring the entire release accepted. Two steps and four inference
-steps do not establish quality or production resolution/duration capacity.
+The committed [GUI acceptance evidence](reference/evidence/gui-acceptance.json)
+records actual preparation, training, checkpoint saving, Edge sample playback and
+optimizer-state restoration for both models on the corrected target machine.
+Both optimizers advanced from step 2 to 3 after restoration as new segments. Wan
+produced a 153,492,464-byte final checkpoint and a 1.0625-second video; H3 produced
+a 74,617,608-byte checkpoint and a 5.167-second video with decoded audio.
+
+| Model | Preparation (s) | Training + sample (s) | Restore + sample (s) | Retained run/cache (GB) |
+| ----- | --------------: | --------------------: | -------------------: | ----------------------: |
+| Wan   |            54.6 |                 155.4 |                160.0 |                    3.09 |
+| H3    |            74.7 |                 172.3 |                 89.1 |                    1.51 |
+
+Restoration peaked at a sampled 8.47 GiB device VRAM / 19.32 GiB process-tree RSS
+for Wan and 10.48 GiB / 33.87 GiB for H3. These sampled values can miss short peaks;
+whole-device and host measurements include other applications. Retained storage
+excludes the existing/derived source weights. The original Wan GUI run completed
+in a preceding harness attempt: its durable stage timings survived, while its
+peak telemetry did not. Separate reference and restoration measurements remain.
+Playback was muted; audible quality and useful learning were not human-reviewed.
+Two steps and four inference steps do not establish production capacity.
+
+The [clean-checkout record](reference/evidence/clean-checkout.json) confirms the
+documented launch command installed locked app dependencies, served UI assets and
+the API, and prepared all four synthetic acceptance jobs. Its application
+environment contains no Torch. The canonical command below remains the complete
+automated release gate.
 
 ## Verification, compatibility and distribution
 
