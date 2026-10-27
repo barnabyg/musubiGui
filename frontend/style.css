@@ -293,6 +293,10 @@ pre {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+pre[aria-label='Run logs'] {
+  max-height: 30rem;
+  overflow: auto;
+}
 @media (max-width: 850px) {
   aside {
     width: 165px;
