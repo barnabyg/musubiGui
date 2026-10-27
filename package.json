@@ -9,7 +9,7 @@
     "build": "vite build",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings 0",
-    "format:check": "prettier --check frontend tests/browser *.ts *.js *.json README.md docs/reference docs/verification.md .github",
+    "format:check": "prettier --check frontend tests/browser *.ts *.js *.json README.md docs/reference docs/verification.md docs/datasets.md docs/jobs.md docs/runs.md docs/outputs.md docs/release.md .github",
     "test:browser": "playwright test",
     "verify": "uv run --locked python tools/verify.py"
   },
