@@ -73,8 +73,8 @@ def cache_environment_identity(settings: Settings, environment: dict[str, Any]) 
         "python": environment.get("python"),
         "platform": environment.get("platform"),
         "packages": environment.get("packages", {}),
+        "preprocessing_packages": environment.get("preprocessing_packages", {}),
         "cuda": environment.get("cuda"),
-        "gpu_name": environment.get("gpu", {}).get("name"),
     }
 
 
@@ -303,3 +303,13 @@ def verify_inputs(run: dict[str, Any]) -> None:
         raise ValueError(
             "The training checkout changed after preparation. Prepare a new revision to record its actual code."
         )
+    expected_runtime = run.get("provenance", {}).get("cache_environment")
+    if expected_runtime:
+        settings = Settings.model_validate(run["settings"])
+        current_runtime = cache_environment_identity(settings, training_environment(settings, versions_only=True))
+        for key in ["executable", "python", "platform", "packages", "preprocessing_packages"]:
+            # Earlier records did not record optional preprocessors. Preserve their readability.
+            if key in expected_runtime and current_runtime[key] != expected_runtime[key]:
+                raise ValueError(
+                    "The selected training environment changed after preparation. Prepare a new revision to record its actual package versions."
+                )

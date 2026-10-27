@@ -13,7 +13,9 @@ import psutil
 from musubi_gui.settings import Settings, validate_paths, within_root
 
 
-def training_environment(settings: Settings, environment: dict[str, str] | None = None) -> dict[str, Any]:
+def training_environment(
+    settings: Settings, environment: dict[str, str] | None = None, *, versions_only: bool = False
+) -> dict[str, Any]:
     python = Path(settings.python)
     if not python.is_file():
         raise ValueError("Select the existing training environment's python.exe.")
@@ -22,7 +24,15 @@ def training_environment(settings: Settings, environment: dict[str, str] | None 
     # B603: selected local Python is an explicit trust boundary; review if selectable remotely.
     try:
         result = subprocess.run(  # nosec B603
-            [str(python), "-I", "-B", "-X", "utf8", str(Path(__file__).with_name("probe.py"))],
+            [
+                str(python),
+                "-I",
+                "-B",
+                "-X",
+                "utf8",
+                str(Path(__file__).with_name("probe.py")),
+                *(["--versions-only"] if versions_only else []),
+            ],
             capture_output=True,
             text=True,
             encoding="utf-8",

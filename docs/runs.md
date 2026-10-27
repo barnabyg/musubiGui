@@ -29,6 +29,13 @@ media or preprocessing changes invalidate latent caches. Cache reuse copies only
 artifacts whose recorded content hashes still match. Changes to model files or
 frozen inputs block execution and require a new preparation.
 
+Cache provenance includes installed optional preprocessing versions (Pillow, NumPy,
+tokenizers, sentencepiece, torchvision, torchaudio, SciPy and einops). Missing optional
+packages remain recorded as absent and do not become installation errors. Before
+launching each stage, a version-only selected-Python probe checks the recorded package
+identity without importing Torch or initializing CUDA. Environment changes require a
+new preparation; volatile GPU availability/free-space readings do not invalidate caches.
+
 A transactional host-wide GPU lease serializes execution, including instances with
 different application state directories. Pending work and history live in versioned
 SQLite storage. Unknown storage versions are preserved and blocked.
