@@ -13,6 +13,65 @@ from fastapi.testclient import TestClient
 PNG = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=")
 
 
+def test_rename_and_delete_library_entry_preserve_files_and_recovery_history(tmp_path: Path) -> None:
+    client, media, state = fixture(tmp_path)
+    dataset = client.post("/api/datasets", json={"name": "Original", "path": str(media)}).json()
+    url = f"/api/datasets/{dataset['id']}"
+    items = client.get(f"{url}/items").json()
+    image = next(item for item in items if item["name"] == "red.png")
+    caption_url = f"{url}/items/{image['id']}/caption"
+    assert (
+        client.put(caption_url, json={"text": "Edited caption", "revision": image["caption"]["revision"]}).status_code
+        == 200
+    )
+    history = list((state / "caption-history").rglob("*.json"))
+    assert history
+    preserved = {path: path.read_bytes() for path in [*media.iterdir(), *history] if path.is_file()}
+
+    assert client.put(url, json={"name": "  Renamed library  "}).json()["name"] == "Renamed library"
+    assert client.get(url).json()["path"] == str(media)
+    renamed_items = client.get(f"{url}/items").json()
+    assert [item["id"] for item in renamed_items] == [item["id"] for item in items]
+    assert next(item for item in renamed_items if item["id"] == image["id"])["caption"]["text"] == "Edited caption"
+    assert client.put(url, json={"name": " "}).status_code == 422
+    assert client.put(url, json={"name": "x" * 201}).status_code == 422
+    assert client.put("/api/datasets/unknown", json={"name": "Missing"}).status_code == 404
+
+    assert client.delete(url).status_code == 200
+    assert client.get("/api/datasets").json() == []
+    assert client.get(url).status_code == 404
+    assert client.get(f"{url}/items").status_code == 404
+    assert client.delete(url).status_code == 404
+    assert {path: path.read_bytes() for path in preserved} == preserved
+    from musubi_gui.datasets import DatasetStore
+
+    assert DatasetStore(state).list() == []
+    recreated = client.post("/api/datasets", json={"name": "Registered again", "path": str(media)}).json()
+    restored = client.get(f"/api/datasets/{recreated['id']}/items").json()
+    assert next(item for item in restored if item["name"] == "red.png")["caption"]["text"] == "Edited caption"
+
+
+def test_delete_waits_for_pending_scan_and_preserves_managed_folder(tmp_path: Path) -> None:
+    client, media, state = fixture(tmp_path)
+    from musubi_gui.datasets import DatasetStore
+
+    store = DatasetStore(state)
+    dataset = store.register("Pending", str(media))
+    url = f"/api/datasets/{dataset['id']}"
+    assert client.delete(url).status_code == 422
+    assert client.get(url).status_code == 200
+    client.post(f"{url}/scan")
+    assert client.delete(url).status_code == 200
+    managed = store.create_managed("Managed", str(media))
+    folder = Path(managed["path"])
+    (folder / "uploaded.png").write_bytes(PNG)
+    (folder / "uploaded.txt").write_text("Uploaded caption", encoding="utf-8")
+    store.scan(managed["id"])
+    assert client.delete(f"/api/datasets/{managed['id']}").status_code == 200
+    assert (folder / "uploaded.png").read_bytes() == PNG
+    assert (folder / "uploaded.txt").read_text(encoding="utf-8") == "Uploaded caption"
+
+
 def fixture(tmp_path: Path) -> tuple[TestClient, Path, Path]:
     from musubi_gui.datasets_api import dataset_router
 

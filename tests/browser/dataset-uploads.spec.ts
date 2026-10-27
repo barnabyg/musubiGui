@@ -10,6 +10,7 @@ test('managed uploads publish media/captions, reject collisions and invalid file
   try {
     await page.goto(app.url);
     await page.getByRole('button', { name: 'Datasets', exact: true }).click();
+    await page.getByRole('button', { name: 'New dataset' }).click();
     await page
       .getByLabel('Dataset name', { exact: true })
       .fill('Uploads library');

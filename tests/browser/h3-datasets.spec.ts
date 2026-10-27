@@ -9,6 +9,7 @@ test('H3 inspector plays resolved audio and identifies missing, ambiguous, malfo
   try {
     await page.goto(app.url);
     await page.getByRole('button', { name: 'Datasets', exact: true }).click();
+    await page.getByRole('button', { name: 'New dataset' }).click();
     await page
       .getByLabel('Dataset name', { exact: true })
       .fill('H3 audio library');
@@ -18,21 +19,11 @@ test('H3 inspector plays resolved audio and identifies missing, ambiguous, malfo
     await expect(page.getByText('Scan: complete 11/11')).toBeVisible({
       timeout: 45_000,
     });
+    await page.getByRole('button', { name: 'Tools', exact: true }).click();
     const inspect = async (name: string) => {
-      const gallery = page.getByLabel('Dataset gallery');
-      await gallery.evaluate((element) => {
-        element.scrollTop = 0;
-      });
+      await page.getByLabel('Search media and captions').fill(name);
       const tile = page.getByRole('button', { name: `${name} video` });
-      await expect
-        .poll(async () => {
-          if (await tile.count()) return true;
-          await gallery.evaluate((element) => {
-            element.scrollTop = element.scrollHeight;
-          });
-          return Boolean(await tile.count());
-        })
-        .toBe(true);
+      await expect(tile).toBeVisible();
       await tile.click();
       await page
         .getByText('H3 audio and media inspector', { exact: true })

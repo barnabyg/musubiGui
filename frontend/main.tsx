@@ -52,6 +52,7 @@ function App() {
   const [report, setReport] = useState<Report | null>(null);
   const [screen, setScreen] = useState('Settings');
   const [jobDirty, setJobDirty] = useState(false);
+  const [datasetEditor, setDatasetEditor] = useState(false);
   const [runId, setRunId] = useState<string>();
   function navigate(name: string) {
     if (
@@ -144,7 +145,9 @@ function App() {
     );
   }
   return (
-    <div className="shell">
+    <div
+      className={`shell ${screen === 'Datasets' && datasetEditor ? 'dataset-editor-active' : ''}`}
+    >
       <aside>
         <a className="brand" href="/">
           ◈{' '}
@@ -171,13 +174,18 @@ function App() {
           <i /> Local connection<small>Training stays on your machine</small>
         </div>
       </aside>
-      <main>
+      <main
+        className={
+          screen === 'Datasets' && datasetEditor ? 'dataset-editor-shell' : ''
+        }
+      >
         <header>
           <span>WORKSPACE / {screen.toUpperCase()}</span>
           <span className="badge">LoRA · Windows</span>
         </header>
         <div hidden={screen !== 'Datasets'}>
           <Datasets
+            onEditorChange={setDatasetEditor}
             visible={screen === 'Datasets'}
             defaultFolder={settings?.dataset_roots[0] ?? ''}
           />

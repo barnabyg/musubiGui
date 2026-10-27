@@ -6,6 +6,37 @@ field starts with the first configured root. Creating a managed dataset creates
 the root folder when needed. Saved custom roots, including an explicitly empty
 list, are preserved; change them in Settings to use a different location.
 
+The Datasets library lists registered and managed datasets, their media/caption
+counts, storage locations and edit/delete actions. Choose **New dataset** to open
+the creation screen, then register an existing folder or create a managed dataset.
+Both flows open the individual dataset editor. **Back to datasets** returns to
+the library after saving the active caption; a failed save keeps the draft open.
+
+The individual editor fills the available window with thumbnails and editable captions.
+A compact top bar contains back navigation, the dataset name/scan status, **Add media**,
+**Tools** and **Dataset settings**. Thumbnails start directly below this bar; the
+workspace banner and large page heading are omitted on this screen.
+Type directly in the caption field beneath any thumbnail. Each field autosaves after
+350 ms and saves immediately when focus leaves it, with a per-caption save indicator.
+Select the thumbnail to open its full preview, larger caption editor and recovery
+history; both editors share the same draft and revision. **Close preview** saves
+pending captions and returns to the full gallery. **Tools** opens a side panel containing
+search, filters, sorting, selection counts and bulk caption actions. **Dataset settings**
+opens a side panel holding the editable display
+name, storage path and H3 coverage. Renaming changes the library name without moving
+the folder. **Add media** opens the managed upload panel; it starts open for a new
+managed dataset and stays open while files upload. Closing or switching panels keeps
+uploads and tool state intact. Panels and the preview overlay the gallery on narrow
+windows, each with its own close control. A registered folder is populated by adding
+files on disk and choosing **Re-scan** in **Dataset settings**.
+
+**Delete** requires confirmation naming the dataset and removes its library entry
+and indexed items only. Original and uploaded media, caption sidecars, thumbnails,
+caption history and bulk/upload recovery evidence remain on disk. Jobs referencing
+the deleted entry need a dataset selected again. Re-registering the preserved folder
+creates a new entry with a new identity; prior exclusions and history are not attached
+to that new entry. Deletion waits for a pending or active scan to finish.
+
 After `npm.cmd run build`, run `.venv\Scripts\python.exe -m musubi_gui.dataset_fixture .cache\dataset-demo --launch`.
 Use a new destination each time; existing fixture directories are preserved. Open the printed loopback URL
 (default `http://127.0.0.1:8767`) and register the printed mixed-media folder in Datasets.
@@ -20,8 +51,16 @@ symlink/junction resolution. If the source folder disappears, its library entry 
 The gallery renders a bounded window of tiles. Browser codec support depends on Edge; containers accepted
 by PyAV may need re-encoding for playback. The original file is preserved when Edge cannot play it.
 
-Captions autosave after 350 ms and flush before selecting another item or dataset. Switching application
-sections also flushes the mounted editor. Alt+Left/Right navigates the viewer. Saved appears only after
+Scrolling a card out of view keeps its draft and any pending save. A focused caption
+stays in place while its saved text changes search/filter/sort results; those results
+update when focus leaves the card. Failed saves retain the draft after scrolling and
+block leaving the dataset or applying bulk/upload operations. Use **Review caption**
+on the affected card, or **Review unsaved captions** in the top bar, to open the full
+editor for retry, conflict resolution and history. Closing the browser with unsaved
+captions requests confirmation.
+
+Captions autosave after 350 ms and all pending captions flush before selecting another item or dataset. Switching application
+sections also flushes pending captions. Alt+Left/Right navigates the viewer. Saved appears only after
 the backend confirms an atomic `.txt` replacement. Failed writes block item navigation and retain the
 draft for retry. External changes produce a conflict: review the current sidecar before explicitly
 choosing it or saving the retained draft over that revision. Caption history can restore an earlier
@@ -33,7 +72,7 @@ missing, ambiguous, malformed, short and offset-audio examples alongside the bas
 Open a video and expand **H3 audio and media inspector**. Inspect the chosen source, play
 the resolved audio and review the geometry/timeline diagnostics. Set the explicit path to
 the fixture's `chosen.wav` to resolve an ambiguous pair; an empty path restores automatic
-resolution. **H3 dataset audio coverage** reports included/excluded items and valid audio
+resolution. Under **Dataset settings**, **H3 dataset audio coverage** reports included/excluded items and valid audio
 supervision. Missing audio is allowed only by an explicit job policy; malformed supplied
 audio remains an error. Source media is never repaired or discarded by inspection.
 
@@ -44,7 +83,7 @@ in an isolated application subprocess with a 45-second timeout. Long clips that 
 need shorter source clips. Geometry, timestamps and playback are preflight evidence;
 actual upstream caching remains the final authority for crop-specific supervision.
 
-Search names/caption text, sort and filter missing captions, invalid media, exclusions or selected items.
+Open **Tools** to search names/caption text, sort and filter missing captions, invalid media, exclusions or selected items.
 Checkbox selections remain explicit across filters; the counter identifies selected items hidden by the
 current filter. Excluding changes library metadata without changing or deleting source media. The
 included count is the effective training count. Select **Selection and bulk caption actions** to preview

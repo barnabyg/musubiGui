@@ -21,6 +21,7 @@ async function fileTransfer(page: Page, media: string, names: string[]) {
 async function createDataset(page: Page, url: string, media: string) {
   await page.goto(url);
   await page.getByRole('button', { name: 'Datasets', exact: true }).click();
+  await page.getByRole('button', { name: 'New dataset' }).click();
   await page.getByLabel('Dataset name', { exact: true }).fill('Dropped media');
   await page.getByLabel('Dataset folder', { exact: true }).fill(media);
   await page.getByRole('button', { name: 'Create managed dataset' }).click();
@@ -186,6 +187,13 @@ test('drop feedback handles child boundaries and non-file drags, and busy upload
       page.getByLabel('Upload result blue.png', { exact: true }),
     ).toContainText('Uploading');
     await expect(picker).toBeDisabled();
+    await page.getByRole('button', { name: 'Tools', exact: true }).click();
+    await expect(picker).toBeHidden();
+    await page.getByRole('button', { name: 'Add media', exact: true }).click();
+    await expect(picker).toBeDisabled();
+    await expect(
+      page.getByLabel('Upload result blue.png', { exact: true }),
+    ).toContainText('Uploading');
     await expect(dropArea).toHaveAttribute('aria-disabled', 'true');
     const replacement = await fileTransfer(page, app.media, ['red.png']);
     await dropArea.dispatchEvent('dragenter', { dataTransfer: replacement });

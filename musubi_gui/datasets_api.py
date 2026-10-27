@@ -42,6 +42,11 @@ class CaptionWrite(BaseModel):
     revision: str
 
 
+class RenameDataset(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str
+
+
 class CaptionRestore(BaseModel):
     model_config = ConfigDict(extra="forbid")
     history_id: str
@@ -115,6 +120,14 @@ def dataset_router(root: Path) -> APIRouter:
     @router.get("/{dataset_id}")
     def dataset(dataset_id: str) -> dict[str, Any]:
         return result(lambda: store.get(dataset_id))
+
+    @router.put("/{dataset_id}")
+    def rename_dataset(dataset_id: str, request: RenameDataset) -> dict[str, Any]:
+        return result(lambda: store.rename(dataset_id, request.name))
+
+    @router.delete("/{dataset_id}")
+    def remove_dataset(dataset_id: str) -> dict[str, str]:
+        return result(lambda: store.remove(dataset_id))
 
     @router.post("/managed")
     def managed(request: ManagedDataset) -> dict[str, Any]:

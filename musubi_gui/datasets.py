@@ -156,6 +156,27 @@ class DatasetStore:
             identifiers = [str(row[0]) for row in db.execute("SELECT id FROM datasets ORDER BY name,id")]
         return [self.get(identifier) for identifier in identifiers]
 
+    def rename(self, dataset_id: str, name: str) -> dict[str, Any]:
+        if not name.strip() or len(name) > 200:
+            raise ValueError("Give the dataset a name of 1–200 characters.")
+        with self._db() as db:
+            if not db.execute("UPDATE datasets SET name=? WHERE id=?", (name.strip(), dataset_id)).rowcount:
+                raise KeyError("Dataset was not found.")
+        return self.get(dataset_id)
+
+    def remove(self, dataset_id: str) -> dict[str, str]:
+        """Remove the library index only; media, sidecars and recovery evidence stay intact."""
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT scan FROM datasets WHERE id=?", (dataset_id,)).fetchone()
+            if row is None:
+                raise KeyError("Dataset was not found.")
+            if json.loads(row["scan"])["state"] in {"pending", "scanning"}:
+                raise ValueError("Wait for the dataset scan to finish before deleting its library entry.")
+            db.execute("DELETE FROM items WHERE dataset=?", (dataset_id,))
+            db.execute("DELETE FROM datasets WHERE id=?", (dataset_id,))
+        return {"id": dataset_id}
+
     def _progress(self, dataset_id: str, status: dict[str, Any]) -> None:
         with self._db() as db:
             db.execute("UPDATE datasets SET scan=? WHERE id=?", (json.dumps(status), dataset_id))
