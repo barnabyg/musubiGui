@@ -18,6 +18,12 @@ model roots. The initial Wan recipe trains the low-noise expert; high-noise-only
 combined training are not qualified. Runtime FP8 scaling requires native FP16 sources,
 not saved scaled-FP8 weights. Inactive-DiT offload is not supported by this recipe.
 
+Gallery preview support is broader than the pinned training loader. GIF, TIF and TIFF
+images remain browsable, but Job review names each incompatible included item and
+requires conversion to PNG/JPEG/WebP/BMP or explicit exclusion before preparation.
+Original media is preserved. The native dataset builder uses the same pinned media
+extension lists as preflight, so supported PNG images remain image datasets.
+
 The small default is 256×256, 17 frames, batch one, rank/alpha eight and two steps.
 Changing capacity controls requires capacity validation on Windows 11 / RTX 3090 /
 96 GB RAM. Draft validation is not proof of successful GPU execution. Sampling runs

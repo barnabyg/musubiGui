@@ -22,6 +22,11 @@ from musubi_gui.settings import Settings, atomic_json, load_settings, validate_p
 
 _lock = threading.RLock()
 
+# Pinned UPSTREAM src/musubi_tuner/dataset/media_utils.py. JPEG-XL is optional
+# upstream and is not indexed by this application's gallery.
+TRAINING_IMAGES = frozenset({".png", ".jpg", ".jpeg", ".webp", ".bmp", ".avif"})
+TRAINING_VIDEOS = frozenset({".mp4", ".webm", ".avi", ".mkv", ".mov", ".flv", ".wmv", ".m4v", ".mpg", ".mpeg"})
+
 
 class JobConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
@@ -398,12 +403,14 @@ def dataset_toml(job: Job, directory: Path, cache: Path, *, kinds: set[str] | No
         f"bucket_no_upscale = {str(config.bucket_no_upscale).lower()}\n\n"
     )
     if kinds is None:
-        files = list(directory.rglob("*")) if directory.exists() else []
-        images = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
-        videos = {".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v"}
-        kinds = {"image" for file in files if file.suffix.lower() in images}
-        kinds.update("video" for file in files if file.suffix.lower() in videos)
+        files = [file for file in directory.rglob("*") if file.is_file()] if directory.exists() else []
+        kinds = {"image" for file in files if file.suffix.lower() in TRAINING_IMAGES}
+        kinds.update("video" for file in files if file.suffix.lower() in TRAINING_VIDEOS)
         if not kinds:
+            if files:
+                raise ValueError(
+                    "The snapshot has no media format supported by the pinned training recipe. Convert or exclude unsupported items before preparation."
+                )
             kinds = {"video"}
     sections = []
     for kind in ["image", "video"]:
@@ -535,6 +542,13 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
                     "Dataset: this initial video recipe requires videos; exclude images or select another dataset."
                 )
             for item in effective_items:
+                suffix = Path(item["path"]).suffix.lower()
+                supported = TRAINING_IMAGES if item["kind"] == "image" else TRAINING_VIDEOS
+                if suffix not in supported:
+                    target = "PNG, JPEG, WebP or BMP" if item["kind"] == "image" else "MP4"
+                    errors.append(
+                        f"{item['name']}: {suffix} {item['kind']} files can be previewed but are not supported by the pinned {job.family.upper()} training recipe. Convert to {target} or exclude this item before preparation."
+                    )
                 if not item["caption"]["exists"]:
                     warnings.append(f"{item['name']}: no caption sidecar; the frozen caption will be empty.")
                 frames = item.get("metadata", {}).get("frames")
