@@ -10,6 +10,22 @@
 .dataset-library small {
   display: block;
 }
+.upload-drop-zone {
+  border: 2px dashed #737084;
+  border-radius: 8px;
+  padding: 18px;
+  margin: 16px 0;
+}
+.upload-drop-zone.dragging {
+  border-color: #c1a4ef;
+  background: #292236;
+}
+.upload-drop-zone:focus-within {
+  border-color: #c1a4ef;
+}
+.upload-drop-zone[aria-disabled='true'] {
+  opacity: 0.65;
+}
 .dataset-workspace {
   display: grid;
   grid-template-columns: 1fr 1fr;

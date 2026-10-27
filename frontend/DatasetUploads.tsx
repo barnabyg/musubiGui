@@ -18,6 +18,8 @@ export function DatasetUploads({ datasetId, beforeAction, onChanged }: Props) {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [busy, setBusy] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const dragDepth = useRef(0);
   const [error, setError] = useState('');
   const abort = useRef<AbortController | null>(null);
   const url = `/api/datasets/${datasetId}/uploads`;
@@ -58,6 +60,12 @@ export function DatasetUploads({ datasetId, beforeAction, onChanged }: Props) {
   }
   async function refresh() {
     setSessions(await request<Session[]>(''));
+  }
+  function selectFiles(files: FileList | null) {
+    if (busy || !files?.length) return;
+    setEntries(
+      Array.from(files).map((file) => ({ file, progress: 0, status: 'Ready' })),
+    );
   }
   async function upload() {
     if (!(await beforeAction())) return;
@@ -166,23 +174,58 @@ export function DatasetUploads({ datasetId, beforeAction, onChanged }: Props) {
         Each filename is exclusive; collisions preserve the existing file. Media
         is validated before appearing in the gallery.
       </p>
-      <label className="field">
-        Upload files
-        <input
-          type="file"
-          multiple
-          disabled={busy}
-          onChange={(event) =>
-            setEntries(
-              Array.from(event.target.files ?? []).map((file) => ({
-                file,
-                progress: 0,
-                status: 'Ready',
-              })),
-            )
-          }
-        />
-      </label>
+      <div
+        role="group"
+        aria-label="Dataset file drop area"
+        aria-disabled={busy}
+        className={`upload-drop-zone${dragging ? ' dragging' : ''}`}
+        onDragEnter={(event) => {
+          if (!event.dataTransfer.types.includes('Files')) return;
+          event.preventDefault();
+          dragDepth.current += 1;
+          if (!busy) setDragging(true);
+        }}
+        onDragOver={(event) => {
+          if (!event.dataTransfer.types.includes('Files')) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = busy ? 'none' : 'copy';
+        }}
+        onDragLeave={() => {
+          dragDepth.current = Math.max(0, dragDepth.current - 1);
+          if (!dragDepth.current) setDragging(false);
+        }}
+        onDrop={(event) => {
+          // Cancel native file opening even when the upload queue is busy.
+          event.preventDefault();
+          dragDepth.current = 0;
+          setDragging(false);
+          selectFiles(event.dataTransfer.files);
+        }}
+      >
+        <p>
+          {busy
+            ? 'Wait for uploads to finish or pause them before selecting files.'
+            : dragging
+              ? 'Drop files here to select them for upload.'
+              : 'Drag and drop images, videos, audio sidecars and matching .txt captions here, or choose files below.'}
+        </p>
+        <p>
+          Selected files replace the queue. Then choose Upload selected files.
+        </p>
+        <label className="field">
+          Upload files
+          <input
+            type="file"
+            multiple
+            disabled={busy}
+            onChange={(event) => {
+              selectFiles(event.target.files);
+              // Allow choosing the same file again after a drop replaces it.
+              event.target.value = '';
+            }}
+          />
+        </label>
+      </div>
       <div className="actions">
         <button
           disabled={busy || !entries.length}
