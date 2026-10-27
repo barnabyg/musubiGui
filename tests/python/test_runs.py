@@ -38,11 +38,11 @@ def plan(root: Path, name: str = "one", delay: float = 0.05) -> ExecutionPlan:
     )
 
 
-def wait_for(service: RunService, run_id: str, status: str) -> dict:
+def wait_for(service: RunService, run_id: str, status: str, *, device_released: bool = False) -> dict:
     deadline = time.monotonic() + 10
     while time.monotonic() < deadline:
         run = service.get(run_id)
-        if run["status"] == status:
+        if run["status"] == status and (not device_released or service.device.owner() is None):
             return run
         time.sleep(0.02)
     raise AssertionError(service.get(run_id))
@@ -147,7 +147,8 @@ def test_queue_order_and_cancellation_survive_restart(tmp_path: Path) -> None:
     paused.close()
     restarted = RunService(state, device_path=device)
     try:
-        wait_for(restarted, ids[0], "completed")
+        # Terminal status is published before the worker finishes releasing its GPU lease.
+        wait_for(restarted, ids[0], "completed", device_released=True)
         assert restarted.get(ids[1])["status"] == "cancelled"
         assert not (tmp_path / "second/checkpoints").exists()
         assert restarted.device.owner() is None
@@ -203,7 +204,7 @@ def test_force_stop_requires_confirmation_and_releases_only_the_owned_worker(tmp
         with pytest.raises(ValueError, match="confirm"):
             service.stop(run["id"], force=True)
         service.stop(run["id"], force=True, confirmed=True)
-        stopped = wait_for(service, run["id"], "stopped")
+        stopped = wait_for(service, run["id"], "stopped", device_released=True)
         assert stopped["stop_kind"] == "force"
         assert service.device.owner() is None
     finally:
