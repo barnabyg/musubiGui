@@ -157,12 +157,12 @@ def test_crash_after_reserving_a_launch_before_process_creation_can_be_reconcile
         "processes": [],
         "job_objects": [name],
         "launch_pending": True,
-        "launch_protocol": 2,
+        "launch_protocol": 3,
     }
     with sqlite3.connect(root / "runs.sqlite3") as database:
         database.execute("UPDATE records SET data=? WHERE id=?", (json.dumps(record), run["id"]))
     assert service.device.acquire(run["id"], stale)
-    service.device.update(run["id"], [], job_objects=[name], launch_pending=True, launch_protocol=2)
+    service.device.update(run["id"], [], job_objects=[name], launch_pending=True, launch_protocol=3)
     service.close()
     restarted = RunService(root, device_path=device)
     try:

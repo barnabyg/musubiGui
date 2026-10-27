@@ -30,7 +30,7 @@ from musubi_gui.snapshots import (
     preparation_transaction,
     verify_inputs,
 )
-from musubi_gui.windows_job import CREATE_SUSPENDED, ProcessJob
+from musubi_gui.windows_job import ProcessJob, WindowsProcess
 
 
 @dataclass
@@ -263,10 +263,10 @@ class RunService:
         uncertain = uncertain or any(identity_status(identity) == "uncertain" for identity in identities)
         owner = self.device.owner()
         if owner and owner["run_id"] == run_id and owner["state"] == str(self.root.resolve()):
-            # Protocol 2 never resumes a process before recording its identity and
-            # assigning its named Job Object. Empty observable jobs prove no GPU
-            # stage survived a crash in the reserved/suspended launch window.
-            observable_launch = owner.get("launch_protocol") == 2 and bool(run.get("job_objects"))
+            # Protocol 3 assigns the named Job Object atomically during process creation.
+            # A known empty job proves that no process survived, even before PID persistence.
+            # Protocol 2 remains readable, but its old unassigned suspended-child window is uncertain.
+            observable_launch = owner.get("launch_protocol") == 3 and bool(run.get("job_objects"))
             uncertain = uncertain or (bool(owner.get("launch_pending")) and not observable_launch)
         if live or uncertain:
             status = "uncertain" if uncertain else "orphaned"
@@ -417,6 +417,8 @@ class RunService:
         run_id = run["id"]
         release = True
         job_object: ProcessJob | None = None
+        process: WindowsProcess | subprocess.Popen[str] | None = None
+        failure: str | None = None
         preparing = run["phase"] == "prepare"
 
         def claim(record: dict[str, Any]) -> None:
@@ -452,29 +454,26 @@ class RunService:
                 names = list(self.get(run_id).get("job_objects", []))
                 if name not in names:
                     names.append(name)
-                self.store.update(run_id, lambda r: r.update(job_objects=names, launch_pending=True, launch_protocol=2))
-                self.device.update(run_id, [], job_objects=names, launch_pending=True, launch_protocol=2)
+                self.store.update(run_id, lambda r: r.update(job_objects=names, launch_pending=True, launch_protocol=3))
+                self.device.update(run_id, [], job_objects=names, launch_pending=True, launch_protocol=3)
                 log_file = Path(run["directory"]) / f"{stage['name']}.log"
                 with log_file.open("a", encoding="utf-8") as log:
-                    # B603: trusted recipe adapter builds arrays; no API accepts executable commands.
-                    process = subprocess.Popen(  # nosec B603
-                        stage["args"],
-                        cwd=settings.checkout,
-                        env=reference_environment(Path(run["cache"])),
-                        stdout=log,
-                        stderr=subprocess.STDOUT,
-                        text=True,
-                        creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | CREATE_SUSPENDED if os.name == "nt" else 0,
-                        start_new_session=os.name != "nt",
-                    )
+                    environment = reference_environment(Path(run["cache"]))
+                    if os.name == "nt":
+                        process = job_object.spawn(stage["args"], cwd=settings.checkout, env=environment, log=log)
+                    else:
+                        # B603: trusted recipe adapter builds arrays; no API accepts executable commands.
+                        process = subprocess.Popen(  # nosec B603
+                            stage["args"],
+                            cwd=settings.checkout,
+                            env=environment,
+                            stdout=log,
+                            stderr=subprocess.STDOUT,
+                            text=True,
+                            start_new_session=True,
+                        )
                     identities = observed_tree(process.pid)
                     self.store.update(run_id, lambda r: r.update(processes=identities))
-                    try:
-                        job_object.assign_and_resume(process.pid)
-                    except BaseException:
-                        process.kill()
-                        process.wait(timeout=10)
-                        raise
                     self.device.update(run_id, identities)
                     self.store.update(run_id, lambda r: r.update(processes=identities, launch_pending=False))
                     self.device.update(run_id, identities, launch_pending=False)
@@ -518,12 +517,25 @@ class RunService:
                                     error="Service stopped; reconcile the recorded process before retrying.",
                                 ),
                             )
-                            threading.Thread(target=process.wait, name="musubi-child-reaper", daemon=True).start()
+                            if isinstance(process, WindowsProcess):
+                                process.close()
+                            else:
+                                threading.Thread(target=process.wait, name="musubi-child-reaper", daemon=True).start()
                             return
                     code = process.wait()
+                    if isinstance(process, WindowsProcess):
+                        process.close()
                     remaining = job_object.pids()
+                    for pid in remaining:
+                        try:
+                            identity = process_identity(pid)
+                            if identity not in identities:
+                                identities.append(identity)
+                        except psutil.NoSuchProcess:
+                            pass
                     if remaining or any(identity_status(identity) != "dead" for identity in identities):
                         release = False
+                        self.device.update(run_id, identities)
                         self.store.update(
                             run_id,
                             lambda r: r.update(
@@ -586,21 +598,32 @@ class RunService:
                 ),
             )
         except Exception as error:
-            message = redact(str(error))
-            self.store.update(run_id, lambda r: r.update(status="failed", error=message, finished=utc_now()))
+            failure = redact(str(error))
         finally:
+            if isinstance(process, WindowsProcess):
+                process.close()
             if job_object:
                 try:
                     if job_object.pids():
                         release = False
-                        self.store.update(
-                            run_id, lambda r: r.update(status="uncertain" if r["status"] == "failed" else r["status"])
-                        )
                 except (OSError, ValueError):
                     release = False
                 job_object.close()
+            if failure is not None:
+                # A retryable terminal failure and its cleared ownership records must become visible together.
+                self.store.update(
+                    run_id,
+                    lambda r: r.update(
+                        status="failed" if release else "uncertain",
+                        error=failure,
+                        finished=utc_now(),
+                        processes=[] if release else r["processes"],
+                        launch_pending=False if release else r.get("launch_pending", False),
+                    ),
+                )
             if release:
-                self.store.update(run_id, lambda r: r.update(processes=[], launch_pending=False))
+                if failure is None:
+                    self.store.update(run_id, lambda r: r.update(processes=[], launch_pending=False))
                 self.device.release(run_id)
 
     def _cache_artifacts(self, run: dict[str, Any], stage: str) -> builtins.list[dict[str, str]]:

@@ -69,10 +69,14 @@ the requested additional steps. The pinned upstream restores optimizer state
 but resets its displayed step counter and data position; seamless continuation
 is unsupported. Loading a LoRA checkpoint alone is not optimizer restoration.
 
-On Windows each stage starts suspended and joins a named Windows Job Object before
-running. Descendants remain associated even when their launcher exits or the service
-stops. The job name plus process creation time and executable identity allow safe
-reconciliation after restart. Browser-independent logs can still be inspected.
+On Windows each stage is assigned to a named Windows Job Object atomically during
+process creation, before its first instruction. A separate acknowledged observer
+holds a query-only job handle before stage creation and survives both controller
+and initial-launcher exit. It remains until the controller is gone or closes the
+job and every stage descendant has exited. Closing the application never enables
+kill-on-close. The job name plus process creation time and executable identity
+allow safe reconciliation after restart, including a crash before PID persistence.
+Browser-independent logs can still be inspected.
 
 If a process survives, the Run is orphaned and the GPU remains owned. Reconcile
 processes refreshes observed state; Terminate recovered work requires confirmation
@@ -81,3 +85,5 @@ launch blocks replacement GPU work. A known dead process/PID reuse does not coun
 as live ownership. Once all recorded work is gone, the Run becomes interrupted and
 can be retried using frozen inputs or a validated saved optimizer state. No retry
 or replacement is launched automatically during uncertain recovery.
+Older reserved launches without atomic job assignment remain readable but are
+treated as uncertain when their ownership cannot be established safely.

@@ -75,6 +75,7 @@ def test_failed_preparation_is_visible_and_retry_preserves_the_original_inputs(t
         run = service.submit(execution)
         failed = wait_for(service, run["id"], "failed")
         assert "exited 3" in failed["error"]
+        assert failed["processes"] == []
         retried = service.retry(run["id"])
         assert retried["manifest"] == run["manifest"]
         assert retried["id"] != run["id"]
