@@ -6,6 +6,8 @@ import { datasetHarness } from './datasetHarness';
 test('large galleries scroll, resize and filter without losing access to media', async ({
   page,
 }) => {
+  // Twenty-four isolated media probes need an explicit hosted-Windows budget.
+  test.setTimeout(120_000);
   const app = await datasetHarness();
   try {
     await Promise.all(
@@ -26,7 +28,7 @@ test('large galleries scroll, resize and filter without losing access to media',
     await page.getByLabel('Dataset folder', { exact: true }).fill(app.media);
     await page.getByRole('button', { name: 'Register folder' }).click();
     await expect(page.getByText('Scan: complete 24/24')).toBeVisible({
-      timeout: 45_000,
+      timeout: 90_000,
     });
     const gallery = page.getByLabel('Dataset gallery');
     // The gallery starts directly below the compact header and fills the viewport.

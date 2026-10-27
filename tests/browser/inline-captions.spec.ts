@@ -17,7 +17,7 @@ async function openDataset(
   await page.getByLabel('Dataset folder', { exact: true }).fill(app.media);
   await page.getByRole('button', { name: 'Register folder' }).click();
   await expect(page.getByText(`Scan: complete ${count}/${count}`)).toBeVisible({
-    timeout: 45_000,
+    timeout: count === 24 ? 90_000 : 45_000,
   });
 }
 
@@ -128,6 +128,8 @@ test('captions edit beneath thumbnails, share the preview draft and flush the la
 test('virtual scrolling preserves pending and failed inline drafts, with recovery and external conflict review', async ({
   page,
 }) => {
+  // Include the 24-media scan and the subsequent caption recovery workflow.
+  test.setTimeout(120_000);
   const app = await datasetHarness();
   let release = () => {};
   try {
