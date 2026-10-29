@@ -105,6 +105,8 @@ const extractionModes: {
 function rateLabel(fps: number | null) {
   return fps === null ? 'unknown fps' : `${Number(fps.toPrecision(6))} fps`;
 }
+type PreparedRun = { id: string; status: string; existing: boolean };
+
 type Props = {
   onRun?: (id: string) => void;
   onDirtyChange?: (dirty: boolean) => void;
@@ -139,7 +141,8 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
   const [models, setModels] = useState<Record<string, string>>({});
   const [job, setJob] = useState<Job | null>(null);
   const [dirty, setDirty] = useState(false);
-  const [busy, setBusy] = useState(false);
+  // Busy until the initial load lands, so it cannot replace drafts created meanwhile.
+  const [busy, setBusy] = useState(true);
   const [status, setStatus] = useState('Loading jobs…');
   const [error, setError] = useState('');
   const [review, setReview] = useState<Review | null>(null);
@@ -148,6 +151,7 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
   const [presetId, setPresetId] = useState('');
   const [transfer, setTransfer] = useState('');
   const [conversion, setConversion] = useState<ConversionPreview | null>(null);
+  const [existingRun, setExistingRun] = useState<PreparedRun | null>(null);
 
   useEffect(() => {
     void Promise.all([
@@ -163,7 +167,8 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
         setPresets(savedPresets);
         setStatus('Jobs loaded');
       })
-      .catch((reason: Error) => setError(reason.message));
+      .catch((reason: Error) => setError(reason.message))
+      .finally(() => setBusy(false));
   }, []);
   useEffect(() => {
     onDirtyChange?.(dirty);
@@ -179,6 +184,7 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
   async function perform(action: () => Promise<void>) {
     setBusy(true);
     setError('');
+    setExistingRun(null);
     try {
       await action();
     } catch (reason) {
@@ -287,9 +293,15 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
   async function prepare() {
     if (!job || !review?.valid || dirty) return;
     await perform(async () => {
-      const run = await request<{ id: string }>('/api/runs/prepare', 'POST', {
+      const run = await request<PreparedRun>('/api/runs/prepare', 'POST', {
         job_id: job.id,
       });
+      // Prepare returns the matching unfinished or completed run instead of duplicating it.
+      if (run.existing) {
+        setExistingRun(run);
+        setStatus('Existing run returned');
+        return;
+      }
       setStatus('Preparation submitted');
       onRun?.(run.id);
     });
@@ -747,8 +759,8 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
               'Blocks to swap',
               'blocks_to_swap',
               job.family === 'wan'
-                ? '36 of 40 blocks is the reference default.'
-                : '48 of 54 blocks is the reference default; H2D-only swapping is required.',
+                ? '0–36 of 40 blocks; 36 is the reference default. 39 crashes in the upstream FP8 path and 37–38 are untested.'
+                : '0–48 of 50 blocks; 48 is the reference default and 49 is untested. H2D-only swapping is required.',
             )}
             {toggle('Gradient checkpointing', 'gradient_checkpointing')}
             {job.family === 'wan' ? (
@@ -817,6 +829,15 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
             </button>
           </div>
           {dirty && <p>Save the draft before reviewing or preparing it.</p>}
+          {review && existingRun && (
+            <p>
+              This revision already has a {existingRun.status} run with the same
+              inputs, so no new run was created.{' '}
+              <button onClick={() => onRun?.(existingRun.id)}>
+                Open existing run
+              </button>
+            </p>
+          )}
           {review && (
             <section className="panel" aria-label="Configuration review">
               <h2>Configuration review</h2>

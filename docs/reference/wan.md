@@ -102,12 +102,17 @@ configuration and arguments, sampled resources and GPU throttle reasons.
 | 36 blocks, 350 W, steeper fans | Trains                                              | 83.6 s       |
 | 36 blocks, 280 W, steeper fans | 200 steps, checkpoints and state at 100/200, sample | 79.1 s, flat |
 
+Job review therefore accepts 0–36 swapped blocks. 37 and 38 have not been run on
+this PC, so they are rejected until a short run qualifies them.
+
 The 200-step run took 4 h 22 min. Peak sampled values were 21.1 GiB device VRAM,
 18.2 GiB process-tree RSS and 34.1 GiB host RAM; RSS stayed at 16–18 GiB with no
 growth. Step time is bounded by GPU thermal slowdown, active in 68–77% of loaded
 samples at up to 68 °C core, not by VRAM or the power cap. Each rank-16 LoRA is
-306,848,376 bytes and each optimizer-state folder about 879 MiB; the final save
-duplicates the last interval save (#34). The 20-step sample at 832×480 × 33 frames
+306,848,376 bytes and each optimizer-state folder about 879 MiB. The final save
+duplicated the last interval save: identical tensors and state files, with only the
+date, epoch and finish time differing in the checkpoint header. The GUI now removes
+such proven copies after training (#34). The 20-step sample at 832×480 × 33 frames
 took about 9 minutes and decoded cleanly. Wan generation downloads the UMT5
 tokenizer into each run cache (#35).
 

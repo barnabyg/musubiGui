@@ -9,11 +9,11 @@ from pathlib import Path
 from typing import Any
 
 
-def tensor(file: Path) -> None:
+def tensor(file: Path, **metadata: str) -> None:
     """Write a tiny, labelled tensor container; it is never a usable model."""
     header = json.dumps(
         {
-            "__metadata__": {"purpose": "SYNTHETIC ACCEPTANCE FIXTURE, NOT A TRAINED MODEL"},
+            "__metadata__": {"purpose": "SYNTHETIC ACCEPTANCE FIXTURE, NOT A TRAINED MODEL", **metadata},
             "fixture.weight": {"dtype": "F32", "shape": [1], "data_offsets": [0, 4]},
         }
     ).encode("utf-8")
@@ -31,6 +31,7 @@ def main(stage: str | None = None) -> None:
     parser.add_argument("--output_dir", type=Path)
     parser.add_argument("--output_name", default="fixture")
     parser.add_argument("--max_train_steps", type=int, default=2)
+    parser.add_argument("--save_every_n_steps", type=int)
     parser.add_argument("--save_state", action="store_true")
     parser.add_argument("--resume", type=Path)
     parser.add_argument("--save_path", type=Path)
@@ -94,24 +95,17 @@ def main(stage: str | None = None) -> None:
             if not saved.get("synthetic"):
                 parser.error("fixture resumes accept only synthetic saved state")
             previous = int(saved["optimizer_step"])
-        for step in range(1, args.max_train_steps + 1):
-            time.sleep(0.5)
-            print(
-                f"steps: {step}/{args.max_train_steps} loss=0.0 (synthetic optimizer_step={previous + step})",
-                flush=True,
-            )
-        tensor(args.output_dir / f"{args.output_name}.safetensors")
-        if args.save_state:
-            state = args.output_dir / f"{args.output_name}-state"
+
+        def save_state(state: Path, step: int) -> None:
             state.mkdir(parents=True, exist_ok=True)
             (state / "trainer_state.json").write_text(
                 json.dumps(
                     {
                         "version": 1,
                         "synthetic": True,
-                        "global_step": args.max_train_steps,
-                        "optimizer_step": previous + args.max_train_steps,
-                        "segment_steps": args.max_train_steps,
+                        "global_step": step,
+                        "optimizer_step": previous + step,
+                        "segment_steps": step,
                     }
                 ),
                 encoding="utf-8",
@@ -120,6 +114,22 @@ def main(stage: str | None = None) -> None:
             tensor(state / "optimizer.bin")
             tensor(state / "random_states_0.pkl")
             (state / "scheduler.bin").write_text("synthetic scheduler", encoding="utf-8")
+
+        for step in range(1, args.max_train_steps + 1):
+            time.sleep(0.5)
+            print(
+                f"steps: {step}/{args.max_train_steps} loss=0.0 (synthetic optimizer_step={previous + step})",
+                flush=True,
+            )
+            # Like upstream, interval saves stamp their own metadata and include the last step.
+            if args.save_every_n_steps and step % args.save_every_n_steps == 0:
+                name = f"{args.output_name}-step{step:08d}"
+                tensor(args.output_dir / f"{name}.safetensors", saved=f"step {step}")
+                if args.save_state:
+                    save_state(args.output_dir / f"{name}-state", step)
+        tensor(args.output_dir / f"{args.output_name}.safetensors", saved="train end")
+        if args.save_state:
+            save_state(args.output_dir / f"{args.output_name}-state", args.max_train_steps)
     elif stage == "generate":
         if args.save_path is None:
             parser.error("--save_path is required for sample fixtures")

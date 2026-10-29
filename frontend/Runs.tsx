@@ -60,12 +60,17 @@ function SavedStates({
   >([]);
   const [steps, setSteps] = useState(1);
   const [error, setError] = useState('');
+  const [inspecting, setInspecting] = useState(false);
   async function inspect() {
+    // Inspection hashes every state file, which takes seconds for large folders.
+    setInspecting(true);
     try {
       setStates(await request(`/api/runs/${runId}/states`));
       setError('');
     } catch (reason) {
       setError((reason as Error).message);
+    } finally {
+      setInspecting(false);
     }
   }
   return (
@@ -77,7 +82,10 @@ function SavedStates({
         LoRA checkpoint alone cannot restore training state. Stopping does not
         guarantee a checkpoint or state save.
       </p>
-      <button onClick={() => void inspect()}>Inspect saved states</button>
+      <button disabled={inspecting} onClick={() => void inspect()}>
+        Inspect saved states
+      </button>
+      {inspecting && <p role="status">Checking saved states…</p>}
       {error && <p role="alert">{error}</p>}
       <label className="field">
         Additional segment steps

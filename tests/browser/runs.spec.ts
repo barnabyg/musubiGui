@@ -104,10 +104,44 @@ test('Wan and H3 prepare and train through the GUI with frozen captions cache re
           ),
         )
         .toBeGreaterThan(0);
-      await page
-        .getByRole('button', { name: 'Inspect saved states', exact: true })
-        .click();
+      const inspect = page.getByRole('button', {
+        name: 'Inspect saved states',
+        exact: true,
+      });
+      // Hold the hashing response to observe the busy state, then fail one request.
+      let release = () => {};
+      const held = new Promise<void>((resolve) => (release = resolve));
+      let requests = 0;
+      await page.route('**/api/runs/*/states', async (route) => {
+        requests += 1;
+        await held;
+        if (requests === 1) await route.continue();
+        else
+          await route.fulfill({
+            status: 500,
+            contentType: 'application/json',
+            body: JSON.stringify({ detail: 'State inspection failed.' }),
+          });
+      });
+      await inspect.click();
+      await expect(inspect).toBeDisabled();
+      await expect(
+        page.getByText('Checking saved states…', { exact: true }),
+      ).toBeVisible();
+      await inspect.click({ force: true });
+      release();
       await expect(page.getByText(/optimizer step 2/)).toBeVisible();
+      await expect(inspect).toBeEnabled();
+      expect(requests).toBe(1);
+      await inspect.click();
+      await expect(
+        page.getByRole('alert').filter({ hasText: 'State inspection failed.' }),
+      ).toBeVisible();
+      await expect(inspect).toBeEnabled();
+      await expect(
+        page.getByText('Checking saved states…', { exact: true }),
+      ).toBeHidden();
+      await page.unroute('**/api/runs/*/states');
     }
   } finally {
     await app.close();
@@ -244,6 +278,108 @@ test('a stopped training run shows the final status of its stopped stage', async
       page.locator('p', { hasText: /^train: stopped/ }),
     ).toBeVisible();
     await expect(page.getByRole('status')).toHaveText('GPU available');
+  } finally {
+    await app.close();
+  }
+});
+
+test('a gracefully stopped revision can be prepared and started again', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const app = await runWorkspace();
+  try {
+    const job = app.manifest.jobs[0];
+    const saved = (await (
+      await fetch(`${app.url}/api/jobs/${job.id}`)
+    ).json()) as {
+      name: string;
+      family: string;
+      dataset_id: string;
+      revision: number;
+      config: Record<string, unknown>;
+    };
+    await fetch(`${app.url}/api/jobs/${job.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...saved,
+        version: undefined,
+        id: undefined,
+        config: { ...saved.config, steps: 50 },
+      }),
+    });
+    const prepare = async () => {
+      await page.getByRole('button', { name: 'Jobs', exact: true }).click();
+      await page
+        .getByRole('button', { name: `${job.name} · WAN · r2`, exact: true })
+        .click();
+      await page
+        .getByRole('button', { name: 'Review configuration', exact: true })
+        .click();
+      await page
+        .getByRole('button', { name: 'Prepare run', exact: true })
+        .click();
+    };
+    await page.goto(app.url);
+    await prepare();
+    await expect(
+      page.getByText('State: prepared', { exact: true }),
+    ).toBeVisible({ timeout: 45_000 });
+    await page
+      .getByRole('button', { name: 'Start training', exact: true })
+      .click();
+    await expect(page.getByLabel('Run logs')).toContainText(
+      'SYNTHETIC ACCEPTANCE FIXTURE: train',
+    );
+    await page
+      .getByRole('button', { name: 'Request graceful stop', exact: true })
+      .click();
+    await expect(page.getByText('State: stopped', { exact: true })).toBeVisible(
+      { timeout: 45_000 },
+    );
+    const stopped = (await app.records()).find((run) => run.job.id === job.id)!;
+
+    // The stopped run no longer blocks preparing the same revision.
+    await prepare();
+    await expect(
+      page.getByText('State: prepared', { exact: true }),
+    ).toBeVisible({ timeout: 45_000 });
+    const fresh = (await app.records()).find(
+      (run) => run.job.id === job.id && run.id !== stopped.id,
+    )!;
+    expect(fresh.fingerprint).toBe(stopped.fingerprint);
+    expect(
+      fresh.stages.find((stage) => stage.name === 'latent_cache')?.status,
+    ).toBe('reused');
+
+    // Preparing again returns the new run and says so on the Jobs screen.
+    await prepare();
+    await expect(
+      page.getByText(/already has a prepared run with the same inputs/),
+    ).toBeVisible();
+    await page
+      .getByRole('button', { name: 'Open existing run', exact: true })
+      .click();
+    await expect(
+      page.getByText('State: prepared', { exact: true }),
+    ).toBeVisible();
+    expect(
+      (await app.records()).filter((run) => run.job.id === job.id),
+    ).toHaveLength(2);
+    await page
+      .getByRole('button', { name: 'Start training', exact: true })
+      .click();
+    await expect(page.getByLabel('Run logs')).toContainText(
+      'SYNTHETIC ACCEPTANCE FIXTURE: train',
+    );
+    page.once('dialog', (dialog) => void dialog.accept());
+    await page
+      .getByRole('button', { name: 'Force terminate', exact: true })
+      .click();
+    await expect(
+      page.getByText('State: stopped', { exact: true }),
+    ).toBeVisible();
   } finally {
     await app.close();
   }

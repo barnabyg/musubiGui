@@ -416,3 +416,33 @@ test('duplication presets cancelled conversion and versioned export import keep 
     await app.close();
   }
 });
+
+test('job actions wait for the initial load so it cannot replace new drafts', async ({
+  page,
+}) => {
+  const app = await workspace();
+  try {
+    let release = () => {};
+    const held = new Promise<void>((resolve) => (release = resolve));
+    await page.route('**/api/jobs/presets', async (route) => {
+      await held;
+      await route.continue();
+    });
+    await openJobs(page, app.url);
+    const create = page.getByRole('button', {
+      name: 'New Wan job',
+      exact: true,
+    });
+    await expect(create).toBeDisabled();
+    release();
+    await create.click();
+    await page.getByLabel('Job name', { exact: true }).fill('After load');
+    await page.getByRole('button', { name: 'Save draft', exact: true }).click();
+    await expect(page.getByRole('status')).toContainText('Draft saved');
+    await expect(
+      page.getByRole('button', { name: 'After load · WAN · r2', exact: true }),
+    ).toBeVisible();
+  } finally {
+    await app.close();
+  }
+});

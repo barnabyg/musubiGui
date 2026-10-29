@@ -17,10 +17,11 @@ from typing import Any
 
 import psutil
 
+from musubi_gui.checkpoint_dedup import remove_final_duplicates
 from musubi_gui.media_probe import inspect as inspect_media
 from musubi_gui.processes import identity_status, observed_tree, process_identity, terminate_owned
 from musubi_gui.reference import Stage, redact, reference_environment
-from musubi_gui.run_store import DeviceLease, RunStore
+from musubi_gui.run_store import DeviceLease, RunStore, blocks_revision
 from musubi_gui.saved_state import discover_states
 from musubi_gui.settings import Settings, atomic_json
 from musubi_gui.snapshots import (
@@ -98,9 +99,9 @@ class RunService:
         with preparation_transaction(self.root):
             inputs = identify_snapshot(self.root, job_id, fixture_mode=self.fixture_mode)
             for previous in self.list():
-                if previous["fingerprint"] == inputs.fingerprint and previous["status"] not in {"failed", "cancelled"}:
-                    return previous
-            return self.submit(ExecutionPlan(**materialize_snapshot(inputs)))
+                if blocks_revision(previous, inputs.fingerprint):
+                    return {**previous, "existing": True}
+            return {**self.submit(ExecutionPlan(**materialize_snapshot(inputs))), "existing": False}
 
     def start(self, run_id: str) -> dict[str, Any]:
         return self._request_training(run_id, allow_wait=False)
@@ -396,7 +397,7 @@ class RunService:
             },
             state_source={"path": state["path"], "files": state["files"]},
         )
-        for key in ["stop_requested", "stop_kind", "finished", "exit_code", "checkpoints"]:
+        for key in ["stop_requested", "stop_kind", "finished", "exit_code", "checkpoints", "removed_duplicates"]:
             record.pop(key, None)
         for stage in record["stages"]:
             if stage["name"] not in {"train", "generate"}:
@@ -582,10 +583,14 @@ class RunService:
                         raise ValueError(f"{stage['name']} returned success but produced no complete cache artifacts.")
                     self.store.update(run_id, lambda r: r["stages"][index].update(artifacts=artifacts))
                 elif stage["name"] == "train":
+                    removed = self._remove_final_duplicates(run, stage)
                     checkpoints = list((Path(run["directory"]) / "checkpoints").glob("*.safetensors"))
                     if not any(file.stat().st_size > 0 for file in checkpoints):
                         raise ValueError("Training exited successfully but no nonempty checkpoint was found.")
-                    self.store.update(run_id, lambda r: r.update(checkpoints=[str(file) for file in checkpoints]))
+                    self.store.update(
+                        run_id,
+                        lambda r: r.update(checkpoints=[str(file) for file in checkpoints], removed_duplicates=removed),
+                    )
                 elif stage["name"] == "generate":
                     samples = list((Path(run["directory"]) / "samples").rglob("*"))
                     media_files = [
@@ -636,6 +641,23 @@ class RunService:
                 if failure is None:
                     self.store.update(run_id, lambda r: r.update(processes=[], launch_pending=False))
                 self.device.release(run_id)
+
+    def _remove_final_duplicates(self, run: dict[str, Any], stage: dict[str, Any]) -> builtins.list[str]:
+        """Keep one copy of the final save when the step count is a multiple of the checkpoint interval."""
+        args = stage["args"]
+        if "--output_name" not in args or "--max_train_steps" not in args:
+            return []
+        log_file = Path(run["directory"]) / f"{stage['name']}.log"
+        removed, problems = remove_final_duplicates(
+            Path(run["directory"]) / "checkpoints",
+            args[args.index("--output_name") + 1],
+            int(args[args.index("--max_train_steps") + 1]),
+        )
+        lines = [f"Removed duplicate of the final save: {name}" for name in removed] + problems
+        if lines:
+            with log_file.open("a", encoding="utf-8") as log:
+                log.writelines(f"{line}\n" for line in lines)
+        return removed
 
     def _signal_stop(
         self, run_id: str, job_object: ProcessJob, identities: builtins.list[dict[str, Any]], signalled: str

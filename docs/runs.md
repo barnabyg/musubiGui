@@ -7,6 +7,14 @@ digest and stable runtime versions identify the snapshot; changing media bytes c
 a new identity even before an index re-scan. A request waiting over 30 seconds reports
 that another snapshot is being created and can be retried safely.
 
+Preparing an unchanged revision returns its existing Run, and the Jobs screen says
+so and links to it. A Run that ended without completing (failed, cancelled,
+stopped or interrupted) is not returned, unless it still records processes to
+reconcile: Prepare creates a fresh Run of the same revision, for example after a
+stop to change machine settings. Its caches are
+reused through the stage fingerprints below, and the earlier Run keeps its logs,
+outputs and saved states.
+
 Before copying media, each new snapshot writes a versioned `snapshot.json` containing
 its source manifest, settings and provenance. A directory with no published Run remains
 an incomplete snapshot; caught failures mark it `incomplete` and retain the evidence.
@@ -70,7 +78,21 @@ that grace period makes the Run orphaned instead.
 
 Enable saved optimizer state in the Job before training. After completion or a
 fully observed stop, Inspect saved states checks model/optimizer/scheduler/RNG
-files and records hashes. Missing, incomplete or changed files are rejected.
+files and records hashes. Hashing large state folders takes seconds; the panel
+shows that it is checking and accepts no repeat request until it finishes.
+Missing, incomplete or changed files are rejected.
+
+When the step count is a multiple of the checkpoint interval, the pinned upstream
+saves the last step twice: once as the interval save `<name>-stepN` and again as
+the final `<name>` checkpoint and `<name>-state`. After training succeeds, the
+interval copy is removed only when it is proven identical. Its checkpoint must
+have the same tensors and data. Its header metadata is ignored, since upstream
+writes a different save date, epoch and finish time into each copy. Every state file must have the same
+content hash. The final copies are always kept and are the ones Inspect saved
+states, Restore and sampling use. The training log names each removed copy; a
+copy that differs, or a check that fails, is kept. A state removal that fails
+partway leaves a hidden `.<name>.duplicate` folder, which is never offered for
+restoration; the log names it so it can be deleted.
 Restore as new segment preserves the original Job/Run and records lineage and
 the requested additional steps. The pinned upstream restores optimizer state
 but resets its displayed step counter and data position; seamless continuation

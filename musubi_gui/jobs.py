@@ -27,6 +27,9 @@ _lock = threading.RLock()
 # upstream and is not indexed by this application's gallery.
 TRAINING_IMAGES = frozenset({".png", ".jpg", ".jpeg", ".webp", ".bmp", ".avif"})
 TRAINING_VIDEOS = frozenset({".mp4", ".webm", ".avi", ".mkv", ".mov", ".flv", ".wmv", ".m4v", ".mpg", ".mpeg"})
+# Highest block-swap values that trained on the target PC (docs/reference); higher ones are unqualified.
+WAN_MAX_BLOCKS_TO_SWAP = 36
+H3_MAX_BLOCKS_TO_SWAP = 48
 
 
 class JobConfig(BaseModel):
@@ -386,8 +389,11 @@ def configuration_errors(job: Job) -> list[str]:
             errors.append("Geometry: Wan width and height must be at least 64 and multiples of 16.")
         if config.frames < 1 or (config.frames - 1) % 4:
             errors.append("Frames: Wan requires 4*n+1 frames.")
-        if not 0 <= config.blocks_to_swap <= 39:
-            errors.append("Block swapping: select between 0 and 39 Wan blocks.")
+        if not 0 <= config.blocks_to_swap <= WAN_MAX_BLOCKS_TO_SWAP:
+            errors.append(
+                f"Block swapping: select between 0 and {WAN_MAX_BLOCKS_TO_SWAP} Wan blocks. "
+                "39 fails at step 0 in the pinned upstream FP8 linear patch; 37 and 38 are untested."
+            )
         if not config.fp8_scaled:
             errors.append("Memory: runtime FP8 scaling from native FP16 weights is required by this Wan recipe.")
         if config.block_swap_h2d_only:
@@ -406,8 +412,11 @@ def configuration_errors(job: Job) -> list[str]:
             errors.append("Geometry: H3 width and height must be at least 64 and multiples of 32.")
         if not 124 <= config.frames <= 345 or (config.frames - 5) % 17:
             errors.append("Frames: H3 requires 17*n+5 frames in the released 124–345 range.")
-        if not 0 <= config.blocks_to_swap <= 53:
-            errors.append("Block swapping: select between 0 and 53 H3 blocks.")
+        if not 0 <= config.blocks_to_swap <= H3_MAX_BLOCKS_TO_SWAP:
+            errors.append(
+                f"Block swapping: select between 0 and {H3_MAX_BLOCKS_TO_SWAP} of the 50 H3 blocks; "
+                "higher values are untested."
+            )
         if config.fp8_scaled:
             errors.append("Memory: H3 does not support FP8 transformer weights/runtime scaling.")
         if not config.block_swap_h2d_only:
