@@ -157,6 +157,20 @@ def diagnostics(settings: Settings) -> dict[str, Any]:
             )
     if not settings.model_roots:
         check("Models", "warning", "Configure local model roots and component paths before reference runs.")
+    for name, roots, note in [
+        ("Model roots", settings.model_roots, ""),
+        ("Dataset roots", settings.dataset_roots, " Creating a managed dataset creates a missing root."),
+    ]:
+        absent = [root for root in roots if not Path(root).is_dir()]
+        if absent:
+            check(
+                name,
+                "warning",
+                "Not an existing folder: "
+                + "; ".join(absent)
+                + ". Check for mistyped or joined paths; put each root on its own line."
+                + note,
+            )
     for name, value in settings.models.items():
         if value and not Path(value).is_file():
             check(name, "error", "Model component is missing; select an existing file inside a configured model root.")

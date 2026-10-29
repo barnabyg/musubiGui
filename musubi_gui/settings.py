@@ -5,7 +5,7 @@ import os
 import tempfile
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class Settings(BaseModel):
@@ -19,6 +19,11 @@ class Settings(BaseModel):
     models: dict[str, str] = Field(default_factory=dict)
     output_root: str = ""
     cache_root: str = ""
+
+    @field_validator("model_roots", "dataset_roots")
+    @classmethod
+    def _drop_blank_roots(cls, roots: list[str]) -> list[str]:
+        return [root.strip() for root in roots if root.strip()]
 
 
 def state_root() -> Path:
