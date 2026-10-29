@@ -60,6 +60,9 @@ Request graceful stop first. Windows console signalling can be unavailable for
 some launch environments; inspect the reported result and use the separately
 confirmed Force terminate action when necessary. Neither action promises a save
 on stop. Only the observed process tree belonging to that Run is signalled.
+A graceful stop sends one console break to the stage launcher's process group,
+which its descendants share; if the launcher has already exited, nothing is left
+to signal gracefully and remaining descendants need Force terminate.
 When the launcher exits, its descendants, such as the Python child behind a
 virtual-environment launcher, get up to 30 seconds to finish exiting. The Run then
 becomes stopped and its active stage shows stopped. A descendant still alive after

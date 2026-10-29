@@ -125,7 +125,11 @@ excludes the existing/derived source weights. The original Wan GUI run completed
 in a preceding harness attempt: its durable stage timings survived, while its
 peak telemetry did not. Separate reference and restoration measurements remain.
 Playback was muted; audible quality and useful learning were not human-reviewed.
-Two steps and four inference steps do not establish production capacity.
+Two steps and four inference steps do not establish production capacity. The later
+[production-size trial](reference/evidence/production-trial.json) qualified Wan at
+832×480 × 33 frames, rank 16 and H3 at 640×352 × 124 frames, rank 8 on the target PC;
+these are the Measured presets described in [Jobs](jobs.md). Useful learning and H3
+audio quality still need a human review of a full-length training run.
 
 The [clean-checkout record](reference/evidence/clean-checkout.json) confirms the
 documented launch command installed locked app dependencies, served UI assets and

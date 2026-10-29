@@ -27,10 +27,11 @@ Original media is preserved. The native dataset builder uses the same pinned med
 extension lists as preflight, so supported PNG images remain image datasets.
 
 The small default is 256×256, 17 frames, batch one, rank/alpha eight and two steps.
-Changing capacity controls requires capacity validation on Windows 11 / RTX 3090 /
-96 GB RAM. Draft validation is not proof of successful GPU execution. Sampling runs
-after training and can be disabled; no checkpoint-on-stop guarantee is made. Saving
-optimizer/training state is distinct from saving LoRA weights.
+It remains the quick execution check. Changing capacity controls requires capacity
+validation on Windows 11 / RTX 3090 / 96 GB RAM; the two measured presets below are
+the configurations validated so far. Draft validation is not proof of successful GPU
+execution. Sampling runs after training and can be disabled; no checkpoint-on-stop
+guarantee is made. Saving optimizer/training state is distinct from saving LoRA weights.
 
 Focused checks: `npm.cmd run typecheck` and
 `.venv\Scripts\python.exe -m pytest tests/python/test_jobs_api.py -q`. Browser checks
@@ -85,10 +86,30 @@ is repaired or silently discarded. The selected audio VAE remains mandatory.
 
 Duplicate job creates an independent identity and output destination. Save as preset
 records named model-specific controls; Apply preset creates a new job revision while
-retaining that job's name and dataset selection. Model conversion first previews every
-changed model/task-specific field. Cancel leaves the previous draft intact; Accept
-creates a revision while retaining the old revision for comparison. Incompatible
-components and memory/recipe/frame defaults reset, and shared controls remain.
+retaining that job's name and dataset selection.
+
+Two built-in **Measured** presets carry the largest configurations that trained on
+the target PC during the production trial
+([evidence](reference/evidence/production-trial.json)):
+
+| Preset                                       | Size    | Frames | Rank/alpha | Memory                                           | Measured step time |
+| -------------------------------------------- | ------- | ------ | ---------- | ------------------------------------------------ | ------------------ |
+| Measured · Wan 832×480 · 33 frames · rank 16 | 832×480 | 33     | 16/16      | 36 swapped blocks, runtime FP8, checkpointing    | ~79 s at 280 W     |
+| Measured · H3 640×352 · 124 frames · rank 8  | 640×352 | 124    | 8/8        | 48 of 50 blocks streamed H2D-only, checkpointing | ~71 s at 245 W     |
+
+Applying a measured preset replaces only width, height, frames, batch size, rank,
+alpha and the memory controls. Model components, prompt, steps, learning rate, seed
+and checkpoint/state cadence keep the job's values, so set the step count yourself.
+Saved presets still replace every setting. Measured presets are part of the
+application, are never written to the presets folder and do not change existing
+jobs. Step times depend on cooling and the GPU power limit: the same Wan job ran at
+79–95 s/step on this PC as fan and power settings changed. H3 at 832×480 × 124 frames
+ran out of VRAM at the first training step, so larger H3 sizes are not qualified.
+
+Model conversion first previews every changed model/task-specific field. Cancel
+leaves the previous draft intact; Accept creates a revision while retaining the old
+revision for comparison. Incompatible components and memory/recipe/frame defaults
+reset, and shared controls remain.
 
 Import / export configuration downloads or accepts strict `musubi-gui-job` version 1
 JSON. Reimport creates an independent job. Unknown versions, formats and fields are

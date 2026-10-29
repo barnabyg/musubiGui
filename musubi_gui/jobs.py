@@ -128,6 +128,43 @@ class Preset(NamedPreset):
     config: JobConfig
 
 
+# Capacity configurations measured on the target PC in #26; see docs/reference/evidence/production-trial.json.
+# Applying one replaces only these memory-bound controls, so model components, prompt, steps,
+# learning rate and checkpoint cadence stay as the job has them.
+MEASURED_CONTROLS = (
+    "width",
+    "height",
+    "frames",
+    "batch_size",
+    "rank",
+    "alpha",
+    "blocks_to_swap",
+    "gradient_checkpointing",
+    "fp8_scaled",
+    "offload_inactive_dit",
+    "block_swap_h2d_only",
+)
+MEASURED_PRESETS = {
+    preset.id: preset
+    for preset in [
+        Preset(
+            id="measured-wan-832x480x33-r16",
+            name="Measured · Wan 832×480 · 33 frames · rank 16",
+            family="wan",
+            config=default_config("wan").model_copy(
+                update={"width": 832, "height": 480, "frames": 33, "rank": 16, "alpha": 16, "blocks_to_swap": 36}
+            ),
+        ),
+        Preset(
+            id="measured-h3-640x352x124-r8",
+            name="Measured · H3 640×352 · 124 frames · rank 8",
+            family="h3",
+            config=default_config("h3").model_copy(update={"width": 640, "height": 352, "rank": 8, "alpha": 8}),
+        ),
+    ]
+}
+
+
 class PresetSelection(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -284,7 +321,7 @@ class JobStore:
             return job
 
     def presets(self) -> builtins.list[Preset]:
-        return [
+        return [*MEASURED_PRESETS.values()] + [
             Preset.model_validate_json(file.read_text(encoding="utf-8"))
             for file in sorted((self.root.parent / "presets").glob("*.json"))
         ]
@@ -302,15 +339,24 @@ class JobStore:
     def apply_preset(self, job_id: str, selection: PresetSelection) -> Job:
         with _lock:
             job = self.get(job_id)
-            identifier(selection.preset_id)
-            preset = Preset.model_validate_json(
-                (self.root.parent / "presets" / f"{selection.preset_id}.json").read_text(encoding="utf-8")
-            )
-            if preset.id != selection.preset_id:
-                raise ValueError("Preset identity mismatch; preserve its file before repair.")
+            measured = MEASURED_PRESETS.get(selection.preset_id)
+            if measured:
+                preset = measured
+            else:
+                identifier(selection.preset_id)
+                preset = Preset.model_validate_json(
+                    (self.root.parent / "presets" / f"{selection.preset_id}.json").read_text(encoding="utf-8")
+                )
+                if preset.id != selection.preset_id:
+                    raise ValueError("Preset identity mismatch; preserve its file before repair.")
             if job.family != preset.family:
                 raise ValueError("This preset belongs to another model. Preview and accept a model conversion first.")
-            draft = as_draft(job).model_copy(update={"config": preset.config})
+            config = (
+                job.config.model_copy(update={key: getattr(preset.config, key) for key in MEASURED_CONTROLS})
+                if measured
+                else preset.config
+            )
+            draft = as_draft(job).model_copy(update={"config": config})
             return self.save(job_id, draft, selection.revision)
 
 

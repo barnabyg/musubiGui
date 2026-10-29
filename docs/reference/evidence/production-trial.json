@@ -1,0 +1,2134 @@
+{
+  "version": 1,
+  "issue": "https://github.com/barnabyg/musubiGui/issues/26",
+  "application_revision": "53bb6c0873266404eecd5b660e1a2dffa22b98ff",
+  "expected_upstream": "f8a1b03794a49239a3539015075f5123d6c07d66",
+  "environment": {
+    "python": "3.12.10",
+    "platform": "Windows-11-10.0.26300-SP0",
+    "packages": {
+      "torch": "2.13.0+cu130",
+      "accelerate": "1.15.0",
+      "safetensors": "0.8.0",
+      "transformers": "5.17.0",
+      "av": "17.1.0",
+      "musubi-tuner": "0.3.6"
+    },
+    "preprocessing_packages": {
+      "pillow": "12.3.0",
+      "numpy": "2.5.2",
+      "tokenizers": "0.23.2",
+      "sentencepiece": "0.2.1",
+      "torchvision": "0.28.0+cu130",
+      "torchaudio": null,
+      "scipy": null,
+      "einops": "0.7.0"
+    },
+    "cuda": "13.0",
+    "cuda_available": true,
+    "gpu": {
+      "name": "NVIDIA GeForce RTX 3090",
+      "vram_bytes": 25769279488
+    }
+  },
+  "host_ram_bytes": 102665969664,
+  "measurement_limits": "Resources sampled every ~2 s with nvidia-smi and psutil from an external logger, not the application. VRAM is whole-device and includes other applications (~0.9 GiB idle desktop baseline). Process RSS sums musubi-tuner python trees. Disk deltas are free-space changes on C: and include unrelated activity. GPU clock, temperature and throttle-reason samples count only rows above 50% utilisation. Seconds per step is the final tqdm average. Runs 352bca2c, 68cb10f0 and da1d21c7 ran after the loggers stopped and have no resource samples. GPU power limits were set by the owner in MSI Afterburner and are read from nvidia-smi: 280 W for the Wan runs except A3 (350 W), 245 W for the H3 probes; runs without samples have no recorded limit. The fan profile was steepened by the owner during A3. The backend ran successive main revisions during the day (fixes for #27-#30 landed between runs); application_revision is the revision at the end of the trial.",
+  "runs": [
+    {
+      "run": "30339408",
+      "purpose": "A0 baseline, pre-#27 application code; stopped at step 27",
+      "power_limit_w": "280.00 W",
+      "job": "wan-step1 susan 832x480x33 r16",
+      "job_revision": 3,
+      "family": "wan",
+      "config": {
+        "recipe": "low-noise",
+        "width": 832,
+        "height": 480,
+        "frames": 33,
+        "frame_extraction": null,
+        "batch_size": 1,
+        "rank": 16,
+        "alpha": 16,
+        "learning_rate": 0.0001,
+        "steps": 500,
+        "gradient_accumulation": 1,
+        "blocks_to_swap": 36,
+        "gradient_checkpointing": true,
+        "fp8_scaled": true,
+        "block_swap_h2d_only": false,
+        "save_every": 100,
+        "save_state": true,
+        "sample_enabled": true,
+        "sample_steps": 20,
+        "seed": 42
+      },
+      "dataset": "susan_wan",
+      "included_items": 28,
+      "status": "interrupted",
+      "created_utc": "2026-10-29T07:50:35.516395+00:00",
+      "finished_utc": "2026-10-29T07:53:59.033329+00:00",
+      "stages": [
+        {
+          "name": "latent_cache",
+          "status": "completed",
+          "exit_code": 0,
+          "elapsed_seconds": 167.6,
+          "resources": {
+            "samples": 81,
+            "peak_device_vram_bytes": 7346323456,
+            "peak_process_tree_rss_bytes": 4434553733,
+            "peak_host_used_bytes": 19048179958,
+            "disk_free_delta_bytes": 42949673
+          }
+        },
+        {
+          "name": "text_cache",
+          "status": "completed",
+          "exit_code": 0,
+          "elapsed_seconds": 32.5,
+          "resources": {
+            "samples": 16,
+            "peak_device_vram_bytes": 8623489024,
+            "peak_process_tree_rss_bytes": 12541304504,
+            "peak_host_used_bytes": 26907970109,
+            "disk_free_delta_bytes": 32212255
+          }
+        },
+        {
+          "name": "train",
+          "status": "interrupted",
+          "exit_code": null,
+          "elapsed_seconds": 4215.1,
+          "resources": {
+            "samples": 2046,
+            "peak_device_vram_bytes": 22535995392,
+            "peak_process_tree_rss_bytes": 19252190904,
+            "peak_host_used_bytes": 33683281019,
+            "disk_free_delta_bytes": 1428076626
+          },
+          "gpu": {
+            "loaded_samples": 454,
+            "power_limit_w": ["280.00 W"],
+            "temperature_c": {
+              "mean": 66.2,
+              "max": 71.19
+            },
+            "sm_clock_mhz_mean": 1002,
+            "power_w": {
+              "mean": 209,
+              "max": 280.07
+            },
+            "fan_percent": {
+              "min": 38.0,
+              "max": 45.0
+            },
+            "sw_thermal_slowdown_percent": 76.9,
+            "sw_power_cap_percent": 22.9,
+            "hw_slowdown_percent": 0.0
+          },
+          "progress": {
+            "completed": 27,
+            "total": 500,
+            "elapsed": "40:57",
+            "seconds_per_step": 94.53
+          }
+        },
+        {
+          "name": "generate",
+          "status": "pending",
+          "exit_code": null
+        }
+      ],
+      "train_args": [
+        "C:/ai/musubi-tuner/.venv/Scripts/python.exe",
+        "-X",
+        "utf8",
+        "-B",
+        "-m",
+        "accelerate.commands.launch",
+        "--num_processes",
+        "1",
+        "--num_machines",
+        "1",
+        "--dynamo_backend",
+        "no",
+        "--num_cpu_threads_per_process",
+        "1",
+        "--mixed_precision",
+        "fp16",
+        "C:\\ai\\musubi-tuner\\wan_train_network.py",
+        "--task",
+        "t2v-A14B",
+        "--dit",
+        "C:\\docs\\git\\musubiGui\\models\\wan-dit\\split_files\\diffusion_models\\wan2.2_t2v_low_noise_14B_fp16.safetensors",
+        "--dataset_config",
+        "C:\\docs\\git\\musubiGui\\outputs\\runs\\f07b383ffaa14aafa1b47213722b752f\\dataset.toml",
+        "--sdpa",
+        "--mixed_precision",
+        "fp16",
+        "--fp8_base",
+        "--fp8_scaled",
+        "--blocks_to_swap",
+        "36",
+        "--gradient_checkpointing",
+        "--optimizer_type",
+        "AdamW",
+        "--learning_rate",
+        "0.0001",
+        "--max_data_loader_n_workers",
+        "0",
+        "--network_module",
+        "networks.lora_wan",
+        "--network_dim",
+        "16",
+        "--network_alpha",
+        "16",
+        "--timestep_sampling",
+        "shift",
+        "--discrete_flow_shift",
+        "3.0",
+        "--min_timestep",
+        "0",
+        "--max_timestep",
+        "875",
+        "--preserve_distribution_shape",
+        "--max_train_steps",
+        "500",
+        "--save_every_n_steps",
+        "100",
+        "--seed",
+        "42",
+        "--output_dir",
+        "C:\\docs\\git\\musubiGui\\outputs\\runs\\f07b383ffaa14aafa1b47213722b752f\\checkpoints",
+        "--output_name",
+        "wan-ec01763ca385489d8eb93577ac0a8607",
+        "--gradient_accumulation_steps",
+        "1",
+        "--save_state",
+        "--save_state_on_train_end"
+      ],
+      "checkpoints": [],
+      "saved_states": [],
+      "samples": []
+    },
+    {
+      "run": "dd98e24d",
+      "purpose": "A1 blocks_to_swap 39",
+      "power_limit_w": null,
+      "job": "tune-A1 swap39 832x480x33 r16 10st",
+      "job_revision": 2,
+      "family": "wan",
+      "config": {
+        "recipe": "low-noise",
+        "width": 832,
+        "height": 480,
+        "frames": 33,
+        "frame_extraction": "head",
+        "batch_size": 1,
+        "rank": 16,
+        "alpha": 16,
+        "learning_rate": 0.0001,
+        "steps": 10,
+        "gradient_accumulation": 1,
+        "blocks_to_swap": 39,
+        "gradient_checkpointing": true,
+        "fp8_scaled": true,
+        "block_swap_h2d_only": false,
+        "save_every": 10,
+        "save_state": false,
+        "sample_enabled": false,
+        "sample_steps": 20,
+        "seed": 42
+      },
+      "dataset": "susan_wan",
+      "included_items": 28,
+      "status": "failed",
+      "created_utc": "2026-10-29T08:51:58.879832+00:00",
+      "finished_utc": "2026-10-29T08:56:12.788245+00:00",
+      "stages": [
+        {
+          "name": "latent_cache",
+          "status": "completed",
+          "exit_code": 0,
+          "elapsed_seconds": 155.3,
+          "resources": {
+            "samples": 75,
+            "peak_device_vram_bytes": 7574913024,
+            "peak_process_tree_rss_bytes": 4498978243,
+            "peak_host_used_bytes": 18865643848,
+            "disk_free_delta_bytes": 42949673
+          }
+        },
+        {
+          "name": "text_cache",
+          "status": "completed",
+          "exit_code": 0,
+          "elapsed_seconds": 23.7,
+          "resources": {
+            "samples": 12,
+            "peak_device_vram_bytes": 8863612928,
+            "peak_process_tree_rss_bytes": 12466142577,
+            "peak_host_used_bytes": 26854283018,
+            "disk_free_delta_bytes": 32212255
+          }
+        },
+        {
+          "name": "train",
+          "status": "failed",
+          "exit_code": 1,
+          "elapsed_seconds": 38.2,
+          "resources": {
+            "samples": 18,
+            "peak_device_vram_bytes": 19538116608,
+            "peak_process_tree_rss_bytes": 19252190904,
+            "peak_host_used_bytes": 33683281019,
+            "disk_free_delta_bytes": 0
+          },
+          "gpu": null,
+          "progress": null,
+          "error": "RuntimeError: Expected all tensors to be on the same device, but found at least two devices, cuda:0 and cpu!"
+        }
+      ],
+      "train_args": [
+        "C:/ai/musubi-tuner/.venv/Scripts/python.exe",
+        "-X",
+        "utf8",
+        "-B",
+        "-m",
+        "accelerate.commands.launch",
+        "--num_processes",
+        "1",
+        "--num_machines",
+        "1",
+        "--dynamo_backend",
+        "no",
+        "--num_cpu_threads_per_process",
+        "1",
+        "--mixed_precision",
+        "fp16",
+        "C:\\ai\\musubi-tuner\\wan_train_network.py",
+        "--task",
+        "t2v-A14B",
+        "--dit",
+        "C:\\docs\\git\\musubiGui\\models\\wan-dit\\split_files\\diffusion_models\\wan2.2_t2v_low_noise_14B_fp16.safetensors",
+        "--dataset_config",
+        "C:\\docs\\git\\musubiGui\\outputs\\runs\\d6da2c1794624ca6b69d3b2f2c3ca97b\\dataset.toml",
+        "--sdpa",
+        "--mixed_precision",
+        "fp16",
+        "--fp8_base",
+        "--fp8_scaled",
+        "--blocks_to_swap",
+        "39",
+        "--gradient_checkpointing",
+        "--optimizer_type",
+        "AdamW",
+        "--learning_rate",
+        "0.0001",
+        "--max_data_loader_n_workers",
+        "0",
+        "--network_module",
+        "networks.lora_wan",
+        "--network_dim",
+        "16",
+        "--network_alpha",
+        "16",
+        "--timestep_sampling",
+        "shift",
+        "--discrete_flow_shift",
+        "3.0",
+        "--min_timestep",
+        "0",
+        "--max_timestep",
+        "875",
+        "--preserve_distribution_shape",
+        "--max_train_steps",
+        "10",
+        "--save_every_n_steps",
+        "10",
+        "--seed",
+        "42",
+        "--output_dir",
+        "C:\\docs\\git\\musubiGui\\outputs\\runs\\d6da2c1794624ca6b69d3b2f2c3ca97b\\checkpoints",
+        "--output_name",
+        "wan-33035f88b4d042f59f4a1a98f5aa9828",
+        "--gradient_accumulation_steps",
+        "1"
+      ],
+      "checkpoints": [],
+      "saved_states": [],
+      "samples": []
+    },
+    {
+      "run": "f33d0315",
+      "purpose": "A2 baseline repeat with 200 ms VRAM sampling",
+      "power_limit_w": "280.00 W",
+      "job": "tune-A2 swap36 baseline clocks 10st",
+      "job_revision": 2,
+      "family": "wan",
+      "config": {
+        "recipe": "low-noise",
+        "width": 832,
+        "height": 480,
+        "frames": 33,
+        "frame_extraction": "head",
+        "batch_size": 1,
+        "rank": 16,
+        "alpha": 16,
+        "learning_rate": 0.0001,
+        "steps": 10,
+        "gradient_accumulation": 1,
+        "blocks_to_swap": 36,
+        "gradient_checkpointing": true,
+        "fp8_scaled": true,
+        "block_swap_h2d_only": false,
+        "save_every": 10,
+        "save_state": false,
+        "sample_enabled": false,
+        "sample_steps": 20,
+        "seed": 42
+      },
+      "dataset": "susan_wan",
+      "included_items": 28,
+      "status": "completed",
+      "created_utc": "2026-10-29T08:58:44.811443+00:00",
+      "finished_utc": "2026-10-29T09:14:32.876473+00:00",
+      "stages": [
+        {
+          "name": "latent_cache",
+          "status": "reused",
+          "exit_code": 0
+        },
+        {
+          "name": "text_cache",
+          "status": "reused",
+          "exit_code": 0
+        },
+        {
+          "name": "train",
+          "status": "completed",
+          "exit_code": 0,
+          "elapsed_seconds": 934.2,
+          "resources": {
+            "samples": 452,
+            "peak_device_vram_bytes": 22535995392,
+            "peak_process_tree_rss_bytes": 18060337480,
+            "peak_host_used_bytes": 33683281019,
+            "disk_free_delta_bytes": 697932186
+          },
+          "gpu": {
+            "loaded_samples": 454,
+            "power_limit_w": ["280.00 W"],
+            "temperature_c": {
+              "mean": 66.2,
+              "max": 71.19
+            },
+            "sm_clock_mhz_mean": 1002,
+            "power_w": {
+              "mean": 209,
+              "max": 280.07
+            },
+            "fan_percent": {
+              "min": 38.0,
+              "max": 45.0
+            },
+            "sw_thermal_slowdown_percent": 76.9,
+            "sw_power_cap_percent": 22.9,
+            "hw_slowdown_percent": 0.0
+          },
+          "progress": {
+            "completed": 10,
+            "total": 10,
+            "elapsed": "14:04",
+            "seconds_per_step": 93.84
+          }
+        }
+      ],
+      "train_args": [
+        "C:/ai/musubi-tuner/.venv/Scripts/python.exe",
+        "-X",
+        "utf8",
+        "-B",
+        "-m",
+        "accelerate.commands.launch",
+        "--num_processes",
+        "1",
+        "--num_machines",
+        "1",
+        "--dynamo_backend",
+        "no",
+        "--num_cpu_threads_per_process",
+        "1",
+        "--mixed_precision",
+        "fp16",
+        "C:\\ai\\musubi-tuner\\wan_train_network.py",
+        "--task",
+        "t2v-A14B",
+        "--dit",
+        "C:\\docs\\git\\musubiGui\\models\\wan-dit\\split_files\\diffusion_models\\wan2.2_t2v_low_noise_14B_fp16.safetensors",
+        "--dataset_config",
+        "C:\\docs\\git\\musubiGui\\outputs\\runs\\8ef35fdacc344a93a2df63e2139bf1c5\\dataset.toml",
+        "--sdpa",
+        "--mixed_precision",
+        "fp16",
+        "--fp8_base",
+        "--fp8_scaled",
+        "--blocks_to_swap",
+        "36",
+        "--gradient_checkpointing",
+        "--optimizer_type",
+        "AdamW",
+        "--learning_rate",
+        "0.0001",
+        "--max_data_loader_n_workers",
+        "0",
+        "--network_module",
+        "networks.lora_wan",
+        "--network_dim",
+        "16",
+        "--network_alpha",
+        "16",
+        "--timestep_sampling",
+        "shift",
+        "--discrete_flow_shift",
+        "3.0",
+        "--min_timestep",
+        "0",
+        "--max_timestep",
+        "875",
+        "--preserve_distribution_shape",
+        "--max_train_steps",
+        "10",
+        "--save_every_n_steps",
+        "10",
+        "--seed",
+        "42",
+        "--output_dir",
+        "C:\\docs\\git\\musubiGui\\outputs\\runs\\8ef35fdacc344a93a2df63e2139bf1c5\\checkpoints",
+        "--output_name",
+        "wan-8b2b0b6a20ed4a7ca49d6ec55923c322",
+        "--gradient_accumulation_steps",
+        "1"
+      ],
+      "checkpoints": [
+        {
+          "name": "wan-8b2b0b6a20ed4a7ca49d6ec55923c322-step00000010.safetensors",
+          "bytes": 306848376
+        },
+        {
+          "name": "wan-8b2b0b6a20ed4a7ca49d6ec55923c322.safetensors",
+          "bytes": 306848376
+        }
+      ],
+      "saved_states": [],
+      "samples": []
+    },
+    {
+      "run": "f581eb20",
+      "purpose": "A3 Afterburner power limit raised to 350 W, steeper fan curve",
+      "power_limit_w": "350.00 W",
+      "job": "tune-A3 swap36 afterburner100 10st",
+      "job_revision": 2,
+      "family": "wan",
+      "config": {
+        "recipe": "low-noise",
+        "width": 832,
+        "height": 480,
+        "frames": 33,
+        "frame_extraction": "head",
+        "batch_size": 1,
+        "rank": 16,
+        "alpha": 16,
+        "learning_rate": 0.0001,
+        "steps": 10,
+        "gradient_accumulation": 1,
+        "blocks_to_swap": 36,
+        "gradient_checkpointing": true,
+        "fp8_scaled": true,
+        "block_swap_h2d_only": false,
+        "save_every": 10,
+        "save_state": false,
+        "sample_enabled": false,
+        "sample_steps": 20,
+        "seed": 42
+      },
+      "dataset": "susan_wan",
+      "included_items": 28,
+      "status": "completed",
+      "created_utc": "2026-10-29T09:20:47.133162+00:00",
+      "finished_utc": "2026-10-29T09:34:59.919187+00:00",
+      "stages": [
+        {
+          "name": "latent_cache",
+          "status": "reused",
+          "exit_code": 0
+        },
+        {
+          "name": "text_cache",
+          "status": "reused",
+          "exit_code": 0
+        },
+        {
+          "name": "train",
+          "status": "completed",
+          "exit_code": 0,
+          "elapsed_seconds": 838.3,
+          "resources": {
+            "samples": 407,
+            "peak_device_vram_bytes": 22572695552,
+            "peak_process_tree_rss_bytes": 18038862643,
+            "peak_host_used_bytes": 33328946217,
+            "disk_free_delta_bytes": 622770258
+          },
+          "gpu": {
+            "loaded_samples": 407,
+            "power_limit_w": ["350.00 W"],
+            "temperature_c": {
+              "mean": 63.7,
+              "max": 71.16
+            },
+            "sm_clock_mhz_mean": 1202,
+            "power_w": {
+              "mean": 239,
+              "max": 349.45
+            },
+            "fan_percent": {
+              "min": 37.0,
+              "max": 86.0
+            },
+            "sw_thermal_slowdown_percent": 75.7,
+            "sw_power_cap_percent": 24.6,
+            "hw_slowdown_percent": 0.0
+          },
+          "progress": {
+            "completed": 10,
+            "total": 10,
+            "elapsed": "12:32",
+            "seconds_per_step": 83.64
+          }
+        }
+      ],
+      "train_args": [
+        "C:/ai/musubi-tuner/.venv/Scripts/python.exe",
+        "-X",
+        "utf8",
+        "-B",
+        "-m",
+        "accelerate.commands.launch",
+        "--num_processes",
+        "1",
+        "--num_machines",
+        "1",
+        "--dynamo_backend",
+        "no",
+        "--num_cpu_threads_per_process",
+        "1",
+        "--mixed_precision",
+        "fp16",
+        "C:\\ai\\musubi-tuner\\wan_train_network.py",
+        "--task",
+        "t2v-A14B",
+        "--dit",
+        "C:\\docs\\git\\musubiGui\\models\\wan-dit\\split_files\\diffusion_models\\wan2.2_t2v_low_noise_14B_fp16.safetensors",
+        "--dataset_config",
+        "C:\\docs\\git\\musubiGui\\outputs\\runs\\affd522bbf8f4e3ba85780bd20d4e3c9\\dataset.toml",
+        "--sdpa",
+        "--mixed_precision",
+        "fp16",
+        "--fp8_base",
+        "--fp8_scaled",
+        "--blocks_to_swap",
+        "36",
+        "--gradient_checkpointing",
+        "--optimizer_type",
+        "AdamW",
+        "--learning_rate",
+        "0.0001",
+        "--max_data_loader_n_workers",
+        "0",
+        "--network_module",
+        "networks.lora_wan",
+        "--network_dim",
+        "16",
+        "--network_alpha",
+        "16",
+        "--timestep_sampling",
+        "shift",
+        "--discrete_flow_shift",
+        "3.0",
+        "--min_timestep",
+        "0",
+        "--max_timestep",
+        "875",
+        "--preserve_distribution_shape",
+        "--max_train_steps",
+        "10",
+        "--save_every_n_steps",
+        "10",
+        "--seed",
+        "42",
+        "--output_dir",
+        "C:\\docs\\git\\musubiGui\\outputs\\runs\\affd522bbf8f4e3ba85780bd20d4e3c9\\checkpoints",
+        "--output_name",
+        "wan-969beec1132441728702e4b3ca0042ca",
+        "--gradient_accumulation_steps",
+        "1"
+      ],
+      "checkpoints": [
+        {
+          "name": "wan-969beec1132441728702e4b3ca0042ca-step00000010.safetensors",
+          "bytes": 306848376
+        },
+        {
+          "name": "wan-969beec1132441728702e4b3ca0042ca.safetensors",
+          "bytes": 306848376
+        }
+      ],
+      "saved_states": [],
+      "samples": []
+    },
+    {
+      "run": "31a4ddb2",
+      "purpose": "500-step attempt; graceful stop at step 16 to change GPU settings",
+      "power_limit_w": "280.00 W",
+      "job": "wan-step1 susan 832x480x33 r16",
+      "job_revision": 3,
+      "family": "wan",
+      "config": {
+        "recipe": "low-noise",
+        "width": 832,
+        "height": 480,
+        "frames": 33,
+        "frame_extraction": "head",
+        "batch_size": 1,
+        "rank": 16,
+        "alpha": 16,
+        "learning_rate": 0.0001,
+        "steps": 500,
+        "gradient_accumulation": 1,
+        "blocks_to_swap": 36,
+        "gradient_checkpointing": true,
+        "fp8_scaled": true,
+        "block_swap_h2d_only": false,
+        "save_every": 100,
+        "save_state": true,
+        "sample_enabled": true,
+        "sample_steps": 20,
+        "seed": 42
+      },
+      "dataset": "susan_wan",
+      "included_items": 28,
+      "status": "stopped",
+      "created_utc": "2026-10-29T09:38:02.685810+00:00",
+      "finished_utc": "2026-10-29T09:59:36.295014+00:00",
+      "stages": [
+        {
+          "name": "latent_cache",
+          "status": "reused",
+          "exit_code": 0
+        },
+        {
+          "name": "text_cache",
+          "status": "reused",
+          "exit_code": 0
+        },
+        {
+          "name": "train",
+          "status": "stopped",
+          "exit_code": 3221225786,
+          "elapsed_seconds": 1263.3,
+          "resources": {
+            "samples": 612,
+            "peak_device_vram_bytes": 22573744128,
+            "peak_process_tree_rss_bytes": 18028125225,
+            "peak_host_used_bytes": 32781337887,
+            "disk_free_delta_bytes": 0
+          },
+          "gpu": {
+            "loaded_samples": 617,
+            "power_limit_w": ["280.00 W"],
+            "temperature_c": {
+              "mean": 61.9,
+              "max": 65.44
+            },
+            "sm_clock_mhz_mean": 1232,
+            "power_w": {
+              "mean": 227,
+              "max": 282.31
+            },
+            "fan_percent": {
+              "min": 44.0,
+              "max": 75.0
+            },
+            "sw_thermal_slowdown_percent": 67.9,
+            "sw_power_cap_percent": 32.6,
+            "hw_slowdown_percent": 0.0
+          },
+          "progress": {
+            "completed": 16,
+            "total": 500,
+            "elapsed": "19:32",
+            "seconds_per_step": 78.17
+          }
+        },
+        {
+          "name": "generate",
+          "status": "pending",
+          "exit_code": null
+        }
+      ],
+      "train_args": [
+        "C:/ai/musubi-tuner/.venv/Scripts/python.exe",
+        "-X",
+        "utf8",
+        "-B",
+        "-m",
+        "accelerate.commands.launch",
+        "--num_processes",
+        "1",
+        "--num_machines",
+        "1",
+        "--dynamo_backend",
+        "no",
+        "--num_cpu_threads_per_process",
+        "1",
+        "--mixed_precision",
+        "fp16",
+        "C:\\ai\\musubi-tuner\\wan_train_network.py",
+        "--task",
+        "t2v-A14B",
+        "--dit",
+        "C:\\docs\\git\\musubiGui\\models\\wan-dit\\split_files\\diffusion_models\\wan2.2_t2v_low_noise_14B_fp16.safetensors",
+        "--dataset_config",
+        "C:\\docs\\git\\musubiGui\\outputs\\runs\\f4a3efceabb84510a41e5f08838bc237\\dataset.toml",
+        "--sdpa",
+        "--mixed_precision",
+        "fp16",
+        "--fp8_base",
+        "--fp8_scaled",
+        "--blocks_to_swap",
+        "36",
+        "--gradient_checkpointing",
+        "--optimizer_type",
+        "AdamW",
+        "--learning_rate",
+        "0.0001",
+        "--max_data_loader_n_workers",
+        "0",
+        "--network_module",
+        "networks.lora_wan",
+        "--network_dim",
+        "16",
+        "--network_alpha",
+        "16",
+        "--timestep_sampling",
+        "shift",
+        "--discrete_flow_shift",
+        "3.0",
+        "--min_timestep",
+        "0",
+        "--max_timestep",
+        "875",
+        "--preserve_distribution_shape",
+        "--max_train_steps",
+        "500",
+        "--save_every_n_steps",
+        "100",
+        "--seed",
+        "42",
+        "--output_dir",
+        "C:\\docs\\git\\musubiGui\\outputs\\runs\\f4a3efceabb84510a41e5f08838bc237\\checkpoints",
+        "--output_name",
+        "wan-ec01763ca385489d8eb93577ac0a8607",
+        "--gradient_accumulation_steps",
+        "1",
+        "--save_state",
+        "--save_state_on_train_end"
+      ],
+      "checkpoints": [],
+      "saved_states": [],
+      "samples": []
+    },
+    {
+      "run": "355a6b79",
+      "purpose": "500-step attempt; graceful stop when the scope changed to 200 steps",
+      "power_limit_w": "280.00 W",
+      "job": "wan-step1b susan 832x480x33 r16 500st",
+      "job_revision": 2,
+      "family": "wan",
+      "config": {
+        "recipe": "low-noise",
+        "width": 832,
+        "height": 480,
+        "frames": 33,
+        "frame_extraction": "head",
+        "batch_size": 1,
+        "rank": 16,
+        "alpha": 16,
+        "learning_rate": 0.0001,
+        "steps": 500,
+        "gradient_accumulation": 1,
+        "blocks_to_swap": 36,
+        "gradient_checkpointing": true,
+        "fp8_scaled": true,
+        "block_swap_h2d_only": false,
+        "save_every": 100,
+        "save_state": true,
+        "sample_enabled": true,
+        "sample_steps": 20,
+        "seed": 42
+      },
+      "dataset": "susan_wan",
+      "included_items": 28,
+      "status": "stopped",
+      "created_utc": "2026-10-29T10:02:21.974978+00:00",
+      "finished_utc": "2026-10-29T10:08:32.426438+00:00",
+      "stages": [
+        {
+          "name": "latent_cache",
+          "status": "reused",
+          "exit_code": 0
+        },
+        {
+          "name": "text_cache",
+          "status": "reused",
+          "exit_code": 0
+        },
+        {
+          "name": "train",
+          "status": "stopped",
+          "exit_code": 3221225786,
+          "elapsed_seconds": 337.5,
+          "resources": {
+            "samples": 164,
+            "peak_device_vram_bytes": 22472032256,
+            "peak_process_tree_rss_bytes": 18028125225,
+            "peak_host_used_bytes": 32877974651,
+            "disk_free_delta_bytes": 0
+          },
+          "gpu": {
+            "loaded_samples": 158,
+            "power_limit_w": ["280.00 W"],
+            "temperature_c": {
+              "mean": 60.7,
+              "max": 64.47
+            },
+            "sm_clock_mhz_mean": 1416,
+            "power_w": {
+              "mean": 242,
+              "max": 280.27
+            },
+            "fan_percent": {
+              "min": 45.0,
+              "max": 73.0
+            },
+            "sw_thermal_slowdown_percent": 50.6,
+            "sw_power_cap_percent": 48.7,
+            "hw_slowdown_percent": 0.0
+          },
+          "progress": {
+            "completed": 4,
+            "total": 500,
+            "elapsed": "03:39",
+            "seconds_per_step": 73.03
+          }
+        },
+        {
+          "name": "generate",
+          "status": "pending",
+          "exit_code": null
+        }
+      ],
+      "train_args": [
+        "C:/ai/musubi-tuner/.venv/Scripts/python.exe",
+        "-X",
+        "utf8",
+        "-B",
+        "-m",
+        "accelerate.commands.launch",
+        "--num_processes",
+        "1",
+        "--num_machines",
+        "1",
+        "--dynamo_backend",
+        "no",
+        "--num_cpu_threads_per_process",
+        "1",
+        "--mixed_precision",
+        "fp16",
+        "C:\\ai\\musubi-tuner\\wan_train_network.py",
+        "--task",
+        "t2v-A14B",
+        "--dit",
+        "C:\\docs\\git\\musubiGui\\models\\wan-dit\\split_files\\diffusion_models\\wan2.2_t2v_low_noise_14B_fp16.safetensors",
+        "--dataset_config",
+        "C:\\docs\\git\\musubiGui\\outputs\\runs\\57d1f719eada4679a9b50c364e2ef09f\\dataset.toml",
+        "--sdpa",
+        "--mixed_precision",
+        "fp16",
+        "--fp8_base",
+        "--fp8_scaled",
+        "--blocks_to_swap",
+        "36",
+        "--gradient_checkpointing",
+        "--optimizer_type",
+        "AdamW",
+        "--learning_rate",
+        "0.0001",
+        "--max_data_loader_n_workers",
+        "0",
+        "--network_module",
+        "networks.lora_wan",
+        "--network_dim",
+        "16",
+        "--network_alpha",
+        "16",
+        "--timestep_sampling",
+        "shift",
+        "--discrete_flow_shift",
+        "3.0",
+        "--min_timestep",
+        "0",
+        "--max_timestep",
+        "875",
+        "--preserve_distribution_shape",
+        "--max_train_steps",
+        "500",
+        "--save_every_n_steps",
+        "100",
+        "--seed",
+        "42",
+        "--output_dir",
+        "C:\\docs\\git\\musubiGui\\outputs\\runs\\57d1f719eada4679a9b50c364e2ef09f\\checkpoints",
+        "--output_name",
+        "wan-240b439cd06e4fa5844dff4c8fece25a",
+        "--gradient_accumulation_steps",
+        "1",
+        "--save_state",
+        "--save_state_on_train_end"
+      ],
+      "checkpoints": [],
+      "saved_states": [],
+      "samples": []
+    },
+    {
+      "run": "fb66e3d3",
+      "purpose": "200-step long-run check",
+      "power_limit_w": "280.00 W",
+      "job": "wan-step1c susan 832x480x33 r16 200st",
+      "job_revision": 2,
+      "family": "wan",
+      "config": {
+        "recipe": "low-noise",
+        "width": 832,
+        "height": 480,
+        "frames": 33,
+        "frame_extraction": "head",
+        "batch_size": 1,
+        "rank": 16,
+        "alpha": 16,
+        "learning_rate": 0.0001,
+        "steps": 200,
+        "gradient_accumulation": 1,
+        "blocks_to_swap": 36,
+        "gradient_checkpointing": true,
+        "fp8_scaled": true,
+        "block_swap_h2d_only": false,
+        "save_every": 100,
+        "save_state": true,
+        "sample_enabled": true,
+        "sample_steps": 20,
+        "seed": 42
+      },
+      "dataset": "susan_wan",
+      "included_items": 28,
+      "status": "completed",
+      "created_utc": "2026-10-29T10:09:37.524125+00:00",
+      "finished_utc": "2026-10-29T14:43:04.907303+00:00",
+      "stages": [
+        {
+          "name": "latent_cache",
+          "status": "reused",
+          "exit_code": 0
+        },
+        {
+          "name": "text_cache",
+          "status": "reused",
+          "exit_code": 0
+        },
+        {
+          "name": "train",
+          "status": "completed",
+          "exit_code": 0,
+          "elapsed_seconds": 15824.2,
+          "resources": {
+            "samples": 7658,
+            "peak_device_vram_bytes": 22700621824,
+            "peak_process_tree_rss_bytes": 18060337480,
+            "peak_host_used_bytes": 36582383944,
+            "disk_free_delta_bytes": 4316442132
+          },
+          "gpu": {
+            "loaded_samples": 7862,
+            "power_limit_w": ["280.00 W"],
+            "temperature_c": {
+              "mean": 62.4,
+              "max": 65.66
+            },
+            "sm_clock_mhz_mean": 1142,
+            "power_w": {
+              "mean": 221,
+              "max": 282.05
+            },
+            "fan_percent": {
+              "min": 50.0,
+              "max": 76.0
+            },
+            "sw_thermal_slowdown_percent": 74.7,
+            "sw_power_cap_percent": 25.3,
+            "hw_slowdown_percent": 0.0
+          },
+          "progress": {
+            "completed": 200,
+            "total": 200,
+            "elapsed": "4:22:15",
+            "seconds_per_step": 79.07
+          }
+        },
+        {
+          "name": "generate",
+          "status": "completed",
+          "exit_code": 0,
+          "elapsed_seconds": 557.7,
+          "resources": {
+            "samples": 270,
+            "peak_device_vram_bytes": 11420041216,
+            "peak_process_tree_rss_bytes": 19542101197,
+            "peak_host_used_bytes": 35540854374,
+            "disk_free_delta_bytes": 257698038
+          },
+          "gpu": {
+            "loaded_samples": 228,
+            "power_limit_w": ["280.00 W"],
+            "temperature_c": {
+              "mean": 66.2,
+              "max": 68.34
+            },
+            "sm_clock_mhz_mean": 1664,
+            "power_w": {
+              "mean": 276,
+              "max": 281.96
+            },
+            "fan_percent": {
+              "min": 50.0,
+              "max": 87.0
+            },
+            "sw_thermal_slowdown_percent": 0.0,
+            "sw_power_cap_percent": 99.1,
+            "hw_slowdown_percent": 0.0
+          },
+          "progress": null
+        }
+      ],
+      "train_args": [
+        "C:/ai/musubi-tuner/.venv/Scripts/python.exe",
+        "-X",
+        "utf8",
+        "-B",
+        "-m",
+        "accelerate.commands.launch",
+        "--num_processes",
+        "1",
+        "--num_machines",
+        "1",
+        "--dynamo_backend",
+        "no",
+        "--num_cpu_threads_per_process",
+        "1",
+        "--mixed_precision",
+        "fp16",
+        "C:\\ai\\musubi-tuner\\wan_train_network.py",
+        "--task",
+        "t2v-A14B",
+        "--dit",
+        "C:\\docs\\git\\musubiGui\\models\\wan-dit\\split_files\\diffusion_models\\wan2.2_t2v_low_noise_14B_fp16.safetensors",
+        "--dataset_config",
+        "C:\\docs\\git\\musubiGui\\outputs\\runs\\38494de53c584b49933dc698eaeadf0c\\dataset.toml",
+        "--sdpa",
+        "--mixed_precision",
+        "fp16",
+        "--fp8_base",
+        "--fp8_scaled",
+        "--blocks_to_swap",
+        "36",
+        "--gradient_checkpointing",
+        "--optimizer_type",
+        "AdamW",
+        "--learning_rate",
+        "0.0001",
+        "--max_data_loader_n_workers",
+        "0",
+        "--network_module",
+        "networks.lora_wan",
+        "--network_dim",
+        "16",
+        "--network_alpha",
+        "16",
+        "--timestep_sampling",
+        "shift",
+        "--discrete_flow_shift",
+        "3.0",
+        "--min_timestep",
+        "0",
+        "--max_timestep",
+        "875",
+        "--preserve_distribution_shape",
+        "--max_train_steps",
+        "200",
+        "--save_every_n_steps",
+        "100",
+        "--seed",
+        "42",
+        "--output_dir",
+        "C:\\docs\\git\\musubiGui\\outputs\\runs\\38494de53c584b49933dc698eaeadf0c\\checkpoints",
+        "--output_name",
+        "wan-9a2d586bf3054935ad68f5de653cd677",
+        "--gradient_accumulation_steps",
+        "1",
+        "--save_state",
+        "--save_state_on_train_end"
+      ],
+      "checkpoints": [
+        {
+          "name": "wan-9a2d586bf3054935ad68f5de653cd677-step00000100.safetensors",
+          "bytes": 306848376
+        },
+        {
+          "name": "wan-9a2d586bf3054935ad68f5de653cd677-step00000200.safetensors",
+          "bytes": 306848376
+        },
+        {
+          "name": "wan-9a2d586bf3054935ad68f5de653cd677.safetensors",
+          "bytes": 306848376
+        }
+      ],
+      "saved_states": [
+        {
+          "name": "wan-9a2d586bf3054935ad68f5de653cd677-state",
+          "bytes": 920958520
+        },
+        {
+          "name": "wan-9a2d586bf3054935ad68f5de653cd677-step00000100-state",
+          "bytes": 920958456
+        },
+        {
+          "name": "wan-9a2d586bf3054935ad68f5de653cd677-step00000200-state",
+          "bytes": 920958520
+        }
+      ],
+      "samples": [
+        {
+          "name": "20261029-144302-140_42_.mp4",
+          "bytes": 949582,
+          "width": 832,
+          "height": 480,
+          "fps": 16.0,
+          "frames": 33,
+          "audio": null
+        }
+      ]
+    },
+    {
+      "run": "82c61da9",
+      "purpose": "H3 probe at 832x480",
+      "power_limit_w": "245.00 W",
+      "job": "h3-probe susan 832x480x124 r8 10st",
+      "job_revision": 2,
+      "family": "h3",
+      "config": {
+        "recipe": "guidance-loss",
+        "width": 832,
+        "height": 480,
+        "frames": 124,
+        "frame_extraction": "head",
+        "batch_size": 1,
+        "rank": 8,
+        "alpha": 8,
+        "learning_rate": 0.0001,
+        "steps": 10,
+        "gradient_accumulation": 1,
+        "blocks_to_swap": 48,
+        "gradient_checkpointing": true,
+        "fp8_scaled": false,
+        "block_swap_h2d_only": true,
+        "save_every": 10,
+        "save_state": false,
+        "sample_enabled": true,
+        "sample_steps": 10,
+        "seed": 42
+      },
+      "dataset": "susan_h3",
+      "included_items": 20,
+      "status": "failed",
+      "created_utc": "2026-10-29T14:58:17.011545+00:00",
+      "finished_utc": "2026-10-29T15:14:49.327474+00:00",
+      "stages": [
+        {
+          "name": "latent_cache",
+          "status": "completed",
+          "exit_code": 0,
+          "elapsed_seconds": 816.9,
+          "resources": {
+            "samples": 397,
+            "peak_device_vram_bytes": 9365880832,
+            "peak_process_tree_rss_bytes": 2834678415,
+            "peak_host_used_bytes": 20605105603,
+            "disk_free_delta_bytes": 3489660928
+          }
+        },
+        {
+          "name": "text_cache",
+          "status": "completed",
+          "exit_code": 0,
+          "elapsed_seconds": 61.8,
+          "resources": {
+            "samples": 29,
+            "peak_device_vram_bytes": 4558159872,
+            "peak_process_tree_rss_bytes": 25039659336,
+            "peak_host_used_bytes": 42187316265,
+            "disk_free_delta_bytes": 107374182
+          }
+        },
+        {
+          "name": "train",
+          "status": "failed",
+          "exit_code": 1,
+          "elapsed_seconds": 83.1,
+          "resources": {
+            "samples": 40,
+            "peak_device_vram_bytes": 25222447104,
+            "peak_process_tree_rss_bytes": 22086869320,
+            "peak_host_used_bytes": 39599598469,
+            "disk_free_delta_bytes": 0
+          },
+          "gpu": {
+            "loaded_samples": 25,
+            "power_limit_w": ["245.00 W"],
+            "temperature_c": {
+              "mean": 59.9,
+              "max": 62.31
+            },
+            "sm_clock_mhz_mean": 1439,
+            "power_w": {
+              "mean": 235,
+              "max": 246.05
+            },
+            "fan_percent": {
+              "min": 49.0,
+              "max": 56.0
+            },
+            "sw_thermal_slowdown_percent": 0.0,
+            "sw_power_cap_percent": 100.0,
+            "hw_slowdown_percent": 0.0
+          },
+          "progress": null,
+          "error": "torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 816.00 MiB. GPU 0 has a total capacity of 24.00 GiB of which 0 bytes is free. Of the allocated memory 17.70 GiB is allocated by PyTorch, and 5.47 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://docs.pytorch.org/docs/stable/notes/cuda.html#optimizing-memory-usage-with-pytorch-cuda-alloc-conf)"
+        },
+        {
+          "name": "generate",
+          "status": "pending",
+          "exit_code": null
+        }
+      ],
+      "train_args": [
+        "C:/ai/musubi-tuner/.venv/Scripts/python.exe",
+        "-X",
+        "utf8",
+        "-B",
+        "-m",
+        "accelerate.commands.launch",
+        "--num_processes",
+        "1",
+        "--num_machines",
+        "1",
+        "--mixed_precision",
+        "bf16",
+        "--dynamo_backend",
+        "no",
+        "--num_cpu_threads_per_process",
+        "1",
+        "C:\\ai\\musubi-tuner\\minimax_h3_train_network.py",
+        "--dataset_config",
+        "C:\\docs\\git\\musubiGui\\outputs\\runs\\3a69498e70dc40cd813edd4e0e2eff13\\dataset.toml",
+        "--task",
+        "t2va",
+        "--dit",
+        "C:\\ai\\ai-toolkit\\models\\diffusion_models\\minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+        "--network_module",
+        "networks.lora_minimax_h3",
+        "--network_dim",
+        "8",
+        "--network_alpha",
+        "8",
+        "--sdpa",
+        "--mixed_precision",
+        "bf16",
+        "--gradient_checkpointing",
+        "--block_swap_h2d_only",
+        "--blocks_to_swap",
+        "48",
+        "--optimizer_type",
+        "AdamW",
+        "--learning_rate",
+        "0.0001",
+        "--max_train_steps",
+        "10",
+        "--save_every_n_steps",
+        "10",
+        "--max_data_loader_n_workers",
+        "0",
+        "--seed",
+        "42",
+        "--output_dir",
+        "C:\\docs\\git\\musubiGui\\outputs\\runs\\3a69498e70dc40cd813edd4e0e2eff13\\checkpoints",
+        "--output_name",
+        "h3-06fd5536ca3c482e8f1ee35a1e8c047a",
+        "--h3_guidance_loss_scale",
+        "4",
+        "--h3_guidance_loss_sigma_min",
+        "0.15",
+        "--h3_guidance_loss_uncond_cache",
+        "C:\\docs\\git\\musubiGui\\cache\\runs\\3a69498e70dc40cd813edd4e0e2eff13\\uncond.safetensors",
+        "--gradient_accumulation_steps",
+        "1"
+      ],
+      "checkpoints": [],
+      "saved_states": [],
+      "samples": []
+    },
+    {
+      "run": "e2fb2e76",
+      "purpose": "H3 probe at 640x352",
+      "power_limit_w": "245.00 W",
+      "job": "h3-probe susan 640x352x124 r8 10st",
+      "job_revision": 2,
+      "family": "h3",
+      "config": {
+        "recipe": "guidance-loss",
+        "width": 640,
+        "height": 352,
+        "frames": 124,
+        "frame_extraction": "head",
+        "batch_size": 1,
+        "rank": 8,
+        "alpha": 8,
+        "learning_rate": 0.0001,
+        "steps": 10,
+        "gradient_accumulation": 1,
+        "blocks_to_swap": 48,
+        "gradient_checkpointing": true,
+        "fp8_scaled": false,
+        "block_swap_h2d_only": true,
+        "save_every": 10,
+        "save_state": false,
+        "sample_enabled": true,
+        "sample_steps": 10,
+        "seed": 42
+      },
+      "dataset": "susan_h3",
+      "included_items": 20,
+      "status": "completed",
+      "created_utc": "2026-10-29T15:19:01.456593+00:00",
+      "finished_utc": "2026-10-29T15:42:47.022355+00:00",
+      "stages": [
+        {
+          "name": "latent_cache",
+          "status": "completed",
+          "exit_code": 0,
+          "elapsed_seconds": 417.3,
+          "resources": {
+            "samples": 202,
+            "peak_device_vram_bytes": 7770996736,
+            "peak_process_tree_rss_bytes": 2147483648,
+            "peak_host_used_bytes": 20003810181,
+            "disk_free_delta_bytes": 10737418
+          }
+        },
+        {
+          "name": "text_cache",
+          "status": "completed",
+          "exit_code": 0,
+          "elapsed_seconds": 49.0,
+          "resources": {
+            "samples": 23,
+            "peak_device_vram_bytes": 3719299072,
+            "peak_process_tree_rss_bytes": 18876381266,
+            "peak_host_used_bytes": 36614596198,
+            "disk_free_delta_bytes": 21474836
+          }
+        },
+        {
+          "name": "train",
+          "status": "completed",
+          "exit_code": 0,
+          "elapsed_seconds": 730.6,
+          "resources": {
+            "samples": 353,
+            "peak_device_vram_bytes": 23276290048,
+            "peak_process_tree_rss_bytes": 22054657065,
+            "peak_host_used_bytes": 41339060224,
+            "disk_free_delta_bytes": 128849019
+          },
+          "gpu": {
+            "loaded_samples": 354,
+            "power_limit_w": ["245.00 W"],
+            "temperature_c": {
+              "mean": 63.4,
+              "max": 66.34
+            },
+            "sm_clock_mhz_mean": 1273,
+            "power_w": {
+              "mean": 221,
+              "max": 245.43
+            },
+            "fan_percent": {
+              "min": 50.0,
+              "max": 61.0
+            },
+            "sw_thermal_slowdown_percent": 35.6,
+            "sw_power_cap_percent": 62.7,
+            "hw_slowdown_percent": 0.0
+          },
+          "progress": {
+            "completed": 10,
+            "total": 10,
+            "elapsed": "10:38",
+            "seconds_per_step": 70.93
+          }
+        },
+        {
+          "name": "generate",
+          "status": "completed",
+          "exit_code": 0,
+          "elapsed_seconds": 191.2,
+          "resources": {
+            "samples": 91,
+            "peak_device_vram_bytes": 9550430208,
+            "peak_process_tree_rss_bytes": 34467112550,
+            "peak_host_used_bytes": 53590454436,
+            "disk_free_delta_bytes": 2007897211
+          },
+          "gpu": {
+            "loaded_samples": 58,
+            "power_limit_w": ["245.00 W"],
+            "temperature_c": {
+              "mean": 63.5,
+              "max": 66.16
+            },
+            "sm_clock_mhz_mean": 1451,
+            "power_w": {
+              "mean": 236,
+              "max": 245.15
+            },
+            "fan_percent": {
+              "min": 49.0,
+              "max": 61.0
+            },
+            "sw_thermal_slowdown_percent": 0.0,
+            "sw_power_cap_percent": 96.6,
+            "hw_slowdown_percent": 0.0
+          },
+          "progress": {
+            "completed": 10,
+            "total": 10,
+            "elapsed": "01:43",
+            "seconds_per_step": 10.33
+          }
+        }
+      ],
+      "train_args": [
+        "C:/ai/musubi-tuner/.venv/Scripts/python.exe",
+        "-X",
+        "utf8",
+        "-B",
+        "-m",
+        "accelerate.commands.launch",
+        "--num_processes",
+        "1",
+        "--num_machines",
+        "1",
+        "--mixed_precision",
+        "bf16",
+        "--dynamo_backend",
+        "no",
+        "--num_cpu_threads_per_process",
+        "1",
+        "C:\\ai\\musubi-tuner\\minimax_h3_train_network.py",
+        "--dataset_config",
+        "C:\\docs\\git\\musubiGui\\outputs\\runs\\43944b615e3444139067557117be9bd0\\dataset.toml",
+        "--task",
+        "t2va",
+        "--dit",
+        "C:\\ai\\ai-toolkit\\models\\diffusion_models\\minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+        "--network_module",
+        "networks.lora_minimax_h3",
+        "--network_dim",
+        "8",
+        "--network_alpha",
+        "8",
+        "--sdpa",
+        "--mixed_precision",
+        "bf16",
+        "--gradient_checkpointing",
+        "--block_swap_h2d_only",
+        "--blocks_to_swap",
+        "48",
+        "--optimizer_type",
+        "AdamW",
+        "--learning_rate",
+        "0.0001",
+        "--max_train_steps",
+        "10",
+        "--save_every_n_steps",
+        "10",
+        "--max_data_loader_n_workers",
+        "0",
+        "--seed",
+        "42",
+        "--output_dir",
+        "C:\\docs\\git\\musubiGui\\outputs\\runs\\43944b615e3444139067557117be9bd0\\checkpoints",
+        "--output_name",
+        "h3-32a7409c0c58479f851c5278d3836c0c",
+        "--h3_guidance_loss_scale",
+        "4",
+        "--h3_guidance_loss_sigma_min",
+        "0.15",
+        "--h3_guidance_loss_uncond_cache",
+        "C:\\docs\\git\\musubiGui\\cache\\runs\\43944b615e3444139067557117be9bd0\\uncond.safetensors",
+        "--gradient_accumulation_steps",
+        "1"
+      ],
+      "checkpoints": [
+        {
+          "name": "h3-32a7409c0c58479f851c5278d3836c0c-step00000010.safetensors",
+          "bytes": 149165288
+        },
+        {
+          "name": "h3-32a7409c0c58479f851c5278d3836c0c.safetensors",
+          "bytes": 149165288
+        }
+      ],
+      "saved_states": [],
+      "samples": [
+        {
+          "name": "sample.mp4",
+          "bytes": 645122,
+          "width": 640,
+          "height": 352,
+          "fps": 24.0,
+          "frames": 124,
+          "audio": {
+            "codec": "aac",
+            "rate": 32000,
+            "channels": 2
+          }
+        }
+      ]
+    },
+    {
+      "run": "352bca2c",
+      "purpose": "H3 30 steps; state saving was not enabled (test-harness error)",
+      "power_limit_w": null,
+      "job": "h3-restore-test susan 640x352x124 r8 30st",
+      "job_revision": 2,
+      "family": "h3",
+      "config": {
+        "recipe": "guidance-loss",
+        "width": 640,
+        "height": 352,
+        "frames": 124,
+        "frame_extraction": "head",
+        "batch_size": 1,
+        "rank": 8,
+        "alpha": 8,
+        "learning_rate": 0.0001,
+        "steps": 30,
+        "gradient_accumulation": 1,
+        "blocks_to_swap": 48,
+        "gradient_checkpointing": true,
+        "fp8_scaled": false,
+        "block_swap_h2d_only": true,
+        "save_every": 10,
+        "save_state": false,
+        "sample_enabled": true,
+        "sample_steps": 10,
+        "seed": 42
+      },
+      "dataset": "susan_h3",
+      "included_items": 20,
+      "status": "completed",
+      "created_utc": "2026-10-29T16:16:24.782440+00:00",
+      "finished_utc": "2026-10-29T16:54:51.024454+00:00",
+      "stages": [
+        {
+          "name": "latent_cache",
+          "status": "reused",
+          "exit_code": 0
+        },
+        {
+          "name": "text_cache",
+          "status": "reused",
+          "exit_code": 0
+        },
+        {
+          "name": "train",
+          "status": "completed",
+          "exit_code": 0,
+          "elapsed_seconds": 2127.1,
+          "resources": null,
+          "gpu": null,
+          "progress": {
+            "completed": 30,
+            "total": 30,
+            "elapsed": "33:54",
+            "seconds_per_step": 70.16
+          }
+        },
+        {
+          "name": "generate",
+          "status": "completed",
+          "exit_code": 0,
+          "elapsed_seconds": 149.6,
+          "resources": null,
+          "gpu": null,
+          "progress": {
+            "completed": 10,
+            "total": 10,
+            "elapsed": "01:43",
+            "seconds_per_step": 10.32
+          }
+        }
+      ],
+      "train_args": [
+        "C:/ai/musubi-tuner/.venv/Scripts/python.exe",
+        "-X",
+        "utf8",
+        "-B",
+        "-m",
+        "accelerate.commands.launch",
+        "--num_processes",
+        "1",
+        "--num_machines",
+        "1",
+        "--mixed_precision",
+        "bf16",
+        "--dynamo_backend",
+        "no",
+        "--num_cpu_threads_per_process",
+        "1",
+        "C:\\ai\\musubi-tuner\\minimax_h3_train_network.py",
+        "--dataset_config",
+        "C:\\docs\\git\\musubiGui\\outputs\\runs\\3b55dcb1c1f548bba55788e5495fb195\\dataset.toml",
+        "--task",
+        "t2va",
+        "--dit",
+        "C:\\ai\\ai-toolkit\\models\\diffusion_models\\minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+        "--network_module",
+        "networks.lora_minimax_h3",
+        "--network_dim",
+        "8",
+        "--network_alpha",
+        "8",
+        "--sdpa",
+        "--mixed_precision",
+        "bf16",
+        "--gradient_checkpointing",
+        "--block_swap_h2d_only",
+        "--blocks_to_swap",
+        "48",
+        "--optimizer_type",
+        "AdamW",
+        "--learning_rate",
+        "0.0001",
+        "--max_train_steps",
+        "30",
+        "--save_every_n_steps",
+        "10",
+        "--max_data_loader_n_workers",
+        "0",
+        "--seed",
+        "42",
+        "--output_dir",
+        "C:\\docs\\git\\musubiGui\\outputs\\runs\\3b55dcb1c1f548bba55788e5495fb195\\checkpoints",
+        "--output_name",
+        "h3-657082a6d6fe4442bda79357db27c9cc",
+        "--h3_guidance_loss_scale",
+        "4",
+        "--h3_guidance_loss_sigma_min",
+        "0.15",
+        "--h3_guidance_loss_uncond_cache",
+        "C:\\docs\\git\\musubiGui\\cache\\runs\\3b55dcb1c1f548bba55788e5495fb195\\uncond.safetensors",
+        "--gradient_accumulation_steps",
+        "1"
+      ],
+      "checkpoints": [
+        {
+          "name": "h3-657082a6d6fe4442bda79357db27c9cc-step00000010.safetensors",
+          "bytes": 149165288
+        },
+        {
+          "name": "h3-657082a6d6fe4442bda79357db27c9cc-step00000020.safetensors",
+          "bytes": 149165288
+        },
+        {
+          "name": "h3-657082a6d6fe4442bda79357db27c9cc-step00000030.safetensors",
+          "bytes": 149165288
+        },
+        {
+          "name": "h3-657082a6d6fe4442bda79357db27c9cc.safetensors",
+          "bytes": 149165288
+        }
+      ],
+      "saved_states": [],
+      "samples": [
+        {
+          "name": "sample.mp4",
+          "bytes": 545765,
+          "width": 640,
+          "height": 352,
+          "fps": 24.0,
+          "frames": 124,
+          "audio": {
+            "codec": "aac",
+            "rate": 32000,
+            "channels": 2
+          }
+        }
+      ]
+    },
+    {
+      "run": "68cb10f0",
+      "purpose": "H3 20 steps with state saved at 10 and 20",
+      "power_limit_w": null,
+      "job": "h3-restore-test susan 640x352x124 r8 20st",
+      "job_revision": 3,
+      "family": "h3",
+      "config": {
+        "recipe": "guidance-loss",
+        "width": 640,
+        "height": 352,
+        "frames": 124,
+        "frame_extraction": "head",
+        "batch_size": 1,
+        "rank": 8,
+        "alpha": 8,
+        "learning_rate": 0.0001,
+        "steps": 20,
+        "gradient_accumulation": 1,
+        "blocks_to_swap": 48,
+        "gradient_checkpointing": true,
+        "fp8_scaled": false,
+        "block_swap_h2d_only": true,
+        "save_every": 10,
+        "save_state": true,
+        "sample_enabled": false,
+        "sample_steps": 10,
+        "seed": 42
+      },
+      "dataset": "susan_h3",
+      "included_items": 20,
+      "status": "completed",
+      "created_utc": "2026-10-29T16:57:04.774268+00:00",
+      "finished_utc": "2026-10-29T17:21:43.270881+00:00",
+      "stages": [
+        {
+          "name": "latent_cache",
+          "status": "reused",
+          "exit_code": 0
+        },
+        {
+          "name": "text_cache",
+          "status": "reused",
+          "exit_code": 0
+        },
+        {
+          "name": "train",
+          "status": "completed",
+          "exit_code": 0,
+          "elapsed_seconds": 1450.1,
+          "resources": null,
+          "gpu": null,
+          "progress": {
+            "completed": 20,
+            "total": 20,
+            "elapsed": "22:38",
+            "seconds_per_step": 71.5
+          }
+        }
+      ],
+      "train_args": [
+        "C:/ai/musubi-tuner/.venv/Scripts/python.exe",
+        "-X",
+        "utf8",
+        "-B",
+        "-m",
+        "accelerate.commands.launch",
+        "--num_processes",
+        "1",
+        "--num_machines",
+        "1",
+        "--mixed_precision",
+        "bf16",
+        "--dynamo_backend",
+        "no",
+        "--num_cpu_threads_per_process",
+        "1",
+        "C:\\ai\\musubi-tuner\\minimax_h3_train_network.py",
+        "--dataset_config",
+        "C:\\docs\\git\\musubiGui\\outputs\\runs\\bb737994b50741fe8ab4e91ba40279d3\\dataset.toml",
+        "--task",
+        "t2va",
+        "--dit",
+        "C:\\ai\\ai-toolkit\\models\\diffusion_models\\minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+        "--network_module",
+        "networks.lora_minimax_h3",
+        "--network_dim",
+        "8",
+        "--network_alpha",
+        "8",
+        "--sdpa",
+        "--mixed_precision",
+        "bf16",
+        "--gradient_checkpointing",
+        "--block_swap_h2d_only",
+        "--blocks_to_swap",
+        "48",
+        "--optimizer_type",
+        "AdamW",
+        "--learning_rate",
+        "0.0001",
+        "--max_train_steps",
+        "20",
+        "--save_every_n_steps",
+        "10",
+        "--max_data_loader_n_workers",
+        "0",
+        "--seed",
+        "42",
+        "--output_dir",
+        "C:\\docs\\git\\musubiGui\\outputs\\runs\\bb737994b50741fe8ab4e91ba40279d3\\checkpoints",
+        "--output_name",
+        "h3-657082a6d6fe4442bda79357db27c9cc",
+        "--h3_guidance_loss_scale",
+        "4",
+        "--h3_guidance_loss_sigma_min",
+        "0.15",
+        "--h3_guidance_loss_uncond_cache",
+        "C:\\docs\\git\\musubiGui\\cache\\runs\\bb737994b50741fe8ab4e91ba40279d3\\uncond.safetensors",
+        "--gradient_accumulation_steps",
+        "1",
+        "--save_state",
+        "--save_state_on_train_end"
+      ],
+      "checkpoints": [
+        {
+          "name": "h3-657082a6d6fe4442bda79357db27c9cc-step00000010.safetensors",
+          "bytes": 149165288
+        },
+        {
+          "name": "h3-657082a6d6fe4442bda79357db27c9cc-step00000020.safetensors",
+          "bytes": 149165288
+        },
+        {
+          "name": "h3-657082a6d6fe4442bda79357db27c9cc.safetensors",
+          "bytes": 149165288
+        }
+      ],
+      "saved_states": [
+        {
+          "name": "h3-657082a6d6fe4442bda79357db27c9cc-state",
+          "bytes": 447704425
+        },
+        {
+          "name": "h3-657082a6d6fe4442bda79357db27c9cc-step00000010-state",
+          "bytes": 447704425
+        },
+        {
+          "name": "h3-657082a6d6fe4442bda79357db27c9cc-step00000020-state",
+          "bytes": 447704425
+        }
+      ],
+      "samples": []
+    },
+    {
+      "run": "da1d21c7",
+      "purpose": "H3 restore of the step-10 state as a 10-step segment",
+      "power_limit_w": null,
+      "job": "h3-restore-test susan 640x352x124 r8 20st",
+      "job_revision": 3,
+      "family": "h3",
+      "config": {
+        "recipe": "guidance-loss",
+        "width": 640,
+        "height": 352,
+        "frames": 124,
+        "frame_extraction": "head",
+        "batch_size": 1,
+        "rank": 8,
+        "alpha": 8,
+        "learning_rate": 0.0001,
+        "steps": 20,
+        "gradient_accumulation": 1,
+        "blocks_to_swap": 48,
+        "gradient_checkpointing": true,
+        "fp8_scaled": false,
+        "block_swap_h2d_only": true,
+        "save_every": 10,
+        "save_state": true,
+        "sample_enabled": false,
+        "sample_steps": 10,
+        "seed": 42
+      },
+      "dataset": "susan_h3",
+      "included_items": 20,
+      "status": "completed",
+      "created_utc": "2026-10-29T17:23:49.882285+00:00",
+      "finished_utc": "2026-10-29T17:36:02.867748+00:00",
+      "stages": [
+        {
+          "name": "latent_cache",
+          "status": "reused",
+          "exit_code": 0
+        },
+        {
+          "name": "text_cache",
+          "status": "reused",
+          "exit_code": 0
+        },
+        {
+          "name": "train",
+          "status": "completed",
+          "exit_code": 0,
+          "elapsed_seconds": 730.2,
+          "resources": null,
+          "gpu": null,
+          "progress": {
+            "completed": 10,
+            "total": 10,
+            "elapsed": "10:40",
+            "seconds_per_step": 71.17
+          }
+        }
+      ],
+      "train_args": [
+        "C:/ai/musubi-tuner/.venv/Scripts/python.exe",
+        "-X",
+        "utf8",
+        "-B",
+        "-m",
+        "accelerate.commands.launch",
+        "--num_processes",
+        "1",
+        "--num_machines",
+        "1",
+        "--mixed_precision",
+        "bf16",
+        "--dynamo_backend",
+        "no",
+        "--num_cpu_threads_per_process",
+        "1",
+        "C:\\ai\\musubi-tuner\\minimax_h3_train_network.py",
+        "--dataset_config",
+        "C:\\docs\\git\\musubiGui\\outputs\\runs\\bb737994b50741fe8ab4e91ba40279d3\\dataset.toml",
+        "--task",
+        "t2va",
+        "--dit",
+        "C:\\ai\\ai-toolkit\\models\\diffusion_models\\minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+        "--network_module",
+        "networks.lora_minimax_h3",
+        "--network_dim",
+        "8",
+        "--network_alpha",
+        "8",
+        "--sdpa",
+        "--mixed_precision",
+        "bf16",
+        "--gradient_checkpointing",
+        "--block_swap_h2d_only",
+        "--blocks_to_swap",
+        "48",
+        "--optimizer_type",
+        "AdamW",
+        "--learning_rate",
+        "0.0001",
+        "--max_train_steps",
+        "10",
+        "--save_every_n_steps",
+        "10",
+        "--max_data_loader_n_workers",
+        "0",
+        "--seed",
+        "42",
+        "--output_dir",
+        "C:\\docs\\git\\musubiGui\\outputs\\runs\\restore-c86af143c91f4259838815375aaf3d9a\\checkpoints",
+        "--output_name",
+        "h3-657082a6d6fe4442bda79357db27c9cc",
+        "--h3_guidance_loss_scale",
+        "4",
+        "--h3_guidance_loss_sigma_min",
+        "0.15",
+        "--h3_guidance_loss_uncond_cache",
+        "C:\\docs\\git\\musubiGui\\cache\\runs\\bb737994b50741fe8ab4e91ba40279d3\\uncond.safetensors",
+        "--gradient_accumulation_steps",
+        "1",
+        "--save_state",
+        "--save_state_on_train_end",
+        "--resume",
+        "C:\\docs\\git\\musubiGui\\outputs\\runs\\bb737994b50741fe8ab4e91ba40279d3\\checkpoints\\h3-657082a6d6fe4442bda79357db27c9cc-step00000010-state"
+      ],
+      "checkpoints": [
+        {
+          "name": "h3-657082a6d6fe4442bda79357db27c9cc-step00000010.safetensors",
+          "bytes": 149165288
+        },
+        {
+          "name": "h3-657082a6d6fe4442bda79357db27c9cc.safetensors",
+          "bytes": 149165288
+        }
+      ],
+      "saved_states": [
+        {
+          "name": "h3-657082a6d6fe4442bda79357db27c9cc-state",
+          "bytes": 447704425
+        },
+        {
+          "name": "h3-657082a6d6fe4442bda79357db27c9cc-step00000010-state",
+          "bytes": 447704425
+        }
+      ],
+      "samples": [],
+      "segment": {
+        "additional_steps": 10,
+        "optimizer_step_before": 10,
+        "counter_resets": true,
+        "data_position_restored": false
+      },
+      "resume_of": "68cb10f0",
+      "saved_state_inspection": [
+        {
+          "name": "h3-657082a6d6fe4442bda79357db27c9cc-state",
+          "valid": true,
+          "optimizer_step": 20,
+          "scheduler_step": 20
+        },
+        {
+          "name": "h3-657082a6d6fe4442bda79357db27c9cc-step00000010-state",
+          "valid": true,
+          "optimizer_step": 20,
+          "scheduler_step": 20
+        }
+      ]
+    }
+  ]
+}
