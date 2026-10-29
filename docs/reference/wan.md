@@ -85,6 +85,36 @@ expert and samples with both using lazy loading, applying the learned LoRA to lo
 High-noise-only CLI training has now passed the native-weight scenario below.
 Combined training has been evaluated from source, **not GPU-proven**.
 
+## Production-size trial, 29 October 2026
+
+[Issue #26](https://github.com/barnabyg/musubiGui/issues/26) ran the GUI recipe at
+production size on the same RTX 3090 / 96 GB host with native FP16 experts. The
+dataset was 28 owner-provided video clips at 16 fps. Every run used 832×480,
+33 frames, head extraction, rank/alpha 16, learning rate 1e-4, batch one, gradient
+checkpointing and runtime FP8 scaling. The
+[evidence file](evidence/production-trial.json) records every attempt, its frozen
+configuration and arguments, sampled resources and GPU throttle reasons.
+
+| Attempt                        | Result                                              | Step time    |
+| ------------------------------ | --------------------------------------------------- | ------------ |
+| 36 swapped blocks, 280 W       | Trains; 21.0 GiB peak device VRAM                   | 93.8–94.5 s  |
+| 39 swapped blocks              | Fails at step 0 in upstream FP8 linear patch (#31)  | —            |
+| 36 blocks, 350 W, steeper fans | Trains                                              | 83.6 s       |
+| 36 blocks, 280 W, steeper fans | 200 steps, checkpoints and state at 100/200, sample | 79.1 s, flat |
+
+The 200-step run took 4 h 22 min. Peak sampled values were 21.1 GiB device VRAM,
+18.2 GiB process-tree RSS and 34.1 GiB host RAM; RSS stayed at 16–18 GiB with no
+growth. Step time is bounded by GPU thermal slowdown, active in 68–77% of loaded
+samples at up to 68 °C core, not by VRAM or the power cap. Each rank-16 LoRA is
+306,848,376 bytes and each optimizer-state folder about 879 MiB; the final save
+duplicates the last interval save (#34). The 20-step sample at 832×480 × 33 frames
+took about 9 minutes and decoded cleanly. Wan generation downloads the UMT5
+tokenizer into each run cache (#35).
+
+This is the Measured Wan preset. 81 frames, 720×1280 and rank 32 were not tried.
+Useful learning was not assessed: 200 steps is below the several hundred steps a
+LoRA needs to change samples visibly, and the GUI cannot produce a no-LoRA baseline.
+
 ## Native-weight qualification
 
 On 27 October 2026, the user-supplied native FP16 low/high-noise experts and native
