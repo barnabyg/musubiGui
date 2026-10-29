@@ -58,9 +58,19 @@ test('captions edit beneath thumbnails, share the preview draft and flush the la
     await page.getByRole('button', { name: 'Close preview' }).click();
 
     // Undoing a failed edit still resolves the failed save against the server revision.
+    // Earlier saves must land first, or the injected failure can hit one of them.
+    await expect
+      .poll(() => readFile(path.join(app.media, 'red.txt'), 'utf8'))
+      .toBe('Shared from the preview');
     let failOnce = true;
     await page.route('**/caption', async (route) => {
-      if (route.request().method() === 'PUT' && failOnce) {
+      const request = route.request();
+      if (
+        request.method() === 'PUT' &&
+        failOnce &&
+        (request.postDataJSON() as { text: string }).text ===
+          'An interrupted edit'
+      ) {
         failOnce = false;
         await route.fulfill({
           status: 500,
