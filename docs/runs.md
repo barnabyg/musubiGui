@@ -80,6 +80,16 @@ fully observed stop, Inspect saved states checks model/optimizer/scheduler/RNG
 files and records hashes. Hashing large state folders takes seconds; the panel
 shows that it is checking and accepts no repeat request until it finishes.
 Missing, incomplete or changed files are rejected.
+
+When the step count is a multiple of the checkpoint interval, the pinned upstream
+saves the last step twice: once as the interval save `<name>-stepN` and again as
+the final `<name>` checkpoint and `<name>-state`. After training succeeds, the
+interval copy is removed only when it is proven identical. Its checkpoint must
+have the same tensors and data, ignoring the save date, epoch and finish time
+that upstream writes into each header. Every state file must have the same
+content hash. The final copies are always kept and are the ones Inspect saved
+states, Restore and sampling use. The training log names each removed copy; a
+copy that differs, or a check that fails, is kept.
 Restore as new segment preserves the original Job/Run and records lineage and
 the requested additional steps. The pinned upstream restores optimizer state
 but resets its displayed step counter and data position; seamless continuation

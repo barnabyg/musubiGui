@@ -249,6 +249,37 @@ def test_graceful_stop_waits_for_descendants_still_exiting_after_the_launcher(tm
         service.close()
 
 
+def test_final_save_at_a_checkpoint_interval_is_stored_once(tmp_path: Path) -> None:
+    # The fixture job trains two steps with a checkpoint interval of one and saved state on.
+    fixture = prepare_acceptance(tmp_path / "acceptance", "fixture", None)
+    service = RunService(Path(fixture["state"]), fixture_mode=True, device_path=tmp_path / "gpu.sqlite")
+    try:
+        run = service.prepare(fixture["jobs"][0]["id"])
+        wait_for(service, run["id"], "prepared")
+        service.start(run["id"])
+        completed = wait_for(service, run["id"], "completed")
+        train = next(stage["args"] for stage in completed["stages"] if stage["name"] == "train")
+        name = train[train.index("--output_name") + 1]
+        checkpoints = Path(completed["directory"]) / "checkpoints"
+        assert sorted(path.name for path in checkpoints.iterdir()) == [
+            f"{name}-state",
+            f"{name}-step00000001-state",
+            f"{name}-step00000001.safetensors",
+            f"{name}.safetensors",
+        ]
+        assert completed["removed_duplicates"] == [f"{name}-step00000002.safetensors", f"{name}-step00000002-state"]
+        assert sorted(Path(file).name for file in completed["checkpoints"]) == [
+            f"{name}-step00000001.safetensors",
+            f"{name}.safetensors",
+        ]
+        assert "Removed duplicate" in service.logs(run["id"])
+        states = {state["name"]: state for state in service.saved_states(run["id"])}
+        assert states[f"{name}-state"]["valid"] and states[f"{name}-state"]["optimizer_step"] == 2
+        assert states[f"{name}-step00000001-state"]["optimizer_step"] == 1
+    finally:
+        service.close()
+
+
 def test_saved_optimizer_state_restores_as_a_new_segment_and_rejects_tampering(tmp_path: Path) -> None:
     fixture = prepare_acceptance(tmp_path / "acceptance", "fixture", None)
     service = RunService(Path(fixture["state"]), fixture_mode=True, device_path=tmp_path / "gpu.sqlite")

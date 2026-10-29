@@ -17,6 +17,7 @@ from typing import Any
 
 import psutil
 
+from musubi_gui.checkpoint_dedup import remove_final_duplicates
 from musubi_gui.media_probe import inspect as inspect_media
 from musubi_gui.processes import identity_status, observed_tree, process_identity, terminate_owned
 from musubi_gui.reference import Stage, redact, reference_environment
@@ -582,10 +583,14 @@ class RunService:
                         raise ValueError(f"{stage['name']} returned success but produced no complete cache artifacts.")
                     self.store.update(run_id, lambda r: r["stages"][index].update(artifacts=artifacts))
                 elif stage["name"] == "train":
+                    removed = self._remove_final_duplicates(run, stage)
                     checkpoints = list((Path(run["directory"]) / "checkpoints").glob("*.safetensors"))
                     if not any(file.stat().st_size > 0 for file in checkpoints):
                         raise ValueError("Training exited successfully but no nonempty checkpoint was found.")
-                    self.store.update(run_id, lambda r: r.update(checkpoints=[str(file) for file in checkpoints]))
+                    self.store.update(
+                        run_id,
+                        lambda r: r.update(checkpoints=[str(file) for file in checkpoints], removed_duplicates=removed),
+                    )
                 elif stage["name"] == "generate":
                     samples = list((Path(run["directory"]) / "samples").rglob("*"))
                     media_files = [
@@ -636,6 +641,27 @@ class RunService:
                 if failure is None:
                     self.store.update(run_id, lambda r: r.update(processes=[], launch_pending=False))
                 self.device.release(run_id)
+
+    def _remove_final_duplicates(self, run: dict[str, Any], stage: dict[str, Any]) -> builtins.list[str]:
+        """Keep one copy of the final save when the step count is a multiple of the checkpoint interval."""
+        args = stage["args"]
+        if "--output_name" not in args or "--max_train_steps" not in args:
+            return []
+        log_file = Path(run["directory"]) / f"{stage['name']}.log"
+        try:
+            removed = remove_final_duplicates(
+                Path(run["directory"]) / "checkpoints",
+                args[args.index("--output_name") + 1],
+                int(args[args.index("--max_train_steps") + 1]),
+            )
+            message = "".join(f"Removed duplicate of the final save: {name}\n" for name in removed)
+        except (OSError, ValueError) as error:
+            removed = []
+            message = f"Kept the interval copy of the final save; duplicate check failed: {error}\n"
+        if message:
+            with log_file.open("a", encoding="utf-8") as log:
+                log.write(message)
+        return removed
 
     def _signal_stop(
         self, run_id: str, job_object: ProcessJob, identities: builtins.list[dict[str, Any]], signalled: str
