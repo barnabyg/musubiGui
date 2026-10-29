@@ -39,11 +39,21 @@ def observed_tree(pid: int) -> list[dict[str, Any]]:
 
 
 def terminate_owned(identities: list[dict[str, Any]], force: bool) -> None:
+    """Kill every owned process, or ask them to stop gracefully.
+
+    A Windows console break is addressed to a process group. The first identity is the stage
+    launcher, created as a group leader, and its descendants inherit that group, so a graceful
+    stop signals only the launcher. Breaking any other PID is undefined and can reach every
+    process on the console, including this one. Once the launcher has exited there is no group
+    leader left to signal, and remaining descendants need a confirmed force stop.
+    """
     processes = []
     for identity in identities:
         process = matching_process(identity)
         if process:
             processes.append(process)
+    if not force and os.name == "nt":
+        processes = processes[:1] if processes and processes[0].pid == identities[0]["pid"] else []
     for process in reversed(processes):
         try:
             if force:
