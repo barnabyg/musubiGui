@@ -628,10 +628,8 @@ class RunService:
 
     def _cache_artifacts(self, run: dict[str, Any], stage: str) -> builtins.list[dict[str, str]]:
         cache = Path(run["cache"])
-        candidates = [
-            *list((cache / "dataset").glob("*.safetensors")),
-            *list((cache / "dataset-images").glob("*.safetensors")),
-        ]
+        # dataset, dataset-images, and one dataset-rate-N per Wan source frame rate.
+        candidates = list(cache.glob("dataset*/*.safetensors"))
         files = [file for file in candidates if file.name.endswith("_te.safetensors") == (stage == "text_cache")]
         if run["job"]["family"] == "h3" and stage == "text_cache":
             uncond = cache / "uncond.safetensors"

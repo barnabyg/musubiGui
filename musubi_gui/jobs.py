@@ -19,6 +19,7 @@ from musubi_gui.diagnostics import upstream_revision
 from musubi_gui.h3 import h3_stages, validate_h3
 from musubi_gui.reference import CAPTION, UPSTREAM, Stage, redact, safetensors_header, validate_wan, wan_stages
 from musubi_gui.settings import Settings, atomic_json, load_settings, validate_paths, within_root
+from musubi_gui.video_sampling import plan_windows, video_sections
 
 _lock = threading.RLock()
 
@@ -388,8 +389,13 @@ def configuration_errors(job: Job) -> list[str]:
     return errors
 
 
-def dataset_toml(job: Job, directory: Path, cache: Path, *, kinds: set[str] | None = None) -> str:
-    """Directory is an immutable managed snapshot, never the mutable source dataset."""
+def dataset_toml(
+    job: Job, directory: Path, cache: Path, *, kinds: set[str] | None = None, video_rates: list[float] | None = None
+) -> str:
+    """Directory is an immutable managed snapshot, never the mutable source dataset.
+
+    Wan videos resample to 16 fps from each section's `source_fps`; H3 resamples by timestamps and ignores it.
+    """
     config = job.config
 
     def quote(path: Path) -> str:
@@ -411,15 +417,19 @@ def dataset_toml(job: Job, directory: Path, cache: Path, *, kinds: set[str] | No
                 )
             kinds = {"video"}
     sections = []
-    for kind in ["image", "video"]:
-        if kind not in kinds:
-            continue
-        cache_directory = cache / ("dataset-images" if kind == "image" else "dataset")
+    if "image" in kinds:
         sections.append(
-            f"[[datasets]]\n{kind}_directory = {quote(directory)}\ncache_directory = {quote(cache_directory)}\n"
-            'caption_extension = ".txt"\n'
-            + (f'target_frames = [{config.frames}]\nframe_extraction = "head"\n' if kind == "video" else "")
+            f"[[datasets]]\nimage_directory = {quote(directory)}\n"
+            f'cache_directory = {quote(cache / "dataset-images")}\ncaption_extension = ".txt"\n'
         )
+    if "video" in kinds:
+        rates = video_rates if job.family == "wan" and video_rates else []
+        for rate, video_directory, cache_directory in video_sections(directory, cache, rates):
+            sections.append(
+                f"[[datasets]]\nvideo_directory = {quote(video_directory)}\ncache_directory = {quote(cache_directory)}\n"
+                f'caption_extension = ".txt"\ntarget_frames = [{config.frames}]\nframe_extraction = "head"\n'
+                + (f"source_fps = {rate!r}\n" if rate is not None else "")
+            )
     return general + "\n".join(sections)
 
 
@@ -550,7 +560,13 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
                 if not item["caption"]["exists"]:
                     warnings.append(f"{item['name']}: no caption sidecar; the frozen caption will be empty.")
                 frames = item.get("metadata", {}).get("frames")
-                if item["kind"] == "video" and isinstance(frames, int) and frames < job.config.frames:
+                # Wan duration is checked after resampling to 16 fps, below.
+                if (
+                    job.family == "h3"
+                    and item["kind"] == "video"
+                    and isinstance(frames, int)
+                    and frames < job.config.frames
+                ):
                     errors.append(
                         f"{item['name']}: {frames} decoded frames cannot supply the requested {job.config.frames}; shorten the job or choose a longer video."
                     )
@@ -574,6 +590,9 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
                         audio_coverage["supervised"] += 1
         except (ValueError, OSError, ImportError, HTTPException) as error:
             errors.append(f"Dataset: {error}")
+    windows = plan_windows(job.family, job.config.frames, effective_items)
+    errors.extend(windows.pop("errors"))
+    warnings.extend(windows.pop("warnings"))
     output = Path(settings.output_root) / "jobs" / job.id
     cache = Path(settings.cache_root) / "jobs" / job.id
     snapshot = output / f"revision-{job.revision}"
@@ -596,13 +615,18 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
         "effective_items": effective_items,
         "effective_count": len(effective_items),
         "audio_coverage": audio_coverage,
+        "video_windows": windows,
         "models": {key: value for key, value in settings.models.items() if key.startswith(job.family + "_")},
         "model_provenance": model_provenance,
         "expected_upstream": UPSTREAM,
         "upstream_revision": actual_revision,
         "paths": {"output": str(output), "cache": str(cache), "snapshot": str(snapshot)},
         "dataset_toml": dataset_toml(
-            job, snapshot / "media", cache, kinds={item["kind"] for item in effective_items} or None
+            job,
+            snapshot / "media",
+            cache,
+            kinds={item["kind"] for item in effective_items} or None,
+            video_rates=windows["source_rates"],
         ),
         "stages": [{"name": stage.name, "args": stage.args} for stage in stages],
     }

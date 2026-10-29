@@ -17,6 +17,7 @@ from musubi_gui.diagnostics import training_environment, upstream_revision
 from musubi_gui.jobs import Job, build_stages, dataset_toml, effective_settings, load_job, review_job
 from musubi_gui.reference import safetensors_header
 from musubi_gui.settings import Settings, atomic_json, load_settings, within_root
+from musubi_gui.video_sampling import WAN_FPS, source_rate, source_rates, video_directory
 
 
 def digest_file(path: Path) -> str:
@@ -145,6 +146,9 @@ def identify_snapshot(root: Path, job_id: str, *, fixture_mode: bool = False) ->
             "audio_policy",
         }
     )
+    if job.family == "wan":
+        # Sections resample each source rate to 16 fps; caches built from un-resampled TOML are never reused.
+        preparation_settings["video_sampling"] = {"target_fps": WAN_FPS, "source_fps": source_rates(manifest["items"])}
     media = [
         {"path": item["path"], "sha256": item["sha256"], "audio": item.get("audio") if job.family == "h3" else None}
         for item in manifest["items"]
@@ -213,9 +217,14 @@ def materialize_snapshot(inputs: SnapshotIdentity) -> dict[str, Any]:
         media_directory = directory / "media"
         media_directory.mkdir()
         cache.mkdir(parents=True)
+        rates = source_rates(manifest["items"]) if job.family == "wan" else []
         for index, item in enumerate(manifest["items"]):
             source = store.media_path(job.dataset_id, item["id"])
-            target = media_directory / f"item{index:06d}{source.suffix.lower()}"
+            folder = media_directory
+            if rates and item["kind"] == "video":
+                folder = video_directory(media_directory, rates, source_rate(item))
+                folder.mkdir(exist_ok=True)
+            target = folder / f"item{index:06d}{source.suffix.lower()}"
             shutil.copyfile(source, target)
             actual = digest_file(target)
             if actual != item["sha256"]:
@@ -238,7 +247,7 @@ def materialize_snapshot(inputs: SnapshotIdentity) -> dict[str, Any]:
                 audio["snapshot_path"] = str(target_audio)
                 files[str(target_audio)] = actual_audio
         native = directory / "dataset.toml"
-        native_text = dataset_toml(job, media_directory, cache)
+        native_text = dataset_toml(job, media_directory, cache, video_rates=rates)
         if job.family == "h3":
             records = []
             for item in manifest["items"]:

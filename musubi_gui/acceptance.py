@@ -19,12 +19,12 @@ from musubi_gui.acceptance_worker import tensor
 from musubi_gui.settings import Settings, atomic_json, save_settings, validate_paths
 
 
-def synthetic_video(file: Path, frames: int, audio: bool = False) -> None:
+def synthetic_video(file: Path, frames: int, audio: bool = False, rate: Fraction | int = 24) -> None:
     import av
 
     file.parent.mkdir(parents=True, exist_ok=True)
     with av.open(str(file), "w") as container:
-        video: Any = container.add_stream("libx264", rate=24)
+        video: Any = container.add_stream("libx264", rate=rate)
         video.width, video.height, video.pix_fmt = 256, 256, "yuv420p"
         video.options = {"preset": "ultrafast", "crf": "24"}
         sound: Any = container.add_stream("aac", rate=48000) if audio else None
@@ -39,7 +39,7 @@ def synthetic_video(file: Path, frames: int, audio: bool = False) -> None:
         for packet in video.encode():
             container.mux(packet)
         if sound:
-            total = frames * 2000
+            total = round(frames * 48000 / rate)
             for start in range(0, total, 1024):
                 count = min(1024, total - start)
                 audio_frame = av.AudioFrame(format="fltp", layout="mono", samples=count)
@@ -174,8 +174,9 @@ def prepare(workspace: Path, mode: str, selected: Path | None) -> dict[str, Any]
         for family in families:
             folder = datasets / family
             folder.mkdir(parents=True)
-            frames = 17 if family == "wan" else 124
-            synthetic_video(folder / "motion.mp4", frames)
+            # Each family's native training rate, so no frames are dropped by resampling.
+            frames, rate = (17, 16) if family == "wan" else (124, 24)
+            synthetic_video(folder / "motion.mp4", frames, rate=rate)
             (folder / "motion.txt").write_text(
                 "A blue field gradually brightens. A steady tone plays.", encoding="utf-8"
             )

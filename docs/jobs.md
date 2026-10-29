@@ -49,6 +49,18 @@ between 124 and 345. Unsupported CFG, negative prompts, Ref2VA, FL2VA training a
 full fine-tuning are not offered. H3 drafts require video items; Wan may use images
 and videos, emitted as separate native dataset sections.
 
+Wan trains and samples at 16 fps. Each Wan video section sets `source_fps` to the
+probed frame rate, so the pinned loader drops frames to 16 fps instead of training
+a 30 fps clip as slow motion. `source_fps` applies to a whole section, so a dataset
+with several frame rates is frozen into one `rate-N` folder, section and cache
+directory per rate. Review names every resampled clip and its frame count before and
+after resampling. A clip that is too short after resampling is blocked; Wan target
+frames need `frames / 16` seconds of source video. Clips below 16 fps, or with an
+unknown frame rate, are blocked because the loader cannot add frames; re-encode or
+exclude them. H3 always resamples to 24 fps by frame timestamps and ignores
+`source_fps`, so its TOML is unchanged. Wan latent and text caches prepared before
+resampling are not reused.
+
 H3's audio policy defaults to requiring supervised audio for every included video.
 Review shows item-specific source/alignment diagnostics and supervision totals.
 Explicitly allowing missing audio produces an audio-less item excluded from audio
