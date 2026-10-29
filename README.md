@@ -28,7 +28,9 @@ of existing scaled-FP8 files; originals remain untouched and lost precision is n
 
 In Settings, select the existing checkout and its Python executable, dedicated output/cache
 roots, and model roots. Component paths must remain within those model roots; symlinks and
-Windows junctions resolve before containment checks. Save, then Run diagnostics. The probe
+Windows junctions resolve before containment checks. Enter one model or dataset root per line;
+saving drops blank lines and surrounding spaces. Save, then Run diagnostics: it warns about each
+configured root that is not an existing folder, such as two paths joined on one line. The probe
 records the selected environment's Python, packages, CUDA/GPU, upstream revision, host RAM,
 disk space and write checks. It does not log raw subprocess output or environment variables.
 Settings live in `.state/settings.json`; dataset/run metadata uses versioned SQLite
