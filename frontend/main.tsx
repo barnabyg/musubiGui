@@ -15,6 +15,7 @@ type Settings = {
   output_root: string;
   cache_root: string;
 };
+type RootKey = 'model_roots' | 'dataset_roots';
 type Report = {
   checks: { name: string; status: string; message: string }[];
   environment: Record<string, unknown>;
@@ -29,6 +30,14 @@ const components = [
   ['h3_audio_vae', 'H3 audio VAE'],
   ['h3_text', 'H3 Qwen text encoder'],
 ];
+
+// Root textareas keep raw text while editing so Enter can start an empty line.
+function rootLines(text: string) {
+  return text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
 
 async function api<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, options);
@@ -45,6 +54,10 @@ async function api<T>(url: string, options?: RequestInit): Promise<T> {
 
 function App() {
   const [settings, setSettings] = useState<Settings | null>(null);
+  const [rootText, setRootText] = useState<Record<RootKey, string>>({
+    model_roots: '',
+    dataset_roots: '',
+  });
   const [status, setStatus] = useState('Loading settings…');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -63,10 +76,17 @@ function App() {
       return;
     setScreen(name);
   }
+  function load(value: Settings) {
+    setSettings(value);
+    setRootText({
+      model_roots: value.model_roots.join('\n'),
+      dataset_roots: value.dataset_roots.join('\n'),
+    });
+  }
   useEffect(() => {
     void api<Settings>('/api/settings')
       .then((value) => {
-        setSettings(value);
+        load(value);
         setStatus('Settings loaded');
       })
       .catch((reason: Error) => {
@@ -81,22 +101,31 @@ function App() {
     window.addEventListener('beforeunload', protect);
     return () => window.removeEventListener('beforeunload', protect);
   }, [dirty]);
-  function update(next: Settings) {
-    setSettings(next);
+  function changed() {
     setDirty(true);
     setStatus('Unsaved changes');
     setReport(null);
+  }
+  function update(next: Settings) {
+    setSettings(next);
+    changed();
   }
   async function save() {
     if (!settings) return;
     setBusy(true);
     setError('');
     try {
-      await api<Settings>('/api/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(settings),
-      });
+      load(
+        await api<Settings>('/api/settings', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...settings,
+            model_roots: rootLines(rootText.model_roots),
+            dataset_roots: rootLines(rootText.dataset_roots),
+          }),
+        }),
+      );
       setDirty(false);
       setStatus('Settings saved');
     } catch (reason) {
@@ -139,6 +168,28 @@ function App() {
           onChange={(event) =>
             settings && update({ ...settings, [key]: event.target.value })
           }
+        />
+        <small>{help}</small>
+      </label>
+    );
+  }
+  function rootsField(
+    label: string,
+    key: RootKey,
+    placeholder: string,
+    help: string,
+  ) {
+    return (
+      <label className="field">
+        {label}
+        <textarea
+          disabled={busy}
+          value={rootText[key]}
+          onChange={(event) => {
+            setRootText({ ...rootText, [key]: event.target.value });
+            changed();
+          }}
+          placeholder={placeholder}
         />
         <small>{help}</small>
       </label>
@@ -262,47 +313,18 @@ function App() {
                       'Dedicated location for prepared training caches.',
                     )}
                   </div>
-                  <label className="field">
-                    Model roots (one per line)
-                    <textarea
-                      disabled={busy}
-                      value={settings.model_roots.join('\n')}
-                      onChange={(event) =>
-                        update({
-                          ...settings,
-                          model_roots: event.target.value
-                            .split('\n')
-                            .filter(Boolean),
-                        })
-                      }
-                      placeholder="C:\ai\models"
-                    />
-                    <small>
-                      All component paths must be contained in one of these
-                      directories.
-                    </small>
-                  </label>
-                  <label className="field">
-                    Dataset roots (one per line)
-                    <textarea
-                      disabled={busy}
-                      value={settings.dataset_roots.join('\n')}
-                      onChange={(event) =>
-                        update({
-                          ...settings,
-                          dataset_roots: event.target.value
-                            .split('\n')
-                            .filter(Boolean),
-                        })
-                      }
-                      placeholder="C:\datasets"
-                    />
-                    <small>
-                      Registered folders and managed uploads stay within these
-                      local roots. Keep them separate from output/cache
-                      directories.
-                    </small>
-                  </label>
+                  {rootsField(
+                    'Model roots (one per line)',
+                    'model_roots',
+                    'C:\\ai\\models',
+                    'All component paths must be contained in one of these directories.',
+                  )}
+                  {rootsField(
+                    'Dataset roots (one per line)',
+                    'dataset_roots',
+                    'C:\\datasets',
+                    'Registered folders and managed uploads stay within these local roots. Keep them separate from output/cache directories.',
+                  )}
                   <details>
                     <summary>
                       Model component paths <span>Wan 2.2 · MiniMax H3</span>

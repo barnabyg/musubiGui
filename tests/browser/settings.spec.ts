@@ -14,23 +14,7 @@ import path from 'node:path';
 import { createServer } from 'node:net';
 import { stopBackendTree } from './processes';
 
-test('settings survive backend restart and invalid installations explain corrections', async ({
-  page,
-}) => {
-  // Windows CI's TEMP can use an 8.3 alias; the backend returns resolved paths.
-  const root = await realpath(
-    await mkdtemp(path.join(tmpdir(), 'musubi-setup-')),
-  );
-  const checkout = path.join(root, '安装 with spaces');
-  await mkdir(checkout);
-  await writeFile(
-    path.join(checkout, 'wan_train_network.py'),
-    '# fixture checkout',
-  );
-  await writeFile(
-    path.join(checkout, 'minimax_h3_train_network.py'),
-    '# fixture checkout',
-  );
+async function settingsBackend(root: string) {
   const reservation = createServer();
   await new Promise<void>((resolve) =>
     reservation.listen(0, '127.0.0.1', resolve),
@@ -75,6 +59,27 @@ test('settings survive backend restart and invalid installations explain correct
       await exited;
     }
   };
+  return { url, start, stop };
+}
+
+test('settings survive backend restart and invalid installations explain corrections', async ({
+  page,
+}) => {
+  // Windows CI's TEMP can use an 8.3 alias; the backend returns resolved paths.
+  const root = await realpath(
+    await mkdtemp(path.join(tmpdir(), 'musubi-setup-')),
+  );
+  const checkout = path.join(root, '安装 with spaces');
+  await mkdir(checkout);
+  await writeFile(
+    path.join(checkout, 'wan_train_network.py'),
+    '# fixture checkout',
+  );
+  await writeFile(
+    path.join(checkout, 'minimax_h3_train_network.py'),
+    '# fixture checkout',
+  );
+  const { url, start, stop } = await settingsBackend(root);
   try {
     await start();
     await page.goto(url);
@@ -135,6 +140,71 @@ test('settings survive backend restart and invalid installations explain correct
         'Install PyTorch in the selected training environment; the GUI will not change it.',
       ),
     ).toBeVisible();
+  } finally {
+    await stop();
+    await rm(root, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 100,
+    });
+  }
+});
+
+test('typed Enter separates model and dataset roots and diagnostics name missing roots', async ({
+  page,
+}) => {
+  const root = await realpath(
+    await mkdtemp(path.join(tmpdir(), 'musubi-roots-')),
+  );
+  const firstModels = path.join(root, 'models');
+  const secondModels = path.join(root, 'derived');
+  const datasets = path.join(root, 'datasets');
+  const sampleVids = path.join(root, 'sample_vids');
+  for (const folder of [firstModels, secondModels, datasets])
+    await mkdir(folder);
+  const { url, start, stop } = await settingsBackend(root);
+  try {
+    await start();
+    await page.goto(url);
+    const modelRoots = page.getByLabel('Model roots (one per line)');
+    const datasetRoots = page.getByLabel('Dataset roots (one per line)');
+    await expect(datasetRoots).toHaveValue(datasets);
+    await modelRoots.pressSequentially(firstModels);
+    await modelRoots.press('Enter');
+    await modelRoots.pressSequentially(secondModels);
+    await expect(modelRoots).toHaveValue(`${firstModels}\n${secondModels}`);
+    await datasetRoots.press('ControlOrMeta+A');
+    await datasetRoots.press('Delete');
+    await datasetRoots.pressSequentially(`  ${datasets}`);
+    await datasetRoots.press('Enter');
+    await datasetRoots.press('Enter');
+    await datasetRoots.pressSequentially(`${sampleVids}  `);
+    await datasetRoots.press('Enter');
+    await expect(datasetRoots).toHaveValue(
+      `  ${datasets}\n\n${sampleVids}  \n`,
+    );
+    await page.getByRole('button', { name: 'Save settings' }).click();
+    await expect(page.getByRole('status')).toHaveText('Settings saved');
+    await expect(datasetRoots).toHaveValue(`${datasets}\n${sampleVids}`);
+    const saved = (await (await fetch(`${url}/api/settings`)).json()) as {
+      model_roots: string[];
+      dataset_roots: string[];
+    };
+    expect(saved.model_roots).toEqual([firstModels, secondModels]);
+    expect(saved.dataset_roots).toEqual([datasets, sampleVids]);
+    await page.reload();
+    await expect(modelRoots).toHaveValue(`${firstModels}\n${secondModels}`);
+    await expect(datasetRoots).toHaveValue(`${datasets}\n${sampleVids}`);
+    await page.getByRole('button', { name: 'Run diagnostics' }).click();
+    const warning = page
+      .locator('.check.warning')
+      .filter({ hasText: 'Dataset roots' });
+    await expect(warning).toContainText(
+      `Not an existing folder: ${sampleVids}.`,
+    );
+    await expect(warning).not.toContainText(datasets);
+    await expect(page.getByText('Model roots', { exact: true })).toHaveCount(0);
   } finally {
     await stop();
     await rm(root, {
