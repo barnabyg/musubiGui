@@ -15,7 +15,7 @@ from musubi_gui.snapshots import digest_file
 
 
 def tensor_digest(file: Path) -> str:
-    """Hash tensor layout and data, ignoring the save date, epoch and finish time in `__metadata__`."""
+    """Hash tensor layout and data, ignoring `__metadata__`, where upstream stamps each save's date and epoch."""
     with file.open("rb") as stream:
         size = int.from_bytes(stream.read(8), "little")
         if not 2 <= size <= 32 * 1024**2:

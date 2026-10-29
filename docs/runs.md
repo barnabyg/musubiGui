@@ -86,8 +86,8 @@ When the step count is a multiple of the checkpoint interval, the pinned upstrea
 saves the last step twice: once as the interval save `<name>-stepN` and again as
 the final `<name>` checkpoint and `<name>-state`. After training succeeds, the
 interval copy is removed only when it is proven identical. Its checkpoint must
-have the same tensors and data, ignoring the save date, epoch and finish time
-that upstream writes into each header. Every state file must have the same
+have the same tensors and data. Its header metadata is ignored, since upstream
+writes a different save date, epoch and finish time into each copy. Every state file must have the same
 content hash. The final copies are always kept and are the ones Inspect saved
 states, Restore and sampling use. The training log names each removed copy; a
 copy that differs, or a check that fails, is kept. A state removal that fails
