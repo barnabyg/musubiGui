@@ -25,7 +25,14 @@ async function createDataset(page: Page, url: string, media: string) {
   await page.getByLabel('Dataset name', { exact: true }).fill('Dropped media');
   await page.getByLabel('Dataset folder', { exact: true }).fill(media);
   await page.getByRole('button', { name: 'Create managed dataset' }).click();
-  await expect(page.getByLabel('Dataset file drop area')).toBeVisible();
+  // Creation scans the new folder before responding, so it gets the scan deadline.
+  // Stopping at an alert reports a creation error instead of a missing drop area.
+  const dropArea = page.getByLabel('Dataset file drop area');
+  await expect(dropArea.or(page.getByRole('alert'))).toBeVisible({
+    timeout: 45_000,
+  });
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await expect(dropArea).toBeVisible();
 }
 
 test('dropped images, video and captions use managed uploads, preserve collisions and survive restart', async ({

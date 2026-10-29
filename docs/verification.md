@@ -18,8 +18,10 @@ under Playwright's five-second default and pass with this budget. This is a corr
 suite, not a latency benchmark: assertions still require the exact expected result.
 Long upload/scan/preparation/training operations use explicit 45-second waits. This
 includes four-media registration scans: an 18-second completed-scan response reproduces
-the 15-second failure and passes with the operation budget. The
-two-family preparation/training scenario has a 120-second total budget.
+the 15-second failure and passes with the operation budget. Managed dataset
+creation also scans before responding and uses the same deadline; two consecutive
+hosted runs timed out at 15 seconds, and an 18-second creation response passes.
+The two-family preparation/training scenario has a 120-second total budget.
 The gallery/inline-caption virtual scrolling fixtures use eight real media files and
 a narrow viewport that forces cards to unmount. This tests recycling and retained
 drafts without requiring 24 separate probe startups just to exceed a desktop
