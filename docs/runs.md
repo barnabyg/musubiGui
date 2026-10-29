@@ -9,8 +9,9 @@ that another snapshot is being created and can be retried safely.
 
 Preparing an unchanged revision returns its existing Run, and the Jobs screen says
 so and links to it. A Run that ended without completing (failed, cancelled,
-stopped or interrupted) is not returned: Prepare creates a fresh Run of the same
-revision, for example after a stop to change machine settings. Its caches are
+stopped or interrupted) is not returned, unless it still records processes to
+reconcile: Prepare creates a fresh Run of the same revision, for example after a
+stop to change machine settings. Its caches are
 reused through the stage fingerprints below, and the earlier Run keeps its logs,
 outputs and saved states.
 

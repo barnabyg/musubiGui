@@ -9,8 +9,14 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-# Terminal statuses for runs that ended without completing; they never block a fresh run of the same revision.
-ENDED_EARLY = frozenset({"failed", "cancelled", "stopped", "interrupted"})
+
+def blocks_revision(run: dict[str, Any], fingerprint: str) -> bool:
+    """Whether `run` stands for this revision, so preparing it again returns `run` instead of a new Run.
+
+    A run that ended without completing doesn't, unless it still records processes to reconcile.
+    """
+    ended_early = run["status"] in {"failed", "cancelled", "stopped", "interrupted"} and not run.get("processes")
+    return run["fingerprint"] == fingerprint and not ended_early
 
 
 @contextmanager
@@ -53,7 +59,7 @@ class RunStore:
         with database(self.path) as connection:
             for row in connection.execute("SELECT data FROM records"):
                 previous = json.loads(row[0])
-                if previous["fingerprint"] == data["fingerprint"] and previous["status"] not in ENDED_EARLY:
+                if blocks_revision(previous, data["fingerprint"]):
                     return dict(previous)
             connection.execute("INSERT INTO records VALUES (?,?)", (data["id"], json.dumps(data)))
             return data
