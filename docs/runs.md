@@ -60,6 +60,10 @@ Request graceful stop first. Windows console signalling can be unavailable for
 some launch environments; inspect the reported result and use the separately
 confirmed Force terminate action when necessary. Neither action promises a save
 on stop. Only the observed process tree belonging to that Run is signalled.
+When the launcher exits, its descendants, such as the Python child behind a
+virtual-environment launcher, get up to 30 seconds to finish exiting. The Run then
+becomes stopped and its active stage shows stopped. A descendant still alive after
+that grace period makes the Run orphaned instead.
 
 Enable saved optimizer state in the Job before training. After completion or a
 fully observed stop, Inspect saved states checks model/optimizer/scheduler/RNG
@@ -82,7 +86,10 @@ If a process survives, the Run is orphaned and the GPU remains owned. Reconcile
 processes refreshes observed state; Terminate recovered work requires confirmation
 and targets only those owned processes. Uncertain identity/access or a crash during
 launch blocks replacement GPU work. A known dead process/PID reuse does not count
-as live ownership. Once all recorded work is gone, the Run becomes interrupted and
+as live ownership. Once all recorded work is gone, an orphaned Run with a requested stop
+becomes stopped; after Terminate recovered work its stop is recorded as forced. A Run
+already interrupted by a service stop stays interrupted. Otherwise it becomes interrupted,
+with its running stage marked interrupted, and
 can be retried using frozen inputs or a validated saved optimizer state. No retry
 or replacement is launched automatically during uncertain recovery.
 Older reserved launches without atomic job assignment remain readable but are

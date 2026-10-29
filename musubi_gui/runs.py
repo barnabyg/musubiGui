@@ -53,10 +53,18 @@ def utc_now() -> str:
 
 class RunService:
     def __init__(
-        self, root: Path, *, device_path: Path | None = None, fixture_mode: bool = False, autostart: bool = True
+        self,
+        root: Path,
+        *,
+        device_path: Path | None = None,
+        fixture_mode: bool = False,
+        autostart: bool = True,
+        descendant_grace: float = 30.0,
     ):
         self.root = root
         self.fixture_mode = fixture_mode
+        # Seconds that descendants may take to exit after their stage launcher before the run is orphaned.
+        self.descendant_grace = descendant_grace
         self.store = RunStore(root)
         self.device = DeviceLease(root, device_path)
         self.identity = process_identity()
@@ -280,14 +288,24 @@ class RunService:
                 ),
             )
         self.device.release(run_id)
-        return self.store.update(
-            run_id,
-            lambda r: r.update(
+
+        def finish(record: dict[str, Any]) -> None:
+            # Every recorded process is gone, so a requested stop was observed rather than assumed.
+            # An already interrupted run stays retryable, as it was before stops were reconciled.
+            requested = record.get("stop_requested") if record["status"] != "interrupted" else None
+            for stage in record["stages"]:
+                if stage["status"] == "running":
+                    stage.update(status="stopped" if requested else "interrupted", finished=utc_now())
+            if requested:
+                record.update(status="stopped", stop_kind=requested, processes=[], error=None, finished=utc_now())
+                return
+            record.update(
                 status="interrupted",
                 processes=[],
                 error="The original processes are gone. Inspect outputs/state, then retry frozen preparation or restore validated optimizer state as a new segment.",
-            ),
-        )
+            )
+
+        return self.store.update(run_id, finish)
 
     def terminate_orphan(self, run_id: str, *, confirmed: bool = False) -> dict[str, Any]:
         if not confirmed:
@@ -302,6 +320,9 @@ class RunService:
             finally:
                 job.close()
         terminate_owned(run.get("processes", []), force=True)
+        if run.get("stop_requested"):
+            # A requested stop is completed by this confirmed force termination, whatever kind was asked for.
+            self.store.update(run_id, lambda r: r.update(stop_requested="force"))
         deadline = time.monotonic() + 5
         while time.monotonic() < deadline:
             if all(identity_status(identity) == "dead" for identity in run.get("processes", [])):
@@ -493,21 +514,7 @@ class RunService:
                         if self.get(run_id).get("cancel_requested"):
                             job_object.terminate()
                             terminate_owned(identities, force=True)
-                        stop = self.get(run_id).get("stop_requested", "")
-                        if stop and stop != signalled:
-                            try:
-                                if stop == "force":
-                                    job_object.terminate()
-                                terminate_owned(identities, force=stop == "force")
-                                signalled = stop
-                            except OSError:
-                                self.store.update(
-                                    run_id,
-                                    lambda r: r.update(
-                                        error="Graceful console signalling is unavailable. Use confirmed force termination if the process remains active."
-                                    ),
-                                )
-                                signalled = stop
+                        signalled = self._signal_stop(run_id, job_object, identities, signalled)
                         if self.stopping.wait(0.1):
                             release = False
                             self.store.update(
@@ -525,17 +532,19 @@ class RunService:
                     code = process.wait()
                     if isinstance(process, WindowsProcess):
                         process.close()
-                    remaining = job_object.pids()
-                    for pid in remaining:
-                        try:
-                            identity = process_identity(pid)
-                            if identity not in identities:
-                                identities.append(identity)
-                        except psutil.NoSuchProcess:
-                            pass
-                    if remaining or any(identity_status(identity) != "dead" for identity in identities):
+                    if not self._await_descendant_exit(run_id, job_object, identities, signalled):
                         release = False
                         self.device.update(run_id, identities)
+                        if self.stopping.is_set():
+                            self.store.update(
+                                run_id,
+                                lambda r: r.update(
+                                    status="interrupted",
+                                    processes=identities,
+                                    error="Service stopped; reconcile the recorded process before retrying.",
+                                ),
+                            )
+                            return
                         self.store.update(
                             run_id,
                             lambda r: r.update(
@@ -545,13 +554,15 @@ class RunService:
                             ),
                         )
                         return
+                requested = self.get(run_id).get("stop_requested")
                 self.store.update(
                     run_id,
                     lambda r: r["stages"][index].update(
-                        status="completed" if code == 0 else "failed", exit_code=code, finished=utc_now()
+                        status="stopped" if requested else "completed" if code == 0 else "failed",
+                        exit_code=code,
+                        finished=utc_now(),
                     ),
                 )
-                requested = self.get(run_id).get("stop_requested")
                 if requested:
                     self.store.update(
                         run_id,
@@ -625,6 +636,52 @@ class RunService:
                 if failure is None:
                     self.store.update(run_id, lambda r: r.update(processes=[], launch_pending=False))
                 self.device.release(run_id)
+
+    def _signal_stop(
+        self, run_id: str, job_object: ProcessJob, identities: builtins.list[dict[str, Any]], signalled: str
+    ) -> str:
+        """Signal a newly requested stop to the owned tree once; returns the stop kind now signalled."""
+        stop = self.get(run_id).get("stop_requested", "")
+        if not stop or stop == signalled:
+            return signalled
+        try:
+            if stop == "force":
+                job_object.terminate()
+            terminate_owned(identities, force=stop == "force")
+        except OSError:
+            self.store.update(
+                run_id,
+                lambda r: r.update(
+                    error="Graceful console signalling is unavailable. Use confirmed force termination if the process remains active."
+                ),
+            )
+        return str(stop)
+
+    def _await_descendant_exit(
+        self, run_id: str, job_object: ProcessJob, identities: builtins.list[dict[str, Any]], signalled: str
+    ) -> bool:
+        """Allow a bounded grace period for descendants still exiting after their launcher, such as
+        the Python child behind a venv launcher or a short-lived nvidia-smi. Records late arrivals
+        and still honours stop requests; returns whether every owned process has exited."""
+        deadline = time.monotonic() + self.descendant_grace
+        while True:
+            remaining = job_object.pids()
+            known = len(identities)
+            for pid in remaining:
+                try:
+                    identity = process_identity(pid)
+                    if identity not in identities:
+                        identities.append(identity)
+                except psutil.NoSuchProcess:
+                    pass
+            if len(identities) > known:
+                self.device.update(run_id, identities)
+                self.store.update(run_id, lambda r: r.update(processes=identities))
+            if not remaining and all(identity_status(identity) == "dead" for identity in identities):
+                return True
+            signalled = self._signal_stop(run_id, job_object, identities, signalled)
+            if time.monotonic() >= deadline or self.stopping.wait(0.1):
+                return False
 
     def _cache_artifacts(self, run: dict[str, Any], stage: str) -> builtins.list[dict[str, str]]:
         cache = Path(run["cache"])

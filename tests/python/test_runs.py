@@ -206,8 +206,46 @@ def test_force_stop_requires_confirmation_and_releases_only_the_owned_worker(tmp
         service.stop(run["id"], force=True, confirmed=True)
         stopped = wait_for(service, run["id"], "stopped", device_released=True)
         assert stopped["stop_kind"] == "force"
+        assert next(stage for stage in stopped["stages"] if stage["name"] == "train")["status"] == "stopped"
         assert service.device.owner() is None
     finally:
+        service.close()
+
+
+def test_graceful_stop_waits_for_descendants_still_exiting_after_the_launcher(tmp_path: Path) -> None:
+    service = RunService(tmp_path / "state", device_path=tmp_path / "gpu.sqlite", descendant_grace=10)
+    try:
+        execution = plan(tmp_path)
+        work = Path(execution.settings.checkout)
+        # Both ignore console breaks so the test controls exit order: the launcher exits first,
+        # and its child (like the Python child behind a venv launcher) finishes a second later.
+        ignore = "import signal;signal.signal(getattr(signal,'SIGBREAK',signal.SIGINT),signal.SIG_IGN)\n"
+        child = (
+            ignore + "import pathlib,time\nwhile not pathlib.Path('release').exists(): time.sleep(.02)\ntime.sleep(1)\n"
+        )
+        (work / "child.py").write_text(child, encoding="utf-8")
+        (work / "launcher.py").write_text(
+            ignore + "import pathlib,subprocess,sys,time\n"
+            "subprocess.Popen([sys.executable,'child.py'])\n"
+            "print('training',flush=True)\n"
+            "while not pathlib.Path('release').exists(): time.sleep(.02)\n",
+            encoding="utf-8",
+        )
+        execution.stages.append(Stage("train", [sys.executable, str(work / "launcher.py")]))
+        run = service.submit(execution)
+        wait_for(service, run["id"], "prepared")
+        service.start(run["id"])
+        wait_for(service, run["id"], "training")
+        service.stop(run["id"])
+        (work / "release").write_text("", encoding="utf-8")
+        stopped = wait_for(service, run["id"], "stopped", device_released=True)
+        assert stopped["stop_kind"] == "graceful"
+        assert stopped["processes"] == []
+        assert next(stage for stage in stopped["stages"] if stage["name"] == "train")["status"] == "stopped"
+    finally:
+        from musubi_gui.processes import terminate_owned
+
+        terminate_owned(service.get(run["id"]).get("processes", []), force=True)
         service.close()
 
 
