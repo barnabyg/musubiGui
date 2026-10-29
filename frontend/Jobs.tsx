@@ -141,7 +141,8 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
   const [models, setModels] = useState<Record<string, string>>({});
   const [job, setJob] = useState<Job | null>(null);
   const [dirty, setDirty] = useState(false);
-  const [busy, setBusy] = useState(false);
+  // Busy until the initial load lands, so it cannot replace drafts created meanwhile.
+  const [busy, setBusy] = useState(true);
   const [status, setStatus] = useState('Loading jobs…');
   const [error, setError] = useState('');
   const [review, setReview] = useState<Review | null>(null);
@@ -166,7 +167,8 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
         setPresets(savedPresets);
         setStatus('Jobs loaded');
       })
-      .catch((reason: Error) => setError(reason.message));
+      .catch((reason: Error) => setError(reason.message))
+      .finally(() => setBusy(false));
   }, []);
   useEffect(() => {
     onDirtyChange?.(dirty);
