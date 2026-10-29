@@ -104,10 +104,44 @@ test('Wan and H3 prepare and train through the GUI with frozen captions cache re
           ),
         )
         .toBeGreaterThan(0);
-      await page
-        .getByRole('button', { name: 'Inspect saved states', exact: true })
-        .click();
+      const inspect = page.getByRole('button', {
+        name: 'Inspect saved states',
+        exact: true,
+      });
+      // Hold the hashing response to observe the busy state, then fail one request.
+      let release = () => {};
+      const held = new Promise<void>((resolve) => (release = resolve));
+      let requests = 0;
+      await page.route('**/api/runs/*/states', async (route) => {
+        requests += 1;
+        await held;
+        if (requests === 1) await route.continue();
+        else
+          await route.fulfill({
+            status: 500,
+            contentType: 'application/json',
+            body: JSON.stringify({ detail: 'State inspection failed.' }),
+          });
+      });
+      await inspect.click();
+      await expect(inspect).toBeDisabled();
+      await expect(
+        page.getByText('Checking saved states…', { exact: true }),
+      ).toBeVisible();
+      await inspect.click({ force: true });
+      release();
       await expect(page.getByText(/optimizer step 2/)).toBeVisible();
+      await expect(inspect).toBeEnabled();
+      expect(requests).toBe(1);
+      await inspect.click();
+      await expect(
+        page.getByRole('alert').filter({ hasText: 'State inspection failed.' }),
+      ).toBeVisible();
+      await expect(inspect).toBeEnabled();
+      await expect(
+        page.getByText('Checking saved states…', { exact: true }),
+      ).toBeHidden();
+      await page.unroute('**/api/runs/*/states');
     }
   } finally {
     await app.close();

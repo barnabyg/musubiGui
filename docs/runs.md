@@ -70,7 +70,9 @@ that grace period makes the Run orphaned instead.
 
 Enable saved optimizer state in the Job before training. After completion or a
 fully observed stop, Inspect saved states checks model/optimizer/scheduler/RNG
-files and records hashes. Missing, incomplete or changed files are rejected.
+files and records hashes. Hashing large state folders takes seconds; the panel
+shows that it is checking and accepts no repeat request until it finishes.
+Missing, incomplete or changed files are rejected.
 Restore as new segment preserves the original Job/Run and records lineage and
 the requested additional steps. The pinned upstream restores optimizer state
 but resets its displayed step counter and data position; seamless continuation
