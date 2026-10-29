@@ -110,6 +110,21 @@ def test_wan_block_swap_is_limited_to_the_qualified_maximum(tmp_path: Path, bloc
         assert "36" in swap_errors[0] and "FP8" in swap_errors[0]
 
 
+@pytest.mark.parametrize(("blocks", "valid"), [(0, True), (48, True), (49, False), (53, False)])
+def test_h3_block_swap_is_limited_to_the_qualified_maximum(tmp_path: Path, blocks: int, valid: bool) -> None:
+    client = client_for(tmp_path)
+    job = client.post("/api/jobs", json={"name": "Swap", "family": "h3", "config": {"blocks_to_swap": blocks}}).json()
+    reopened = client_for(tmp_path).get(f"/api/jobs/{job['id']}").json()
+    assert reopened["config"]["blocks_to_swap"] == blocks
+    errors = client.post(f"/api/jobs/{job['id']}/review", json={}).json()["errors"]
+    swap_errors = [error for error in errors if error.startswith("Block swapping")]
+    if valid:
+        assert swap_errors == []
+    else:
+        assert len(swap_errors) == 1
+        assert "48" in swap_errors[0] and "50" in swap_errors[0]
+
+
 def test_h3_draft_defaults_and_native_stages_match_guidance_loss_recipe(tmp_path: Path) -> None:
     save_settings(
         tmp_path,
