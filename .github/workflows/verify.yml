@@ -17,3 +17,11 @@ jobs:
       - run: uv sync --locked
       - run: npm.cmd ci
       - run: npm.cmd run verify
+      # Keep Playwright's page snapshots and screenshots so intermittent failures can be diagnosed.
+      - if: failure()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: playwright-results
+          path: test-results
+          if-no-files-found: ignore
+          retention-days: 14

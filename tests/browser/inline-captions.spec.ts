@@ -58,9 +58,19 @@ test('captions edit beneath thumbnails, share the preview draft and flush the la
     await page.getByRole('button', { name: 'Close preview' }).click();
 
     // Undoing a failed edit still resolves the failed save against the server revision.
+    // Earlier saves must land first, or the injected failure can hit one of them.
+    await expect
+      .poll(() => readFile(path.join(app.media, 'red.txt'), 'utf8'))
+      .toBe('Shared from the preview');
     let failOnce = true;
     await page.route('**/caption', async (route) => {
-      if (route.request().method() === 'PUT' && failOnce) {
+      const request = route.request();
+      if (
+        request.method() === 'PUT' &&
+        failOnce &&
+        (request.postDataJSON() as { text: string }).text ===
+          'An interrupted edit'
+      ) {
         failOnce = false;
         await route.fulfill({
           status: 500,
@@ -306,6 +316,60 @@ test('autosave keeps a focused inline caption stable when its text stops matchin
       .click();
     await expect(red).toHaveValue('A completely different description');
   } finally {
+    await app.cleanup();
+  }
+});
+
+test('a caption saved while the item list is loading is not reverted by that list', async ({
+  page,
+}) => {
+  const app = await datasetHarness();
+  let release = () => {};
+  try {
+    await openDataset(page, app);
+    const blue = page.getByLabel('Caption for blue.png', { exact: true });
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let holding = false;
+    let read = false;
+    // Read one list before the save and deliver it after; later polls pass through.
+    await page.route('**/items', async (route) => {
+      if (holding) return route.continue();
+      holding = true;
+      const response = await route.fetch();
+      read = true;
+      await held;
+      await route.fulfill({ response });
+    });
+    await page
+      .getByRole('button', { name: 'Dataset settings', exact: true })
+      .click();
+    const rescan = page.getByRole('button', { name: 'Re-scan', exact: true });
+    await rescan.click();
+    await expect.poll(() => read).toBe(true);
+    await blue.fill('Saved while the list was loading');
+    await blue.blur();
+    await expect
+      .poll(() =>
+        readFile(path.join(app.media, 'blue.txt'), 'utf8').catch(() => null),
+      )
+      .toBe('Saved while the list was loading');
+    await expect(
+      page.getByText('Saved', { exact: true }).first(),
+    ).toBeVisible();
+    release();
+    await expect(rescan).toBeEnabled();
+    // Read once after React applies the list: a later scan poll would mask a revert.
+    await page.evaluate(
+      () =>
+        new Promise((resolve) =>
+          requestAnimationFrame(() => setTimeout(resolve, 50)),
+        ),
+    );
+    expect(await blue.inputValue()).toBe('Saved while the list was loading');
+  } finally {
+    release();
     await app.cleanup();
   }
 });

@@ -99,7 +99,13 @@ export function Datasets({
     id: string;
     order: string[];
   } | null>(null);
+  // Captions saved in this tab, with when the save landed, so an item list
+  // requested before a save cannot put the older caption back.
+  const savedCaptions = useRef(
+    new Map<string, { caption: Caption; at: number }>(),
+  );
   const onCaptionSaved = useCallback((id: string, caption: Caption) => {
+    savedCaptions.current.set(id, { caption, at: performance.now() });
     setActive((value) => (value?.id === id ? { ...value, caption } : value));
     setItems((values) =>
       values.map((item) => (item.id === id ? { ...item, caption } : item)),
@@ -125,13 +131,21 @@ export function Datasets({
   }, [screen, onEditorChange]);
   const refresh = useCallback(async (id?: string) => {
     const list = await api<Dataset[]>('/api/datasets');
+    const requested = performance.now();
     const contents = id
       ? await api<DatasetItem[]>(`/api/datasets/${id}/items`)
       : [];
     setDatasets(list);
     if (id) {
       setDataset(list.find((value) => value.id === id) ?? null);
-      setItems(contents);
+      setItems(
+        contents.map((item) => {
+          const saved = savedCaptions.current.get(item.id);
+          return saved && saved.at > requested
+            ? { ...item, caption: saved.caption }
+            : item;
+        }),
+      );
     }
     return list;
   }, []);
