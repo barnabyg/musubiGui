@@ -110,7 +110,7 @@ test('Wan draft controls, validation and reviewed native configuration survive s
       .click();
     await page.getByLabel('Job name', { exact: true }).fill('Browser Wan');
     await page.getByLabel('LoRA rank', { exact: true }).fill('16');
-    await page.getByLabel('Frames', { exact: false }).fill('18');
+    await page.getByRole('spinbutton', { name: /^Frames\b/ }).fill('18');
     await page.getByRole('button', { name: 'Save draft', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('Draft saved');
     await page
@@ -122,7 +122,7 @@ test('Wan draft controls, validation and reviewed native configuration survive s
     await expect(
       page.getByRole('button', { name: 'Prepare run', exact: true }),
     ).toBeDisabled();
-    await page.getByLabel('Frames', { exact: false }).fill('33');
+    await page.getByRole('spinbutton', { name: /^Frames\b/ }).fill('33');
     await page.getByLabel('Width', { exact: false }).fill('320');
     await page.getByRole('button', { name: 'Save draft', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('Draft saved');
@@ -162,7 +162,9 @@ test('Wan draft controls, validation and reviewed native configuration survive s
     await app.start();
     await openJobs(page, app.url);
     await page.getByRole('button', { name: /Browser Wan · WAN/ }).click();
-    await expect(page.getByLabel('Frames', { exact: false })).toHaveValue('33');
+    await expect(
+      page.getByRole('spinbutton', { name: /^Frames\b/ }),
+    ).toHaveValue('33');
     await expect(page.getByLabel('LoRA rank', { exact: true })).toHaveValue(
       '16',
     );
@@ -226,7 +228,7 @@ test('Wan frame extraction controls persist and review counts cached windows aft
     await page
       .getByRole('combobox', { name: /^Dataset\b/ })
       .selectOption(dataset.id);
-    await page.getByLabel('Frames', { exact: false }).fill('17');
+    await page.getByRole('spinbutton', { name: /^Frames\b/ }).fill('17');
     await page
       .getByRole('combobox', { name: /^Frame extraction\b/ })
       .selectOption('slide');
@@ -338,12 +340,35 @@ test('duplication presets cancelled conversion and versioned export import keep 
     await expect(page.getByLabel('LoRA rank', { exact: true })).toHaveValue(
       '16',
     );
+    await page.getByLabel('Training steps', { exact: true }).fill('800');
+    await page.getByRole('button', { name: 'Save draft', exact: true }).click();
+    await expect(page.getByRole('status')).toContainText('Draft saved');
+    await page
+      .getByRole('combobox', { name: 'Compatible preset', exact: true })
+      .selectOption({
+        label: 'Measured · Wan 832×480 · 33 frames · rank 16',
+      });
+    await page
+      .getByRole('button', { name: 'Apply preset', exact: true })
+      .click();
+    await expect(page.getByRole('status')).toHaveText(
+      'Preset applied as a new revision',
+    );
+    await expect(
+      page.getByRole('spinbutton', { name: /^Width\b/ }),
+    ).toHaveValue('832');
+    await expect(
+      page.getByRole('spinbutton', { name: /^Frames\b/ }),
+    ).toHaveValue('33');
+    await expect(
+      page.getByLabel('Training steps', { exact: true }),
+    ).toHaveValue('800');
     await page
       .getByRole('button', { name: 'Change model to H3 T2VA', exact: true })
       .click();
     await expect(
       page.getByRole('dialog', { name: 'Confirm model conversion' }),
-    ).toContainText('frames: 17 → 124');
+    ).toContainText('frames: 33 → 124');
     await page
       .getByRole('button', { name: 'Cancel conversion', exact: true })
       .click();

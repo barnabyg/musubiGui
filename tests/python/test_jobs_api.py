@@ -174,6 +174,52 @@ def test_duplicate_presets_and_model_conversion_preserve_original_revisions(tmp_
     assert client.get(f"/api/jobs/{original['id']}").json() == original
 
 
+def test_measured_presets_replace_only_capacity_controls(tmp_path: Path) -> None:
+    client = client_for(tmp_path)
+    presets = {preset["id"]: preset for preset in client.get("/api/jobs/presets").json()}
+    assert presets["measured-wan-832x480x33-r16"]["family"] == "wan"
+    assert presets["measured-h3-640x352x124-r8"]["family"] == "h3"
+    job = client.post(
+        "/api/jobs",
+        json={
+            "name": "Real run",
+            "family": "h3",
+            "config": {"steps": 800, "save_every": 100, "save_state": True, "sample_prompt": "kept", "seed": 7},
+        },
+    ).json()
+    applied = client.post(
+        f"/api/jobs/{job['id']}/apply-preset", json={"preset_id": "measured-h3-640x352x124-r8", "revision": 1}
+    ).json()
+    config = applied["config"]
+    assert (config["width"], config["height"], config["frames"], config["rank"], config["alpha"]) == (
+        640,
+        352,
+        124,
+        8,
+        8,
+    )
+    assert (config["blocks_to_swap"], config["block_swap_h2d_only"], config["fp8_scaled"]) == (48, True, False)
+    assert (config["steps"], config["save_every"], config["save_state"]) == (800, 100, True)
+    assert (config["sample_prompt"], config["seed"], applied["name"]) == ("kept", 7, "Real run")
+    assert client.get(f"/api/jobs/{job['id']}/revisions/1").json()["config"]["width"] == 256
+    wan = client.post("/api/jobs", json={"name": "Wan", "family": "wan"}).json()
+    rejected = client.post(
+        f"/api/jobs/{wan['id']}/apply-preset", json={"preset_id": "measured-h3-640x352x124-r8", "revision": 1}
+    )
+    assert rejected.status_code == 422
+    assert "another model" in rejected.json()["detail"]
+    wan_applied = client.post(
+        f"/api/jobs/{wan['id']}/apply-preset", json={"preset_id": "measured-wan-832x480x33-r16", "revision": 1}
+    ).json()
+    assert (
+        wan_applied["config"]["width"],
+        wan_applied["config"]["frames"],
+        wan_applied["config"]["blocks_to_swap"],
+    ) == (832, 33, 36)
+    assert client.get("/api/jobs/defaults/wan").json()["width"] == 256
+    assert not (tmp_path / "presets").exists()
+
+
 def test_versioned_export_roundtrip_and_unknown_fields_are_not_silently_discarded(tmp_path: Path) -> None:
     client = client_for(tmp_path)
     job = client.post(

@@ -533,6 +533,10 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
                 </select>
               </label>
             </div>
+            <p className="hint">
+              Measured presets set only size, frames, rank and memory controls
+              qualified on the target PC; saved presets replace all settings.
+            </p>
             <div className="actions">
               <button
                 disabled={busy || dirty || !presetName.trim()}
