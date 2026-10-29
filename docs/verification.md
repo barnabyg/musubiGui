@@ -8,7 +8,9 @@ The canonical command is `npm.cmd run verify`. It checks Python/TypeScript forma
 lint, strict types, Bandit static security analysis, pytest and real Edge browser tests,
 lockfile consistency, installed npm dependency integrity, Python/npm vulnerabilities,
 detect-secrets, and sdist/wheel packaging. The browser suite builds the UI before testing.
-CI uses the same command. Registry access is required by vulnerability and lock checks.
+CI uses the same command. When it fails, CI keeps Playwright's `test-results`
+(page snapshots and failure screenshots of synthetic fixtures) as the
+`playwright-results` artifact for 14 days. Registry access is required by vulnerability and lock checks.
 All diagnostics and warnings must be resolved; pytest warnings and ESLint warnings fail.
 
 Browser assertions have a 15-second integration deadline because they exercise real

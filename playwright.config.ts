@@ -9,5 +9,10 @@ export default defineConfig({
   timeout: 60_000,
   // Real backend/media subprocesses on hosted Windows runners can outlast 5 s.
   expect: { timeout: 15_000 },
-  use: { browserName: 'chromium', channel: 'msedge', headless: true },
+  use: {
+    browserName: 'chromium',
+    channel: 'msedge',
+    headless: true,
+    screenshot: 'only-on-failure',
+  },
 });
