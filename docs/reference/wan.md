@@ -102,6 +102,9 @@ configuration and arguments, sampled resources and GPU throttle reasons.
 | 36 blocks, 350 W, steeper fans | Trains                                              | 83.6 s       |
 | 36 blocks, 280 W, steeper fans | 200 steps, checkpoints and state at 100/200, sample | 79.1 s, flat |
 
+Job review therefore accepts 0–36 swapped blocks. 37 and 38 have not been run on
+this PC, so they are rejected until a short run qualifies them.
+
 The 200-step run took 4 h 22 min. Peak sampled values were 21.1 GiB device VRAM,
 18.2 GiB process-tree RSS and 34.1 GiB host RAM; RSS stayed at 16–18 GiB with no
 growth. Step time is bounded by GPU thermal slowdown, active in 68–77% of loaded

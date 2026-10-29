@@ -747,7 +747,7 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
               'Blocks to swap',
               'blocks_to_swap',
               job.family === 'wan'
-                ? '36 of 40 blocks is the reference default.'
+                ? '0–36 of 40 blocks; 36 is the reference default. 39 crashes in the upstream FP8 path and 37–38 are untested.'
                 : '48 of 54 blocks is the reference default; H2D-only swapping is required.',
             )}
             {toggle('Gradient checkpointing', 'gradient_checkpointing')}
