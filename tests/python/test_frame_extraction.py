@@ -108,3 +108,12 @@ def test_changing_wan_frame_extraction_invalidates_latent_and_text_caches(tmp_pa
             assert len({key[stage] for key in keys}) == 3
     finally:
         service.close()
+
+
+def test_invalid_slide_stride_reports_a_review_error_instead_of_failing(tmp_path: Path) -> None:
+    review = wan_review(
+        tmp_path, {"native.mp4": (Fraction(16), 90)}, frames=17, frame_extraction="slide", frame_stride=0
+    )
+    assert review["valid"] is False
+    assert "Frame extraction: enter a slide stride of at least one frame." in review["errors"]
+    assert not any("Shorten the job" in error for error in review["errors"])

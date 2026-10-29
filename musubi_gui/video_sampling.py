@@ -96,6 +96,13 @@ def plan_windows(
     errors: list[str] = []
     warnings: list[str] = []
     planned: list[dict[str, Any]] = []
+
+    def windows(frame_count: int) -> int | None:
+        # Review reports an invalid stride as a configuration error; it has no window count.
+        if extraction == "slide" and stride < 1:
+            return None
+        return len(window_starts(frame_count, frames, extraction, stride, sample))
+
     for item in items:
         if item["kind"] != "video":
             continue
@@ -112,7 +119,7 @@ def plan_windows(
         if family != "wan":
             # H3 resamples to 24 fps by timestamps; its duration and audio checks are separate.
             if count is not None:
-                entry["windows"] = len(window_starts(count, frames, extraction, stride, sample))
+                entry["windows"] = windows(count)
             continue
         if rate is None:
             errors.append(
@@ -127,14 +134,12 @@ def plan_windows(
         if count is None:
             continue
         resampled = resampled_frames(count, rate)
-        entry.update(
-            resampled_frames=resampled, windows=len(window_starts(resampled, frames, extraction, stride, sample))
-        )
+        entry.update(resampled_frames=resampled, windows=windows(resampled))
         if abs(rate - WAN_FPS) > RATE_TOLERANCE:
             warnings.append(
                 f"{name}: {rate_label(rate)} is resampled to 16 fps by dropping frames ({count} → {resampled} frames, {resampled / WAN_FPS:.2f} s)."
             )
-        if not entry["windows"]:
+        if entry["windows"] == 0:
             errors.append(
                 f"{name}: {count} frames at {rate_label(rate)} resample to {resampled} frames ({resampled / WAN_FPS:.2f} s at 16 fps); {frames} frames need {frames / WAN_FPS:.2f} s. Shorten the job or choose a longer video."
             )
