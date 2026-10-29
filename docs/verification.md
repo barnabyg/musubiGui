@@ -8,7 +8,9 @@ The canonical command is `npm.cmd run verify`. It checks Python/TypeScript forma
 lint, strict types, Bandit static security analysis, pytest and real Edge browser tests,
 lockfile consistency, installed npm dependency integrity, Python/npm vulnerabilities,
 detect-secrets, and sdist/wheel packaging. The browser suite builds the UI before testing.
-CI uses the same command. Registry access is required by vulnerability and lock checks.
+CI uses the same command. When it fails, CI keeps Playwright's `test-results`
+(page snapshots and failure screenshots of synthetic fixtures) as the
+`playwright-results` artifact for 14 days. Registry access is required by vulnerability and lock checks.
 All diagnostics and warnings must be resolved; pytest warnings and ESLint warnings fail.
 
 Browser assertions have a 15-second integration deadline because they exercise real
@@ -18,8 +20,10 @@ under Playwright's five-second default and pass with this budget. This is a corr
 suite, not a latency benchmark: assertions still require the exact expected result.
 Long upload/scan/preparation/training operations use explicit 45-second waits. This
 includes four-media registration scans: an 18-second completed-scan response reproduces
-the 15-second failure and passes with the operation budget. The
-two-family preparation/training scenario has a 120-second total budget.
+the 15-second failure and passes with the operation budget. Managed dataset
+creation also scans before responding and uses the same deadline; two consecutive
+hosted runs timed out at 15 seconds, and an 18-second creation response passes.
+The two-family preparation/training scenario has a 120-second total budget.
 The gallery/inline-caption virtual scrolling fixtures use eight real media files and
 a narrow viewport that forces cards to unmount. This tests recycling and retained
 drafts without requiring 24 separate probe startups just to exceed a desktop

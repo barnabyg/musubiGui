@@ -6,6 +6,18 @@ test('H3 inspector plays resolved audio and identifies missing, ambiguous, malfo
   page,
 }) => {
   const app = await datasetHarness({ h3Audio: true });
+  // Audio requests are reported if playback stalls; one hosted run hung in play().
+  const audioRequests: string[] = [];
+  page.on('requestfinished', (request) => {
+    if (request.url().endsWith('/audio'))
+      audioRequests.push(
+        `${request.headers()['range'] ?? 'no range'} in ${Math.round(request.timing().responseEnd)} ms`,
+      );
+  });
+  page.on('requestfailed', (request) => {
+    if (request.url().endsWith('/audio'))
+      audioRequests.push(`failed: ${request.failure()?.errorText}`);
+  });
   try {
     await page.goto(app.url);
     await page.getByRole('button', { name: 'Datasets', exact: true }).click();
@@ -34,12 +46,25 @@ test('H3 inspector plays resolved audio and identifies missing, ambiguous, malfo
     await inspect('sidecar.mp4');
     await expect(page.getByText('Audio source: sidecar')).toBeVisible();
     await expect(page.getByText('Audio coverage: 100.0%')).toBeVisible();
-    await page
+    const started = await page
       .getByLabel('Resolved H3 audio')
       .evaluate(async (audio: HTMLAudioElement) => {
         audio.muted = true;
-        await audio.play();
+        const stalled = new Promise<string>((resolve) =>
+          setTimeout(
+            () =>
+              resolve(
+                `readyState ${audio.readyState}, networkState ${audio.networkState}, error ${audio.error?.code ?? 'none'}`,
+              ),
+            30_000,
+          ),
+        );
+        return Promise.race([audio.play().then(() => 'playing'), stalled]);
       });
+    expect(
+      started,
+      `Audio playback did not start. Requests: ${audioRequests.join('; ')}`,
+    ).toBe('playing');
     await expect
       .poll(() =>
         page
