@@ -90,7 +90,9 @@ have the same tensors and data, ignoring the save date, epoch and finish time
 that upstream writes into each header. Every state file must have the same
 content hash. The final copies are always kept and are the ones Inspect saved
 states, Restore and sampling use. The training log names each removed copy; a
-copy that differs, or a check that fails, is kept.
+copy that differs, or a check that fails, is kept. A state removal that fails
+partway leaves a hidden `.<name>.duplicate` folder, which is never offered for
+restoration; the log names it so it can be deleted.
 Restore as new segment preserves the original Job/Run and records lineage and
 the requested additional steps. The pinned upstream restores optimizer state
 but resets its displayed step counter and data position; seamless continuation

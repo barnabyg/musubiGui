@@ -1,5 +1,8 @@
 import json
+import shutil
 from pathlib import Path
+
+import pytest
 
 from musubi_gui.checkpoint_dedup import remove_final_duplicates
 
@@ -31,24 +34,44 @@ def outputs(root: Path, *, step_weights: bytes = b"same", step_optimizer: bytes 
 
 def test_step_copies_of_the_final_save_are_removed_when_weights_and_state_match(tmp_path: Path) -> None:
     root = outputs(tmp_path)
-    assert remove_final_duplicates(root, "lora", 200) == ["lora-step00000200.safetensors", "lora-step00000200-state"]
+    assert remove_final_duplicates(root, "lora", 200) == (
+        ["lora-step00000200.safetensors", "lora-step00000200-state"],
+        [],
+    )
     assert sorted(path.name for path in root.iterdir()) == ["lora-state", "lora.safetensors"]
 
 
 def test_step_copies_that_differ_from_the_final_save_are_kept(tmp_path: Path) -> None:
     root = outputs(tmp_path, step_weights=b"diff", step_optimizer=b"sgd!")
-    assert remove_final_duplicates(root, "lora", 200) == []
+    assert remove_final_duplicates(root, "lora", 200) == ([], [])
     assert len(list(root.iterdir())) == 4
 
 
 def test_a_state_with_an_extra_file_is_not_a_duplicate(tmp_path: Path) -> None:
     root = outputs(tmp_path)
     (root / "lora-step00000200-state" / "scaler.pt").write_bytes(b"scaler")
-    assert remove_final_duplicates(root, "lora", 200) == ["lora-step00000200.safetensors"]
+    assert remove_final_duplicates(root, "lora", 200) == (["lora-step00000200.safetensors"], [])
     assert (root / "lora-step00000200-state").is_dir()
 
 
 def test_a_step_count_without_an_interval_save_removes_nothing(tmp_path: Path) -> None:
     root = outputs(tmp_path)
-    assert remove_final_duplicates(root, "lora", 150) == []
+    assert remove_final_duplicates(root, "lora", 150) == ([], [])
     assert len(list(root.iterdir())) == 4
+
+
+def test_a_failed_state_removal_still_reports_the_removed_checkpoint(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = outputs(tmp_path)
+
+    def locked(path: Path) -> None:
+        raise PermissionError("in use")
+
+    monkeypatch.setattr(shutil, "rmtree", locked)
+    removed, problems = remove_final_duplicates(root, "lora", 200)
+    assert removed == ["lora-step00000200.safetensors"]
+    assert len(problems) == 1 and "lora-step00000200-state" in problems[0] and "in use" in problems[0]
+    # The partly removed copy can no longer be mistaken for a restorable state.
+    assert not (root / "lora-step00000200-state").exists()
+    assert ".lora-step00000200-state.duplicate" in problems[0]

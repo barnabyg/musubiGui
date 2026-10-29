@@ -648,19 +648,15 @@ class RunService:
         if "--output_name" not in args or "--max_train_steps" not in args:
             return []
         log_file = Path(run["directory"]) / f"{stage['name']}.log"
-        try:
-            removed = remove_final_duplicates(
-                Path(run["directory"]) / "checkpoints",
-                args[args.index("--output_name") + 1],
-                int(args[args.index("--max_train_steps") + 1]),
-            )
-            message = "".join(f"Removed duplicate of the final save: {name}\n" for name in removed)
-        except (OSError, ValueError) as error:
-            removed = []
-            message = f"Kept the interval copy of the final save; duplicate check failed: {error}\n"
-        if message:
+        removed, problems = remove_final_duplicates(
+            Path(run["directory"]) / "checkpoints",
+            args[args.index("--output_name") + 1],
+            int(args[args.index("--max_train_steps") + 1]),
+        )
+        lines = [f"Removed duplicate of the final save: {name}" for name in removed] + problems
+        if lines:
             with log_file.open("a", encoding="utf-8") as log:
-                log.write(message)
+                log.writelines(f"{line}\n" for line in lines)
         return removed
 
     def _signal_stop(
