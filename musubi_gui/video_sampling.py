@@ -22,9 +22,24 @@ def resampled_frames(source_frames: int, source_fps: float) -> int:
     return count
 
 
-def window_starts(frame_count: int, target: int) -> list[int]:
-    """Crop positions the pinned dataset caches for one clip (UPSTREAM image_video_dataset.py)."""
-    return [0] if frame_count >= target else []
+def window_starts(
+    frame_count: int, target: int, extraction: str = "head", stride: int = 1, sample: int = 1
+) -> list[int]:
+    """Distinct crop positions the pinned dataset caches for one clip (UPSTREAM image_video_dataset.py).
+
+    Repeated uniform positions share one cache file, so they count once.
+    """
+    if frame_count < target:
+        return []
+    if extraction == "chunk":
+        return list(range(0, frame_count - target + 1, target))
+    if extraction == "slide":
+        return list(range(0, frame_count - target + 1, stride))
+    if extraction == "uniform" and sample > 1:
+        # numpy.linspace(0, span, sample, dtype=int) truncates evenly spaced positions and ends exactly at span.
+        span = frame_count - target
+        return sorted({int(index * (span / (sample - 1))) for index in range(sample - 1)} | {span})
+    return [0]
 
 
 def source_frames(metadata: dict[str, Any]) -> int | None:
@@ -68,7 +83,15 @@ def rate_label(fps: float) -> str:
     return f"{fps:.6g} fps"
 
 
-def plan_windows(family: str, frames: int, items: list[dict[str, Any]]) -> dict[str, Any]:
+def plan_windows(
+    family: str,
+    frames: int,
+    items: list[dict[str, Any]],
+    *,
+    extraction: str = "head",
+    stride: int = 1,
+    sample: int = 1,
+) -> dict[str, Any]:
     """Cached windows per included video, with the errors and warnings resampling causes for Wan."""
     errors: list[str] = []
     warnings: list[str] = []
@@ -89,7 +112,7 @@ def plan_windows(family: str, frames: int, items: list[dict[str, Any]]) -> dict[
         if family != "wan":
             # H3 resamples to 24 fps by timestamps; its duration and audio checks are separate.
             if count is not None:
-                entry["windows"] = len(window_starts(count, frames))
+                entry["windows"] = len(window_starts(count, frames, extraction, stride, sample))
             continue
         if rate is None:
             errors.append(
@@ -104,7 +127,9 @@ def plan_windows(family: str, frames: int, items: list[dict[str, Any]]) -> dict[
         if count is None:
             continue
         resampled = resampled_frames(count, rate)
-        entry.update(resampled_frames=resampled, windows=len(window_starts(resampled, frames)))
+        entry.update(
+            resampled_frames=resampled, windows=len(window_starts(resampled, frames, extraction, stride, sample))
+        )
         if abs(rate - WAN_FPS) > RATE_TOLERANCE:
             warnings.append(
                 f"{name}: {rate_label(rate)} is resampled to 16 fps by dropping frames ({count} → {resampled} frames, {resampled / WAN_FPS:.2f} s)."

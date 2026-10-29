@@ -171,6 +171,96 @@ test('Wan draft controls, validation and reviewed native configuration survive s
   }
 });
 
+test('Wan frame extraction controls persist and review counts cached windows after resampling', async ({
+  page,
+}) => {
+  const app = await workspace();
+  try {
+    const clips = path.join(app.root, 'clips');
+    const creator = spawn(
+      path.resolve('.venv/Scripts/python.exe'),
+      [
+        '-c',
+        'import sys; from fractions import Fraction; from pathlib import Path; from musubi_gui.acceptance import synthetic_video; synthetic_video(Path(sys.argv[1]) / "thirty.mp4", 90, rate=Fraction(30))',
+        clips,
+      ],
+      { stdio: 'pipe' },
+    );
+    expect(
+      await new Promise<number | null>((resolve) =>
+        creator.once('exit', resolve),
+      ),
+    ).toBe(0);
+    const settings = (await (
+      await page.request.get(`${app.url}/api/settings`)
+    ).json()) as { dataset_roots: string[] };
+    expect(
+      (
+        await page.request.put(`${app.url}/api/settings`, {
+          data: { ...settings, dataset_roots: [clips] },
+        })
+      ).status(),
+    ).toBe(200);
+    const dataset = (await (
+      await page.request.post(`${app.url}/api/datasets`, {
+        data: { name: 'Thirty fps', path: clips },
+      })
+    ).json()) as { id: string };
+    await expect
+      .poll(
+        async () =>
+          (
+            (await (
+              await page.request.get(
+                `${app.url}/api/datasets/${dataset.id}/items`,
+              )
+            ).json()) as { valid: boolean }[]
+          ).filter((item) => item.valid).length,
+        { timeout: 45_000 },
+      )
+      .toBe(1);
+    await openJobs(page, app.url);
+    await page
+      .getByRole('button', { name: 'New Wan job', exact: true })
+      .click();
+    await page
+      .getByRole('combobox', { name: /^Dataset\b/ })
+      .selectOption(dataset.id);
+    await page.getByLabel('Frames', { exact: false }).fill('17');
+    await page
+      .getByRole('combobox', { name: /^Frame extraction\b/ })
+      .selectOption('slide');
+    await page.getByLabel('Slide stride', { exact: true }).fill('8');
+    await page.getByRole('button', { name: 'Save draft', exact: true }).click();
+    await expect(page.getByRole('status')).toContainText('Draft saved');
+    await page
+      .getByRole('button', { name: 'Review configuration', exact: true })
+      .click();
+    const toml = page.getByTestId('dataset-toml');
+    await expect(toml).toContainText(
+      'frame_extraction = "slide"\nframe_stride = 8\nsource_fps = 30.0',
+    );
+    // 90 frames at 30 fps keep 48 at 16 fps: windows start at 0, 8, 16 and 24.
+    const windows = page.getByTestId('video-windows');
+    await expect(windows).toContainText('4 cached video windows');
+    await expect(windows).toContainText('thirty.mp4: 30 fps, 90 → 48 frames');
+    await expect(
+      page.getByText(/thirty\.mp4: 30 fps is resampled to 16 fps/),
+    ).toBeVisible();
+    await page.reload();
+    await openJobs(page, app.url);
+    await page.getByRole('button', { name: /New Wan job · WAN/ }).click();
+    await expect(
+      page.getByRole('combobox', { name: /^Frame extraction\b/ }),
+    ).toHaveValue('slide');
+    await expect(page.getByLabel('Slide stride', { exact: true })).toHaveValue(
+      '8',
+    );
+  } finally {
+    await app.close();
+  }
+});
+
 test('H3 editor keeps T2VA guidance stages and identifies invalid geometry', async ({
   page,
 }) => {

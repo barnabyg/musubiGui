@@ -37,6 +37,10 @@ class JobConfig(BaseModel):
     width: int = 256
     height: int = 256
     frames: int = 17
+    # Pinned UPSTREAM frame_extraction modes qualified here; `full` has unbounded clip length and memory.
+    frame_extraction: Literal["head", "chunk", "slide", "uniform"] = "head"
+    frame_stride: int = 16
+    frame_sample: int = 4
     batch_size: int = 1
     repeats: int = 1
     enable_bucket: bool = False
@@ -342,6 +346,10 @@ def configuration_errors(job: Job) -> list[str]:
             errors.append("Memory: runtime FP8 scaling from native FP16 weights is required by this Wan recipe.")
         if config.block_swap_h2d_only:
             errors.append("Memory: H2D-only swapping belongs to the H3 recipe, not the initial Wan recipe.")
+        if config.frame_extraction == "slide" and config.frame_stride < 1:
+            errors.append("Frame extraction: enter a slide stride of at least one frame.")
+        if config.frame_extraction == "uniform" and config.frame_sample < 2:
+            errors.append("Frame extraction: uniform sampling needs at least two windows per clip; use head for one.")
         allowed_components = {"wan_low", "wan_high", "wan_vae", "wan_t5"}
     else:
         if config.recipe != "guidance-loss":
@@ -358,6 +366,10 @@ def configuration_errors(job: Job) -> list[str]:
             errors.append("Memory: H3 does not support FP8 transformer weights/runtime scaling.")
         if not config.block_swap_h2d_only:
             errors.append("Memory: H3 guidance loss requires H2D-only swapping for the validated target-PC recipe.")
+        if config.frame_extraction != "head":
+            errors.append(
+                "Frame extraction: H3 uses head only. Audio alignment and coverage are inspected for each clip's first window, so other modes are not qualified."
+            )
         allowed_components = {"h3_dit", "h3_video_vae", "h3_audio_vae", "h3_text"}
     if config.batch_size != 1:
         errors.append(
@@ -427,7 +439,10 @@ def dataset_toml(
         for rate, video_directory, cache_directory in video_sections(directory, cache, rates):
             sections.append(
                 f"[[datasets]]\nvideo_directory = {quote(video_directory)}\ncache_directory = {quote(cache_directory)}\n"
-                f'caption_extension = ".txt"\ntarget_frames = [{config.frames}]\nframe_extraction = "head"\n'
+                f'caption_extension = ".txt"\ntarget_frames = [{config.frames}]\n'
+                f'frame_extraction = "{config.frame_extraction}"\n'
+                + (f"frame_stride = {config.frame_stride}\n" if config.frame_extraction == "slide" else "")
+                + (f"frame_sample = {config.frame_sample}\n" if config.frame_extraction == "uniform" else "")
                 + (f"source_fps = {rate!r}\n" if rate is not None else "")
             )
     return general + "\n".join(sections)
@@ -590,7 +605,14 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
                         audio_coverage["supervised"] += 1
         except (ValueError, OSError, ImportError, HTTPException) as error:
             errors.append(f"Dataset: {error}")
-    windows = plan_windows(job.family, job.config.frames, effective_items)
+    windows = plan_windows(
+        job.family,
+        job.config.frames,
+        effective_items,
+        extraction=job.config.frame_extraction,
+        stride=job.config.frame_stride,
+        sample=job.config.frame_sample,
+    )
     errors.extend(windows.pop("errors"))
     warnings.extend(windows.pop("warnings"))
     output = Path(settings.output_root) / "jobs" / job.id

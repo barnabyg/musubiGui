@@ -7,6 +7,9 @@ type JobConfig = {
   width: number;
   height: number;
   frames: number;
+  frame_extraction: 'head' | 'chunk' | 'slide' | 'uniform';
+  frame_stride: number;
+  frame_sample: number;
   batch_size: number;
   repeats: number;
   enable_bucket: boolean;
@@ -61,7 +64,47 @@ type Review = {
     missing: number;
     items: unknown[];
   };
+  video_windows: {
+    total: number;
+    items: {
+      id: string;
+      name: string;
+      source_fps: number | null;
+      source_frames: number | null;
+      resampled_frames: number | null;
+      windows: number | null;
+    }[];
+  };
 };
+const extractionModes: {
+  value: JobConfig['frame_extraction'];
+  label: string;
+  help: string;
+}[] = [
+  {
+    value: 'head',
+    label: 'Head: first window only',
+    help: 'One window per clip, from its start. The rest of each clip is not trained.',
+  },
+  {
+    value: 'chunk',
+    label: 'Chunk: consecutive windows',
+    help: 'Non-overlapping windows: a clip yields floor(length ÷ frames) windows; a shorter remainder is dropped.',
+  },
+  {
+    value: 'slide',
+    label: 'Slide: a window every stride',
+    help: 'A clip yields floor((length − frames) ÷ stride) + 1 windows; a stride below the frame count overlaps them.',
+  },
+  {
+    value: 'uniform',
+    label: 'Uniform: evenly spaced windows',
+    help: 'Each long-enough clip yields the sample count of windows spread from its start to its end; a clip only as long as the window yields one.',
+  },
+];
+function rate(fps: number | null) {
+  return fps === null ? 'unknown fps' : `${Number(fps.toPrecision(6))} fps`;
+}
 type Props = {
   onRun?: (id: string) => void;
   onDirtyChange?: (dirty: boolean) => void;
@@ -614,6 +657,45 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
                 'Keep at one for the target-PC recipe.',
               )}
             </div>
+            <div className="columns">
+              <label className="field">
+                Frame extraction
+                <select
+                  value={job.config.frame_extraction}
+                  disabled={busy}
+                  onChange={(event) =>
+                    config(
+                      'frame_extraction',
+                      event.target.value as JobConfig['frame_extraction'],
+                    )
+                  }
+                >
+                  {extractionModes.map((mode) => (
+                    <option
+                      key={mode.value}
+                      value={mode.value}
+                      disabled={job.family === 'h3' && mode.value !== 'head'}
+                    >
+                      {mode.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {job.config.frame_extraction === 'slide' &&
+                number('Slide stride', 'frame_stride')}
+              {job.config.frame_extraction === 'uniform' &&
+                number('Windows per clip', 'frame_sample')}
+            </div>
+            <p className="hint">
+              {
+                extractionModes.find(
+                  (mode) => mode.value === job.config.frame_extraction,
+                )?.help
+              }{' '}
+              {job.family === 'wan'
+                ? 'Clip length is counted after resampling to 16 fps. Review lists each clip’s cached windows; more windows mean a larger cache and longer epochs.'
+                : 'H3 uses head only: audio alignment is inspected for each clip’s first window, so other modes are not qualified.'}
+            </p>
             {toggle('Enable bucketing', 'enable_bucket')}
             {toggle('Do not upscale buckets', 'bucket_no_upscale')}
             {job.family === 'h3' && (
@@ -752,6 +834,27 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
                   <li key={index}>{message}</li>
                 ))}
               </ul>
+              {review.video_windows.items.length > 0 && (
+                <div data-testid="video-windows">
+                  <h3>Cached video windows</h3>
+                  <p>
+                    {review.video_windows.total} cached video windows from{' '}
+                    {review.video_windows.items.length} videos (
+                    {job.config.frame_extraction}).
+                  </p>
+                  <ul>
+                    {review.video_windows.items.map((item) => (
+                      <li key={item.id}>
+                        {item.name}: {rate(item.source_fps)},{' '}
+                        {item.source_frames ?? '?'}
+                        {item.resampled_frames !== item.source_frames &&
+                          ` → ${item.resampled_frames ?? '?'}`}{' '}
+                        frames · {item.windows ?? '?'} windows
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               {job.family === 'h3' && (
                 <>
                   <h3>Audio coverage</h3>

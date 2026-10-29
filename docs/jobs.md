@@ -61,6 +61,18 @@ exclude them. H3 always resamples to 24 fps by frame timestamps and ignores
 `source_fps`, so its TOML is unchanged. Wan latent and text caches prepared before
 resampling are not reused.
 
+Frame extraction chooses which windows of each clip are cached and trained. Head
+(the default, and what earlier version 1 jobs keep) uses only each clip's first
+window. Wan also offers chunk (consecutive non-overlapping windows), slide (a
+window every stride, emitted as `frame_stride`) and uniform (the given number of
+evenly spaced windows, emitted as `frame_sample`; at least two). The pinned `full`
+mode is not offered because its variable clip length has no validated memory
+budget. H3 uses head only: its audio alignment and coverage checks inspect each
+clip's first window, so other modes are blocked in review. Review lists each video's
+frame rate, frame count before and after resampling, and cached windows, plus the
+total, so the cache size and epoch length are visible before preparation. Changing
+the mode, stride or sample count changes the latent and text cache identities.
+
 H3's audio policy defaults to requiring supervised audio for every included video.
 Review shows item-specific source/alignment diagnostics and supervision totals.
 Explicitly allowing missing audio produces an audio-less item excluded from audio
@@ -82,7 +94,8 @@ presets. Review local filesystem paths before sharing a configuration. No model,
 dataset or training-state payload is embedded in the export.
 
 Browser checks: `npm.cmd run test:browser -- tests/browser/jobs.spec.ts`. The scenarios
-cover restart persistence and generated configuration for both models, invalid draft
+cover restart persistence and generated configuration for both models, frame
+extraction with cached-window counts for a resampled 30 fps clip, invalid draft
 feedback, duplication, presets, cancelled/accepted conversion and configuration
 round-trip. These UI scenarios intentionally do not launch GPU work; the separate
 release-acceptance fixtures exercise execution and real hardware evidence remains

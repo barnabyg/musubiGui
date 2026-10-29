@@ -148,7 +148,14 @@ def identify_snapshot(root: Path, job_id: str, *, fixture_mode: bool = False) ->
     )
     if job.family == "wan":
         # Sections resample each source rate to 16 fps; caches built from un-resampled TOML are never reused.
-        preparation_settings["video_sampling"] = {"target_fps": WAN_FPS, "source_fps": source_rates(manifest["items"])}
+        config = job.config
+        preparation_settings["video_sampling"] = {
+            "target_fps": WAN_FPS,
+            "source_fps": source_rates(manifest["items"]),
+            "frame_extraction": config.frame_extraction,
+            "frame_stride": config.frame_stride if config.frame_extraction == "slide" else None,
+            "frame_sample": config.frame_sample if config.frame_extraction == "uniform" else None,
+        }
     media = [
         {"path": item["path"], "sha256": item["sha256"], "audio": item.get("audio") if job.family == "h3" else None}
         for item in manifest["items"]
