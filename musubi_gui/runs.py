@@ -397,7 +397,7 @@ class RunService:
             },
             state_source={"path": state["path"], "files": state["files"]},
         )
-        for key in ["stop_requested", "stop_kind", "finished", "exit_code", "checkpoints"]:
+        for key in ["stop_requested", "stop_kind", "finished", "exit_code", "checkpoints", "removed_duplicates"]:
             record.pop(key, None)
         for stage in record["stages"]:
             if stage["name"] not in {"train", "generate"}:

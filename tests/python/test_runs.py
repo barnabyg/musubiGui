@@ -294,6 +294,9 @@ def test_saved_optimizer_state_restores_as_a_new_segment_and_rejects_tampering(t
         with pytest.raises(ValueError, match="confirm"):
             service.restore_state(run["id"], states[0]["id"], 1)
         restored = service.restore_state(run["id"], states[0]["id"], 1, confirmed=True)
+        # Training results of the original run are not the new segment's.
+        assert service.get(run["id"])["removed_duplicates"]
+        assert "removed_duplicates" not in restored and "checkpoints" not in restored
         wait_for(service, restored["id"], "completed")
         assert service.saved_states(restored["id"])[0]["optimizer_step"] == 3
         assert service.get(restored["id"])["resume_of"] == run["id"]
