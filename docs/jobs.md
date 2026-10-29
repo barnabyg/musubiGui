@@ -67,11 +67,15 @@ window. Wan also offers chunk (consecutive non-overlapping windows), slide (a
 window every stride, emitted as `frame_stride`) and uniform (the given number of
 evenly spaced windows, emitted as `frame_sample`; at least two). The pinned `full`
 mode is not offered because its variable clip length has no validated memory
-budget. H3 uses head only: its audio alignment and coverage checks inspect each
-clip's first window, so other modes are blocked in review. Review lists each video's
+budget. H3 uses head only. The pinned loader slices audio for every window, but the
+GUI's audio alignment and coverage checks inspect only each clip's first window, so
+other modes are blocked in review until those windows are inspected too. Review lists each video's
 frame rate, frame count before and after resampling, and cached windows, plus the
 total, so the cache size and epoch length are visible before preparation. Changing
 the mode, stride or sample count changes the latent and text cache identities.
+Counts are predicted from each clip's probed average frame rate and frame count;
+variable-frame-rate or mislabelled clips can decode to a different count, so
+re-encode them at a constant frame rate when the exact count matters.
 
 H3's audio policy defaults to requiring supervised audio for every included video.
 Review shows item-specific source/alignment diagnostics and supervision totals.

@@ -99,10 +99,10 @@ const extractionModes: {
   {
     value: 'uniform',
     label: 'Uniform: evenly spaced windows',
-    help: 'Each long-enough clip yields the sample count of windows spread from its start to its end; a clip only as long as the window yields one.',
+    help: 'Up to the sample count of windows per long-enough clip, spread evenly from its start to its end. Positions that coincide on a short clip are cached once.',
   },
 ];
-function rate(fps: number | null) {
+function rateLabel(fps: number | null) {
   return fps === null ? 'unknown fps' : `${Number(fps.toPrecision(6))} fps`;
 }
 type Props = {
@@ -845,7 +845,7 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
                   <ul>
                     {review.video_windows.items.map((item) => (
                       <li key={item.id}>
-                        {item.name}: {rate(item.source_fps)},{' '}
+                        {item.name}: {rateLabel(item.source_fps)},{' '}
                         {item.source_frames ?? '?'}
                         {item.resampled_frames !== item.source_frames &&
                           ` → ${item.resampled_frames ?? '?'}`}{' '}
