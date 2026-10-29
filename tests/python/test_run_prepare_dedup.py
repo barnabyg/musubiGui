@@ -96,3 +96,25 @@ def test_failed_materialization_keeps_its_source_manifest_and_releases_preparati
         assert (incomplete / "snapshot.json").is_file()
     finally:
         service.close()
+
+
+@pytest.mark.parametrize("ended", ["stopped", "interrupted", "failed", "cancelled"])
+def test_preparing_a_revision_whose_run_ended_early_creates_a_new_run(tmp_path: Path, ended: str) -> None:
+    fixture = prepare(tmp_path / "acceptance", "fixture", None)
+    service = RunService(
+        Path(fixture["state"]), fixture_mode=True, device_path=tmp_path / "device.sqlite", autostart=False
+    )
+    try:
+        job = fixture["jobs"][0]
+        first = service.prepare(job["id"])
+        assert first["existing"] is False
+        again = service.prepare(job["id"])
+        assert (again["id"], again["existing"]) == (first["id"], True)
+        service.store.update(first["id"], lambda record: record.update(status=ended))
+        fresh = service.prepare(job["id"])
+        assert fresh["id"] != first["id"]
+        assert fresh["existing"] is False
+        assert fresh["fingerprint"] == first["fingerprint"]
+        assert "existing" not in service.get(fresh["id"])
+    finally:
+        service.close()

@@ -9,6 +9,9 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+# Terminal statuses for runs that ended without completing; they never block a fresh run of the same revision.
+ENDED_EARLY = frozenset({"failed", "cancelled", "stopped", "interrupted"})
+
 
 @contextmanager
 def database(path: Path) -> Iterator[sqlite3.Connection]:
@@ -50,7 +53,7 @@ class RunStore:
         with database(self.path) as connection:
             for row in connection.execute("SELECT data FROM records"):
                 previous = json.loads(row[0])
-                if previous["fingerprint"] == data["fingerprint"] and previous["status"] not in {"failed", "cancelled"}:
+                if previous["fingerprint"] == data["fingerprint"] and previous["status"] not in ENDED_EARLY:
                     return dict(previous)
             connection.execute("INSERT INTO records VALUES (?,?)", (data["id"], json.dumps(data)))
             return data

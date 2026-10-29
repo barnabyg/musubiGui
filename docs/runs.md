@@ -7,6 +7,13 @@ digest and stable runtime versions identify the snapshot; changing media bytes c
 a new identity even before an index re-scan. A request waiting over 30 seconds reports
 that another snapshot is being created and can be retried safely.
 
+Preparing an unchanged revision returns its existing Run, and the Jobs screen says
+so and links to it. A Run that ended without completing (failed, cancelled,
+stopped or interrupted) is not returned: Prepare creates a fresh Run of the same
+revision, for example after a stop to change machine settings. Its caches are
+reused through the stage fingerprints below, and the earlier Run keeps its logs,
+outputs and saved states.
+
 Before copying media, each new snapshot writes a versioned `snapshot.json` containing
 its source manifest, settings and provenance. A directory with no published Run remains
 an incomplete snapshot; caught failures mark it `incomplete` and retain the evidence.

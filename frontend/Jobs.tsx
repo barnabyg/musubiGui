@@ -105,6 +105,8 @@ const extractionModes: {
 function rateLabel(fps: number | null) {
   return fps === null ? 'unknown fps' : `${Number(fps.toPrecision(6))} fps`;
 }
+type PreparedRun = { id: string; status: string; existing: boolean };
+
 type Props = {
   onRun?: (id: string) => void;
   onDirtyChange?: (dirty: boolean) => void;
@@ -148,6 +150,7 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
   const [presetId, setPresetId] = useState('');
   const [transfer, setTransfer] = useState('');
   const [conversion, setConversion] = useState<ConversionPreview | null>(null);
+  const [existingRun, setExistingRun] = useState<PreparedRun | null>(null);
 
   useEffect(() => {
     void Promise.all([
@@ -179,6 +182,7 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
   async function perform(action: () => Promise<void>) {
     setBusy(true);
     setError('');
+    setExistingRun(null);
     try {
       await action();
     } catch (reason) {
@@ -287,9 +291,15 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
   async function prepare() {
     if (!job || !review?.valid || dirty) return;
     await perform(async () => {
-      const run = await request<{ id: string }>('/api/runs/prepare', 'POST', {
+      const run = await request<PreparedRun>('/api/runs/prepare', 'POST', {
         job_id: job.id,
       });
+      // Prepare returns the matching unfinished or completed run instead of duplicating it.
+      if (run.existing) {
+        setExistingRun(run);
+        setStatus('Existing run returned');
+        return;
+      }
       setStatus('Preparation submitted');
       onRun?.(run.id);
     });
@@ -817,6 +827,15 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
             </button>
           </div>
           {dirty && <p>Save the draft before reviewing or preparing it.</p>}
+          {review && existingRun && (
+            <p>
+              This revision already has a {existingRun.status} run with the same
+              inputs, so no new run was created.{' '}
+              <button onClick={() => onRun?.(existingRun.id)}>
+                Open existing run
+              </button>
+            </p>
+          )}
           {review && (
             <section className="panel" aria-label="Configuration review">
               <h2>Configuration review</h2>

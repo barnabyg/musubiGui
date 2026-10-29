@@ -11,6 +11,7 @@ const execute = promisify(execFile);
 export type RunRecord = {
   id: string;
   status: string;
+  fingerprint: string;
   error?: string;
   job: { id: string; name: string; family: string; revision: number };
   directory: string;

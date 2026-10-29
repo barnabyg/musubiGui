@@ -20,7 +20,7 @@ import psutil
 from musubi_gui.media_probe import inspect as inspect_media
 from musubi_gui.processes import identity_status, observed_tree, process_identity, terminate_owned
 from musubi_gui.reference import Stage, redact, reference_environment
-from musubi_gui.run_store import DeviceLease, RunStore
+from musubi_gui.run_store import ENDED_EARLY, DeviceLease, RunStore
 from musubi_gui.saved_state import discover_states
 from musubi_gui.settings import Settings, atomic_json
 from musubi_gui.snapshots import (
@@ -98,9 +98,9 @@ class RunService:
         with preparation_transaction(self.root):
             inputs = identify_snapshot(self.root, job_id, fixture_mode=self.fixture_mode)
             for previous in self.list():
-                if previous["fingerprint"] == inputs.fingerprint and previous["status"] not in {"failed", "cancelled"}:
-                    return previous
-            return self.submit(ExecutionPlan(**materialize_snapshot(inputs)))
+                if previous["fingerprint"] == inputs.fingerprint and previous["status"] not in ENDED_EARLY:
+                    return {**previous, "existing": True}
+            return {**self.submit(ExecutionPlan(**materialize_snapshot(inputs))), "existing": False}
 
     def start(self, run_id: str) -> dict[str, Any]:
         return self._request_training(run_id, allow_wait=False)
