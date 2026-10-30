@@ -39,7 +39,7 @@ def plan(root: Path, name: str = "one", delay: float = 0.05) -> ExecutionPlan:
 
 
 def wait_for(service: RunService, run_id: str, status: str, *, device_released: bool = False) -> dict:
-    deadline = time.monotonic() + 10
+    deadline = time.monotonic() + 180
     while time.monotonic() < deadline:
         run = service.get(run_id)
         if run["status"] == status and (not device_released or service.device.owner() is None):

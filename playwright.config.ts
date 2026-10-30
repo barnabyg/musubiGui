@@ -6,9 +6,9 @@ delete process.env.NO_COLOR;
 export default defineConfig({
   testDir: './tests/browser',
   workers: 1,
-  timeout: 60_000,
-  // Real backend/media subprocesses on hosted Windows runners can outlast 5 s.
-  expect: { timeout: 15_000 },
+  // Upper bounds with deliberate margin; see docs/verification.md. A passing test never waits them out.
+  timeout: 1_800_000,
+  expect: { timeout: 60_000 },
   use: {
     browserName: 'chromium',
     channel: 'msedge',

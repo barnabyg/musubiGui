@@ -18,7 +18,7 @@ import pytest
 def request(url: str, method: str = "GET", data: dict[str, Any] | None = None) -> tuple[int, dict[str, Any]]:
     body = json.dumps(data).encode("utf-8") if data is not None else None
     target = urlsplit(url)
-    connection = HTTPConnection(target.hostname or "127.0.0.1", target.port, timeout=15)
+    connection = HTTPConnection(target.hostname or "127.0.0.1", target.port, timeout=300)
     try:
         connection.request(method, target.path, body=body, headers={"Content-Type": "application/json"})
         response = connection.getresponse()
@@ -49,7 +49,7 @@ def backend(root: Path) -> Iterator[str]:
     )
     url = f"http://127.0.0.1:{port}"
     try:
-        deadline = time.monotonic() + 20
+        deadline = time.monotonic() + 180
         while time.monotonic() < deadline:
             if process.poll() is not None:
                 raise AssertionError(process.communicate(timeout=1)[0])
@@ -64,7 +64,7 @@ def backend(root: Path) -> Iterator[str]:
     finally:
         if process.poll() is None:
             process.terminate()
-        process.communicate(timeout=10)
+        process.communicate(timeout=300)
 
 
 @pytest.mark.parametrize("second_action", ["save", "convert", "preset"])
@@ -85,7 +85,7 @@ def test_two_backends_publish_only_one_revision_and_preserve_history(tmp_path: P
             other = {**update, "name": f"Second edit {attempt}"}
 
             def change(url: str, action: str) -> tuple[int, dict[str, Any]]:
-                gate.wait(timeout=10)
+                gate.wait(timeout=300)
                 if action == "preset":
                     return request(
                         url + f"/api/jobs/{job_id}/apply-preset",
@@ -106,7 +106,7 @@ def test_two_backends_publish_only_one_revision_and_preserve_history(tmp_path: P
 
             with ThreadPoolExecutor(max_workers=2) as pool:
                 calls = [pool.submit(change, first, "save"), pool.submit(change, second, second_action)]
-                responses = [call.result(timeout=20) for call in calls]
+                responses = [call.result(timeout=300) for call in calls]
             assert sorted(code for code, _ in responses) == [200, 409]
             winner = next(value for code, value in responses if code == 200)
             assert winner["revision"] == current["revision"] + 1

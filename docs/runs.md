@@ -44,6 +44,12 @@ launching each stage, a version-only selected-Python probe checks the recorded p
 identity without importing Torch or initializing CUDA. Environment changes require a
 new preparation; volatile GPU availability/free-space readings do not invalidate caches.
 
+Wan text caching and generation need the UMT5 tokenizer from the Hugging Face Hub. The
+first Wan Run downloads it and needs Hub access. Later Wan Runs use a verified shared
+copy under the cache root and run with Hub access off, as
+[Wan network access](reference/wan.md#network-access) describes. H3 still downloads its
+processor, config and tokenizer into each Run's cache, so every H3 Run needs Hub access.
+
 A transactional host-wide GPU lease serializes execution, including instances with
 different application state directories. Pending work and history live in versioned
 SQLite storage. Unknown storage versions are preserved and blocked.

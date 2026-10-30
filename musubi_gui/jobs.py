@@ -16,8 +16,10 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from musubi_gui.diagnostics import upstream_revision
+from musubi_gui.disk_estimate import check_volumes, estimate_disk, free_space_reader
 from musubi_gui.h3 import h3_stages, validate_h3
 from musubi_gui.reference import CAPTION, UPSTREAM, Stage, redact, safetensors_header, validate_wan, wan_stages
+from musubi_gui.run_store import RunStore, preparation_transaction
 from musubi_gui.settings import Settings, atomic_json, load_settings, validate_paths, within_root
 from musubi_gui.video_sampling import plan_windows, video_sections
 
@@ -241,6 +243,36 @@ def identifier(value: str) -> str:
 class JobStore:
     def __init__(self, root: Path):
         self.root = root / "jobs"
+        # Outside the job folders: revision files stay as written and older versions ignore the markers.
+        self.archive_dir = root / "archived-jobs"
+
+    def is_archived(self, job_id: str) -> bool:
+        return (self.archive_dir / f"{identifier(job_id)}.json").is_file()
+
+    def _require_unarchived(self, job_id: str) -> None:
+        if self.is_archived(job_id):
+            raise ValueError("This job is archived. Restore it before changing it.")
+
+    def archive_job(self, job_id: str) -> Job:
+        # The preparation gate keeps Prepare from creating a Run between the check and the marker.
+        with preparation_transaction(self.root.parent), self._mutation():
+            job = self.get(job_id)
+            if RunStore(self.root.parent).has_active_run(job_id):
+                raise HTTPException(
+                    409, "This job has an active Run. Wait for it to finish, or stop or cancel it, before archiving."
+                )
+            self.archive_dir.mkdir(parents=True, exist_ok=True)
+            atomic_json(self.archive_dir / f"{job_id}.json", {"version": 1, "id": job_id})
+            return job
+
+    def restore_job(self, job_id: str) -> Job:
+        with self._mutation():
+            job = self.get(job_id)
+            (self.archive_dir / f"{job_id}.json").unlink(missing_ok=True)
+            return job
+
+    def archived(self) -> builtins.list[Job]:
+        return [job for job in self._stored() if self.is_archived(job.id)]
 
     @contextmanager
     def _mutation(self) -> Iterator[None]:
@@ -269,6 +301,9 @@ class JobStore:
         return job
 
     def list(self) -> list[Job]:
+        return [job for job in self._stored() if not self.is_archived(job.id)]
+
+    def _stored(self) -> builtins.list[Job]:
         jobs = []
         for directory in sorted(self.root.glob("*")):
             if not directory.is_dir():
@@ -291,6 +326,7 @@ class JobStore:
     def save(self, job_id: str, draft: JobDraft, expected_revision: int) -> Job:
         with self._mutation():
             old = self.get(job_id)
+            self._require_unarchived(job_id)
             if expected_revision != old.revision:
                 raise HTTPException(
                     409, "This job changed in another tab. Reopen it before saving; your edits remain here."
@@ -304,6 +340,7 @@ class JobStore:
     def convert(self, job_id: str, conversion: Conversion) -> dict[str, Any] | Job:
         with self._mutation():
             old = self.get(job_id)
+            self._require_unarchived(job_id)
             if conversion.revision != old.revision:
                 raise HTTPException(409, "The draft changed. Reopen it and preview the conversion again.")
             if conversion.family == old.family:
@@ -331,6 +368,7 @@ class JobStore:
 
     def create_preset(self, job_id: str, name: str) -> Preset:
         job = self.get(job_id)
+        self._require_unarchived(job_id)
         preset = Preset(
             name=name, id=uuid.uuid4().hex, family=job.family, config=export_draft(as_draft(job)).draft.config
         )
@@ -544,6 +582,27 @@ def build_stages(job: Job, settings: Settings, run: Path, cache: Path) -> list[S
     return [stage for stage in stages if stage.name != "generate" or config.sample_enabled]
 
 
+def disk_preflight(
+    job: Job,
+    settings: Settings,
+    items: list[dict[str, Any]],
+    video_windows: list[dict[str, Any]],
+    *,
+    fixture_mode: bool = False,
+) -> dict[str, Any]:
+    media_bytes = 0
+    for item in items:
+        try:
+            media_bytes += Path(item["absolute_path"]).stat().st_size
+        except OSError:
+            # Review reports unreadable media through the dataset checks.
+            continue
+    images = [item for item in items if item["kind"] == "image"]
+    estimate = estimate_disk(job.family, job.config, [*images, *video_windows], media_bytes=media_bytes)
+    volumes = check_volumes(settings, estimate, free=free_space_reader(fixture_mode=fixture_mode))
+    return {"estimate": estimate, "volumes": volumes}
+
+
 def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool = False) -> dict[str, Any]:
     errors = configuration_errors(job)
     warnings = [
@@ -670,6 +729,8 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
     )
     errors.extend(windows.pop("errors"))
     warnings.extend(windows.pop("warnings"))
+    disk = disk_preflight(job, settings, effective_items, windows["items"], fixture_mode=fixture_mode)
+    warnings.extend(volume["warning"] for volume in disk["volumes"] if volume["warning"])
     output = Path(settings.output_root) / "jobs" / job.id
     cache = Path(settings.cache_root) / "jobs" / job.id
     snapshot = output / f"revision-{job.revision}"
@@ -693,6 +754,7 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
         "effective_count": len(effective_items),
         "audio_coverage": audio_coverage,
         "video_windows": windows,
+        "disk": disk,
         "models": {key: value for key, value in settings.models.items() if key.startswith(job.family + "_")},
         "model_provenance": model_provenance,
         "expected_upstream": UPSTREAM,
@@ -731,6 +793,11 @@ def jobs_router(root: Path, *, fixture_mode: bool = False) -> APIRouter:
     def get_jobs() -> list[Job]:
         with job_errors():
             return store.list()
+
+    @router.get("/archived")
+    def get_archived() -> list[Job]:
+        with job_errors():
+            return store.archived()
 
     @router.get("/defaults/{family}")
     def get_defaults(family: Literal["wan", "h3"]) -> JobConfig:
@@ -771,6 +838,16 @@ def jobs_router(root: Path, *, fixture_mode: bool = False) -> APIRouter:
         with job_errors():
             draft = as_draft(store.get(job_id))
             return store.create(draft.model_copy(update={"name": draft.name + " copy"}))
+
+    @router.post("/{job_id}/archive")
+    def archive_job(job_id: str) -> Job:
+        with job_errors():
+            return store.archive_job(job_id)
+
+    @router.post("/{job_id}/restore")
+    def restore_job(job_id: str) -> Job:
+        with job_errors():
+            return store.restore_job(job_id)
 
     @router.post("/{job_id}/presets")
     def post_preset(job_id: str, value: NamedPreset) -> Preset:

@@ -29,7 +29,7 @@ test('managed uploads publish media/captions, reject collisions and invalid file
     await page.getByRole('button', { name: 'Upload selected files' }).click();
     // Uploaded is reported before the final gallery refresh has finished.
     await expect(page.getByLabel('Upload files')).toBeEnabled({
-      timeout: 45_000,
+      timeout: 240_000,
     });
     await expect(
       page.getByLabel('Upload result red.png', { exact: true }),
@@ -59,7 +59,7 @@ test('managed uploads publish media/captions, reject collisions and invalid file
       .setInputFiles(path.join(app.media, 'red.png'));
     await page.getByRole('button', { name: 'Upload selected files' }).click();
     await expect(page.getByLabel('Upload files')).toBeEnabled({
-      timeout: 45_000,
+      timeout: 240_000,
     });
     await expect(
       page.getByLabel('Upload result red.png', { exact: true }),

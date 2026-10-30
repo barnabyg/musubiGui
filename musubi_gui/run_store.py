@@ -5,9 +5,44 @@ import json
 import sqlite3
 import tempfile
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from pathlib import Path
 from typing import Any
+
+# Runs that are queued, working or not yet reconciled, so their job stays in the list.
+ACTIVE_STATUSES = frozenset(
+    {
+        "pending_preparation",
+        "preparing",
+        "pending_training",
+        "training",
+        "generating",
+        "stopping",
+        "orphaned",
+        "uncertain",
+    }
+)
+
+
+def is_active(run: dict[str, Any]) -> bool:
+    return run["status"] in ACTIVE_STATUSES or bool(run.get("processes"))
+
+
+@contextmanager
+def preparation_transaction(root: Path) -> Iterator[None]:
+    """A separate SQLite gate reserves identification/materialization across backends."""
+    root.mkdir(parents=True, exist_ok=True)
+    with closing(sqlite3.connect(root / "snapshot-lock.sqlite3", timeout=30, isolation_level=None)) as connection:
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+        except sqlite3.OperationalError as error:
+            raise ValueError(
+                "Another request is creating a frozen snapshot. Wait for preparation to finish and retry; source files are preserved."
+            ) from error
+        try:
+            yield
+        finally:
+            connection.rollback()
 
 
 def blocks_revision(run: dict[str, Any], fingerprint: str) -> bool:
@@ -47,6 +82,9 @@ class RunStore:
     def list(self) -> list[dict[str, Any]]:
         with database(self.path) as connection:
             return [json.loads(row[0]) for row in connection.execute("SELECT data FROM records ORDER BY rowid DESC")]
+
+    def has_active_run(self, job_id: str) -> bool:
+        return any(run["job"]["id"] == job_id and is_active(run) for run in self.list())
 
     def get(self, run_id: str) -> dict[str, Any]:
         with database(self.path) as connection:

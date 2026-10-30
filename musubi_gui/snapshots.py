@@ -3,18 +3,15 @@
 import hashlib
 import json
 import shutil
-import sqlite3
 import subprocess  # nosec B404
 import uuid
-from collections.abc import Iterator
-from contextlib import closing, contextmanager
 from dataclasses import dataclass
 from importlib import import_module
 from pathlib import Path
 from typing import Any
 
 from musubi_gui.diagnostics import training_environment, upstream_revision
-from musubi_gui.jobs import Job, build_stages, dataset_toml, effective_settings, load_job, review_job
+from musubi_gui.jobs import Job, JobStore, build_stages, dataset_toml, effective_settings, load_job, review_job
 from musubi_gui.reference import safetensors_header
 from musubi_gui.settings import Settings, atomic_json, load_settings, within_root
 from musubi_gui.video_sampling import WAN_FPS, source_rate, source_rates, video_directory
@@ -90,25 +87,10 @@ class SnapshotIdentity:
     fingerprint: str
 
 
-@contextmanager
-def preparation_transaction(root: Path) -> Iterator[None]:
-    """A separate SQLite gate reserves identification/materialization across backends."""
-    root.mkdir(parents=True, exist_ok=True)
-    with closing(sqlite3.connect(root / "snapshot-lock.sqlite3", timeout=30, isolation_level=None)) as connection:
-        try:
-            connection.execute("BEGIN IMMEDIATE")
-        except sqlite3.OperationalError as error:
-            raise ValueError(
-                "Another request is creating a frozen snapshot. Wait for preparation to finish and retry; source files are preserved."
-            ) from error
-        try:
-            yield
-        finally:
-            connection.rollback()
-
-
 def identify_snapshot(root: Path, job_id: str, *, fixture_mode: bool = False) -> SnapshotIdentity:
     job = load_job(root, job_id)
+    if JobStore(root).is_archived(job_id):
+        raise ValueError("This job is archived. Restore it from Jobs before preparing a new Run.")
     settings = effective_settings(job, load_settings(root))
     review = review_job(root, job, settings, fixture_mode=fixture_mode)
     if not review["valid"]:

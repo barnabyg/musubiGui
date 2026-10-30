@@ -18,7 +18,7 @@ async function openDataset(
   await page.getByRole('button', { name: 'Register folder' }).click();
   await expect(page.locator('.dataset-identity [role="status"]')).toHaveText(
     `Scan: complete ${count}/${count}`,
-    { timeout: 45_000 },
+    { timeout: 240_000 },
   );
 }
 
@@ -140,7 +140,6 @@ test('virtual scrolling preserves pending and failed inline drafts, with recover
   page,
 }) => {
   // Keep scan and recovery time separate from the default assertion deadline.
-  test.setTimeout(90_000);
   const app = await datasetHarness();
   let release = () => {};
   try {

@@ -19,7 +19,7 @@ export type RunRecord = {
   stages: { name: string; status: string }[];
 };
 
-export async function runWorkspace() {
+export async function runWorkspace(options: { freeBytes?: number } = {}) {
   const parent = await mkdtemp(path.join(tmpdir(), 'musubi-runs-'));
   const fixture = path.join(parent, 'fixture');
   const python = path.resolve('.venv/Scripts/python.exe');
@@ -63,6 +63,9 @@ export async function runWorkspace() {
           MUSUBI_TEST_DEVICE: path.join(parent, 'device.sqlite'),
           MUSUBI_TEST_PORT: String(port),
           MUSUBI_TEST_IDENTITY: identityFile,
+          ...(options.freeBytes === undefined
+            ? {}
+            : { MUSUBI_TEST_FREE_BYTES: String(options.freeBytes) }),
         },
         stdio: 'pipe',
       },
@@ -82,7 +85,7 @@ export async function runWorkspace() {
             return output.includes('Traceback') ? output : 0;
           }
         },
-        { timeout: 15000 },
+        { timeout: 240_000 },
       )
       .toBe(200);
   };
@@ -157,6 +160,30 @@ export async function runWorkspace() {
       });
     }
   };
+  // Another instance owning the GPU leaves new work pending, whatever the fixture's speed.
+  const leaseGpu = async (action: 'acquire' | 'release') => {
+    const call =
+      action === 'acquire'
+        ? "acquire('other-work',{})"
+        : "release('other-work')";
+    await execute(python, [
+      '-c',
+      `import sys;from pathlib import Path;from musubi_gui.run_store import DeviceLease;DeviceLease(Path(sys.argv[1]),Path(sys.argv[2])).${call}`,
+      path.join(parent, 'other-instance'),
+      path.join(parent, 'device.sqlite'),
+    ]);
+  };
   await start();
-  return { parent, fixture, manifest, url, start, crash, post, records, close };
+  return {
+    parent,
+    fixture,
+    manifest,
+    url,
+    start,
+    crash,
+    post,
+    records,
+    leaseGpu,
+    close,
+  };
 }

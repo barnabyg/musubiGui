@@ -64,6 +64,25 @@ type Review = {
     missing: number;
     items: unknown[];
   };
+  disk: {
+    estimate: {
+      media_snapshot: number;
+      caches: number;
+      checkpoints: number;
+      states: number;
+      samples: number;
+      saves: number;
+    };
+    volumes: {
+      volume: string;
+      roots: string[];
+      needed: number;
+      margin: number;
+      free: number | null;
+      shortfall: number;
+      warning: string;
+    }[];
+  };
   video_windows: {
     total: number;
     items: {
@@ -105,6 +124,11 @@ const extractionModes: {
 function rateLabel(fps: number | null) {
   return fps === null ? 'unknown fps' : `${Number(fps.toPrecision(6))} fps`;
 }
+function sizeLabel(bytes: number) {
+  return bytes >= 100_000_000
+    ? `${(bytes / 1_000_000_000).toFixed(1)} GB`
+    : `${(bytes / 1_000_000).toFixed(0)} MB`;
+}
 type PreparedRun = { id: string; status: string; existing: boolean };
 
 type Props = {
@@ -137,6 +161,7 @@ async function request<T>(
 
 export function Jobs({ onRun, onDirtyChange }: Props) {
   const [jobs, setJobs] = useState<Job[]>([]);
+  const [archived, setArchived] = useState<Job[]>([]);
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [models, setModels] = useState<Record<string, string>>({});
   const [job, setJob] = useState<Job | null>(null);
@@ -159,9 +184,11 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
       request<Dataset[]>('/api/datasets'),
       request<{ models: Record<string, string> }>('/api/settings'),
       request<Preset[]>('/api/jobs/presets'),
+      request<Job[]>('/api/jobs/archived'),
     ])
-      .then(([items, library, settings, savedPresets]) => {
+      .then(([items, library, settings, savedPresets, hidden]) => {
         setJobs(items);
+        setArchived(hidden);
         setDatasets(library);
         setModels(settings.models);
         setPresets(savedPresets);
@@ -319,6 +346,28 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
       setStatus('Independent copy created');
     });
   }
+  async function refreshLibrary() {
+    setJobs(await request<Job[]>('/api/jobs'));
+    setArchived(await request<Job[]>('/api/jobs/archived'));
+  }
+  async function archive() {
+    if (!job || dirty) return;
+    await perform(async () => {
+      await request<Job>(`/api/jobs/${job.id}/archive`, 'POST', {});
+      await refreshLibrary();
+      setJob(null);
+      setReview(null);
+      setConversion(null);
+      setStatus('Job archived');
+    });
+  }
+  async function restore(id: string) {
+    await perform(async () => {
+      await request<Job>(`/api/jobs/${id}/restore`, 'POST', {});
+      await refreshLibrary();
+      setStatus('Job restored');
+    });
+  }
   async function savePreset() {
     if (!job || dirty) return;
     await perform(async () => {
@@ -436,6 +485,25 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
           </button>
         ))}
       </div>
+      {archived.length > 0 && (
+        <details className="panel">
+          <summary>Archived jobs ({archived.length})</summary>
+          <p>
+            Archived jobs are hidden from the list above. Their Runs, outputs
+            and saved states stay in Runs.
+          </p>
+          <ul aria-label="Archived jobs">
+            {archived.map((item) => (
+              <li key={item.id}>
+                {item.name} · {item.family.toUpperCase()} · r{item.revision}{' '}
+                <button disabled={busy} onClick={() => void restore(item.id)}>
+                  Restore {item.name}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
       <details className="panel">
         <summary>Import / export configuration</summary>
         <p>
@@ -495,6 +563,9 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
                 onClick={() => void convert(false)}
               >
                 Change model to {job.family === 'wan' ? 'H3 T2VA' : 'Wan T2V'}
+              </button>
+              <button disabled={busy || dirty} onClick={() => void archive()}>
+                Archive job
               </button>
             </div>
             {conversion && (
@@ -859,6 +930,39 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
                   <li key={index}>{message}</li>
                 ))}
               </ul>
+              <div data-testid="disk-estimate">
+                <h3>Estimated disk use</h3>
+                <ul>
+                  <li>
+                    Media snapshot:{' '}
+                    {sizeLabel(review.disk.estimate.media_snapshot)}
+                  </li>
+                  <li>Caches: {sizeLabel(review.disk.estimate.caches)}</li>
+                  <li>
+                    LoRA checkpoints:{' '}
+                    {sizeLabel(review.disk.estimate.checkpoints)} (
+                    {review.disk.estimate.saves} saves)
+                  </li>
+                  <li>
+                    Optimizer states: {sizeLabel(review.disk.estimate.states)}
+                  </li>
+                  <li>Samples: {sizeLabel(review.disk.estimate.samples)}</li>
+                </ul>
+                <ul>
+                  {review.disk.volumes.map((volume) => (
+                    <li key={volume.volume}>
+                      {volume.volume} ({volume.roots.join(', ')}): needs about{' '}
+                      {sizeLabel(volume.needed + volume.margin)} including a{' '}
+                      {sizeLabel(volume.margin)} margin,{' '}
+                      {volume.free === null
+                        ? 'free space unknown'
+                        : `${sizeLabel(volume.free)} free`}
+                      {volume.shortfall > 0 &&
+                        `, ${sizeLabel(volume.shortfall)} short`}
+                    </li>
+                  ))}
+                </ul>
+              </div>
               {review.video_windows.items.length > 0 && (
                 <div data-testid="video-windows">
                   <h3>Cached video windows</h3>

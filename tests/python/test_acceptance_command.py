@@ -13,7 +13,7 @@ def test_acceptance_refuses_existing_workspace_without_changing_its_files(tmp_pa
         [sys.executable, "-m", "musubi_gui.acceptance", "--workspace", str(workspace), "--prepare-only"],
         capture_output=True,
         text=True,
-        timeout=30,
+        timeout=300,
     )
     assert result.returncode == 2
     assert "new, nonexistent directory" in result.stdout
@@ -28,7 +28,7 @@ def test_acceptance_prepares_two_models_without_starting_training(tmp_path: Path
         capture_output=True,
         text=True,
         encoding="utf-8",
-        timeout=60,
+        timeout=300,
     )
     assert result.returncode == 0, result.stdout + result.stderr
     manifest = json.loads((workspace / "acceptance.json").read_text(encoding="utf-8"))

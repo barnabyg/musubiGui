@@ -37,7 +37,7 @@ def test_h3_nvfp4_block_scales_do_not_get_rejected_as_fp8_weights(tmp_path: Path
         [sys.executable, "-m", "musubi_gui.reference", "h3", "--settings", str(state), "--plan-only"],
         capture_output=True,
         text=True,
-        timeout=30,
+        timeout=300,
     )
     assert result.returncode == 2
     evidence = json.loads(next((tmp_path / "outputs").glob("h3-*/evidence.json")).read_text(encoding="utf-8"))

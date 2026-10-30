@@ -21,16 +21,16 @@ from musubi_gui.checkpoint_dedup import remove_final_duplicates
 from musubi_gui.media_probe import inspect as inspect_media
 from musubi_gui.processes import identity_status, observed_tree, process_identity, terminate_owned
 from musubi_gui.reference import Stage, redact, reference_environment
-from musubi_gui.run_store import DeviceLease, RunStore, blocks_revision
+from musubi_gui.run_store import DeviceLease, RunStore, blocks_revision, preparation_transaction
 from musubi_gui.saved_state import discover_states
 from musubi_gui.settings import Settings, atomic_json
 from musubi_gui.snapshots import (
     digest_file,
     identify_snapshot,
     materialize_snapshot,
-    preparation_transaction,
     verify_inputs,
 )
+from musubi_gui.wan_tokenizer import publish_shared, seed_run, shared_directory
 from musubi_gui.windows_job import ProcessJob, WindowsProcess
 
 
@@ -481,6 +481,10 @@ class RunService:
                 log_file = Path(run["directory"]) / f"{stage['name']}.log"
                 with log_file.open("a", encoding="utf-8") as log:
                     environment = reference_environment(Path(run["cache"]))
+                    if self._seed_wan_tokenizer(run):
+                        environment["HF_HUB_OFFLINE"] = "1"
+                        log.write("Using the shared Wan tokenizer; Hugging Face Hub access is off for this stage.\n")
+                        log.flush()
                     if os.name == "nt":
                         process = job_object.spawn(stage["args"], cwd=settings.checkout, env=environment, log=log)
                     else:
@@ -577,6 +581,7 @@ class RunService:
                         self.store.update(run_id, lambda r: r.update(status="cancelled", processes=[]))
                         return
                     raise ValueError(f"{stage['name']} exited {code}. Inspect logs and retry preparation.")
+                self._share_wan_tokenizer(run)
                 if preparing:
                     artifacts = self._cache_artifacts(run, stage["name"])
                     if run.get("stage_keys") and not artifacts:
@@ -641,6 +646,26 @@ class RunService:
                 if failure is None:
                     self.store.update(run_id, lambda r: r.update(processes=[], launch_pending=False))
                 self.device.release(run_id)
+
+    def _seed_wan_tokenizer(self, run: dict[str, Any]) -> bool:
+        shared = wan_tokenizer_directory(run)
+        if not shared:
+            return False
+        try:
+            return seed_run(shared, Path(run["cache"]))
+        except OSError:
+            # The stage can still download the tokenizer itself.
+            return False
+
+    def _share_wan_tokenizer(self, run: dict[str, Any]) -> None:
+        shared = wan_tokenizer_directory(run)
+        if not shared:
+            return
+        try:
+            publish_shared(Path(run["cache"]), shared)
+        except OSError:
+            # Sharing only saves a later download; it never fails a stage that succeeded.
+            return
 
     def _remove_final_duplicates(self, run: dict[str, Any], stage: dict[str, Any]) -> builtins.list[str]:
         """Keep one copy of the final save when the step count is a multiple of the checkpoint interval."""
@@ -755,6 +780,11 @@ class RunService:
             )
             return True
         return False
+
+
+def wan_tokenizer_directory(run: dict[str, Any]) -> Path | None:
+    cache_root = run["settings"].get("cache_root")
+    return shared_directory(cache_root) if run["job"]["family"] == "wan" and cache_root else None
 
 
 def fingerprint(value: object) -> str:

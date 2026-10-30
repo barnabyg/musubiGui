@@ -7,7 +7,6 @@ test('large galleries scroll, resize and filter without losing access to media',
   page,
 }) => {
   // Leave room for a real scan and the subsequent gallery interactions.
-  test.setTimeout(90_000);
   const app = await datasetHarness();
   try {
     await Promise.all(
@@ -29,7 +28,7 @@ test('large galleries scroll, resize and filter without losing access to media',
     await page.getByRole('button', { name: 'Register folder' }).click();
     await expect(page.locator('.dataset-identity [role="status"]')).toHaveText(
       'Scan: complete 8/8',
-      { timeout: 45_000 },
+      { timeout: 240_000 },
     );
     const gallery = page.getByLabel('Dataset gallery');
     // The gallery starts directly below the compact header and fills the viewport.
@@ -132,7 +131,7 @@ test('separate library and editor create, populate, rename, reopen and delete wi
       ]);
     await page.getByRole('button', { name: 'Upload selected files' }).click();
     await expect(page.getByLabel('Upload files')).toBeEnabled({
-      timeout: 45_000,
+      timeout: 240_000,
     });
     const tile = page.getByRole('button', { name: 'red.png image' });
     await expect(

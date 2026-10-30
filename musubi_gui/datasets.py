@@ -10,6 +10,7 @@ import stat
 import subprocess  # nosec B404
 import sys
 import tempfile
+import time
 import uuid
 from contextlib import contextmanager
 from datetime import UTC, datetime
@@ -21,6 +22,8 @@ from musubi_gui.settings import atomic_json, load_settings, within_root
 IMAGES = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff", ".gif"}
 VIDEOS = {".mp4", ".mov", ".mkv", ".avi", ".webm"}
 AUDIO = {".aac", ".flac", ".m4a", ".mp3", ".ogg", ".opus", ".wav"}
+# Windows refuses to replace a file another process has open; scanners and readers let go quickly.
+CAPTION_REPLACE_SECONDS = 2.0
 
 
 def content_hash(path: Path) -> str:
@@ -336,14 +339,23 @@ class DatasetStore:
                     os.fsync(stream.fileno())
                 regular_path(media, folder)
                 regular_path(media.with_suffix(".txt"), folder)
-                if read_caption(path)["revision"] != revision:
-                    raise CaptionConflict(
-                        "Caption changed during save. Your text is retained; reload and review the external edit."
-                    )
-                if exists:
-                    os.replace(temporary, path)
-                else:
-                    path.unlink(missing_ok=True)
+                deadline = time.monotonic() + CAPTION_REPLACE_SECONDS
+                while True:
+                    # Checked on every attempt, so an external edit made during a wait is never overwritten.
+                    if read_caption(path)["revision"] != revision:
+                        raise CaptionConflict(
+                            "Caption changed during save. Your text is retained; reload and review the external edit."
+                        )
+                    try:
+                        if exists:
+                            os.replace(temporary, path)
+                        else:
+                            path.unlink(missing_ok=True)
+                        break
+                    except PermissionError:
+                        if time.monotonic() >= deadline:
+                            raise
+                        time.sleep(0.05)
                 saved = read_caption(path)
                 record.update(state="applied", after=saved)
                 atomic_json(history_file, record)

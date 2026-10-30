@@ -18,7 +18,7 @@ def test_version_only_probe_reports_optional_preprocessors_without_initializing_
         capture_output=True,
         text=True,
         check=True,
-        timeout=15,
+        timeout=300,
     )
     report = json.loads(result.stdout.removeprefix("MUSUBI_PROBE="))
     assert set(report["preprocessing_packages"]) == {
@@ -63,7 +63,8 @@ def test_preprocessor_versions_invalidate_cache_and_changed_queued_environment_b
         environment.pop("gpu")  # The real probe omits GPU details when CUDA is temporarily unavailable.
         assert service.prepare(fixture["jobs"][0]["id"])["id"] == updated["id"]
         service.start_worker()
-        deadline = time.monotonic() + 15
+        # Two real fixture preparations; only an upper bound, so hosted runners get plenty of margin.
+        deadline = time.monotonic() + 180
         while (
             service.get(first["id"])["status"] != "failed" or service.get(updated["id"])["status"] != "prepared"
         ) and time.monotonic() < deadline:

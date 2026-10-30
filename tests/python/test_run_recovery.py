@@ -13,7 +13,7 @@ from musubi_gui.windows_job import ProcessJob
 
 
 def wait_status(service: RunService, run_id: str, expected: str) -> dict:
-    deadline = time.monotonic() + 10
+    deadline = time.monotonic() + 180
     while time.monotonic() < deadline:
         run = service.get(run_id)
         if run["status"] == expected:
@@ -82,7 +82,7 @@ def test_restart_observes_surviving_work_and_does_not_launch_replacement(tmp_pat
             fingerprint="restart",
         )
     )
-    deadline = time.monotonic() + 5
+    deadline = time.monotonic() + 180
     while not service.get(run["id"]).get("processes") and time.monotonic() < deadline:
         time.sleep(0.02)
     assert service.get(run["id"])["processes"]

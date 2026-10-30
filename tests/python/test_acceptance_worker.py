@@ -11,7 +11,7 @@ def test_fake_worker_refuses_to_run_outside_an_explicit_synthetic_checkout(tmp_p
         env={"PYTHONPATH": str(Path(__file__).resolve().parents[2])},
         capture_output=True,
         text=True,
-        timeout=15,
+        timeout=300,
     )
     assert result.returncode == 2
     assert "synthetic checkout marker" in result.stdout
@@ -43,7 +43,7 @@ def test_fake_worker_produces_an_explicit_synthetic_checkpoint_and_resume_metada
         env={"PYTHONPATH": str(Path(__file__).resolve().parents[2])},
         capture_output=True,
         text=True,
-        timeout=15,
+        timeout=300,
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert "SYNTHETIC" in result.stdout

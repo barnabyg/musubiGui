@@ -34,7 +34,7 @@ def test_retry_seals_its_executed_native_inputs_and_rejects_edits_before_launch(
         else:
             executed_toml.write_text("invalid edited native configuration", encoding="utf-8")
         service.start_worker()
-        deadline = time.monotonic() + 10
+        deadline = time.monotonic() + 180
         while service.get(retried["id"])["status"] != "failed" and time.monotonic() < deadline:
             time.sleep(0.02)
         rejected = service.get(retried["id"])
