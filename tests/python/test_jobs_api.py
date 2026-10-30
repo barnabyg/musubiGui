@@ -95,7 +95,7 @@ def test_incompatible_wan_options_remain_editable_but_review_blocks_execution(tm
     assert any("4*n+1" in error for error in review["errors"])
 
 
-@pytest.mark.parametrize(("blocks", "valid"), [(0, True), (36, True), (37, False), (39, False)])
+@pytest.mark.parametrize(("blocks", "valid"), [(0, True), (36, True), (38, True), (39, False), (40, False)])
 def test_wan_block_swap_is_limited_to_the_qualified_maximum(tmp_path: Path, blocks: int, valid: bool) -> None:
     client = client_for(tmp_path)
     job = client.post("/api/jobs", json={"name": "Swap", "family": "wan", "config": {"blocks_to_swap": blocks}}).json()
@@ -107,7 +107,7 @@ def test_wan_block_swap_is_limited_to_the_qualified_maximum(tmp_path: Path, bloc
         assert swap_errors == []
     else:
         assert len(swap_errors) == 1
-        assert "36" in swap_errors[0] and "FP8" in swap_errors[0]
+        assert "38" in swap_errors[0] and "FP8" in swap_errors[0]
 
 
 @pytest.mark.parametrize(("blocks", "valid"), [(0, True), (48, True), (49, False), (53, False)])
@@ -122,7 +122,7 @@ def test_h3_block_swap_is_limited_to_the_qualified_maximum(tmp_path: Path, block
         assert swap_errors == []
     else:
         assert len(swap_errors) == 1
-        assert "48" in swap_errors[0] and "50" in swap_errors[0]
+        assert "48" in swap_errors[0] and "50" in swap_errors[0] and "upstream" in swap_errors[0]
 
 
 def test_h3_draft_defaults_and_native_stages_match_guidance_loss_recipe(tmp_path: Path) -> None:
