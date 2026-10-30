@@ -82,7 +82,6 @@ type Review = {
       shortfall: number;
       warning: string;
     }[];
-    low: boolean;
   };
   video_windows: {
     total: number;
@@ -178,7 +177,6 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
   const [transfer, setTransfer] = useState('');
   const [conversion, setConversion] = useState<ConversionPreview | null>(null);
   const [existingRun, setExistingRun] = useState<PreparedRun | null>(null);
-  const [acceptLowDisk, setAcceptLowDisk] = useState(false);
 
   useEffect(() => {
     void Promise.all([
@@ -313,7 +311,6 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
   async function inspect() {
     if (!job) return;
     await perform(async () => {
-      setAcceptLowDisk(false);
       setReview(
         await request<Review>(`/api/jobs/${job.id}/review`, 'POST', {}),
       );
@@ -325,7 +322,6 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
     await perform(async () => {
       const run = await request<PreparedRun>('/api/runs/prepare', 'POST', {
         job_id: job.id,
-        accept_low_disk: acceptLowDisk,
       });
       // Prepare returns the matching unfinished or completed run instead of duplicating it.
       if (run.existing) {
@@ -903,19 +899,6 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
               Prepare run
             </button>
           </div>
-          {review?.disk.low && (
-            <label className="job-toggle">
-              <input
-                type="checkbox"
-                checked={acceptLowDisk}
-                disabled={busy}
-                onChange={(event) => setAcceptLowDisk(event.target.checked)}
-              />
-              <span>
-                Prepare anyway, even though this Run may run out of disk space
-              </span>
-            </label>
-          )}
           {dirty && <p>Save the draft before reviewing or preparing it.</p>}
           {review && existingRun && (
             <p>

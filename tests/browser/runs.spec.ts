@@ -385,7 +385,7 @@ test('a gracefully stopped revision can be prepared and started again', async ({
   }
 });
 
-test('low disk space warns in review and stops preparation until accepted', async ({
+test('low disk space warns in review and preparation still goes ahead', async ({
   page,
 }) => {
   test.setTimeout(90_000);
@@ -405,21 +405,10 @@ test('low disk space warns in review and stops preparation until accepted', asyn
     await expect(estimate).toContainText('short');
     const volume = path.parse(app.parent).root;
     await expect(estimate).toContainText(volume);
+    const review = page.getByRole('region', { name: 'Configuration review' });
+    await expect(review).toContainText('Ready for preparation');
+    await expect(review.getByText(/^Low disk space on /)).toContainText(volume);
 
-    await page
-      .getByRole('button', { name: 'Prepare run', exact: true })
-      .click();
-    const refusal = page.getByRole('alert');
-    await expect(refusal).toContainText('Low disk space');
-    await expect(refusal).toContainText(volume);
-    await expect(refusal).toContainText('short');
-    expect(await app.records()).toEqual([]);
-
-    await page
-      .getByRole('checkbox', {
-        name: 'Prepare anyway, even though this Run may run out of disk space',
-      })
-      .check();
     await page
       .getByRole('button', { name: 'Prepare run', exact: true })
       .click();

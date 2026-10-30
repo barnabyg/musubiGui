@@ -600,7 +600,7 @@ def disk_preflight(
     images = [item for item in items if item["kind"] == "image"]
     estimate = estimate_disk(job.family, job.config, [*images, *video_windows], media_bytes=media_bytes)
     volumes = check_volumes(settings, estimate, free=free_space_reader(fixture_mode=fixture_mode))
-    return {"estimate": estimate, "volumes": volumes, "low": any(volume["shortfall"] for volume in volumes)}
+    return {"estimate": estimate, "volumes": volumes}
 
 
 def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool = False) -> dict[str, Any]:

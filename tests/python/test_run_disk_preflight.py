@@ -37,7 +37,7 @@ def test_review_reports_the_estimate_and_each_target_volume(service: RunService,
     disk = client.post(f"/api/jobs/{fixture['jobs'][0]['id']}/review", json={}).json()["disk"]
     assert {"media_snapshot", "caches", "checkpoints", "states", "samples", "saves"} <= set(disk["estimate"])
     assert disk["estimate"]["media_snapshot"] > 0
-    assert disk["low"] is False
+    assert disk["volumes"][0]["shortfall"] == 0
     assert disk["volumes"][0]["free"] > 0
     assert set(disk["volumes"][0]["roots"]) == {"Output root", "Cache root"}
 
@@ -48,40 +48,16 @@ def test_low_disk_warns_in_review_without_making_the_job_invalid(
     monkeypatch.setenv(FREE_SPACE_OVERRIDE, "1000")
     review = client_for(service, fixture).post(f"/api/jobs/{fixture['jobs'][0]['id']}/review", json={}).json()
     assert review["valid"] is True
-    assert review["disk"]["low"] is True
+    assert review["disk"]["volumes"][0]["shortfall"] > 0
     assert any("Low disk space" in warning and "short" in warning for warning in review["warnings"])
 
 
-def test_prepare_is_refused_on_low_disk_until_the_user_accepts_it(
-    service: RunService, fixture: dict, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_prepare_goes_ahead_on_low_disk(service: RunService, fixture: dict, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(FREE_SPACE_OVERRIDE, "1000")
     client = client_for(service, fixture)
-    job_id = fixture["jobs"][0]["id"]
-    output_runs = tmp_path / "acceptance" / "outputs" / "runs"
-
-    refused = client.post("/api/runs/prepare", json={"job_id": job_id})
-    assert refused.status_code == 409
-    assert "Low disk space" in refused.json()["detail"]
-    assert "short" in refused.json()["detail"]
-    assert Path(fixture["state"]).anchor in refused.json()["detail"]
-    assert service.list() == []
-    assert not output_runs.exists() or not list(output_runs.iterdir())
-
-    accepted = client.post("/api/runs/prepare", json={"job_id": job_id, "accept_low_disk": True})
-    assert accepted.status_code == 200
-    assert accepted.json()["status"] == "pending_preparation"
-
-
-def test_preparing_an_unchanged_revision_returns_its_run_even_on_low_disk(
-    service: RunService, fixture: dict, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    job_id = fixture["jobs"][0]["id"]
-    first = service.prepare(job_id)
-    monkeypatch.setenv(FREE_SPACE_OVERRIDE, "1000")
-    again = service.prepare(job_id)
-    assert again["id"] == first["id"]
-    assert again["existing"] is True
+    prepared = client.post("/api/runs/prepare", json={"job_id": fixture["jobs"][0]["id"]})
+    assert prepared.status_code == 200
+    assert prepared.json()["status"] == "pending_preparation"
 
 
 def test_the_free_space_override_is_ignored_outside_fixture_mode(

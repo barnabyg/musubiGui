@@ -25,10 +25,10 @@ checkpoints, optimizer states and samples, plus the free space on each target vo
 When the output and cache roots share a volume, their needs are added together. A Run
 needs the estimate plus a margin of 10% or 1 GB, whichever is larger.
 
-If a volume is short, review shows a warning naming the volume and the shortfall. Prepare
-is then refused with the same message until you tick "Prepare anyway". The job stays
-valid: this is your decision, because the estimate can be wrong in either direction and
-large runs are normal. A Run that needs tens of GB does not warn when the space is free.
+If a volume is short, review shows a warning naming the volume and the shortfall. It is
+only a warning: Prepare still goes ahead, because the estimate can be wrong in either
+direction and large runs are normal. A Run that needs tens of GB does not warn when the
+space is free.
 
 The estimate uses sizes measured on the target PC
 ([Wan](reference/wan.md#measured-disk-use), [H3](reference/h3.md#measured-disk-use)):
@@ -44,8 +44,8 @@ The estimate uses sizes measured on the target PC
 
 Its limits:
 
-- It covers one Run and does not count other queued Runs. Only Prepare checks it, so
-  Retry and Restore as new segment don't warn or stop on low disk.
+- It covers one Run and does not count other queued Runs. Only review shows it, so Retry
+  and Restore as new segment don't warn on low disk.
 - H3 frame counts above 124, H3 ranks other than 4 and 8, and Wan ranks other than 8 and
   16 are extrapolated.
 - Text caches use the mean per-item size measured in the #26 trial, so long captions use
@@ -53,8 +53,8 @@ Its limits:
   the real size.
 - Bucketing can change latent sizes.
 - Compiler caches are left to the margin.
-- Free space is read at review and Prepare. It is not checked again at Start, so a Run
-  prepared now and started later can still run out.
+- Free space is read at review. It is not checked again at Prepare or Start, so a Run can
+  still run out if the space is used in the meantime.
 
 Compared with run `fb66e3d3` in #26 (Wan, 832×480, 33 frames, rank 16, 200 steps, saving
 every 100 with state), the estimate gives 83 MB of caches against 83 MB measured, 921 MB

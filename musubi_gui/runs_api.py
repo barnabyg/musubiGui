@@ -12,7 +12,6 @@ from musubi_gui.runs import RunService
 class PrepareRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     job_id: str
-    accept_low_disk: bool = False
 
 
 class QueueOrder(BaseModel):
@@ -64,7 +63,7 @@ def runs_router(service: RunService) -> APIRouter:
     @router.post("/prepare")
     def prepare(request: PrepareRequest) -> dict[str, Any]:
         with run_errors():
-            return service.prepare(request.job_id, accept_low_disk=request.accept_low_disk)
+            return service.prepare(request.job_id)
 
     @router.get("/queue")
     def queue() -> list[dict[str, Any]]:
