@@ -384,3 +384,49 @@ test('a gracefully stopped revision can be prepared and started again', async ({
     await app.close();
   }
 });
+
+test('low disk space warns in review and stops preparation until accepted', async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  const app = await runWorkspace({ freeBytes: 1000 });
+  try {
+    const job = app.manifest.jobs.find((item) => item.family === 'wan')!;
+    await page.goto(app.url);
+    await page.getByRole('button', { name: 'Jobs', exact: true }).click();
+    await page
+      .getByRole('button', { name: `${job.name} · WAN · r1`, exact: true })
+      .click();
+    await page
+      .getByRole('button', { name: 'Review configuration', exact: true })
+      .click();
+    const estimate = page.getByTestId('disk-estimate');
+    await expect(estimate).toContainText('Optimizer states');
+    await expect(estimate).toContainText('short');
+    const volume = path.parse(app.parent).root;
+    await expect(estimate).toContainText(volume);
+
+    await page
+      .getByRole('button', { name: 'Prepare run', exact: true })
+      .click();
+    const refusal = page.getByRole('alert');
+    await expect(refusal).toContainText('Low disk space');
+    await expect(refusal).toContainText(volume);
+    await expect(refusal).toContainText('short');
+    expect(await app.records()).toEqual([]);
+
+    await page
+      .getByRole('checkbox', {
+        name: 'Prepare anyway, even though this Run may run out of disk space',
+      })
+      .check();
+    await page
+      .getByRole('button', { name: 'Prepare run', exact: true })
+      .click();
+    await expect(
+      page.getByText('State: prepared', { exact: true }),
+    ).toBeVisible({ timeout: 45_000 });
+  } finally {
+    await app.close();
+  }
+});

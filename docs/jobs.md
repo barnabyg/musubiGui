@@ -20,6 +20,46 @@ also passed high-noise-only training; that recipe is not exposed by the GUI.
 Combined training remains unqualified. Runtime FP8 scaling requires native FP16 sources,
 not saved scaled-FP8 weights. Inactive-DiT offload is not supported by this recipe.
 
+Review also estimates the disk a Run will use: the media snapshot, caches, LoRA
+checkpoints, optimizer states and samples, plus the free space on each target volume.
+When the output and cache roots share a volume, their needs are added together. A Run
+needs the estimate plus a margin of 10% or 1 GB, whichever is larger.
+
+If a volume is short, review shows a warning naming the volume and the shortfall. Prepare
+is then refused with the same message until you tick "Prepare anyway". The job stays
+valid: this is your decision, because the estimate can be wrong in either direction and
+large runs are normal. A Run that needs tens of GB does not warn when the space is free.
+
+The estimate uses sizes measured on the target PC
+([Wan](reference/wan.md#measured-disk-use), [H3](reference/h3.md#measured-disk-use)):
+
+- Checkpoints are linear in rank for each model. Each saved state is 3.0014 times its
+  checkpoint.
+- The save count is `floor(steps / save_every) + 1`. This is the peak: when the last step
+  falls on the interval, the duplicate exists until training succeeds and it is removed,
+  so a successful Run keeps one set fewer.
+- Wan latents are computed from size and frames, and H3 latents are fitted to two measured
+  sizes at 124 frames. Each cached video window or image adds one latent file, and repeats
+  add none.
+
+Its limits:
+
+- It covers one Run. It does not count other queued Runs, retries or restored segments.
+- H3 frame counts above 124, H3 ranks other than 4 and 8, and Wan ranks other than 8 and
+  16 are extrapolated.
+- Text caches use the mean per-item size measured in the #26 trial, so long captions use
+  more. Samples use the largest measured bytes per pixel-frame, and video content changes
+  the real size.
+- Bucketing can change latent sizes.
+- Compiler caches are left to the margin.
+- Free space is read at review and Prepare. It is not checked again at Start, so a Run
+  prepared now and started later can still run out.
+
+Compared with run `fb66e3d3` in #26 (Wan, 832×480, 33 frames, rank 16, 200 steps, saving
+every 100 with state), the estimate gives 83 MB of caches against 83 MB measured, 921 MB
+of checkpoints against 921 MB, and 2.76 GB of states against 2.76 GB. The sample is
+estimated at 3.3 MB against 0.9 MB measured.
+
 Gallery preview support is broader than the pinned training loader. GIF, TIF and TIFF
 images remain browsable, but Job review names each incompatible included item and
 requires conversion to PNG/JPEG/WebP/BMP or explicit exclusion before preparation.

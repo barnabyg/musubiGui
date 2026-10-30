@@ -95,12 +95,17 @@ class RunService:
     def get(self, run_id: str) -> dict[str, Any]:
         return self.store.get(run_id)
 
-    def prepare(self, job_id: str) -> dict[str, Any]:
+    def prepare(self, job_id: str, *, accept_low_disk: bool = False) -> dict[str, Any]:
         with preparation_transaction(self.root):
             inputs = identify_snapshot(self.root, job_id, fixture_mode=self.fixture_mode)
             for previous in self.list():
                 if blocks_revision(previous, inputs.fingerprint):
                     return {**previous, "existing": True}
+            if inputs.disk["low"] and not accept_low_disk:
+                warnings = " ".join(volume["warning"] for volume in inputs.disk["volumes"] if volume["shortfall"])
+                raise ValueError(
+                    f"Preparation stopped: {warnings} Free some space, or review again and choose Prepare anyway."
+                )
             return {**self.submit(ExecutionPlan(**materialize_snapshot(inputs))), "existing": False}
 
     def start(self, run_id: str) -> dict[str, Any]:

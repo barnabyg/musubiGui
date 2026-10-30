@@ -120,6 +120,21 @@ This is the Measured Wan preset. 81 frames, 720×1280 and rank 32 were not tried
 Useful learning was not assessed: 200 steps is below the several hundred steps a
 LoRA needs to change samples visibly, and the GUI cannot produce a no-LoRA baseline.
 
+## Measured disk use
+
+Job review's [disk estimate](../jobs.md) uses these sizes from the target PC.
+
+| Item                                   | Bytes       |
+| -------------------------------------- | ----------- |
+| Rank-8 LoRA                            | 153,492,416 |
+| Rank-16 LoRA                           | 306,848,376 |
+| Rank-16 state folder                   | 920,958,520 |
+| Latent cache, 832×480, 33 frames, each | 1,797,336   |
+| Text cache, mean per item (28 clips)   | 397,532     |
+| Hugging Face tokenizer files per Run   | 21,508,498  |
+| Sample, 832×480, 33 frames             | 949,582     |
+| Sample, 256×256, 17 frames             | 258,973     |
+
 ## Native-weight qualification
 
 On 27 October 2026, the user-supplied native FP16 low/high-noise experts and native

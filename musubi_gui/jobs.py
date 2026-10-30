@@ -16,6 +16,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from musubi_gui.diagnostics import upstream_revision
+from musubi_gui.disk_estimate import check_volumes, estimate_disk, free_space_reader
 from musubi_gui.h3 import h3_stages, validate_h3
 from musubi_gui.reference import CAPTION, UPSTREAM, Stage, redact, safetensors_header, validate_wan, wan_stages
 from musubi_gui.settings import Settings, atomic_json, load_settings, validate_paths, within_root
@@ -544,6 +545,27 @@ def build_stages(job: Job, settings: Settings, run: Path, cache: Path) -> list[S
     return [stage for stage in stages if stage.name != "generate" or config.sample_enabled]
 
 
+def disk_preflight(
+    job: Job,
+    settings: Settings,
+    items: list[dict[str, Any]],
+    video_windows: list[dict[str, Any]],
+    *,
+    fixture_mode: bool = False,
+) -> dict[str, Any]:
+    media_bytes = 0
+    for item in items:
+        try:
+            media_bytes += Path(item["absolute_path"]).stat().st_size
+        except OSError:
+            # Review reports unreadable media through the dataset checks.
+            continue
+    images = [item for item in items if item["kind"] == "image"]
+    estimate = estimate_disk(job.family, job.config, [*images, *video_windows], media_bytes=media_bytes)
+    volumes = check_volumes(settings, estimate, free=free_space_reader(fixture_mode=fixture_mode))
+    return {"estimate": estimate, "volumes": volumes, "low": any(volume["shortfall"] for volume in volumes)}
+
+
 def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool = False) -> dict[str, Any]:
     errors = configuration_errors(job)
     warnings = [
@@ -670,6 +692,8 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
     )
     errors.extend(windows.pop("errors"))
     warnings.extend(windows.pop("warnings"))
+    disk = disk_preflight(job, settings, effective_items, windows["items"], fixture_mode=fixture_mode)
+    warnings.extend(volume["warning"] for volume in disk["volumes"] if volume["warning"])
     output = Path(settings.output_root) / "jobs" / job.id
     cache = Path(settings.cache_root) / "jobs" / job.id
     snapshot = output / f"revision-{job.revision}"
@@ -693,6 +717,7 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
         "effective_count": len(effective_items),
         "audio_coverage": audio_coverage,
         "video_windows": windows,
+        "disk": disk,
         "models": {key: value for key, value in settings.models.items() if key.startswith(job.family + "_")},
         "model_provenance": model_provenance,
         "expected_upstream": UPSTREAM,

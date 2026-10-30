@@ -19,7 +19,7 @@ export type RunRecord = {
   stages: { name: string; status: string }[];
 };
 
-export async function runWorkspace() {
+export async function runWorkspace(options: { freeBytes?: number } = {}) {
   const parent = await mkdtemp(path.join(tmpdir(), 'musubi-runs-'));
   const fixture = path.join(parent, 'fixture');
   const python = path.resolve('.venv/Scripts/python.exe');
@@ -63,6 +63,9 @@ export async function runWorkspace() {
           MUSUBI_TEST_DEVICE: path.join(parent, 'device.sqlite'),
           MUSUBI_TEST_PORT: String(port),
           MUSUBI_TEST_IDENTITY: identityFile,
+          ...(options.freeBytes === undefined
+            ? {}
+            : { MUSUBI_TEST_FREE_BYTES: String(options.freeBytes) }),
         },
         stdio: 'pipe',
       },

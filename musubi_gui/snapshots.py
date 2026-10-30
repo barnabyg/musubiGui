@@ -88,6 +88,7 @@ class SnapshotIdentity:
     provenance: dict[str, Any]
     stage_keys: dict[str, str]
     fingerprint: str
+    disk: dict[str, Any]
 
 
 @contextmanager
@@ -195,7 +196,7 @@ def identify_snapshot(root: Path, job_id: str, *, fixture_mode: bool = False) ->
             "provenance": stable_provenance,
         }
     )
-    return SnapshotIdentity(root, job, settings, manifest, provenance, keys, identity)
+    return SnapshotIdentity(root, job, settings, manifest, provenance, keys, identity, review["disk"])
 
 
 def materialize_snapshot(inputs: SnapshotIdentity) -> dict[str, Any]:

@@ -64,6 +64,26 @@ type Review = {
     missing: number;
     items: unknown[];
   };
+  disk: {
+    estimate: {
+      media_snapshot: number;
+      caches: number;
+      checkpoints: number;
+      states: number;
+      samples: number;
+      saves: number;
+    };
+    volumes: {
+      volume: string;
+      roots: string[];
+      needed: number;
+      margin: number;
+      free: number | null;
+      shortfall: number;
+      warning: string;
+    }[];
+    low: boolean;
+  };
   video_windows: {
     total: number;
     items: {
@@ -104,6 +124,11 @@ const extractionModes: {
 ];
 function rateLabel(fps: number | null) {
   return fps === null ? 'unknown fps' : `${Number(fps.toPrecision(6))} fps`;
+}
+function sizeLabel(bytes: number) {
+  return bytes >= 100_000_000
+    ? `${(bytes / 1_000_000_000).toFixed(1)} GB`
+    : `${(bytes / 1_000_000).toFixed(0)} MB`;
 }
 type PreparedRun = { id: string; status: string; existing: boolean };
 
@@ -152,6 +177,7 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
   const [transfer, setTransfer] = useState('');
   const [conversion, setConversion] = useState<ConversionPreview | null>(null);
   const [existingRun, setExistingRun] = useState<PreparedRun | null>(null);
+  const [acceptLowDisk, setAcceptLowDisk] = useState(false);
 
   useEffect(() => {
     void Promise.all([
@@ -284,6 +310,7 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
   async function inspect() {
     if (!job) return;
     await perform(async () => {
+      setAcceptLowDisk(false);
       setReview(
         await request<Review>(`/api/jobs/${job.id}/review`, 'POST', {}),
       );
@@ -295,6 +322,7 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
     await perform(async () => {
       const run = await request<PreparedRun>('/api/runs/prepare', 'POST', {
         job_id: job.id,
+        accept_low_disk: acceptLowDisk,
       });
       // Prepare returns the matching unfinished or completed run instead of duplicating it.
       if (run.existing) {
@@ -828,6 +856,19 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
               Prepare run
             </button>
           </div>
+          {review?.disk.low && (
+            <label className="job-toggle">
+              <input
+                type="checkbox"
+                checked={acceptLowDisk}
+                disabled={busy}
+                onChange={(event) => setAcceptLowDisk(event.target.checked)}
+              />
+              <span>
+                Prepare anyway, even though this Run may run out of disk space
+              </span>
+            </label>
+          )}
           {dirty && <p>Save the draft before reviewing or preparing it.</p>}
           {review && existingRun && (
             <p>
@@ -859,6 +900,39 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
                   <li key={index}>{message}</li>
                 ))}
               </ul>
+              <div data-testid="disk-estimate">
+                <h3>Estimated disk use</h3>
+                <ul>
+                  <li>
+                    Media snapshot:{' '}
+                    {sizeLabel(review.disk.estimate.media_snapshot)}
+                  </li>
+                  <li>Caches: {sizeLabel(review.disk.estimate.caches)}</li>
+                  <li>
+                    LoRA checkpoints:{' '}
+                    {sizeLabel(review.disk.estimate.checkpoints)} (
+                    {review.disk.estimate.saves} saves)
+                  </li>
+                  <li>
+                    Optimizer states: {sizeLabel(review.disk.estimate.states)}
+                  </li>
+                  <li>Samples: {sizeLabel(review.disk.estimate.samples)}</li>
+                </ul>
+                <ul>
+                  {review.disk.volumes.map((volume) => (
+                    <li key={volume.volume}>
+                      {volume.volume} ({volume.roots.join(', ')}): needs about{' '}
+                      {sizeLabel(volume.needed + volume.margin)} including a{' '}
+                      {sizeLabel(volume.margin)} margin,{' '}
+                      {volume.free === null
+                        ? 'free space unknown'
+                        : `${sizeLabel(volume.free)} free`}
+                      {volume.shortfall > 0 &&
+                        `, ${sizeLabel(volume.shortfall)} short`}
+                    </li>
+                  ))}
+                </ul>
+              </div>
               {review.video_windows.items.length > 0 && (
                 <div data-testid="video-windows">
                   <h3>Cached video windows</h3>
