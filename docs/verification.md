@@ -24,10 +24,11 @@ the 15-second failure and passes with the operation budget. Managed dataset
 creation also scans before responding and uses the same deadline; two consecutive
 hosted runs timed out at 15 seconds, and an 18-second creation response passes.
 The two-family preparation/training scenario has a 120-second total budget.
-H3 media inspection results use the same 45-second wait inside a 240-second test budget,
+H3 media inspection results use a 120-second wait inside a 1,200-second test budget,
 because each of the scenario's inspections decodes whole clips in new subprocesses: hosted
 runs exceeded both the 15-second and 60-second defaults while the test takes 10 seconds
-locally. The pytest wait for two queued fixture preparations also uses 45 seconds.
+locally. The pytest wait for two queued fixture preparations uses 180 seconds. These are upper
+bounds with deliberate margin, and a test budget must exceed the sum of its waits.
 The gallery/inline-caption virtual scrolling fixtures use eight real media files and
 a narrow viewport that forces cards to unmount. This tests recycling and retained
 drafts without requiring 24 separate probe startups just to exceed a desktop

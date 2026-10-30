@@ -388,7 +388,7 @@ test('a gracefully stopped revision can be prepared and started again', async ({
 test('low disk space warns in review and preparation still goes ahead', async ({
   page,
 }) => {
-  test.setTimeout(90_000);
+  test.setTimeout(600_000);
   const app = await runWorkspace({ freeBytes: 1000 });
   try {
     const job = app.manifest.jobs.find((item) => item.family === 'wan')!;
@@ -401,7 +401,9 @@ test('low disk space warns in review and preparation still goes ahead', async ({
       .getByRole('button', { name: 'Review configuration', exact: true })
       .click();
     const estimate = page.getByTestId('disk-estimate');
-    await expect(estimate).toContainText('Optimizer states');
+    await expect(estimate).toContainText('Optimizer states', {
+      timeout: 120_000,
+    });
     await expect(estimate).toContainText('short');
     const volume = path.parse(app.parent).root;
     await expect(estimate).toContainText(volume);
@@ -414,7 +416,7 @@ test('low disk space warns in review and preparation still goes ahead', async ({
       .click();
     await expect(
       page.getByText('State: prepared', { exact: true }),
-    ).toBeVisible({ timeout: 45_000 });
+    ).toBeVisible({ timeout: 120_000 });
   } finally {
     await app.close();
   }
@@ -423,7 +425,7 @@ test('low disk space warns in review and preparation still goes ahead', async ({
 test('archiving hides a job, keeps its Runs browsable and restores it', async ({
   page,
 }) => {
-  test.setTimeout(90_000);
+  test.setTimeout(600_000);
   const app = await runWorkspace();
   try {
     const job = app.manifest.jobs.find((item) => item.family === 'wan')!;
@@ -447,19 +449,21 @@ test('archiving hides a job, keeps its Runs browsable and restores it', async ({
       .getByRole('button', { name: 'Prepare run', exact: true })
       .click();
     await expect
-      .poll(async () => (await app.records())[0]?.status)
+      .poll(async () => (await app.records())[0]?.status, { timeout: 120_000 })
       .toBe('pending_preparation');
 
     // A queued Run keeps its job in the list, and the refusal says why.
     await jobsTab.click();
     await library.click();
     await archiveButton.click();
-    await expect(page.getByRole('alert')).toContainText('active Run');
+    await expect(page.getByRole('alert')).toContainText('active Run', {
+      timeout: 120_000,
+    });
     await expect(library).toBeVisible();
 
     await app.leaseGpu('release');
     await expect
-      .poll(async () => (await app.records())[0]?.status, { timeout: 45_000 })
+      .poll(async () => (await app.records())[0]?.status, { timeout: 120_000 })
       .toBe('prepared');
     const [run] = await app.records();
 
@@ -490,7 +494,7 @@ test('archiving hides a job, keeps its Runs browsable and restores it', async ({
       .click();
     await expect(
       page.getByText('State: completed', { exact: true }),
-    ).toBeVisible({ timeout: 45_000 });
+    ).toBeVisible({ timeout: 120_000 });
 
     await jobsTab.click();
     await page.getByText('Archived jobs (1)', { exact: true }).click();

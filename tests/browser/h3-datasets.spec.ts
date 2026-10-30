@@ -6,8 +6,8 @@ test('H3 inspector plays resolved audio and identifies missing, ambiguous, malfo
   page,
 }) => {
   // Every inspection starts probe subprocesses that decode whole clips, which hosted runners do slowly.
-  test.setTimeout(240_000);
-  const inspected = expect.configure({ timeout: 45_000 });
+  test.setTimeout(1_200_000);
+  const inspected = expect.configure({ timeout: 120_000 });
   const app = await datasetHarness({ h3Audio: true });
   // Audio requests are reported if playback stalls; one hosted run hung in play().
   const audioRequests: string[] = [];
