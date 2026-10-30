@@ -11,7 +11,7 @@ from musubi_gui import wan_tokenizer
 from musubi_gui.reference import Stage
 from musubi_gui.runs import ExecutionPlan, RunService
 from musubi_gui.settings import Settings
-from musubi_gui.wan_tokenizer import COMMIT, REPOSITORY, SUBFOLDER, publish_shared, seed_run
+from musubi_gui.wan_tokenizer import COMMIT, DISABLED, REPOSITORY, SUBFOLDER, publish_shared, seed_run
 
 FILES = {"tokenizer.json": b"tokens", "spiece.model": b"pieces"}
 
@@ -67,6 +67,18 @@ def test_a_damaged_shared_copy_does_not_seed(tmp_path: Path) -> None:
     later = tmp_path / "later"
     assert seed_run(shared, later) is False
     assert not (later / "huggingface").exists()
+
+
+def test_a_disabled_shared_copy_stays_unused_even_after_a_later_download(tmp_path: Path) -> None:
+    shared = tmp_path / "shared"
+    downloaded_cache(tmp_path / "first")
+    publish_shared(tmp_path / "first", shared)
+    (shared / DISABLED).touch()
+    later = tmp_path / "later"
+    assert seed_run(shared, later) is False
+    downloaded_cache(later)
+    publish_shared(later, shared)
+    assert seed_run(shared, tmp_path / "last") is False
 
 
 def stage_plan(root: Path, name: str, family: str = "wan") -> ExecutionPlan:

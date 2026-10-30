@@ -123,8 +123,10 @@ LoRA needs to change samples visibly, and the GUI cannot produce a no-LoRA basel
 
 The pinned T5 code loads its tokenizer by repository name, even when `wan_t5` is a
 local file. It fetches `Wan-AI/Wan2.1-T2V-14B` → `google/umt5-xxl` (about 21 MB) from
-the Hugging Face Hub, without authentication. Latent caching and training don't need it.
-Text caching and generation do, and on an empty cache with `HF_HUB_OFFLINE=1` both exit 1
+the Hugging Face Hub, without authentication. Latent caching passed offline on an empty
+cache. Training takes no T5 input and passed offline with a seeded cache; it was not run
+offline on an empty one. Text caching and generation need the tokenizer, and on an empty
+cache with `HF_HUB_OFFLINE=1` both exit 1
 with `OSError: We couldn't connect to 'https://huggingface.co' to load the files, and
 couldn't find them in the cached files.` This was reproduced with the Hub switched off
 through `HF_HUB_OFFLINE`, not by disabling the network
@@ -142,8 +144,10 @@ folder. Online, the 404 gives an empty config, but offline transformers 5.17 tre
 same missing file as a connection error. Seeding adds an empty `config.json`, which gives
 the same empty config. With it, all four stages passed offline, and the text cache was
 byte-identical to one made online. A transformers upgrade could change this behaviour; a
-stage that then fails shows the error above in its log, and deleting the shared folder
-restores the download.
+stage that then fails shows the error above in its log. To recover, create an empty file
+named `disabled` in the shared folder: stages then download with Hub access on, as they
+did before seeding. Deleting the folder doesn't help, because the next successful
+download publishes it again.
 
 ## Measured disk use
 

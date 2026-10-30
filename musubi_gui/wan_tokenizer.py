@@ -9,6 +9,8 @@ from pathlib import Path
 REPOSITORY = "models--Wan-AI--Wan2.1-T2V-14B"
 COMMIT = "a064a6c71f5be440641209c07bf2a5ce7a2ff5e4"  # pragma: allowlist secret
 SUBFOLDER = "google/umt5-xxl"
+# An empty file with this name in the shared copy returns every Run to downloading with Hub access on.
+DISABLED = "disabled"
 # Downloaded by run fb66e3d3 in #26. A different download stays in its own Run and is not shared.
 FILES = {
     "special_tokens_map.json": "7b8a9f5040adb67b5805abdfd42c1f8d0f3d0e711f10726580eb3789cd0ad61d",  # pragma: allowlist secret
@@ -50,7 +52,7 @@ def publish_shared(run_cache: Path, shared: Path) -> bool:
 
 def seed_run(shared: Path, run_cache: Path) -> bool:
     """Lay out the shared copy as a Hub cache entry; False leaves the Run to download it as before."""
-    if not _verified(shared):
+    if (shared / DISABLED).exists() or not _verified(shared):
         return False
     folder = _snapshot(run_cache)
     folder.mkdir(parents=True, exist_ok=True)
