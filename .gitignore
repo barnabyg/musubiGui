@@ -59,5 +59,6 @@ Desktop.ini
 .cache/
 .state/
 .worktrees/
+.claude/worktrees/
 .python-version
 musubi_gui/web/
