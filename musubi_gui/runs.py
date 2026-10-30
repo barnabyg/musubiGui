@@ -653,21 +653,21 @@ class RunService:
                 self.device.release(run_id)
 
     def _seed_wan_tokenizer(self, run: dict[str, Any]) -> bool:
-        cache_root = run["settings"].get("cache_root")
-        if run["job"]["family"] != "wan" or not cache_root:
+        shared = wan_tokenizer_directory(run)
+        if not shared:
             return False
         try:
-            return seed_run(shared_directory(cache_root), Path(run["cache"]))
+            return seed_run(shared, Path(run["cache"]))
         except OSError:
             # The stage can still download the tokenizer itself.
             return False
 
     def _share_wan_tokenizer(self, run: dict[str, Any]) -> None:
-        cache_root = run["settings"].get("cache_root")
-        if run["job"]["family"] != "wan" or not cache_root:
+        shared = wan_tokenizer_directory(run)
+        if not shared:
             return
         try:
-            publish_shared(Path(run["cache"]), shared_directory(cache_root))
+            publish_shared(Path(run["cache"]), shared)
         except OSError:
             # Sharing only saves a later download; it never fails a stage that succeeded.
             return
@@ -785,6 +785,11 @@ class RunService:
             )
             return True
         return False
+
+
+def wan_tokenizer_directory(run: dict[str, Any]) -> Path | None:
+    cache_root = run["settings"].get("cache_root")
+    return shared_directory(cache_root) if run["job"]["family"] == "wan" and cache_root else None
 
 
 def fingerprint(value: object) -> str:

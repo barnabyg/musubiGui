@@ -83,6 +83,9 @@ class RunStore:
         with database(self.path) as connection:
             return [json.loads(row[0]) for row in connection.execute("SELECT data FROM records ORDER BY rowid DESC")]
 
+    def has_active_run(self, job_id: str) -> bool:
+        return any(run["job"]["id"] == job_id and is_active(run) for run in self.list())
+
     def get(self, run_id: str) -> dict[str, Any]:
         with database(self.path) as connection:
             row = connection.execute("SELECT data FROM records WHERE id=?", (run_id,)).fetchone()

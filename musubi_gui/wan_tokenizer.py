@@ -1,10 +1,11 @@
 """Share the UMT5 tokenizer the pinned Wan code loads by repository name, so later Runs need no Hub access."""
 
-import hashlib
 import json
 import os
 import shutil
 from pathlib import Path
+
+from musubi_gui.snapshots import digest_file
 
 REPOSITORY = "models--Wan-AI--Wan2.1-T2V-14B"
 COMMIT = "a064a6c71f5be440641209c07bf2a5ce7a2ff5e4"  # pragma: allowlist secret
@@ -26,7 +27,7 @@ def shared_directory(cache_root: str) -> Path:
 
 def _verified(folder: Path) -> bool:
     try:
-        return all(hashlib.sha256((folder / name).read_bytes()).hexdigest() == file for name, file in FILES.items())
+        return all(digest_file(folder / name) == expected for name, expected in FILES.items())
     except OSError:
         return False
 

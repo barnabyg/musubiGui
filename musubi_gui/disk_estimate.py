@@ -95,11 +95,8 @@ def _volume_key(path: Path) -> object:
         return path
 
 
-def check_volumes(
-    settings: Settings, estimate: dict[str, Any], *, free: Callable[[Path], int] | None = None
-) -> list[dict[str, Any]]:
+def check_volumes(settings: Settings, estimate: dict[str, Any], *, free: Callable[[Path], int]) -> list[dict[str, Any]]:
     """Free space per target volume; roots sharing a volume are checked against their combined need."""
-    read_free = free or free_space_reader()
     volumes: dict[object, dict[str, Any]] = {}
     for label, value, needed in [
         ("Output root", settings.output_root, estimate["output_root"]),
@@ -119,7 +116,7 @@ def check_volumes(
         path, needed, roots = volume.pop("path"), volume["needed"], ", ".join(volume["roots"])
         margin = max(MINIMUM_MARGIN, int(needed * MARGIN_FRACTION))
         try:
-            available: int | None = read_free(path)
+            available: int | None = free(path)
         except OSError:
             available = None
         shortfall = 0 if available is None else max(0, needed + margin - available)

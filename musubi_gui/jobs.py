@@ -19,7 +19,7 @@ from musubi_gui.diagnostics import upstream_revision
 from musubi_gui.disk_estimate import check_volumes, estimate_disk, free_space_reader
 from musubi_gui.h3 import h3_stages, validate_h3
 from musubi_gui.reference import CAPTION, UPSTREAM, Stage, redact, safetensors_header, validate_wan, wan_stages
-from musubi_gui.run_store import RunStore, is_active, preparation_transaction
+from musubi_gui.run_store import RunStore, preparation_transaction
 from musubi_gui.settings import Settings, atomic_json, load_settings, validate_paths, within_root
 from musubi_gui.video_sampling import plan_windows, video_sections
 
@@ -244,31 +244,31 @@ class JobStore:
     def __init__(self, root: Path):
         self.root = root / "jobs"
         # Outside the job folders: revision files stay as written and older versions ignore the markers.
-        self.archive = root / "archived-jobs"
+        self.archive_dir = root / "archived-jobs"
 
     def is_archived(self, job_id: str) -> bool:
-        return (self.archive / f"{identifier(job_id)}.json").is_file()
+        return (self.archive_dir / f"{identifier(job_id)}.json").is_file()
 
     def _require_unarchived(self, job_id: str) -> None:
         if self.is_archived(job_id):
             raise ValueError("This job is archived. Restore it before changing it.")
 
     def archive_job(self, job_id: str) -> Job:
-        # The preparation gate keeps a Run from starting between the check and the marker.
+        # The preparation gate keeps Prepare from creating a Run between the check and the marker.
         with preparation_transaction(self.root.parent), self._mutation():
             job = self.get(job_id)
-            if any(run["job"]["id"] == job_id and is_active(run) for run in RunStore(self.root.parent).list()):
+            if RunStore(self.root.parent).has_active_run(job_id):
                 raise HTTPException(
                     409, "This job has an active Run. Wait for it to finish, or stop or cancel it, before archiving."
                 )
-            self.archive.mkdir(parents=True, exist_ok=True)
-            atomic_json(self.archive / f"{job_id}.json", {"version": 1, "id": job_id})
+            self.archive_dir.mkdir(parents=True, exist_ok=True)
+            atomic_json(self.archive_dir / f"{job_id}.json", {"version": 1, "id": job_id})
             return job
 
     def restore_job(self, job_id: str) -> Job:
         with self._mutation():
             job = self.get(job_id)
-            (self.archive / f"{job_id}.json").unlink(missing_ok=True)
+            (self.archive_dir / f"{job_id}.json").unlink(missing_ok=True)
             return job
 
     def archived(self) -> builtins.list[Job]:
