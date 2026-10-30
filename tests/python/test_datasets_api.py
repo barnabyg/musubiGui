@@ -2,6 +2,7 @@ import base64
 import json
 import os
 import subprocess
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
@@ -9,6 +10,8 @@ from typing import Any
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+
+from musubi_gui import datasets
 
 PNG = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=")
 
@@ -142,6 +145,45 @@ def test_captions_save_atomically_detect_conflicts_and_restore_exact_revision(tm
     empty = client.put(url, json={"text": "", "revision": restored.json()["revision"]})
     assert empty.status_code == 200
     assert (media / "red.txt").read_bytes() == b""
+
+
+def caption_url(client: TestClient, media: Path) -> str:
+    dataset = client.post("/api/datasets", json={"name": "Locked sidecar", "path": str(media)}).json()
+    image = next(
+        item for item in client.get(f"/api/datasets/{dataset['id']}/items").json() if item["name"] == "red.png"
+    )
+    return f"/api/datasets/{dataset['id']}/items/{image['id']}/caption"
+
+
+def test_a_caption_saves_when_another_process_briefly_holds_the_sidecar_open(tmp_path: Path) -> None:
+    client, media, _ = fixture(tmp_path)
+    url = caption_url(client, media)
+    revision = client.get(url).json()["revision"]
+    holder = (media / "red.txt").open("rb")
+    release = threading.Timer(0.3, holder.close)
+    release.start()
+    try:
+        saved = client.put(url, json={"text": "Saved past the lock", "revision": revision})
+    finally:
+        release.join()
+    assert saved.status_code == 200, saved.text
+    assert (media / "red.txt").read_text(encoding="utf-8") == "Saved past the lock"
+
+
+def test_a_caption_save_reports_a_lasting_lock_and_can_be_retried(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(datasets, "CAPTION_REPLACE_SECONDS", 0.1)
+    client, media, _ = fixture(tmp_path)
+    url = caption_url(client, media)
+    revision = client.get(url).json()["revision"]
+    with (media / "red.txt").open("rb"):
+        refused = client.put(url, json={"text": "Waiting", "revision": revision})
+    assert refused.status_code == 500
+    assert (media / "red.txt").read_text(encoding="utf-8") == "A red square"
+    assert not list(media.glob(".pending-caption-*"))
+    assert client.put(url, json={"text": "Waiting", "revision": revision}).status_code == 200
+    assert (media / "red.txt").read_text(encoding="utf-8") == "Waiting"
 
 
 def test_concurrent_caption_writes_never_silently_replace_each_other(tmp_path: Path) -> None:

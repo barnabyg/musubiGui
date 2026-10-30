@@ -61,7 +61,8 @@ captions requests confirmation.
 
 Captions autosave after 350 ms and all pending captions flush before selecting another item or dataset. Switching application
 sections also flushes pending captions. Alt+Left/Right navigates the viewer. Saved appears only after
-the backend confirms an atomic `.txt` replacement. Failed writes block item navigation and retain the
+the backend confirms an atomic `.txt` replacement. If another program has the sidecar open, the save
+keeps trying for two seconds. Failed writes block item navigation and retain the
 draft for retry. External changes produce a conflict: review the current sidecar before explicitly
 choosing it or saving the retained draft over that revision. Caption history can restore an earlier
 text only against the current revision; concurrent edits are rejected. Original/replacement text is
