@@ -443,7 +443,12 @@ test('archiving hides a job, keeps its Runs browsable and restores it', async ({
       exact: true,
     });
     const jobsTab = page.getByRole('button', { name: 'Jobs', exact: true });
+    const archiveButton = page.getByRole('button', {
+      name: 'Archive job',
+      exact: true,
+    });
     await page.goto(app.url);
+    await app.leaseGpu('acquire');
     await jobsTab.click();
     await library.click();
     await page
@@ -452,16 +457,24 @@ test('archiving hides a job, keeps its Runs browsable and restores it', async ({
     await page
       .getByRole('button', { name: 'Prepare run', exact: true })
       .click();
-    await expect(
-      page.getByText('State: prepared', { exact: true }),
-    ).toBeVisible({ timeout: 45_000 });
-    const [run] = await app.records();
+    await expect
+      .poll(async () => (await app.records())[0]?.status)
+      .toBe('pending_preparation');
 
+    // A queued Run keeps its job in the list, and the refusal says why.
     await jobsTab.click();
     await library.click();
-    await page
-      .getByRole('button', { name: 'Archive job', exact: true })
-      .click();
+    await archiveButton.click();
+    await expect(page.getByRole('alert')).toContainText('active Run');
+    await expect(library).toBeVisible();
+
+    await app.leaseGpu('release');
+    await expect
+      .poll(async () => (await app.records())[0]?.status, { timeout: 45_000 })
+      .toBe('prepared');
+    const [run] = await app.records();
+
+    await archiveButton.click();
     await expect(library).toHaveCount(0);
     await expect(
       page.getByRole('button', { name: 'Archive job', exact: true }),
@@ -481,6 +494,14 @@ test('archiving hides a job, keeps its Runs browsable and restores it', async ({
       page.getByText('State: prepared', { exact: true }),
     ).toBeVisible();
     expect((await app.records()).map((record) => record.id)).toEqual([run.id]);
+
+    // The Run has its own frozen snapshot, so it can still train.
+    await page
+      .getByRole('button', { name: 'Start training', exact: true })
+      .click();
+    await expect(
+      page.getByText('State: completed', { exact: true }),
+    ).toBeVisible({ timeout: 45_000 });
 
     await jobsTab.click();
     await page.getByText('Archived jobs (1)', { exact: true }).click();

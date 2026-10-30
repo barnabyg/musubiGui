@@ -160,6 +160,30 @@ export async function runWorkspace(options: { freeBytes?: number } = {}) {
       });
     }
   };
+  // Another instance owning the GPU leaves new work pending, whatever the fixture's speed.
+  const leaseGpu = async (action: 'acquire' | 'release') => {
+    const call =
+      action === 'acquire'
+        ? "acquire('other-work',{})"
+        : "release('other-work')";
+    await execute(python, [
+      '-c',
+      `import sys;from pathlib import Path;from musubi_gui.run_store import DeviceLease;DeviceLease(Path(sys.argv[1]),Path(sys.argv[2])).${call}`,
+      path.join(parent, 'other-instance'),
+      path.join(parent, 'device.sqlite'),
+    ]);
+  };
   await start();
-  return { parent, fixture, manifest, url, start, crash, post, records, close };
+  return {
+    parent,
+    fixture,
+    manifest,
+    url,
+    start,
+    crash,
+    post,
+    records,
+    leaseGpu,
+    close,
+  };
 }

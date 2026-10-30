@@ -44,7 +44,8 @@ The estimate uses sizes measured on the target PC
 
 Its limits:
 
-- It covers one Run. It does not count other queued Runs, retries or restored segments.
+- It covers one Run and does not count other queued Runs. Only Prepare checks it, so
+  Retry and Restore as new segment don't warn or stop on low disk.
 - H3 frame counts above 124, H3 ranks other than 4 and 8, and Wan ranks other than 8 and
   16 are extrapolated.
 - Text caches use the mean per-item size measured in the #26 trial, so long captions use
@@ -136,9 +137,11 @@ version ignores the marker and lists the job again.
 
 An archived job leaves the job list and can't be edited, converted, used as a preset
 source or prepared. Presets already saved from it stay, since they are independent
-copies. Its Runs, outputs and saved states stay browsable from Runs, and a prepared Run
-can still be started. Archived jobs lists these jobs with a Restore button, which brings
-a job back unchanged.
+copies. Its Runs, outputs and saved states stay browsable from Runs. Those Runs also keep
+working, because each uses its own frozen snapshot: you can still start a prepared Run,
+retry a failed one or restore a saved state, even though that makes the archived job's
+Run active again. Archived jobs lists these jobs with a Restore button, which brings a
+job back unchanged.
 
 A job can't be archived while it has an active Run: queued, preparing, training,
 sampling or stopping, or still holding processes to reconcile. The refusal says why, and
