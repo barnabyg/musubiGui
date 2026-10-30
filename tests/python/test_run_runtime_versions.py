@@ -63,7 +63,8 @@ def test_preprocessor_versions_invalidate_cache_and_changed_queued_environment_b
         environment.pop("gpu")  # The real probe omits GPU details when CUDA is temporarily unavailable.
         assert service.prepare(fixture["jobs"][0]["id"])["id"] == updated["id"]
         service.start_worker()
-        deadline = time.monotonic() + 15
+        # Two real fixture preparations; the same budget as the browser suite's preparation waits.
+        deadline = time.monotonic() + 45
         while (
             service.get(first["id"])["status"] != "failed" or service.get(updated["id"])["status"] != "prepared"
         ) and time.monotonic() < deadline:
