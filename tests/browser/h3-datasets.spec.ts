@@ -5,6 +5,9 @@ import { datasetHarness } from './datasetHarness';
 test('H3 inspector plays resolved audio and identifies missing, ambiguous, malformed and misaligned sources', async ({
   page,
 }) => {
+  // Every inspection starts probe subprocesses that decode whole clips, which hosted runners do slowly.
+  test.setTimeout(240_000);
+  const inspected = expect.configure({ timeout: 45_000 });
   const app = await datasetHarness({ h3Audio: true });
   // Audio requests are reported if playback stalls; one hosted run hung in play().
   const audioRequests: string[] = [];
@@ -41,10 +44,10 @@ test('H3 inspector plays resolved audio and identifies missing, ambiguous, malfo
         .getByText('H3 audio and media inspector', { exact: true })
         .click();
       await page.getByRole('button', { name: 'Inspect H3 media' }).click();
-      await expect(page.getByLabel('H3 inspection result')).toBeVisible();
+      await inspected(page.getByLabel('H3 inspection result')).toBeVisible();
     };
     await inspect('sidecar.mp4');
-    await expect(page.getByText('Audio source: sidecar')).toBeVisible();
+    await inspected(page.getByText('Audio source: sidecar')).toBeVisible();
     await expect(page.getByText('Audio coverage: 100.0%')).toBeVisible();
     const started = await page
       .getByLabel('Resolved H3 audio')
@@ -73,21 +76,23 @@ test('H3 inspector plays resolved audio and identifies missing, ambiguous, malfo
       )
       .toBeGreaterThan(0);
     await inspect('embedded.mp4');
-    await expect(page.getByText('Audio source: embedded')).toBeVisible();
+    await inspected(page.getByText('Audio source: embedded')).toBeVisible();
     await inspect('missing.mp4');
-    await expect(page.getByText('Audio source: missing')).toBeVisible();
+    await inspected(page.getByText('Audio source: missing')).toBeVisible();
     await expect(page.getByText('Audio coverage: 0.0%')).toBeVisible();
     await inspect('ambiguous.mp4');
-    await expect(page.getByRole('alert')).toContainText('Multiple same-stem');
+    await inspected(page.getByRole('alert')).toContainText(
+      'Multiple same-stem',
+    );
     await page
       .getByLabel('Explicit audio path')
       .fill(path.join(app.media, 'chosen.wav'));
     await page.getByRole('button', { name: 'Apply audio source' }).click();
-    await expect(page.getByText('Audio source: explicit')).toBeVisible();
+    await inspected(page.getByText('Audio source: explicit')).toBeVisible();
     await inspect('malformed.mp4');
-    await expect(page.getByRole('alert')).toContainText('decode');
+    await inspected(page.getByRole('alert')).toContainText('decode');
     await inspect('late.mp4');
-    await expect(page.getByRole('alert')).toContainText(
+    await inspected(page.getByRole('alert')).toContainText(
       'materially short or misaligned',
     );
   } finally {
