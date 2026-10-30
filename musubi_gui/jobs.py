@@ -29,8 +29,8 @@ _lock = threading.RLock()
 # upstream and is not indexed by this application's gallery.
 TRAINING_IMAGES = frozenset({".png", ".jpg", ".jpeg", ".webp", ".bmp", ".avif"})
 TRAINING_VIDEOS = frozenset({".mp4", ".webm", ".avi", ".mkv", ".mov", ".flv", ".wmv", ".m4v", ".mpg", ".mpeg"})
-# Highest block-swap values that trained on the target PC (docs/reference); higher ones are unqualified.
-WAN_MAX_BLOCKS_TO_SWAP = 36
+# Highest block-swap values that trained on the target PC; the next value up fails (docs/reference).
+WAN_MAX_BLOCKS_TO_SWAP = 38
 H3_MAX_BLOCKS_TO_SWAP = 48
 
 
@@ -430,7 +430,7 @@ def configuration_errors(job: Job) -> list[str]:
         if not 0 <= config.blocks_to_swap <= WAN_MAX_BLOCKS_TO_SWAP:
             errors.append(
                 f"Block swapping: select between 0 and {WAN_MAX_BLOCKS_TO_SWAP} Wan blocks. "
-                "39 fails at step 0 in the pinned upstream FP8 linear patch; 37 and 38 are untested."
+                "39 fails at step 0 in the pinned upstream FP8 linear patch."
             )
         if not config.fp8_scaled:
             errors.append("Memory: runtime FP8 scaling from native FP16 weights is required by this Wan recipe.")
@@ -453,7 +453,7 @@ def configuration_errors(job: Job) -> list[str]:
         if not 0 <= config.blocks_to_swap <= H3_MAX_BLOCKS_TO_SWAP:
             errors.append(
                 f"Block swapping: select between 0 and {H3_MAX_BLOCKS_TO_SWAP} of the 50 H3 blocks; "
-                "higher values are untested."
+                "the pinned upstream rejects higher values."
             )
         if config.fp8_scaled:
             errors.append("Memory: H3 does not support FP8 transformer weights/runtime scaling.")

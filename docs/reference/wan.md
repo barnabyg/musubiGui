@@ -102,8 +102,8 @@ configuration and arguments, sampled resources and GPU throttle reasons.
 | 36 blocks, 350 W, steeper fans | Trains                                              | 83.6 s       |
 | 36 blocks, 280 W, steeper fans | 200 steps, checkpoints and state at 100/200, sample | 79.1 s, flat |
 
-Job review therefore accepts 0–36 swapped blocks. 37 and 38 have not been run on
-this PC, so they are rejected until a short run qualifies them.
+Job review accepts 0–38 swapped blocks; see the [qualification](#block-swap-qualification-30-october-2026)
+of 37 and 38 below.
 
 The 200-step run took 4 h 22 min. Peak sampled values were 21.1 GiB device VRAM,
 18.2 GiB process-tree RSS and 34.1 GiB host RAM; RSS stayed at 16–18 GiB with no
@@ -118,6 +118,22 @@ took about 9 minutes and decoded cleanly.
 This is the Measured Wan preset. 81 frames, 720×1280 and rank 32 were not tried.
 Useful learning was not assessed: 200 steps is below the several hundred steps a
 LoRA needs to change samples visibly, and the GUI cannot produce a no-LoRA baseline.
+
+## Block-swap qualification, 30 October 2026
+
+[Issue #42](https://github.com/barnabyg/musubiGui/issues/42) ran the same recipe and
+dataset through the GUI's API for 10 steps each, at 280 W, with the cached latents and
+text reused and sampling off. These test mechanics only, not learning
+([evidence](evidence/block-swap-qualification.json)).
+
+| Swapped blocks | Run        | Result                                       | Step time | Peak device VRAM |
+| -------------- | ---------- | -------------------------------------------- | --------- | ---------------- |
+| 37             | `c62b706e` | Trains; 10 steps and a 306,848,376-byte LoRA | 77.2 s    | 20.6 GiB         |
+| 38             | `9ee3cb5b` | Trains; 10 steps and a 306,848,376-byte LoRA | 82.2 s    | 20.3 GiB         |
+
+39 failed at step 0 in the upstream FP8 linear patch in #26 (run `dd98e24d`,
+[evidence](evidence/production-trial.json)) and was not rerun, so 38 is the limit. The Measured Wan preset and the default stay at 36: these short runs show
+that 37 and 38 train, not that they hold up over a long run or reduce step time.
 
 ## Network access
 
