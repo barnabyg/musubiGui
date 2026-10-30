@@ -368,6 +368,30 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
       setStatus('Job restored');
     });
   }
+  async function deleteJob(target: Job) {
+    await perform(async () => {
+      const preview = await request<{ refusal: string | null }>(
+        `/api/jobs/${target.id}/delete-preview`,
+      );
+      if (preview.refusal) throw new Error(preview.refusal);
+      if (
+        !window.confirm(
+          `Permanently delete job ${target.name} and its revision history? This can't be undone. Datasets and presets are not affected.`,
+        )
+      )
+        return;
+      await request(`/api/jobs/${target.id}/delete`, 'POST', {
+        confirmed: true,
+      });
+      await refreshLibrary();
+      if (job?.id === target.id) {
+        setJob(null);
+        setReview(null);
+        setConversion(null);
+      }
+      setStatus('Job deleted');
+    });
+  }
   async function savePreset() {
     if (!job || dirty) return;
     await perform(async () => {
@@ -498,6 +522,9 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
                 {item.name} · {item.family.toUpperCase()} · r{item.revision}{' '}
                 <button disabled={busy} onClick={() => void restore(item.id)}>
                   Restore {item.name}
+                </button>{' '}
+                <button disabled={busy} onClick={() => void deleteJob(item)}>
+                  Delete {item.name}
                 </button>
               </li>
             ))}
@@ -566,6 +593,12 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
               </button>
               <button disabled={busy || dirty} onClick={() => void archive()}>
                 Archive job
+              </button>
+              <button
+                disabled={busy || dirty}
+                onClick={() => void deleteJob(job)}
+              >
+                Delete job
               </button>
             </div>
             {conversion && (

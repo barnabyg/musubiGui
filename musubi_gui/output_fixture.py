@@ -96,8 +96,8 @@ def prepare(root: Path) -> dict[str, Any]:
                             }
                         ]
                     },
-                    directory=root / "output" / token,
-                    cache=root / "cache" / token,
+                    directory=root / "output" / "runs" / token,
+                    cache=root / "cache" / "runs" / token,
                     stages=[],
                     fingerprint=token,
                     provenance={

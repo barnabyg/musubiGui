@@ -129,8 +129,8 @@ Duplicate job creates an independent identity and output destination. Save as pr
 records named model-specific controls; Apply preset creates a new job revision while
 retaining that job's name and dataset selection.
 
-Archive job hides a job you no longer need. It is an archive rather than a delete,
-because each Run's frozen snapshot records the job's identity and revision. Nothing is
+Archive job hides a job you no longer need, even while it has Runs, because each Run's
+frozen snapshot records the job's identity and revision. Nothing is
 removed from disk, and version-one revision files are not rewritten: the archive is a
 separate marker file in `archived-jobs` in the state directory. An older application
 version ignores the marker and lists the job again.
@@ -146,6 +146,15 @@ job back unchanged.
 A job can't be archived while it has an active Run: queued, preparing, training,
 sampling or stopping, or still holding processes to reconcile. The refusal says why, and
 the job stays in the list. Stop or cancel the Run first.
+
+Delete job permanently removes a job and all its revisions, and works for listed and
+archived jobs alike. It is refused while any Run of that job remains, whatever the Run's
+state, including a Run with an unfinished delete. The refusal points to
+[Delete run](runs.md#deleting-a-run) for each Run, or Archive job to hide the job instead.
+Deleting a job and its Runs in one action was rejected, because it would remove far more
+than the action suggests. Datasets, presets saved from the job and other jobs are left
+alone. An interrupted delete leaves the job listed at its latest revision, to delete again.
+Unknown job storage or an unknown Run database version blocks the delete.
 
 Two built-in **Measured** presets carry the largest configurations that trained on
 the target PC during the production trial

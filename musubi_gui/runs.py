@@ -21,9 +21,10 @@ from musubi_gui.checkpoint_dedup import remove_final_duplicates
 from musubi_gui.media_probe import inspect as inspect_media
 from musubi_gui.processes import identity_status, observed_tree, process_identity, terminate_owned
 from musubi_gui.reference import Stage, redact, reference_environment
+from musubi_gui.run_deletion import failure_message, folder_bytes, output_index_file, plan_deletion, remove_folder
 from musubi_gui.run_store import DeviceLease, RunStore, blocks_revision, preparation_transaction
 from musubi_gui.saved_state import discover_states
-from musubi_gui.settings import Settings, atomic_json
+from musubi_gui.settings import Settings, atomic_json, load_settings
 from musubi_gui.snapshots import (
     digest_file,
     identify_snapshot,
@@ -418,6 +419,51 @@ class RunService:
         )
         return self.enqueue(record["id"])
 
+    def deletion_preview(self, run_id: str) -> dict[str, Any]:
+        run = self.reconcile(run_id)
+        others = [other for other in self.list() if other["id"] != run_id]
+        try:
+            plan = plan_deletion(run, others, load_settings(self.root))
+        except ValueError as refusal:
+            return {"run_id": run_id, "refusal": str(refusal)}
+        size = sum(folder_bytes(Path(folder)) for folder in plan["folders"])
+        return {**plan, "run_id": run_id, "refusal": None, "bytes": size}
+
+    def delete(self, run_id: str, *, confirmed: bool = False) -> dict[str, Any]:
+        """Mark the Run first, so anything short of a finished delete leaves it visible and deletable again."""
+        if not confirmed:
+            raise ValueError("Explicit confirmation is required to permanently delete a Run.")
+        self.reconcile(run_id)
+        settings = load_settings(self.root)
+        folders: builtins.list[Path] = []
+
+        def begin(record: dict[str, Any], others: builtins.list[dict[str, Any]]) -> None:
+            folders.extend(Path(folder) for folder in plan_deletion(record, others, settings)["folders"])
+            remaining = [{"path": str(folder)} for folder in folders]
+            record.update(status="deleting", deletion={"error": None, "remaining": remaining})
+
+        self.store.update_with_others(run_id, begin)
+        freed = sum(folder_bytes(folder) for folder in folders)
+        failed: builtins.list[str] = []
+        for index, folder in enumerate(folders):
+            failed += remove_folder(folder)
+            if not failed:
+                # Kept current so a restart partway through lists only what is really left.
+                left = [{"path": str(later)} for later in folders[index + 1 :]]
+                self.store.update(run_id, lambda record: record["deletion"].update(remaining=left))
+        remaining = [{"path": str(folder), "bytes": folder_bytes(folder)} for folder in folders if folder.exists()]
+        if failed or remaining:
+            message = failure_message(failed or [str(item["path"]) for item in remaining])
+            return {
+                "deleted": False,
+                "run": self.store.update(
+                    run_id, lambda record: record["deletion"].update(error=message, remaining=remaining)
+                ),
+            }
+        output_index_file(self.root, run_id).unlink(missing_ok=True)
+        self.store.remove(run_id)
+        return {"deleted": True, "id": run_id, "freed_bytes": freed}
+
     def _schedule(self) -> None:
         while not self.stopping.is_set():
             try:
@@ -760,18 +806,22 @@ class RunService:
                 continue
             old: dict[str, Any] = next((stage for stage in previous["stages"] if stage["name"] == stage_name), {})
             artifacts = old.get("artifacts", [])
-            if not artifacts or old.get("status") not in {"completed", "reused"}:
+            if not artifacts or old.get("status") not in {"completed", "reused"} or previous["status"] == "deleting":
                 continue
-            if not all(
-                (Path(previous["cache"]) / file["path"]).is_file()
-                and digest_file(Path(previous["cache"]) / file["path"]) == file["sha256"]
-                for file in artifacts
-            ):
+            try:
+                if not all(
+                    (Path(previous["cache"]) / file["path"]).is_file()
+                    and digest_file(Path(previous["cache"]) / file["path"]) == file["sha256"]
+                    for file in artifacts
+                ):
+                    continue
+                for file in artifacts:
+                    target = Path(run["cache"]) / file["path"]
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copyfile(Path(previous["cache"]) / file["path"], target)
+            except (FileNotFoundError, PermissionError):
+                # That Run was deleted meanwhile; its cache simply isn't available to reuse.
                 continue
-            for file in artifacts:
-                target = Path(run["cache"]) / file["path"]
-                target.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copyfile(Path(previous["cache"]) / file["path"], target)
             self.store.update(
                 run["id"],
                 lambda r: r["stages"][index].update(

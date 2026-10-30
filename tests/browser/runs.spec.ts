@@ -1,7 +1,233 @@
 import { test, expect } from '@playwright/test';
-import { writeFile, readFile } from 'node:fs/promises';
+import { spawn } from 'node:child_process';
+import { access, writeFile, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { runWorkspace } from './runHarness';
+
+const exists = (file: string) =>
+  access(file).then(
+    () => true,
+    () => false,
+  );
+
+test('deleting a Run and its Job goes from the UI to the disk and survives a backend restart', async ({
+  page,
+}) => {
+  test.skip(process.platform !== 'win32', 'Windows file locking boundary');
+  const app = await runWorkspace();
+  const dialogs: string[] = [];
+  let releaseLock = () => {};
+  page.on('dialog', (dialog) => {
+    dialogs.push(dialog.message());
+    void dialog.accept();
+  });
+  try {
+    const job = app.manifest.jobs.find((item) => item.family === 'wan')!;
+    const label = `${job.name} · WAN · r1`;
+    const jobButton = page.getByRole('button', { name: label, exact: true });
+    const navigate = (name: string) =>
+      page.getByRole('button', { name, exact: true }).click();
+    const button = (name: string) =>
+      page.getByRole('button', { name, exact: true });
+    await page.goto(app.url);
+    await navigate('Jobs');
+    await jobButton.click();
+
+    // A Job with a Run is refused with the way forward, before any question is asked.
+    await app.post('/api/runs/prepare', { job_id: job.id });
+    await button('Delete job').click();
+    await expect(page.getByRole('alert')).toContainText('Archive job');
+    expect(dialogs).toEqual([]);
+
+    await navigate('Runs');
+    await jobButton.click();
+    await expect(
+      page.getByText('State: prepared', { exact: true }),
+    ).toBeVisible({ timeout: 240_000 });
+    const [run] = await app.records();
+
+    const lockScript =
+      "import sys;f=open(sys.argv[1],'rb');print('ready',flush=True);sys.stdin.read()";
+    const locked = path.join(run.directory, 'inputs.json');
+    const lock = spawn(path.resolve('.venv/Scripts/python.exe'), [
+      '-c',
+      lockScript,
+      locked,
+    ]);
+    releaseLock = () => lock.kill();
+    await new Promise((resolve) => lock.stdout.once('data', resolve));
+
+    // A locked file leaves the Run visible, saying what remains.
+    await button('Delete run').click();
+    await expect(page.getByLabel('Unfinished delete')).toContainText(
+      'inputs.json',
+      { timeout: 240_000 },
+    );
+    expect(dialogs).toHaveLength(1);
+    expect(dialogs[0]).toContain(run.id.slice(0, 8));
+    expect(dialogs[0]).toMatch(/This frees \d+ (KB|MB|GB)/);
+    expect(dialogs[0]).toContain("can't be undone");
+    expect(dialogs[0]).toContain('download any LoRA');
+    await expect(page.getByLabel('Unfinished delete')).toContainText(
+      'Still on disk:',
+    );
+    await expect(
+      page.getByText('State: deleting', { exact: true }),
+    ).toBeVisible();
+    await expect(page.getByLabel('Run outputs')).toHaveCount(0);
+
+    // It is still there, and still deletable, after a restart.
+    const closed = new Promise((resolve) => lock.once('exit', resolve));
+    lock.stdin.end();
+    await closed;
+    await app.crash();
+    await app.start();
+    await page.reload();
+    await navigate('Runs');
+    await jobButton.click();
+    await expect(
+      page.getByText('State: deleting', { exact: true }),
+    ).toBeVisible();
+    await button('Delete again').click();
+    await expect(page.getByText(/^Run deleted\. Freed/)).toBeVisible({
+      timeout: 240_000,
+    });
+    await expect(jobButton).toHaveCount(0);
+    expect(await exists(run.directory)).toBe(false);
+    expect(await exists(path.join(run.directory, '..', '..'))).toBe(true);
+    expect(await app.records()).toEqual([]);
+    await expect(page.getByRole('alert')).toHaveCount(0);
+
+    // Gone after a restart too, and the Job can now be deleted.
+    await app.crash();
+    await app.start();
+    await page.reload();
+    await navigate('Runs');
+    await expect(jobButton).toHaveCount(0);
+    await navigate('Jobs');
+    await jobButton.click();
+    dialogs.length = 0;
+    await button('Delete job').click();
+    await expect(jobButton).toHaveCount(0);
+    expect(dialogs[0]).toContain(job.name);
+    expect(await exists(path.join(app.manifest.state, 'jobs', job.id))).toBe(
+      false,
+    );
+
+    await app.crash();
+    await app.start();
+    await page.reload();
+    await navigate('Jobs');
+    await expect(
+      page.getByRole('button', { name: /· H3 · r1$/ }).first(),
+    ).toBeVisible();
+    await expect(jobButton).toHaveCount(0);
+    const jobs = (await (await fetch(`${app.url}/api/jobs`)).json()) as {
+      id: string;
+    }[];
+    expect(jobs.map((item) => item.id)).not.toContain(job.id);
+
+    // An archived Job has the control as well.
+    const other = app.manifest.jobs.find((item) => item.family === 'h3')!;
+    await app.post(`/api/jobs/${other.id}/archive`);
+    await page.reload();
+    await navigate('Jobs');
+    await page.getByText('Archived jobs (1)', { exact: true }).click();
+    await button(`Delete ${other.name}`).click();
+    await expect(button(`Delete ${other.name}`)).toHaveCount(0);
+    expect(await exists(path.join(app.manifest.state, 'jobs', other.id))).toBe(
+      false,
+    );
+  } finally {
+    releaseLock();
+    await app.close();
+  }
+});
+
+test('a Run that reused a deleted Run cache still shows it and can be used', async ({
+  page,
+}) => {
+  const app = await runWorkspace();
+  page.on('dialog', (dialog) => void dialog.accept());
+  try {
+    const job = app.manifest.jobs.find((item) => item.family === 'wan')!;
+    const prepared = async (count: number) =>
+      expect
+        .poll(
+          async () =>
+            (await app.records()).filter((run) => run.status === 'prepared')
+              .length,
+          { timeout: 240_000 },
+        )
+        .toBe(count);
+    await app.post('/api/runs/prepare', { job_id: job.id });
+    await prepared(1);
+    const [first] = await app.records();
+    await writeFile(
+      path.join(app.fixture, 'datasets', 'wan', 'motion.txt'),
+      'A changed caption.',
+      'utf8',
+    );
+    await app.post('/api/runs/prepare', { job_id: job.id });
+    await prepared(2);
+
+    await page.goto(app.url);
+    await page.getByRole('button', { name: 'Runs', exact: true }).click();
+    const runs = page.getByRole('button', {
+      name: `${job.name} · WAN · r1`,
+      exact: true,
+    });
+    await runs.last().click();
+    await expect(
+      page.getByText(`Run ${first.id}`, { exact: true }),
+    ).toBeVisible();
+    await page.getByRole('button', { name: 'Delete run', exact: true }).click();
+    await expect(page.getByText(/^Run deleted\. Freed/)).toBeVisible({
+      timeout: 240_000,
+    });
+
+    await expect(runs).toHaveCount(1);
+    await runs.click();
+    await expect(page.getByText('verified cache reused')).toBeVisible();
+    await expect(page.getByRole('alert')).toHaveCount(0);
+    await page
+      .getByRole('button', { name: 'Start training', exact: true })
+      .click();
+    await expect(
+      page.getByText('State: completed', { exact: true }),
+    ).toBeVisible({ timeout: 240_000 });
+    expect(await exists(first.directory)).toBe(false);
+  } finally {
+    await app.close();
+  }
+});
+
+test('Delete run on an active Run is refused with the reason', async ({
+  page,
+}) => {
+  const app = await runWorkspace();
+  try {
+    const job = app.manifest.jobs.find((item) => item.family === 'wan')!;
+    await app.leaseGpu('acquire');
+    await app.post('/api/runs/prepare', { job_id: job.id });
+    await page.goto(app.url);
+    await page.getByRole('button', { name: 'Runs', exact: true }).click();
+    await page
+      .getByRole('button', { name: `${job.name} · WAN · r1`, exact: true })
+      .click();
+    await expect(
+      page.getByText('State: pending_preparation', { exact: true }),
+    ).toBeVisible();
+    await page.getByRole('button', { name: 'Delete run', exact: true }).click();
+    await expect(page.getByRole('alert')).toContainText('active');
+    const [run] = await app.records();
+    expect(run.status).toBe('pending_preparation');
+    expect(await exists(run.directory)).toBe(true);
+    await app.leaseGpu('release');
+  } finally {
+    await app.close();
+  }
+});
 
 test('Wan and H3 prepare and train through the GUI with frozen captions cache reuse and playable outputs', async ({
   page,

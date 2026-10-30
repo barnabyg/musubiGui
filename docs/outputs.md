@@ -8,7 +8,7 @@ binary attachments. Legacy `.pt`/`.pth`/`.ckpt` files are never unpickled.
 
 The inventory survives restart and retains previously observed missing files.
 Missing/moved, unreadable, empty/truncated and blocked outputs have separate status
-messages; no source file is deleted or repaired. Refresh after an active producer
+messages; browsing never deletes or repairs a source file. Refresh after an active producer
 finishes writing. An available file means it can be read/decoded or its checkpoint
 header/payload bounds can be inspected; it does not establish training quality,
 complete optimizer state or resumability. H3 video samples without a decodable audio
@@ -20,10 +20,15 @@ escapes, arbitrary paths and identities belonging to another Run are rejected.
 Changing the configured root blocks access to old locations until the original
 root is restored. Moving an output does not silently reassign its provenance.
 
+[Delete run](runs.md#deleting-a-run) removes a Run's outputs and its index entry with it,
+so download a LoRA you want to keep first. While a delete is unfinished, the Run offers no
+outputs. Comparison lists neither deleted Runs nor Runs being deleted; comparing with a Run
+deleted from another tab since the list loaded reports that it was not found.
+
 Compare frozen run inputs displays changed Job controls/revisions, Settings,
 dataset/caption manifests, model identities and upstream/environment provenance.
-It compares recorded facts and offers no quality ranking. Original Jobs and Runs
-remain unchanged.
+It compares recorded facts and offers no quality ranking. Comparing changes no Job or
+Run.
 
 One command creates **two synthetic Runs per model** and launches their real media
 output browser, without model weights or GPU work:

@@ -2,6 +2,7 @@
 
 import builtins
 import json
+import os
 import sqlite3
 import tempfile
 from collections.abc import Callable, Iterator
@@ -28,6 +29,28 @@ def is_active(run: dict[str, Any]) -> bool:
     return run["status"] in ACTIVE_STATUSES or bool(run.get("processes"))
 
 
+def references_folder(run: dict[str, Any], folder: str) -> bool:
+    """Whether `run` reads files under `folder`, through its frozen inputs, a stage argument or restored state.
+
+    Retries and restored segments keep reading the media and dataset files of the Run they came from.
+    """
+    target = os.path.normcase(folder)
+
+    def inside(text: str) -> bool:
+        value = os.path.normcase(text)
+        return value.endswith(target) or target + os.sep in value
+
+    source = run.get("state_source") or {}
+    return any(
+        inside(text)
+        for text in [
+            *run.get("input_files", {}),
+            *[arg for stage in run.get("stages", []) for arg in stage.get("args", [])],
+            *([source["path"]] if "path" in source else []),
+        ]
+    )
+
+
 @contextmanager
 def preparation_transaction(root: Path) -> Iterator[None]:
     """A separate SQLite gate reserves identification/materialization across backends."""
@@ -48,9 +71,12 @@ def preparation_transaction(root: Path) -> Iterator[None]:
 def blocks_revision(run: dict[str, Any], fingerprint: str) -> bool:
     """Whether `run` stands for this revision, so preparing it again returns `run` instead of a new Run.
 
-    A run that ended without completing doesn't, unless it still records processes to reconcile.
+    A run that ended without completing doesn't, unless it still records processes to reconcile,
+    and nor does one being deleted.
     """
-    ended_early = run["status"] in {"failed", "cancelled", "stopped", "interrupted"} and not run.get("processes")
+    ended_early = run["status"] in {"failed", "cancelled", "stopped", "interrupted", "deleting"} and not run.get(
+        "processes"
+    )
     return run["fingerprint"] == fingerprint and not ended_early
 
 
@@ -86,6 +112,9 @@ class RunStore:
     def has_active_run(self, job_id: str) -> bool:
         return any(run["job"]["id"] == job_id and is_active(run) for run in self.list())
 
+    def count_for_job(self, job_id: str) -> int:
+        return sum(run["job"]["id"] == job_id for run in self.list())
+
     def get(self, run_id: str) -> dict[str, Any]:
         with database(self.path) as connection:
             row = connection.execute("SELECT data FROM records WHERE id=?", (run_id,)).fetchone()
@@ -99,8 +128,27 @@ class RunStore:
                 previous = json.loads(row[0])
                 if blocks_revision(previous, data["fingerprint"]):
                     return dict(previous)
+                if previous["status"] == "deleting" and references_folder(data, previous["directory"]):
+                    raise ValueError("The Run these inputs come from is being deleted.")
             connection.execute("INSERT INTO records VALUES (?,?)", (data["id"], json.dumps(data)))
             return data
+
+    def remove(self, run_id: str) -> None:
+        with database(self.path) as connection:
+            connection.execute("DELETE FROM records WHERE id=?", (run_id,))
+
+    def update_with_others(
+        self, run_id: str, change: Callable[[dict[str, Any], builtins.list[dict[str, Any]]], None]
+    ) -> dict[str, Any]:
+        """Like `update`, with every other Run read in the same transaction so `change` can depend on them."""
+        with database(self.path) as connection:
+            records = [json.loads(row[0]) for row in connection.execute("SELECT data FROM records")]
+            data = next((record for record in records if record["id"] == run_id), None)
+            if data is None:
+                raise ValueError("Run not found.")
+            change(data, [record for record in records if record["id"] != run_id])
+            connection.execute("UPDATE records SET data=? WHERE id=?", (json.dumps(data), run_id))
+            return dict(data)
 
     def update(self, run_id: str, change: Callable[[dict[str, Any]], None]) -> dict[str, Any]:
         with database(self.path) as connection:
