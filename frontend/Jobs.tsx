@@ -162,6 +162,7 @@ async function request<T>(
 
 export function Jobs({ onRun, onDirtyChange }: Props) {
   const [jobs, setJobs] = useState<Job[]>([]);
+  const [archived, setArchived] = useState<Job[]>([]);
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [models, setModels] = useState<Record<string, string>>({});
   const [job, setJob] = useState<Job | null>(null);
@@ -185,9 +186,11 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
       request<Dataset[]>('/api/datasets'),
       request<{ models: Record<string, string> }>('/api/settings'),
       request<Preset[]>('/api/jobs/presets'),
+      request<Job[]>('/api/jobs/archived'),
     ])
-      .then(([items, library, settings, savedPresets]) => {
+      .then(([items, library, settings, savedPresets, hidden]) => {
         setJobs(items);
+        setArchived(hidden);
         setDatasets(library);
         setModels(settings.models);
         setPresets(savedPresets);
@@ -347,6 +350,28 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
       setStatus('Independent copy created');
     });
   }
+  async function refreshLibrary() {
+    setJobs(await request<Job[]>('/api/jobs'));
+    setArchived(await request<Job[]>('/api/jobs/archived'));
+  }
+  async function archive() {
+    if (!job || dirty) return;
+    await perform(async () => {
+      await request<Job>(`/api/jobs/${job.id}/archive`, 'POST', {});
+      await refreshLibrary();
+      setJob(null);
+      setReview(null);
+      setConversion(null);
+      setStatus('Job archived');
+    });
+  }
+  async function restore(id: string) {
+    await perform(async () => {
+      await request<Job>(`/api/jobs/${id}/restore`, 'POST', {});
+      await refreshLibrary();
+      setStatus('Job restored');
+    });
+  }
   async function savePreset() {
     if (!job || dirty) return;
     await perform(async () => {
@@ -464,6 +489,25 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
           </button>
         ))}
       </div>
+      {archived.length > 0 && (
+        <details className="panel">
+          <summary>Archived jobs ({archived.length})</summary>
+          <p>
+            Archived jobs are hidden from the list above. Their Runs, outputs
+            and saved states stay in Runs.
+          </p>
+          <ul aria-label="Archived jobs">
+            {archived.map((item) => (
+              <li key={item.id}>
+                {item.name} · {item.family.toUpperCase()} · r{item.revision}{' '}
+                <button disabled={busy} onClick={() => void restore(item.id)}>
+                  Restore {item.name}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
       <details className="panel">
         <summary>Import / export configuration</summary>
         <p>
@@ -523,6 +567,9 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
                 onClick={() => void convert(false)}
               >
                 Change model to {job.family === 'wan' ? 'H3 T2VA' : 'Wan T2V'}
+              </button>
+              <button disabled={busy || dirty} onClick={() => void archive()}>
+                Archive job
               </button>
             </div>
             {conversion && (

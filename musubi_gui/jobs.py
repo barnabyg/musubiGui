@@ -19,6 +19,7 @@ from musubi_gui.diagnostics import upstream_revision
 from musubi_gui.disk_estimate import check_volumes, estimate_disk, free_space_reader
 from musubi_gui.h3 import h3_stages, validate_h3
 from musubi_gui.reference import CAPTION, UPSTREAM, Stage, redact, safetensors_header, validate_wan, wan_stages
+from musubi_gui.run_store import RunStore, is_active, preparation_transaction
 from musubi_gui.settings import Settings, atomic_json, load_settings, validate_paths, within_root
 from musubi_gui.video_sampling import plan_windows, video_sections
 
@@ -242,6 +243,36 @@ def identifier(value: str) -> str:
 class JobStore:
     def __init__(self, root: Path):
         self.root = root / "jobs"
+        # Outside the job folders: revision files stay as written and older versions ignore the markers.
+        self.archive = root / "archived-jobs"
+
+    def is_archived(self, job_id: str) -> bool:
+        return (self.archive / f"{identifier(job_id)}.json").is_file()
+
+    def _require_unarchived(self, job_id: str) -> None:
+        if self.is_archived(job_id):
+            raise ValueError("This job is archived. Restore it before changing it.")
+
+    def archive_job(self, job_id: str) -> Job:
+        # The preparation gate keeps a Run from starting between the check and the marker.
+        with preparation_transaction(self.root.parent), self._mutation():
+            job = self.get(job_id)
+            if any(run["job"]["id"] == job_id and is_active(run) for run in RunStore(self.root.parent).list()):
+                raise HTTPException(
+                    409, "This job has an active Run. Wait for it to finish, or stop or cancel it, before archiving."
+                )
+            self.archive.mkdir(parents=True, exist_ok=True)
+            atomic_json(self.archive / f"{job_id}.json", {"version": 1, "id": job_id})
+            return job
+
+    def restore_job(self, job_id: str) -> Job:
+        with self._mutation():
+            job = self.get(job_id)
+            (self.archive / f"{job_id}.json").unlink(missing_ok=True)
+            return job
+
+    def archived(self) -> builtins.list[Job]:
+        return [job for job in self._stored() if self.is_archived(job.id)]
 
     @contextmanager
     def _mutation(self) -> Iterator[None]:
@@ -270,6 +301,9 @@ class JobStore:
         return job
 
     def list(self) -> list[Job]:
+        return [job for job in self._stored() if not self.is_archived(job.id)]
+
+    def _stored(self) -> builtins.list[Job]:
         jobs = []
         for directory in sorted(self.root.glob("*")):
             if not directory.is_dir():
@@ -292,6 +326,7 @@ class JobStore:
     def save(self, job_id: str, draft: JobDraft, expected_revision: int) -> Job:
         with self._mutation():
             old = self.get(job_id)
+            self._require_unarchived(job_id)
             if expected_revision != old.revision:
                 raise HTTPException(
                     409, "This job changed in another tab. Reopen it before saving; your edits remain here."
@@ -305,6 +340,7 @@ class JobStore:
     def convert(self, job_id: str, conversion: Conversion) -> dict[str, Any] | Job:
         with self._mutation():
             old = self.get(job_id)
+            self._require_unarchived(job_id)
             if conversion.revision != old.revision:
                 raise HTTPException(409, "The draft changed. Reopen it and preview the conversion again.")
             if conversion.family == old.family:
@@ -332,6 +368,7 @@ class JobStore:
 
     def create_preset(self, job_id: str, name: str) -> Preset:
         job = self.get(job_id)
+        self._require_unarchived(job_id)
         preset = Preset(
             name=name, id=uuid.uuid4().hex, family=job.family, config=export_draft(as_draft(job)).draft.config
         )
@@ -757,6 +794,11 @@ def jobs_router(root: Path, *, fixture_mode: bool = False) -> APIRouter:
         with job_errors():
             return store.list()
 
+    @router.get("/archived")
+    def get_archived() -> list[Job]:
+        with job_errors():
+            return store.archived()
+
     @router.get("/defaults/{family}")
     def get_defaults(family: Literal["wan", "h3"]) -> JobConfig:
         return default_config(family)
@@ -796,6 +838,16 @@ def jobs_router(root: Path, *, fixture_mode: bool = False) -> APIRouter:
         with job_errors():
             draft = as_draft(store.get(job_id))
             return store.create(draft.model_copy(update={"name": draft.name + " copy"}))
+
+    @router.post("/{job_id}/archive")
+    def archive_job(job_id: str) -> Job:
+        with job_errors():
+            return store.archive_job(job_id)
+
+    @router.post("/{job_id}/restore")
+    def restore_job(job_id: str) -> Job:
+        with job_errors():
+            return store.restore_job(job_id)
 
     @router.post("/{job_id}/presets")
     def post_preset(job_id: str, value: NamedPreset) -> Preset:

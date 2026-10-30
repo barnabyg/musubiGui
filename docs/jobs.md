@@ -128,6 +128,22 @@ Duplicate job creates an independent identity and output destination. Save as pr
 records named model-specific controls; Apply preset creates a new job revision while
 retaining that job's name and dataset selection.
 
+Archive job hides a job you no longer need. It is an archive rather than a delete,
+because each Run's frozen snapshot records the job's identity and revision. Nothing is
+removed from disk, and version-one revision files are not rewritten: the archive is a
+separate marker file in `archived-jobs` in the state directory. An older application
+version ignores the marker and lists the job again.
+
+An archived job leaves the job list and can't be edited, converted, used as a preset
+source or prepared. Presets already saved from it stay, since they are independent
+copies. Its Runs, outputs and saved states stay browsable from Runs, and a prepared Run
+can still be started. Archived jobs lists these jobs with a Restore button, which brings
+a job back unchanged.
+
+A job can't be archived while it has an active Run: queued, preparing, training,
+sampling or stopping, or still holding processes to reconcile. The refusal says why, and
+the job stays in the list. Stop or cancel the Run first.
+
 Two built-in **Measured** presets carry the largest configurations that trained on
 the target PC during the production trial
 ([evidence](reference/evidence/production-trial.json)):

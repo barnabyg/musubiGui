@@ -21,14 +21,13 @@ from musubi_gui.checkpoint_dedup import remove_final_duplicates
 from musubi_gui.media_probe import inspect as inspect_media
 from musubi_gui.processes import identity_status, observed_tree, process_identity, terminate_owned
 from musubi_gui.reference import Stage, redact, reference_environment
-from musubi_gui.run_store import DeviceLease, RunStore, blocks_revision
+from musubi_gui.run_store import DeviceLease, RunStore, blocks_revision, preparation_transaction
 from musubi_gui.saved_state import discover_states
 from musubi_gui.settings import Settings, atomic_json
 from musubi_gui.snapshots import (
     digest_file,
     identify_snapshot,
     materialize_snapshot,
-    preparation_transaction,
     verify_inputs,
 )
 from musubi_gui.wan_tokenizer import publish_shared, seed_run, shared_directory

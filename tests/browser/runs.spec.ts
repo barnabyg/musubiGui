@@ -430,3 +430,66 @@ test('low disk space warns in review and stops preparation until accepted', asyn
     await app.close();
   }
 });
+
+test('archiving hides a job, keeps its Runs browsable and restores it', async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  const app = await runWorkspace();
+  try {
+    const job = app.manifest.jobs.find((item) => item.family === 'wan')!;
+    const library = page.getByRole('button', {
+      name: `${job.name} · WAN · r1`,
+      exact: true,
+    });
+    const jobsTab = page.getByRole('button', { name: 'Jobs', exact: true });
+    await page.goto(app.url);
+    await jobsTab.click();
+    await library.click();
+    await page
+      .getByRole('button', { name: 'Review configuration', exact: true })
+      .click();
+    await page
+      .getByRole('button', { name: 'Prepare run', exact: true })
+      .click();
+    await expect(
+      page.getByText('State: prepared', { exact: true }),
+    ).toBeVisible({ timeout: 45_000 });
+    const [run] = await app.records();
+
+    await jobsTab.click();
+    await library.click();
+    await page
+      .getByRole('button', { name: 'Archive job', exact: true })
+      .click();
+    await expect(library).toHaveCount(0);
+    await expect(
+      page.getByRole('button', { name: 'Archive job', exact: true }),
+    ).toHaveCount(0);
+
+    // Still archived after a reload, and its Run stays browsable from Runs.
+    await page.reload();
+    await jobsTab.click();
+    await expect(library).toHaveCount(0);
+    await page.getByRole('button', { name: 'Runs', exact: true }).click();
+    await page
+      .getByRole('button', { name: new RegExp(`^${job.name} · WAN · r`) })
+      .first()
+      .click();
+    await expect(page.getByRole('heading', { name: job.name })).toBeVisible();
+    await expect(
+      page.getByText('State: prepared', { exact: true }),
+    ).toBeVisible();
+    expect((await app.records()).map((record) => record.id)).toEqual([run.id]);
+
+    await jobsTab.click();
+    await page.getByText('Archived jobs (1)', { exact: true }).click();
+    await page
+      .getByRole('button', { name: `Restore ${job.name}`, exact: true })
+      .click();
+    await expect(library).toBeVisible();
+    await expect(page.getByText('Archived jobs (1)')).toHaveCount(0);
+  } finally {
+    await app.close();
+  }
+});
