@@ -31,6 +31,7 @@ from musubi_gui.snapshots import (
     preparation_transaction,
     verify_inputs,
 )
+from musubi_gui.wan_tokenizer import publish_shared, seed_run, shared_directory
 from musubi_gui.windows_job import ProcessJob, WindowsProcess
 
 
@@ -486,6 +487,10 @@ class RunService:
                 log_file = Path(run["directory"]) / f"{stage['name']}.log"
                 with log_file.open("a", encoding="utf-8") as log:
                     environment = reference_environment(Path(run["cache"]))
+                    if self._seed_wan_tokenizer(run):
+                        environment["HF_HUB_OFFLINE"] = "1"
+                        log.write("Using the shared Wan tokenizer; Hugging Face Hub access is off for this stage.\n")
+                        log.flush()
                     if os.name == "nt":
                         process = job_object.spawn(stage["args"], cwd=settings.checkout, env=environment, log=log)
                     else:
@@ -582,6 +587,7 @@ class RunService:
                         self.store.update(run_id, lambda r: r.update(status="cancelled", processes=[]))
                         return
                     raise ValueError(f"{stage['name']} exited {code}. Inspect logs and retry preparation.")
+                self._share_wan_tokenizer(run)
                 if preparing:
                     artifacts = self._cache_artifacts(run, stage["name"])
                     if run.get("stage_keys") and not artifacts:
@@ -646,6 +652,26 @@ class RunService:
                 if failure is None:
                     self.store.update(run_id, lambda r: r.update(processes=[], launch_pending=False))
                 self.device.release(run_id)
+
+    def _seed_wan_tokenizer(self, run: dict[str, Any]) -> bool:
+        cache_root = run["settings"].get("cache_root")
+        if run["job"]["family"] != "wan" or not cache_root:
+            return False
+        try:
+            return seed_run(shared_directory(cache_root), Path(run["cache"]))
+        except OSError:
+            # The stage can still download the tokenizer itself.
+            return False
+
+    def _share_wan_tokenizer(self, run: dict[str, Any]) -> None:
+        cache_root = run["settings"].get("cache_root")
+        if run["job"]["family"] != "wan" or not cache_root:
+            return
+        try:
+            publish_shared(Path(run["cache"]), shared_directory(cache_root))
+        except OSError:
+            # Sharing only saves a later download; it never fails a stage that succeeded.
+            return
 
     def _remove_final_duplicates(self, run: dict[str, Any], stage: dict[str, Any]) -> builtins.list[str]:
         """Keep one copy of the final save when the step count is a multiple of the checkpoint interval."""

@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "issue": 35,
+  "date": "2026-10-30",
+  "method": "Real pinned-upstream Wan stages on the target PC with HF_HUB_OFFLINE=1 and a fresh per-run Hugging Face cache: one clip, 256x256, 17 frames, one training step, a two-step sample. The network itself was not disabled.",
+  "library_versions": { "transformers": "5.17.0", "huggingface_hub": "1.32.0" },
+  "fresh_cache": [
+    { "stage": "latent_cache", "exit_code": 0, "seconds": 28.6 },
+    {
+      "stage": "text_cache",
+      "exit_code": 1,
+      "seconds": 18.2,
+      "error": "OSError: We couldn't connect to 'https://huggingface.co' to load the files, and couldn't find them in the cached files."
+    },
+    {
+      "stage": "generate",
+      "exit_code": 1,
+      "seconds": 10.2,
+      "error": "OSError: We couldn't connect to 'https://huggingface.co' to load the files, and couldn't find them in the cached files."
+    }
+  ],
+  "copied_download": {
+    "text_cache_exit_code": 1,
+    "generate_exit_code": 1,
+    "reason": "A plain copy of a run's download still fails the same way. google/umt5-xxl has no config.json. Online, that 404 gives an empty config; offline, transformers treats the same missing file as a connection error, even though .no_exist records it."
+  },
+  "seeded_with_empty_config": [
+    { "stage": "latent_cache", "exit_code": 0, "seconds": 8.4 },
+    { "stage": "text_cache", "exit_code": 0, "seconds": 12.6 },
+    { "stage": "train", "exit_code": 0, "seconds": 47.0 },
+    { "stage": "generate", "exit_code": 0, "seconds": 61.2 }
+  ],
+  "equivalence": {
+    "text_cache_identical_to_online_run": true,
+    "tokenizer_class_and_ids_identical_to_fresh_download": true
+  }
+}

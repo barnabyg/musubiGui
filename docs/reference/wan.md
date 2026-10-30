@@ -113,12 +113,37 @@ samples at up to 68 °C core, not by VRAM or the power cap. Each rank-16 LoRA is
 duplicated the last interval save: identical tensors and state files, with only the
 date, epoch and finish time differing in the checkpoint header. The GUI now removes
 such proven copies after training (#34). The 20-step sample at 832×480 × 33 frames
-took about 9 minutes and decoded cleanly. Wan generation downloads the UMT5
-tokenizer into each run cache (#35).
+took about 9 minutes and decoded cleanly.
 
 This is the Measured Wan preset. 81 frames, 720×1280 and rank 32 were not tried.
 Useful learning was not assessed: 200 steps is below the several hundred steps a
 LoRA needs to change samples visibly, and the GUI cannot produce a no-LoRA baseline.
+
+## Network access
+
+The pinned T5 code loads its tokenizer by repository name, even when `wan_t5` is a
+local file. It fetches `Wan-AI/Wan2.1-T2V-14B` → `google/umt5-xxl` (about 21 MB) from
+the Hugging Face Hub, without authentication. Latent caching and training don't need it.
+Text caching and generation do, and on an empty cache with `HF_HUB_OFFLINE=1` both exit 1
+with `OSError: We couldn't connect to 'https://huggingface.co' to load the files, and
+couldn't find them in the cached files.` This was reproduced with the Hub switched off
+through `HF_HUB_OFFLINE`, not by disabling the network
+([evidence](evidence/wan-offline-tokenizer.json)).
+
+The GUI therefore needs the Hub once. After a Wan stage succeeds, the Run's download is
+checked against pinned SHA-256 hashes and kept in
+`<cache root>/shared/wan-umt5-tokenizer`. Every later Wan stage verifies that copy, lays
+it out in its own Run's Hugging Face cache and runs with `HF_HUB_OFFLINE=1`, so it cannot
+contact the Hub. The stage log says so. If the copy is missing or damaged, or a download
+doesn't match the hashes, the stage falls back to downloading as before.
+
+A plain copy of the download is not enough. The repository has no `config.json` in that
+folder. Online, the 404 gives an empty config, but offline transformers 5.17 treats the
+same missing file as a connection error. Seeding adds an empty `config.json`, which gives
+the same empty config. With it, all four stages passed offline, and the text cache was
+byte-identical to one made online. A transformers upgrade could change this behaviour; a
+stage that then fails shows the error above in its log, and deleting the shared folder
+restores the download.
 
 ## Measured disk use
 
