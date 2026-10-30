@@ -28,7 +28,7 @@ def test_reference_failure_writes_unproven_evidence_without_touching_installatio
         [sys.executable, "-m", "musubi_gui.reference", "wan", "--settings", str(state)],
         capture_output=True,
         text=True,
-        timeout=30,
+        timeout=300,
     )
     assert result.returncode == 2
     evidence = list(output.glob("wan-*/evidence.json"))
@@ -70,7 +70,7 @@ def test_reference_child_overrides_inherited_hugging_face_cache_locations(tmp_pa
         env=env,
         capture_output=True,
         text=True,
-        timeout=30,
+        timeout=300,
     )
     assert result.returncode == 2
     report = json.loads(next(output.glob("wan-*/evidence.json")).read_text(encoding="utf-8"))
@@ -108,7 +108,7 @@ def test_wan_rejects_bf16_sources_before_the_fp16_training_recipe(tmp_path: Path
         [sys.executable, "-m", "musubi_gui.reference", "wan", "--settings", str(state)],
         capture_output=True,
         text=True,
-        timeout=30,
+        timeout=300,
     )
     assert result.returncode == 2
     report = json.loads(next(output.glob("wan-*/evidence.json")).read_text(encoding="utf-8"))

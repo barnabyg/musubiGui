@@ -109,7 +109,7 @@ def stage_plan(root: Path, name: str, family: str = "wan") -> ExecutionPlan:
 
 def observed(service: RunService, plan: ExecutionPlan) -> dict:
     run = service.submit(plan)
-    deadline = time.monotonic() + 120
+    deadline = time.monotonic() + 180
     while service.get(run["id"])["status"] not in {"prepared", "failed"} and time.monotonic() < deadline:
         time.sleep(0.02)
     assert service.get(run["id"])["status"] == "prepared", service.get(run["id"])

@@ -31,7 +31,7 @@ def test_offline_wan_conversion_applies_weight_scale_without_mutating_source(tmp
         ],
         capture_output=True,
         text=True,
-        timeout=30,
+        timeout=300,
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert source.read_bytes() == original
@@ -80,7 +80,7 @@ def test_t5_conversion_maps_transformers_encoder_keys_to_native_wan_architecture
         ],
         capture_output=True,
         text=True,
-        timeout=30,
+        timeout=300,
     )
     assert result.returncode == 0, result.stdout + result.stderr
     with destination.open("rb") as stream:
@@ -106,12 +106,12 @@ def test_conversion_preserves_existing_destinations_and_rejects_unknown_t5_data(
     source.write_bytes(len(encoded).to_bytes(8, "little") + encoded + struct.pack("<e", 1.0))
     destination.write_bytes(b"existing model")
     command = [sys.executable, "-m", "musubi_gui.convert_wan", "t5", "--source", str(source), "--destination"]
-    result = subprocess.run([*command, str(destination)], capture_output=True, text=True, timeout=30)
+    result = subprocess.run([*command, str(destination)], capture_output=True, text=True, timeout=300)
     assert result.returncode == 2
     assert "never overwritten" in result.stdout
     assert destination.read_bytes() == b"existing model"
     unknown = tmp_path / "new.safetensors"
-    result = subprocess.run([*command, str(unknown)], capture_output=True, text=True, timeout=30)
+    result = subprocess.run([*command, str(unknown)], capture_output=True, text=True, timeout=300)
     assert result.returncode == 2
     assert "Unknown T5 source key" in result.stdout
     assert not unknown.exists()

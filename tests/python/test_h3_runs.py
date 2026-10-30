@@ -10,7 +10,7 @@ from musubi_gui.runs import RunService
 
 
 def wait(service: RunService, run_id: str, status: str) -> dict:
-    deadline = time.monotonic() + 20
+    deadline = time.monotonic() + 180
     while time.monotonic() < deadline:
         run = service.get(run_id)
         if run["status"] == status:

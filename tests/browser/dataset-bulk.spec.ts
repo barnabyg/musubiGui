@@ -15,7 +15,7 @@ test('filters retain explicit selection, bulk previews report conflicts, restore
     await page.getByLabel('Dataset folder', { exact: true }).fill(app.media);
     await page.getByRole('button', { name: 'Register folder' }).click();
     await expect(page.getByText('Scan: complete 4/4')).toBeVisible({
-      timeout: 45_000,
+      timeout: 240_000,
     });
     const originalRed = await readFile(path.join(app.media, 'red.txt'), 'utf8');
     const originalMotion = await readFile(

@@ -85,7 +85,7 @@ export async function runWorkspace(options: { freeBytes?: number } = {}) {
             return output.includes('Traceback') ? output : 0;
           }
         },
-        { timeout: 15000 },
+        { timeout: 240_000 },
       )
       .toBe(200);
   };

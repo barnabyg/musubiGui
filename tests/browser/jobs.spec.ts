@@ -218,7 +218,7 @@ test('Wan frame extraction controls persist and review counts cached windows aft
               )
             ).json()) as { valid: boolean }[]
           ).filter((item) => item.valid).length,
-        { timeout: 45_000 },
+        { timeout: 240_000 },
       )
       .toBe(1);
     await openJobs(page, app.url);

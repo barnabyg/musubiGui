@@ -29,7 +29,7 @@ async function createDataset(page: Page, url: string, media: string) {
   // Stopping at an alert reports a creation error instead of a missing drop area.
   const dropArea = page.getByLabel('Dataset file drop area');
   await expect(dropArea.or(page.getByRole('alert'))).toBeVisible({
-    timeout: 45_000,
+    timeout: 240_000,
   });
   await expect(page.getByRole('alert')).toHaveCount(0);
   await expect(dropArea).toBeVisible();
@@ -71,7 +71,7 @@ test('dropped images, video and captions use managed uploads, preserve collision
     ).toContainText(/Uploading|Validating media|Uploaded/);
     // This batch validates media sequentially and refreshes the gallery per file.
     await expect(page.getByLabel('Upload files')).toBeEnabled({
-      timeout: 45_000,
+      timeout: 240_000,
     });
     for (const name of [
       'red.png',
@@ -122,7 +122,7 @@ test('dropped images, video and captions use managed uploads, preserve collision
     });
     await dropArea.dispatchEvent('drop', { dataTransfer: collision });
     await expect(page.getByLabel('Upload files')).toBeEnabled({
-      timeout: 45_000,
+      timeout: 240_000,
     });
     await expect(
       page.getByLabel('Upload result red.png', { exact: true }),
@@ -210,7 +210,7 @@ test('drop feedback handles child boundaries and non-file drags, and busy upload
       page.getByLabel('Upload result red.png', { exact: true }),
     ).toHaveCount(0);
     releaseUpload();
-    await expect(picker).toBeEnabled({ timeout: 45_000 });
+    await expect(picker).toBeEnabled({ timeout: 240_000 });
     await expect(
       page.getByLabel('Upload result blue.png', { exact: true }),
     ).toContainText('Uploaded');
@@ -244,9 +244,9 @@ test('rapid drops keep the first batch while caption saving is pending', async (
     await area.dispatchEvent('drop', { dataTransfer: initial });
     await expect(
       page.getByLabel('Upload result blue.png', { exact: true }),
-    ).toContainText('Uploaded', { timeout: 45_000 });
+    ).toContainText('Uploaded', { timeout: 240_000 });
     await expect(page.getByLabel('Upload files')).toBeEnabled({
-      timeout: 45_000,
+      timeout: 240_000,
     });
     await page.getByRole('button', { name: 'blue.png image' }).click();
     const held = new Promise<void>((resolve) => {
@@ -284,9 +284,9 @@ test('rapid drops keep the first batch while caption saving is pending', async (
     releaseCaption();
     await expect(
       page.getByLabel('Upload result red.png', { exact: true }),
-    ).toContainText('Uploaded', { timeout: 45_000 });
+    ).toContainText('Uploaded', { timeout: 240_000 });
     await expect(page.getByLabel('Upload files')).toBeEnabled({
-      timeout: 45_000,
+      timeout: 240_000,
     });
     const records = (await (
       await page.request.get(`${app.url}/api/datasets`)

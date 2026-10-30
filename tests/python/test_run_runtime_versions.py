@@ -18,7 +18,7 @@ def test_version_only_probe_reports_optional_preprocessors_without_initializing_
         capture_output=True,
         text=True,
         check=True,
-        timeout=15,
+        timeout=300,
     )
     report = json.loads(result.stdout.removeprefix("MUSUBI_PROBE="))
     assert set(report["preprocessing_packages"]) == {

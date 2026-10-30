@@ -13,32 +13,25 @@ CI uses the same command. When it fails, CI keeps Playwright's `test-results`
 `playwright-results` artifact for 14 days. Registry access is required by vulnerability and lock checks.
 All diagnostics and warnings must be resolved; pytest warnings and ESLint warnings fail.
 
-Browser assertions have a 15-second integration deadline because they exercise real
-backend requests, SQLite writes and media subprocesses on hosted Windows runners.
-Controlled six-second dataset creation and completed-scan responses reproduce failures
-under Playwright's five-second default and pass with this budget. This is a correctness
-suite, not a latency benchmark: assertions still require the exact expected result.
-Long upload/scan/preparation/training operations use explicit 45-second waits. This
-includes four-media registration scans: an 18-second completed-scan response reproduces
-the 15-second failure and passes with the operation budget. Managed dataset
-creation also scans before responding and uses the same deadline; two consecutive
-hosted runs timed out at 15 seconds, and an 18-second creation response passes.
-The two-family preparation/training scenario has a 120-second total budget.
-H3 media inspection results use a 120-second wait inside a 1,200-second test budget,
-because each of the scenario's inspections decodes whole clips in new subprocesses: hosted
-runs exceeded both the 15-second and 60-second defaults while the test takes 10 seconds
-locally. The pytest wait for two queued fixture preparations uses 180 seconds. These are upper
-bounds with deliberate margin, and a test budget must exceed the sum of its waits.
+Test deadlines are upper bounds, not targets, so they carry a lot of margin. A passing test
+never waits them out, while a tight deadline fails correct code when a hosted Windows runner
+crawls. Hosted runs have taken over 45 seconds to scan four media files, and over 60 seconds
+for an H3 inspection scenario that takes 10 seconds locally. Deadlines are never set just
+above an observed time.
+
+Browser assertions wait up to 60 seconds, because they exercise real backend requests,
+SQLite writes and media subprocesses. Long upload, scan, inspection, preparation and training
+operations use explicit 240-second waits. Each test has a single 30-minute budget, which
+exceeds the sum of its waits. Pytest polls for Run states for up to 180 seconds, and its
+subprocesses and requests have 300 seconds. The cost is that a truly hung test takes longer
+to fail. This is a correctness suite, not a latency benchmark: assertions still require the
+exact expected result.
+
 The gallery/inline-caption virtual scrolling fixtures use eight real media files and
 a narrow viewport that forces cards to unmount. This tests recycling and retained
 drafts without requiring 24 separate probe startups just to exceed a desktop
-viewport. Both scenarios allow 90 seconds overall and retain the standard
-45-second scan deadline. Completion assertions target the visible scan status so a
-failure includes its last reported progress or error. The earlier 24-media fixtures
-exceeded even a 90-second scan budget on one hosted runner, while another passed;
-increasing timeouts alone did not make that unrelated setup workload reliable.
-Other fixture deadlines and the 15-second default remain unchanged. Retries remain
-disabled. Review these deadlines if fixture workloads or runner capacity change.
+viewport. Completion assertions target the visible scan status so a
+failure includes its last reported progress or error. Retries remain disabled.
 
 Focused commands: `npm.cmd run typecheck`, `.venv\Scripts\python.exe -m mypy`,
 `.venv\Scripts\python.exe -m pytest tests/python/test_settings_api.py -q`, and

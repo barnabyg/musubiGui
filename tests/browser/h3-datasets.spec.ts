@@ -6,8 +6,7 @@ test('H3 inspector plays resolved audio and identifies missing, ambiguous, malfo
   page,
 }) => {
   // Every inspection starts probe subprocesses that decode whole clips, which hosted runners do slowly.
-  test.setTimeout(1_200_000);
-  const inspected = expect.configure({ timeout: 120_000 });
+  const inspected = expect.configure({ timeout: 240_000 });
   const app = await datasetHarness({ h3Audio: true });
   // Audio requests are reported if playback stalls; one hosted run hung in play().
   const audioRequests: string[] = [];
@@ -32,7 +31,7 @@ test('H3 inspector plays resolved audio and identifies missing, ambiguous, malfo
     await page.getByRole('button', { name: 'Register folder' }).click();
     // Eleven media probes can exceed the default DOM assertion deadline on CI.
     await expect(page.getByText('Scan: complete 11/11')).toBeVisible({
-      timeout: 45_000,
+      timeout: 240_000,
     });
     await page.getByRole('button', { name: 'Tools', exact: true }).click();
     const inspect = async (name: string) => {
@@ -59,7 +58,7 @@ test('H3 inspector plays resolved audio and identifies missing, ambiguous, malfo
               resolve(
                 `readyState ${audio.readyState}, networkState ${audio.networkState}, error ${audio.error?.code ?? 'none'}`,
               ),
-            30_000,
+            120_000,
           ),
         );
         return Promise.race([audio.play().then(() => 'playing'), stalled]);

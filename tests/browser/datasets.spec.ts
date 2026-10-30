@@ -25,7 +25,7 @@ test('register mixed media, preview, and recover library after service restart',
     await page.getByLabel('Dataset folder', { exact: true }).fill(app.media);
     await page.getByRole('button', { name: 'Register folder' }).click();
     await expect(page.getByText('Scan: complete 4/4')).toBeVisible({
-      timeout: 45_000,
+      timeout: 240_000,
     });
     await page.getByRole('button', { name: 'red.png image' }).click();
     await expect(page.getByAltText('Preview red.png')).toBeVisible();
@@ -67,7 +67,7 @@ test('caption autosave flushes navigation, preserves failed drafts, rejects exte
     await page.getByLabel('Dataset folder', { exact: true }).fill(app.media);
     await page.getByRole('button', { name: 'Register folder' }).click();
     await expect(page.getByText('Scan: complete 4/4')).toBeVisible({
-      timeout: 45_000,
+      timeout: 240_000,
     });
     await page.getByRole('button', { name: 'red.png image' }).click();
     await page
@@ -173,7 +173,7 @@ test('caption autosave rejects an inside-root Windows junction redirect and reta
     await page.getByLabel('Dataset folder', { exact: true }).fill(app.media);
     await page.getByRole('button', { name: 'Register folder' }).click();
     await expect(page.getByText('Scan: complete 4/4')).toBeVisible({
-      timeout: 45_000,
+      timeout: 240_000,
     });
     await page.getByRole('button', { name: 'red.png image' }).click();
     const caption = await readFile(path.join(app.media, 'red.txt'), 'utf8');

@@ -7,7 +7,6 @@ test('Wan and H3 prepare and train through the GUI with frozen captions cache re
   page,
 }) => {
   // Both families prepare, train, decode samples and inspect saved state.
-  test.setTimeout(120_000);
   const app = await runWorkspace();
   try {
     await page.goto(app.url);
@@ -28,7 +27,7 @@ test('Wan and H3 prepare and train through the GUI with frozen captions cache re
         .click();
       await expect(
         page.getByText('State: prepared', { exact: true }),
-      ).toBeVisible({ timeout: 45_000 });
+      ).toBeVisible({ timeout: 240_000 });
       const first = (await app.records()).find((run) => run.job.id === job.id)!;
       const originalCaption = first.manifest.items[0].caption.text;
       const captionPath = path.join(
@@ -53,7 +52,7 @@ test('Wan and H3 prepare and train through the GUI with frozen captions cache re
         .click();
       await expect(
         page.getByText('State: prepared', { exact: true }),
-      ).toBeVisible({ timeout: 45_000 });
+      ).toBeVisible({ timeout: 240_000 });
       const next = (await app.records()).find(
         (run) => run.job.id === job.id && run.id !== first.id,
       )!;
@@ -81,7 +80,7 @@ test('Wan and H3 prepare and train through the GUI with frozen captions cache re
         .click();
       await expect(
         page.getByText('State: completed', { exact: true }),
-      ).toBeVisible({ timeout: 45_000 });
+      ).toBeVisible({ timeout: 240_000 });
       await page
         .getByRole('button', { name: 'Refresh outputs', exact: true })
         .click();
@@ -186,7 +185,7 @@ test('backend interruption retains GPU ownership and offers explicit recovery wi
       .click();
     await expect(
       page.getByText('State: prepared', { exact: true }),
-    ).toBeVisible({ timeout: 45_000 });
+    ).toBeVisible({ timeout: 240_000 });
     const run = (await app.records())[0];
     await page
       .getByRole('button', { name: 'Start training', exact: true })
@@ -260,7 +259,7 @@ test('a stopped training run shows the final status of its stopped stage', async
       .click();
     await expect(
       page.getByText('State: prepared', { exact: true }),
-    ).toBeVisible({ timeout: 45_000 });
+    ).toBeVisible({ timeout: 240_000 });
     await page
       .getByRole('button', { name: 'Start training', exact: true })
       .click();
@@ -286,7 +285,6 @@ test('a stopped training run shows the final status of its stopped stage', async
 test('a gracefully stopped revision can be prepared and started again', async ({
   page,
 }) => {
-  test.setTimeout(120_000);
   const app = await runWorkspace();
   try {
     const job = app.manifest.jobs[0];
@@ -325,7 +323,7 @@ test('a gracefully stopped revision can be prepared and started again', async ({
     await prepare();
     await expect(
       page.getByText('State: prepared', { exact: true }),
-    ).toBeVisible({ timeout: 45_000 });
+    ).toBeVisible({ timeout: 240_000 });
     await page
       .getByRole('button', { name: 'Start training', exact: true })
       .click();
@@ -336,7 +334,7 @@ test('a gracefully stopped revision can be prepared and started again', async ({
       .getByRole('button', { name: 'Request graceful stop', exact: true })
       .click();
     await expect(page.getByText('State: stopped', { exact: true })).toBeVisible(
-      { timeout: 45_000 },
+      { timeout: 240_000 },
     );
     const stopped = (await app.records()).find((run) => run.job.id === job.id)!;
 
@@ -344,7 +342,7 @@ test('a gracefully stopped revision can be prepared and started again', async ({
     await prepare();
     await expect(
       page.getByText('State: prepared', { exact: true }),
-    ).toBeVisible({ timeout: 45_000 });
+    ).toBeVisible({ timeout: 240_000 });
     const fresh = (await app.records()).find(
       (run) => run.job.id === job.id && run.id !== stopped.id,
     )!;
@@ -388,7 +386,6 @@ test('a gracefully stopped revision can be prepared and started again', async ({
 test('low disk space warns in review and preparation still goes ahead', async ({
   page,
 }) => {
-  test.setTimeout(600_000);
   const app = await runWorkspace({ freeBytes: 1000 });
   try {
     const job = app.manifest.jobs.find((item) => item.family === 'wan')!;
@@ -402,7 +399,7 @@ test('low disk space warns in review and preparation still goes ahead', async ({
       .click();
     const estimate = page.getByTestId('disk-estimate');
     await expect(estimate).toContainText('Optimizer states', {
-      timeout: 120_000,
+      timeout: 240_000,
     });
     await expect(estimate).toContainText('short');
     const volume = path.parse(app.parent).root;
@@ -416,7 +413,7 @@ test('low disk space warns in review and preparation still goes ahead', async ({
       .click();
     await expect(
       page.getByText('State: prepared', { exact: true }),
-    ).toBeVisible({ timeout: 120_000 });
+    ).toBeVisible({ timeout: 240_000 });
   } finally {
     await app.close();
   }
@@ -425,7 +422,6 @@ test('low disk space warns in review and preparation still goes ahead', async ({
 test('archiving hides a job, keeps its Runs browsable and restores it', async ({
   page,
 }) => {
-  test.setTimeout(600_000);
   const app = await runWorkspace();
   try {
     const job = app.manifest.jobs.find((item) => item.family === 'wan')!;
@@ -449,7 +445,7 @@ test('archiving hides a job, keeps its Runs browsable and restores it', async ({
       .getByRole('button', { name: 'Prepare run', exact: true })
       .click();
     await expect
-      .poll(async () => (await app.records())[0]?.status, { timeout: 120_000 })
+      .poll(async () => (await app.records())[0]?.status, { timeout: 240_000 })
       .toBe('pending_preparation');
 
     // A queued Run keeps its job in the list, and the refusal says why.
@@ -457,13 +453,13 @@ test('archiving hides a job, keeps its Runs browsable and restores it', async ({
     await library.click();
     await archiveButton.click();
     await expect(page.getByRole('alert')).toContainText('active Run', {
-      timeout: 120_000,
+      timeout: 240_000,
     });
     await expect(library).toBeVisible();
 
     await app.leaseGpu('release');
     await expect
-      .poll(async () => (await app.records())[0]?.status, { timeout: 120_000 })
+      .poll(async () => (await app.records())[0]?.status, { timeout: 240_000 })
       .toBe('prepared');
     const [run] = await app.records();
 
@@ -494,7 +490,7 @@ test('archiving hides a job, keeps its Runs browsable and restores it', async ({
       .click();
     await expect(
       page.getByText('State: completed', { exact: true }),
-    ).toBeVisible({ timeout: 120_000 });
+    ).toBeVisible({ timeout: 240_000 });
 
     await jobsTab.click();
     await page.getByText('Archived jobs (1)', { exact: true }).click();

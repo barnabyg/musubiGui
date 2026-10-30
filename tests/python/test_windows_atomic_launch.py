@@ -51,7 +51,7 @@ def test_controller_crash_before_pid_persistence_leaves_child_discoverable_by_jo
         env={**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[2])},
         capture_output=True,
         text=True,
-        timeout=15,
+        timeout=300,
     )
     assert result.returncode == 0, result.stderr
     witness = json.loads(result.stdout.strip())

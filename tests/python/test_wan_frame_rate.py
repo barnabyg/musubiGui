@@ -37,7 +37,7 @@ def wan_review(tmp_path: Path, clips: dict[str, tuple[Fraction, int]], **config:
 
 
 def prepared(service: RunService, run_id: str) -> dict[str, Any]:
-    deadline = time.monotonic() + 30
+    deadline = time.monotonic() + 180
     while time.monotonic() < deadline:
         run = service.get(run_id)
         if run["status"] in {"prepared", "failed"}:

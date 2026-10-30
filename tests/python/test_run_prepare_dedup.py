@@ -35,7 +35,7 @@ def test_parallel_prepare_calls_share_one_materialization_and_actual_media_chang
             capture_output=True,
             text=True,
             check=True,
-            timeout=30,
+            timeout=300,
         )
         assert other.stdout.strip() == runs[0]["id"]
         assert len(list(output_root.iterdir())) == 1
@@ -47,7 +47,7 @@ def test_parallel_prepare_calls_share_one_materialization_and_actual_media_chang
                 capture_output=True,
                 text=True,
                 check=True,
-                timeout=30,
+                timeout=300,
             )
             return result.stdout.strip()
 
