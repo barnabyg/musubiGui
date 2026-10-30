@@ -25,6 +25,7 @@ type RunChoice = {
   id: string;
   job: { name: string; family: string; revision: number };
   created: string;
+  status: string;
 };
 type Comparison = {
   before: string;
@@ -229,7 +230,7 @@ export function Outputs({ runId }: { runId: string }) {
         >
           <option value="">Select another run</option>
           {runs
-            .filter((run) => run.id !== runId)
+            .filter((run) => run.id !== runId && run.status !== 'deleting')
             .map((run) => (
               <option key={run.id} value={run.id}>
                 {run.job.name} · {run.job.family.toUpperCase()} · r

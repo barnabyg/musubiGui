@@ -170,6 +170,12 @@ MEASURED_PRESETS = {
 }
 
 
+class DeleteJob(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    confirmed: bool = False
+
+
 class PresetSelection(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -270,6 +276,34 @@ class JobStore:
             job = self.get(job_id)
             (self.archive_dir / f"{job_id}.json").unlink(missing_ok=True)
             return job
+
+    def deletion_preview(self, job_id: str) -> dict[str, Any]:
+        self.get(job_id)
+        runs = RunStore(self.root.parent).count_for_job(job_id)
+        refusal = (
+            f"This job still has {runs} Run(s). Use Delete run on each of them first, or Archive job to hide it instead."
+            if runs
+            else None
+        )
+        return {"runs": runs, "refusal": refusal}
+
+    def delete_job(self, job_id: str) -> None:
+        # The preparation gate keeps Prepare from creating a Run between the check and the removal.
+        with preparation_transaction(self.root.parent), self._mutation():
+            refusal = self.deletion_preview(job_id)["refusal"]
+            if refusal:
+                raise HTTPException(409, refusal)
+            directory = self.root / job_id
+            # Latest revision last: an interrupted delete leaves the job listed as it was, to delete again.
+            files = sorted(directory.iterdir(), key=lambda file: int(file.stem) if file.stem.isdigit() else -1)
+            # Any revision this version can't read stays blocked and preserved, not just the latest.
+            for file in files:
+                if file.stem.isdigit():
+                    self.get(job_id, int(file.stem))
+            for file in files:
+                file.unlink()
+            directory.rmdir()
+            (self.archive_dir / f"{job_id}.json").unlink(missing_ok=True)
 
     def archived(self) -> builtins.list[Job]:
         return [job for job in self._stored() if self.is_archived(job.id)]
@@ -848,6 +882,19 @@ def jobs_router(root: Path, *, fixture_mode: bool = False) -> APIRouter:
     def restore_job(job_id: str) -> Job:
         with job_errors():
             return store.restore_job(job_id)
+
+    @router.get("/{job_id}/delete-preview")
+    def delete_preview(job_id: str) -> dict[str, Any]:
+        with job_errors():
+            return store.deletion_preview(job_id)
+
+    @router.post("/{job_id}/delete")
+    def delete_job(job_id: str, request: DeleteJob) -> dict[str, Any]:
+        with job_errors():
+            if not request.confirmed:
+                raise ValueError("Explicit confirmation is required to permanently delete a job.")
+            store.delete_job(job_id)
+            return {"deleted": True, "id": job_id}
 
     @router.post("/{job_id}/presets")
     def post_preset(job_id: str, value: NamedPreset) -> Preset:

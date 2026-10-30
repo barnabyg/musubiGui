@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse
 
 from musubi_gui.media_probe import inspect
 from musubi_gui.reference import redact, safetensors_header
+from musubi_gui.run_deletion import output_index_file
 from musubi_gui.runs import RunService
 from musubi_gui.settings import atomic_json, load_settings, within_root
 
@@ -21,6 +22,7 @@ IMAGES = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff", ".gif"}
 VIDEOS = {".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v"}
 AUDIO = {".aac", ".flac", ".m4a", ".mp3", ".ogg", ".opus", ".wav"}
 CHECKPOINTS = {".safetensors", ".pt", ".pth", ".ckpt"}
+BEING_DELETED = "This Run is being deleted, so its outputs are no longer offered."
 
 
 def output_id(run_id: str, relative: str) -> str:
@@ -75,7 +77,7 @@ class OutputBrowser:
         self.root = service.root / "output-index"
 
     def _index(self, run_id: str) -> Path:
-        return self.root / (hashlib.sha256(run_id.encode()).hexdigest() + ".json")
+        return output_index_file(self.service.root, run_id)
 
     def _load(self, run_id: str) -> dict[str, dict[str, Any]]:
         file = self._index(run_id)
@@ -127,6 +129,8 @@ class OutputBrowser:
     def scan(self, run_id: str) -> dict[str, Any]:
         with _lock:
             run = self.service.get(run_id)
+            if run["status"] == "deleting":
+                return self._result(run, {}, [BEING_DELETED])
             entries = self._load(run_id)
             warnings = []
             try:
@@ -216,6 +220,8 @@ class OutputBrowser:
 
     def file(self, run_id: str, identity: str, download: bool) -> FileResponse:
         run = self.service.get(run_id)
+        if run["status"] == "deleting":
+            raise HTTPException(404, BEING_DELETED)
         self._directory(run)
         entries = self._load(run_id)
         if identity not in entries:

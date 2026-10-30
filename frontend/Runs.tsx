@@ -19,7 +19,41 @@ type Run = {
   }[];
   directory: string;
   order: number;
+  deletion?: {
+    error: string | null;
+    remaining: { path: string; bytes?: number }[];
+  };
 };
+type DeletePreview = {
+  refusal: string | null;
+  bytes?: number;
+  shared_cache?: string | null;
+  dependents?: { id: string; status: string }[];
+};
+type DeleteResult = { deleted: boolean; freed_bytes?: number };
+
+function sizeLabel(bytes: number) {
+  if (bytes >= 100_000_000) return `${(bytes / 1_000_000_000).toFixed(1)} GB`;
+  return bytes >= 1_000_000
+    ? `${(bytes / 1_000_000).toFixed(0)} MB`
+    : `${Math.ceil(bytes / 1_000)} KB`;
+}
+
+function deleteQuestion(run: Run, preview: DeletePreview) {
+  const lines = [
+    `Permanently delete run ${run.id.slice(0, 8)} of ${run.job.name} (r${run.job.revision})?`,
+    `This frees ${sizeLabel(preview.bytes ?? 0)} and can't be undone. Its checkpoints, samples, saved states, logs and frozen inputs are removed, so download any LoRA you want to keep first.`,
+  ];
+  if (preview.shared_cache)
+    lines.push(
+      'Its cache stays until the other run using it is deleted, and is not counted above.',
+    );
+  if (preview.dependents?.length)
+    lines.push(
+      `${preview.dependents.length} later run(s) came from this one. They stay browsable, but can no longer be retried or restored from.`,
+    );
+  return lines.join('\n\n');
+}
 
 async function request<T>(url: string, body?: object): Promise<T> {
   const response = await fetch(
@@ -124,6 +158,8 @@ export function Runs({ selectedId }: { selectedId?: string }) {
   const [selected, setSelected] = useState(selectedId ?? '');
   const [logs, setLogs] = useState('');
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [deleting, setDeleting] = useState('');
   const [busy, setBusy] = useState(false);
   const [owner, setOwner] = useState<{ run_id: string } | null>(null);
   const [fixture, setFixture] = useState(false);
@@ -141,7 +177,11 @@ export function Runs({ selectedId }: { selectedId?: string }) {
         setRuns(records);
         setOwner(capabilities.gpu_owner);
         setFixture(capabilities.fixture);
-        if (selected) {
+        if (selected && !records.some((record) => record.id === selected)) {
+          // Deleted, perhaps from another tab: there is nothing left to show.
+          setSelected('');
+          setLogs('');
+        } else if (selected) {
           const result = await request<{ text: string }>(
             `/api/runs/${selected}/logs`,
           );
@@ -159,6 +199,7 @@ export function Runs({ selectedId }: { selectedId?: string }) {
     };
   }, [selected]);
   const run = runs.find((record) => record.id === selected);
+  const showFiles = run && run.status !== 'deleting' && run.id !== deleting;
   async function action(name: string, body: object = {}) {
     if (!run) return;
     setBusy(true);
@@ -170,6 +211,41 @@ export function Runs({ selectedId }: { selectedId?: string }) {
     } catch (reason) {
       setError((reason as Error).message);
     } finally {
+      setBusy(false);
+    }
+  }
+  async function deleteRun() {
+    if (!run) return;
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      const preview = await request<DeletePreview>(
+        `/api/runs/${run.id}/delete-preview`,
+      );
+      if (preview.refusal) throw new Error(preview.refusal);
+      if (!window.confirm(deleteQuestion(run, preview))) return;
+      setNotice('Deleting run…');
+      // Unmounting the outputs closes any preview stream holding one of the files open.
+      setDeleting(run.id);
+      const result = await request<DeleteResult>(`/api/runs/${run.id}/delete`, {
+        confirmed: true,
+      });
+      setNotice(
+        result.deleted
+          ? `Run deleted. Freed ${sizeLabel(result.freed_bytes ?? 0)}.`
+          : '',
+      );
+      if (result.deleted) {
+        setSelected('');
+        setLogs('');
+      }
+      setRuns(await request<Run[]>('/api/runs'));
+    } catch (reason) {
+      setNotice('');
+      setError((reason as Error).message);
+    } finally {
+      setDeleting('');
       setBusy(false);
     }
   }
@@ -215,6 +291,7 @@ export function Runs({ selectedId }: { selectedId?: string }) {
       <p role="status">
         {owner ? `GPU owned by run ${owner.run_id}` : 'GPU available'}
       </p>
+      {notice && <p role="status">{notice}</p>}
       <div className="columns">
         <section className="panel">
           <h2>Pending queue</h2>
@@ -266,6 +343,28 @@ export function Runs({ selectedId }: { selectedId?: string }) {
               <strong>State: {run.status}</strong>
             </p>
             {run.error && <p className="error">{run.error}</p>}
+            {run.status === 'deleting' && (
+              <div aria-label="Unfinished delete">
+                <p className="error">
+                  {run.deletion?.error ??
+                    'This run is being deleted, or its delete was interrupted. If this stays, choose Delete again.'}
+                </p>
+                {!!run.deletion?.remaining.length && (
+                  <>
+                    <p>Still on disk:</p>
+                    <ul>
+                      {run.deletion.remaining.map((item) => (
+                        <li key={item.path}>
+                          {item.path}
+                          {item.bytes !== undefined &&
+                            ` · ${sizeLabel(item.bytes)}`}
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+              </div>
+            )}
             <div className="actions">
               {['orphaned', 'uncertain', 'interrupted'].includes(
                 run.status,
@@ -345,6 +444,9 @@ export function Runs({ selectedId }: { selectedId?: string }) {
                   Retry frozen preparation
                 </button>
               )}
+              <button disabled={busy} onClick={() => void deleteRun()}>
+                {run.status === 'deleting' ? 'Delete again' : 'Delete run'}
+              </button>
             </div>
             {run.stages.map((stage) => (
               <p key={stage.name}>
@@ -363,7 +465,7 @@ export function Runs({ selectedId }: { selectedId?: string }) {
           </section>
         )}
       </div>
-      {run && (
+      {showFiles && (
         <SavedStates
           key={`states-${run.id}`}
           runId={run.id}
@@ -376,7 +478,7 @@ export function Runs({ selectedId }: { selectedId?: string }) {
           }
         />
       )}
-      {run && <Outputs key={`outputs-${run.id}`} runId={run.id} />}
+      {showFiles && <Outputs key={`outputs-${run.id}`} runId={run.id} />}
       {run && (
         <section className="panel">
           <h2>Live stage logs</h2>
