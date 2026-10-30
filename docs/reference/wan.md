@@ -201,9 +201,9 @@ Both GUI samples and the CLI sample were 256×256, 1.0625-second videos. The
 original GUI run peaked at sampled 19.07 GiB process-tree RSS / 8.37 GiB whole-device
 VRAM; restoration peaked at 18.09 / 8.37 GiB. The CLI generation peak was 18.12 /
 8.32 GiB. These are short sampled observations, not capacity limits or a controlled
-performance comparison with the earlier converted-weight runs. Full commands,
-logs, frozen inputs, state probes, telemetry and screenshots remain in
-`.cache/wan-native-qualification` and `.cache/wan-native-high-qualification`.
+performance comparison with the earlier converted-weight runs. The full commands,
+logs, frozen inputs, state probes, telemetry and screenshots were local working
+files and were not kept, so the paths in `evidence/wan-native.json` no longer resolve.
 The earlier converted weights/evidence are preserved; main local Settings now
 select the supplied native components, with the previous settings backed up.
 
