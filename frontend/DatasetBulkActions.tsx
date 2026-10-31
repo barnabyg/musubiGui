@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { apiClient } from './api';
 
-const post = apiClient(
+const batchRequest = apiClient(
   'Batch action failed. No unreported changes should be assumed; inspect the per-item results and caption history.',
 );
 
@@ -38,7 +38,7 @@ export function DatasetBulkActions({
   const [busy, setBusy] = useState(false);
   const url = `/api/datasets/${datasetId}`;
   const request = <T,>(path: string, data: object) =>
-    post<T>(url + path, 'POST', data);
+    batchRequest<T>(url + path, 'POST', data);
   async function action(work: () => Promise<void>) {
     if (!(await beforeAction())) return;
     setBusy(true);
