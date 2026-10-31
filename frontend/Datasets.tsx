@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useRef,
+  useEffectEvent,
   useState,
   useSyncExternalStore,
 } from 'react';
@@ -46,10 +47,14 @@ const api = apiClient((status) => `Request failed (${status}).`);
 
 export function Datasets({
   visible = true,
+  selectedId,
+  onSelect,
   defaultFolder = '',
   onEditorChange,
 }: {
   visible?: boolean;
+  selectedId?: string;
+  onSelect?: (id?: string, replace?: boolean) => void;
   defaultFolder?: string;
   onEditorChange?: (editing: boolean) => void;
 }) {
@@ -183,8 +188,17 @@ export function Datasets({
     if (!(await captions.flushAll())) return;
     setActive(item);
   }
+  const followRoute = useEffectEvent(() => {
+    if (!loaded || selectedId === dataset?.id) return;
+    if (selectedId) void open(selectedId);
+    else if (screen === 'edit') void back();
+  });
+  useEffect(() => followRoute(), [selectedId, loaded]);
   async function open(id: string) {
-    if (!(await captions.flushAll())) return;
+    if (!(await captions.flushAll())) {
+      onSelect?.(dataset?.id, true);
+      return;
+    }
     setBusy(true);
     setActive(null);
     setSelected(new Set());
@@ -199,14 +213,19 @@ export function Datasets({
       setScreen('edit');
       setPanel(null);
       setStatus('');
+      onSelect?.(id);
     } catch (reason) {
       setError((reason as Error).message);
+      onSelect?.(dataset?.id, true);
     } finally {
       setBusy(false);
     }
   }
   async function back() {
-    if (!(await captions.flushAll())) return;
+    if (!(await captions.flushAll())) {
+      onSelect?.(dataset?.id, true);
+      return;
+    }
     setBusy(true);
     try {
       await refresh();
@@ -216,6 +235,7 @@ export function Datasets({
       setScreen('library');
       setError('');
       setStatus('');
+      onSelect?.();
     } catch (reason) {
       setError((reason as Error).message);
     } finally {

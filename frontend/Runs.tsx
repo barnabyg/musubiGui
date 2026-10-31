@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useEffectEvent, useState } from 'react';
 import { apiClient } from './api';
 import { confirmDialog } from './ConfirmDialog';
 import { Outputs } from './Outputs';
@@ -261,10 +261,15 @@ function SavedStates({
   );
 }
 
-export function Runs({ selectedId }: { selectedId?: string }) {
+export function Runs({
+  selectedId,
+  onSelect,
+}: {
+  selectedId?: string;
+  onSelect?: (id?: string, replace?: boolean) => void;
+}) {
   const [runs, setRuns] = useState<Run[]>([]);
-  const [selected, setSelected] = useState(selectedId ?? '');
-  const [logs, setLogs] = useState('');
+  const selected = selectedId ?? '';
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [deleting, setDeleting] = useState('');
@@ -272,10 +277,13 @@ export function Runs({ selectedId }: { selectedId?: string }) {
   const [owner, setOwner] = useState<{ run_id: string } | null>(null);
   const [fixture, setFixture] = useState(false);
   const [notify, setNotify] = useState(notificationsWanted);
-  const [progress, setProgress] = useState<{
+  const [live, setLive] = useState<{
     runId: string;
-    value: Progress | null;
+    text: string;
+    progress: Progress | null;
   } | null>(null);
+  // Deleted, perhaps from another tab, or never there: a stale link leaves nothing to show.
+  const forgetRun = useEffectEvent(() => onSelect?.(undefined, true));
   useEffect(() => {
     let current = true;
     async function refresh() {
@@ -291,18 +299,13 @@ export function Runs({ selectedId }: { selectedId?: string }) {
         setOwner(capabilities.gpu_owner);
         setFixture(capabilities.fixture);
         if (selected && !records.some((record) => record.id === selected)) {
-          // Deleted, perhaps from another tab: there is nothing left to show.
-          setSelected('');
-          setLogs('');
+          forgetRun();
         } else if (selected) {
           const result = await request<{
             text: string;
             progress: Progress | null;
           }>(`/api/runs/${selected}/logs`);
-          if (current) {
-            setLogs(result.text);
-            setProgress({ runId: selected, value: result.progress });
-          }
+          if (current) setLive({ runId: selected, ...result });
         }
       } catch (reason) {
         if (current) setError((reason as Error).message);
@@ -316,6 +319,7 @@ export function Runs({ selectedId }: { selectedId?: string }) {
     };
   }, [selected]);
   const run = runs.find((record) => record.id === selected);
+  const current = live?.runId === run?.id ? live : null;
   const showFiles = run && run.status !== 'deleting' && run.id !== deleting;
   async function action(name: string, body: object = {}) {
     if (!run) return;
@@ -327,7 +331,7 @@ export function Runs({ selectedId }: { selectedId?: string }) {
         'POST',
         body,
       );
-      setSelected(result.id);
+      onSelect?.(result.id);
       setRuns(await request<Run[]>('/api/runs'));
     } catch (reason) {
       setError((reason as Error).message);
@@ -359,10 +363,7 @@ export function Runs({ selectedId }: { selectedId?: string }) {
           ? `Run deleted. Freed ${sizeLabel(result.freed_bytes ?? 0)}.`
           : '',
       );
-      if (result.deleted) {
-        setSelected('');
-        setLogs('');
-      }
+      if (result.deleted) onSelect?.();
       setRuns(await request<Run[]>('/api/runs'));
     } catch (reason) {
       setNotice('');
@@ -456,7 +457,7 @@ export function Runs({ selectedId }: { selectedId?: string }) {
             <p key={record.id}>
               <button
                 aria-pressed={selected === record.id}
-                onClick={() => setSelected(record.id)}
+                onClick={() => onSelect?.(record.id)}
               >
                 {record.job.name} · {record.job.family.toUpperCase()} · r
                 {record.job.revision}
@@ -617,10 +618,7 @@ export function Runs({ selectedId }: { selectedId?: string }) {
                 ))}
               </ol>
             )}
-            <TrainingProgress
-              run={run}
-              progress={progress?.runId === run.id ? progress.value : null}
-            />
+            <TrainingProgress run={run} progress={current?.progress ?? null} />
             <details>
               <summary>
                 Frozen inputs ({run.manifest.items.length} included items)
@@ -634,7 +632,9 @@ export function Runs({ selectedId }: { selectedId?: string }) {
       {run && (
         <details className="panel" open={run.status === 'failed'}>
           <summary>Stage logs</summary>
-          <pre aria-label="Run logs">{logs || 'Waiting for stage output…'}</pre>
+          <pre aria-label="Run logs">
+            {current?.text || 'Waiting for stage output…'}
+          </pre>
         </details>
       )}
       {showFiles && (

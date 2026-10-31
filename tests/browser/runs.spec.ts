@@ -365,6 +365,97 @@ test('Prepare and start keeps going with the tab closed, and the tab title signa
   }
 });
 
+test('the URL keeps the screen and selection across navigation, refresh and browser history', async ({
+  page,
+}) => {
+  const app = await runWorkspace();
+  try {
+    const job = app.manifest.jobs.find((item) => item.family === 'wan')!;
+    const other = app.manifest.jobs.find((item) => item.family === 'h3')!;
+    const nav = (name: string) =>
+      page.getByRole('button', { name, exact: true });
+    const jobName = page.getByLabel('Job name', { exact: true });
+    await page.goto(app.url);
+    await nav('Jobs').click();
+    await page
+      .getByRole('button', { name: `${job.name} · WAN · r1`, exact: true })
+      .click();
+    await expect(jobName).toHaveValue(job.name);
+    expect(new URL(page.url()).hash).toBe(`#/jobs/${job.id}`);
+
+    // Returning through the sidebar and browser back both reopen the job.
+    await nav('Runs').click();
+    await expect(page.getByRole('heading', { name: 'Runs' })).toBeVisible();
+    await nav('Jobs').click();
+    await expect(jobName).toHaveValue(job.name);
+    await nav('Runs').click();
+    await page.goBack();
+    await expect(jobName).toHaveValue(job.name);
+    await page.goForward();
+    await expect(page.getByRole('heading', { name: 'Runs' })).toBeVisible();
+    await page.goBack();
+    await page.reload();
+    await expect(jobName).toHaveValue(job.name);
+
+    // Back moves between selections too.
+    await page
+      .getByRole('button', { name: `${other.name} · H3 · r1`, exact: true })
+      .click();
+    await expect(jobName).toHaveValue(other.name);
+    await page.goBack();
+    await expect(jobName).toHaveValue(job.name);
+
+    // Unsaved edits ask first, on back as on the sidebar.
+    await page.getByLabel('Training steps', { exact: true }).fill('33');
+    await page.goBack();
+    const leave = page.getByRole('dialog', { name: 'Leave this job?' });
+    await leave.getByRole('button', { name: 'Keep editing' }).click();
+    await expect(
+      page.getByLabel('Training steps', { exact: true }),
+    ).toHaveValue('33');
+    expect(new URL(page.url()).hash).toBe(`#/jobs/${job.id}`);
+    await page.goBack();
+    await leave.getByRole('button', { name: 'Discard changes' }).click();
+    await expect(
+      page.getByLabel('Training steps', { exact: true }),
+    ).toHaveCount(0);
+    await nav('Settings').click();
+
+    // A link to a Run opens it, and a stale link falls back to the list.
+    const run = (await app.post('/api/runs/prepare', { job_id: job.id })) as {
+      id: string;
+    };
+    await page.goto(`${app.url}/#/runs/${run.id}`);
+    await expect(
+      page.getByText(`Run ${run.id}`, { exact: true }),
+    ).toBeVisible();
+    await page.reload();
+    await expect(
+      page.getByText(`Run ${run.id}`, { exact: true }),
+    ).toBeVisible();
+    await page.goto(`${app.url}/#/runs/${'0'.repeat(32)}`);
+    await expect.poll(() => new URL(page.url()).hash).toBe('#/runs');
+
+    // The selected dataset survives a refresh and the trip to another screen.
+    await nav('Datasets').click();
+    await page.getByRole('button', { name: /^WAN acceptance/ }).click();
+    await expect(
+      page.getByRole('button', { name: 'Back to datasets' }).first(),
+    ).toBeVisible();
+    expect(new URL(page.url()).hash).toMatch(/^#\/datasets\/\w+$/);
+    await page.reload();
+    await expect(
+      page.getByRole('button', { name: 'Back to datasets' }).first(),
+    ).toBeVisible();
+    await page.goBack();
+    await expect(
+      page.getByRole('button', { name: /^WAN acceptance/ }),
+    ).toBeVisible();
+  } finally {
+    await app.close();
+  }
+});
+
 test('a Run that reused a deleted Run cache still shows it and can be used', async ({
   page,
 }) => {

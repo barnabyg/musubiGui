@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { ActionMenu } from './ActionMenu';
 import { confirmDialog } from './ConfirmDialog';
 import { apiClient } from './api';
@@ -136,6 +136,8 @@ function sizeLabel(bytes: number) {
 type PreparedRun = { id: string; status: string; existing: boolean };
 
 type Props = {
+  selectedId?: string;
+  onSelect?: (id?: string, replace?: boolean) => void;
   onRun?: (id: string) => void;
   onDirtyChange?: (dirty: boolean) => void;
 };
@@ -159,7 +161,7 @@ function diskVerdict(disk: Review['disk']) {
     : 'Disk: enough free space';
 }
 
-export function Jobs({ onRun, onDirtyChange }: Props) {
+export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [archived, setArchived] = useState<Job[]>([]);
   const [summaries, setSummaries] = useState<JobSummary[]>([]);
@@ -203,6 +205,35 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
       .catch((reason: Error) => setError(reason.message))
       .finally(() => setBusy(false));
   }, []);
+  // Follows the URL: a link, refresh or browser history can name a job that isn't open here.
+  const followRoute = useEffectEvent((items: Job[]) => {
+    if (selectedId === job?.id) return;
+    const found = items.find((item) => item.id === selectedId);
+    if (found) {
+      select(found);
+      return;
+    }
+    setJob(null);
+    setDirty(false);
+    setReview(null);
+    if (selectedId) {
+      onSelect?.(undefined, true);
+      setStatus('That job is no longer in the job list.');
+    }
+  });
+  useEffect(() => {
+    let stale = false;
+    void request<Job[]>('/api/jobs')
+      .then((items) => {
+        if (!stale) followRoute(items);
+      })
+      .catch((reason: Error) => {
+        if (!stale) setError(reason.message);
+      });
+    return () => {
+      stale = true;
+    };
+  }, [selectedId]);
   // A new draft's name is the first thing worth changing; the field is disabled until the request lands.
   useEffect(() => {
     if (focusName.current && !busy && nameField.current) {
@@ -259,8 +290,12 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
     if (dirty && !(await confirmDiscard('open another job'))) return;
     select(value);
   }
-  function select(value: Job) {
+  function show(value: Job | null) {
     setJob(value);
+    onSelect?.(value?.id);
+  }
+  function select(value: Job) {
+    show(value);
     setDirty(false);
     setReview(null);
     setStatus(`Opened revision ${value.revision}`);
@@ -321,7 +356,7 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
         config: await request<JobConfig>(`/api/jobs/defaults/${family}`),
       });
       await reloadJobs();
-      setJob(created);
+      show(created);
       setDirty(false);
       setReview(null);
       setStatus('Draft created');
@@ -342,7 +377,7 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
       setStatus('Save failed — edits retained');
       throw reason;
     }
-    setJob(saved);
+    show(saved);
     setDirty(false);
     setReview(null);
     setStatus(`Draft saved — revision ${saved.revision}`);
@@ -412,7 +447,7 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
     await perform(async () => {
       await request<Job>(`/api/jobs/${job.id}/archive`, 'POST', {});
       await refreshLibrary();
-      setJob(null);
+      show(null);
       setReview(null);
       setStatus('Job archived');
     });
@@ -447,7 +482,7 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
       });
       await refreshLibrary();
       if (job?.id === target.id) {
-        setJob(null);
+        show(null);
         setReview(null);
       }
       setStatus('Job deleted');
@@ -545,7 +580,7 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
         JSON.parse(transfer),
       );
       await reloadJobs();
-      setJob(imported);
+      show(imported);
       setDirty(false);
       setReview(null);
       setStatus('Configuration imported as an independent draft');

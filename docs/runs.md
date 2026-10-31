@@ -103,6 +103,13 @@ finished, stopped or failed, until you return to the tab or change screen. The R
 screen also offers an opt-in browser notification for the same events; the choice is
 kept in that browser only.
 
+## Links and browser history
+
+The address bar names the screen and its selection, such as `#/runs/<id>` or
+`#/jobs/<id>`, so refresh, browser back and forward and saved links return to the same
+place. The sidebar reopens each screen's last selection. Leaving a job with unsaved edits
+asks first, whichever way you leave.
+
 ## Queueing
 
 Add prepared runs to the pending queue while another operation owns the GPU. Move

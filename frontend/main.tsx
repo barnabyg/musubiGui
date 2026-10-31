@@ -1,4 +1,10 @@
-import { useEffect, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+} from 'react';
 import { createRoot } from 'react-dom/client';
 import { apiClient } from './api';
 import './style.css';
@@ -6,6 +12,7 @@ import { ConfirmDialogHost, confirmDialog } from './ConfirmDialog';
 import { Jobs } from './Jobs';
 import { Runs } from './Runs';
 import { Datasets } from './Datasets';
+import { formatRoute, parseRoute, screens, type Screen } from './route';
 import { useRunSignals } from './runSignals';
 
 type Settings = {
@@ -67,15 +74,58 @@ function App() {
   const [busy, setBusy] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [report, setReport] = useState<Report | null>(null);
-  const [screen, setScreen] = useState('Settings');
+  const [initialRoute] = useState(() => parseRoute(window.location.hash));
+  const [screen, setScreen] = useState<Screen>(initialRoute.screen);
+  // Each screen's selection, kept while elsewhere so that returning reopens it.
+  const [selection, setSelection] = useState<Partial<Record<Screen, string>>>(
+    initialRoute.id ? { [initialRoute.screen]: initialRoute.id } : {},
+  );
+  // Set before the browser reports the change, so only history moves look external.
+  const currentHash = useRef(formatRoute(initialRoute));
   const [jobDirty, setJobDirty] = useState(false);
   const [datasetEditor, setDatasetEditor] = useState(false);
-  const [runId, setRunId] = useState<string>();
   useRunSignals(screen);
-  async function navigate(name: string) {
+  const go = useCallback((target: Screen, id?: string, replace = false) => {
+    setScreen(target);
+    setSelection((value) => ({ ...value, [target]: id }));
+    const hash = formatRoute({ screen: target, id });
+    if (hash === currentHash.current) return;
+    currentHash.current = hash;
+    if (replace) window.history.replaceState(null, '', hash);
+    else window.location.hash = hash;
+  }, []);
+  const selectDataset = useCallback(
+    (id?: string, replace?: boolean) => go('Datasets', id, replace),
+    [go],
+  );
+  const selectJob = useCallback(
+    (id?: string, replace?: boolean) => go('Jobs', id, replace),
+    [go],
+  );
+  const selectRun = useCallback(
+    (id?: string, replace?: boolean) => go('Runs', id, replace),
+    [go],
+  );
+  async function navigate(name: Screen) {
     if (screen === 'Jobs' && jobDirty && !(await confirmLeaveJob())) return;
-    setScreen(name);
+    go(name, selection[name]);
   }
+  const followHistory = useEffectEvent(async () => {
+    if (window.location.hash === currentHash.current) return;
+    const next = parseRoute(window.location.hash);
+    if (screen === 'Jobs' && jobDirty) {
+      // The browser has already moved. Put this job's URL back while the question is open.
+      window.history.pushState(null, '', currentHash.current);
+      if (!(await confirmLeaveJob())) return;
+      setJobDirty(false);
+    }
+    go(next.screen, next.id);
+  });
+  useEffect(() => {
+    const listener = () => void followHistory();
+    window.addEventListener('hashchange', listener);
+    return () => window.removeEventListener('hashchange', listener);
+  }, []);
   function load(value: Settings) {
     setSettings(value);
     setRootText({
@@ -198,7 +248,7 @@ function App() {
         </a>
         <div className="workspace">WORKSPACE</div>
         <nav>
-          {['Datasets', 'Jobs', 'Runs', 'Settings'].map((name) => (
+          {screens.map((name) => (
             <button
               key={name}
               className={screen === name ? 'active' : ''}
@@ -228,19 +278,20 @@ function App() {
           <Datasets
             onEditorChange={setDatasetEditor}
             visible={screen === 'Datasets'}
+            selectedId={selection.Datasets}
+            onSelect={selectDataset}
             defaultFolder={settings?.dataset_roots[0] ?? ''}
           />
         </div>
         {screen === 'Jobs' ? (
           <Jobs
+            selectedId={selection.Jobs}
+            onSelect={selectJob}
             onDirtyChange={setJobDirty}
-            onRun={(id) => {
-              setRunId(id);
-              setScreen('Runs');
-            }}
+            onRun={selectRun}
           />
         ) : screen === 'Runs' ? (
-          <Runs key={runId} selectedId={runId} />
+          <Runs selectedId={selection.Runs} onSelect={selectRun} />
         ) : screen === 'Datasets' ? null : (
           <>
             <section className="title">
