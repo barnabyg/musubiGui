@@ -2,11 +2,15 @@ import {
   useCallback,
   useEffect,
   useRef,
+  useEffectEvent,
+  useLayoutEffect,
   useState,
   useSyncExternalStore,
 } from 'react';
 import './datasets.css';
 import { apiClient } from './api';
+import { confirmDialog } from './ConfirmDialog';
+import { PathField } from './PathField';
 import { CaptionEditor } from './CaptionEditor';
 import { InlineCaption } from './InlineCaption';
 import { type Caption, useCaptionSession } from './captionSession';
@@ -43,13 +47,38 @@ export type DatasetItem = {
 
 const api = apiClient((status) => `Request failed (${status}).`);
 
+// A panel beside the gallery narrows the tiles but leaves the column count alone, so they keep
+// their rows and columns. It takes width from the preview too, so with both open the count comes
+// from the width the gallery would have without the panel: these numbers mirror
+// `.dataset-workspace.has-viewer` in datasets.css. On narrow windows the panel overlays.
+function galleryColumns(gallery: HTMLElement, width: number) {
+  const screen = gallery.closest('.editor-screen');
+  const panel = screen?.querySelector<HTMLElement>(
+    '.dataset-panel:not([hidden])',
+  );
+  let available = width;
+  if (panel && getComputedStyle(panel).position !== 'absolute') {
+    const workspace = gallery.closest('.dataset-workspace') as HTMLElement;
+    const inner = workspace.clientWidth - 16 + panel.offsetWidth;
+    const viewer = workspace.querySelector('.media-viewer');
+    available = viewer ? inner - Math.max(280, inner * 0.36) - 12 : inner;
+  }
+  return Math.max(1, Math.floor(available / 230));
+}
+
 export function Datasets({
   visible = true,
+  selectedId,
+  onSelect,
   defaultFolder = '',
+  datasetRoots,
   onEditorChange,
 }: {
   visible?: boolean;
+  selectedId?: string;
+  onSelect?: (id?: string, replace?: boolean) => void;
   defaultFolder?: string;
+  datasetRoots?: string[];
   onEditorChange?: (editing: boolean) => void;
 }) {
   const [datasets, setDatasets] = useState<Dataset[]>([]);
@@ -138,11 +167,12 @@ export function Datasets({
   }, []);
   useEffect(() => {
     if (!gallery.current) return;
+    const element = gallery.current;
     const observer = new ResizeObserver((entries) => {
-      setColumns(Math.max(1, Math.floor(entries[0].contentRect.width / 230)));
+      setColumns(galleryColumns(element, entries[0].contentRect.width));
       setGalleryHeight(entries[0].contentRect.height);
     });
-    observer.observe(gallery.current);
+    observer.observe(element);
     return () => observer.disconnect();
   }, [dataset?.id, visible, screen]);
   useEffect(() => {
@@ -182,8 +212,17 @@ export function Datasets({
     if (!(await captions.flushAll())) return;
     setActive(item);
   }
+  const followRoute = useEffectEvent(() => {
+    if (!loaded || selectedId === dataset?.id) return;
+    if (selectedId) void open(selectedId);
+    else if (screen === 'edit') void back();
+  });
+  useEffect(() => followRoute(), [selectedId, loaded]);
   async function open(id: string) {
-    if (!(await captions.flushAll())) return;
+    if (!(await captions.flushAll())) {
+      onSelect?.(dataset?.id, true);
+      return;
+    }
     setBusy(true);
     setActive(null);
     setSelected(new Set());
@@ -198,14 +237,19 @@ export function Datasets({
       setScreen('edit');
       setPanel(null);
       setStatus('');
+      onSelect?.(id);
     } catch (reason) {
       setError((reason as Error).message);
+      onSelect?.(dataset?.id, true);
     } finally {
       setBusy(false);
     }
   }
   async function back() {
-    if (!(await captions.flushAll())) return;
+    if (!(await captions.flushAll())) {
+      onSelect?.(dataset?.id, true);
+      return;
+    }
     setBusy(true);
     try {
       await refresh();
@@ -215,6 +259,7 @@ export function Datasets({
       setScreen('library');
       setError('');
       setStatus('');
+      onSelect?.();
     } catch (reason) {
       setError((reason as Error).message);
     } finally {
@@ -222,12 +267,19 @@ export function Datasets({
     }
   }
   async function remove(value: Dataset) {
-    if (
-      !window.confirm(
-        `Delete "${value.name}" from the dataset library?\n\nOnly the library entry is removed. Media files, captions and recovery history stay on disk, including uploaded files. Jobs using this dataset will need a dataset selected again.`,
-      )
-    )
-      return;
+    const confirmed = await confirmDialog({
+      title: `Delete "${value.name}" from the dataset library?`,
+      body: (
+        <p>
+          Only the library entry is removed. Media files, captions and recovery
+          history stay on disk, including uploaded files. Jobs using this
+          dataset will need a dataset selected again.
+        </p>
+      ),
+      confirmLabel: 'Delete from library',
+      danger: true,
+    });
+    if (!confirmed) return;
     setBusy(true);
     setError('');
     try {
@@ -256,7 +308,7 @@ export function Datasets({
       setPanel(managed ? 'uploads' : null);
       setStatus(
         managed
-          ? 'Managed dataset created. Add media and matching captions to get started.'
+          ? 'Upload folder created. Add media and matching captions to get started.'
           : 'Dataset registered. Source media stays in its original folder.',
       );
     } catch (reason) {
@@ -331,6 +383,32 @@ export function Datasets({
     start + columns * (Math.ceil(galleryHeight / rowHeight) + 2),
   );
   const renderedItems = visibleItems.slice(start, end);
+  // The preview takes width and changes the column count, which moves every tile. The tile being
+  // worked on stays where it was on screen if possible, and in view whatever happens.
+  const keptTile = useRef<{ id?: string; columns: number }>({ columns });
+  const keepActiveTile = useEffectEvent(() => {
+    const element = gallery.current;
+    const previous = keptTile.current;
+    const id = active?.id ?? previous.id;
+    // A closed preview's tile is only kept through the reflow its closing causes.
+    keptTile.current = {
+      id: previous.columns !== columns && !active ? undefined : id,
+      columns,
+    };
+    const index = visibleItems.findIndex((item) => item.id === id);
+    if (!element || index < 0) return;
+    const top = Math.floor(index / columns) * rowHeight;
+    let target = element.scrollTop;
+    if (previous.columns !== columns && previous.id === id)
+      target =
+        top -
+        (Math.floor(index / previous.columns) * rowHeight - element.scrollTop);
+    if (target + element.clientHeight < top + rowHeight)
+      target = top + rowHeight - element.clientHeight;
+    if (target > top) target = top;
+    if (target !== element.scrollTop) element.scrollTop = target;
+  });
+  useLayoutEffect(() => keepActiveTile(), [columns, active?.id]);
   const focusedItem = visibleItems.find((item) => item.id === editing?.id);
   if (focusedItem && !renderedItems.includes(focusedItem))
     renderedItems.push(focusedItem);
@@ -357,7 +435,6 @@ export function Datasets({
           )}
           <section className="title dataset-heading">
             <div>
-              <p className="eyebrow">YOUR MEDIA, YOUR CAPTIONS</p>
               <h1 ref={heading} tabIndex={-1}>
                 {screen === 'library' ? 'Datasets' : 'New dataset'}
               </h1>
@@ -449,7 +526,7 @@ export function Datasets({
               aria-controls="dataset-tools-panel"
               onClick={() => setPanel(panel === 'tools' ? null : 'tools')}
             >
-              Tools
+              Search &amp; edit
               {selected.size > 0
                 ? ` · ${selected.size}`
                 : query || filter !== 'all'
@@ -553,14 +630,16 @@ export function Datasets({
                 onChange={(event) => setName(event.target.value)}
               />
             </label>
-            <label className="field">
-              Dataset folder
-              <input
-                value={folder}
-                onChange={(event) => setFolder(event.target.value)}
-                placeholder="C:\datasets\…"
-              />
-            </label>
+            <PathField
+              label="Dataset folder"
+              kind="folder"
+              roots={datasetRoots}
+              className="dataset-folder-field"
+              missingMessage="This folder doesn't exist yet. Create a new folder for uploads will create it."
+              value={folder}
+              placeholder="C:\datasets\…"
+              onChange={setFolder}
+            />
           </div>
           <p>
             Use a folder within the dataset roots configured in Settings.
@@ -573,13 +652,13 @@ export function Datasets({
               disabled={busy || !name.trim() || !folder.trim()}
               onClick={() => void create(true)}
             >
-              Create managed dataset
+              Create a new folder for uploads
             </button>
             <button
               disabled={busy || !name.trim() || !folder.trim()}
               onClick={() => void create(false)}
             >
-              Register folder
+              Use existing folder
             </button>
           </div>
           {busy && <p role="status">Opening dataset…</p>}
@@ -622,7 +701,7 @@ export function Datasets({
             <p className="dataset-path">{dataset.path}</p>
             <p>
               {dataset.managed
-                ? 'Managed dataset · uploads are stored in this folder.'
+                ? 'Upload folder · uploads are stored in this folder.'
                 : 'Registered local folder · add media in this folder, then re-scan.'}
             </p>
             <H3Coverage key={dataset.id} datasetId={dataset.id} />

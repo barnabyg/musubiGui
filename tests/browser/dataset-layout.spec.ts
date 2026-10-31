@@ -25,7 +25,7 @@ test('large galleries scroll, resize and filter without losing access to media',
       .getByLabel('Dataset name', { exact: true })
       .fill('Large collection');
     await page.getByLabel('Dataset folder', { exact: true }).fill(app.media);
-    await page.getByRole('button', { name: 'Register folder' }).click();
+    await page.getByRole('button', { name: 'Use existing folder' }).click();
     await expect(page.locator('.dataset-identity [role="status"]')).toHaveText(
       'Scan: complete 8/8',
       { timeout: 240_000 },
@@ -73,7 +73,9 @@ test('large galleries scroll, resize and filter without losing access to media',
     await gallery.focus();
     await page.keyboard.press('End');
     await expect(last).toBeVisible();
-    await page.getByRole('button', { name: 'Tools', exact: true }).click();
+    await page
+      .getByRole('button', { name: 'Search & edit', exact: true })
+      .click();
     await page.getByLabel('Search media and captions').fill('blue.png');
     await expect(
       page.getByRole('button', { name: 'blue.png image' }),
@@ -91,6 +93,104 @@ test('large galleries scroll, resize and filter without losing access to media',
     await expect(
       page.getByRole('button', { name: 'blue.png image' }),
     ).toBeVisible();
+  } finally {
+    await app.cleanup();
+  }
+});
+
+test('the active tile stays in view and panels keep the column count', async ({
+  page,
+}) => {
+  const app = await datasetHarness();
+  try {
+    await Promise.all(
+      Array.from({ length: 8 }, (_, index) =>
+        copyFile(
+          path.join(app.media, 'red.png'),
+          path.join(app.media, `study-${String(index).padStart(2, '0')}.png`),
+        ),
+      ),
+    );
+    await page.setViewportSize({ width: 1440, height: 800 });
+    await page.goto(app.url);
+    await page.getByRole('button', { name: 'Datasets', exact: true }).click();
+    await page.getByRole('button', { name: 'New dataset' }).click();
+    await page.getByLabel('Dataset name', { exact: true }).fill('Layout');
+    await page.getByLabel('Dataset folder', { exact: true }).fill(app.media);
+    await page.getByRole('button', { name: 'Use existing folder' }).click();
+    await expect(page.locator('.dataset-identity [role="status"]')).toHaveText(
+      /^Scan: complete/,
+      { timeout: 240_000 },
+    );
+    const gallery = page.getByLabel('Dataset gallery');
+    const tile = page.getByRole('button', { name: 'study-07.png image' });
+    const card = page.locator('.media-card').filter({ has: tile });
+    const position = () =>
+      card.evaluate((element) => {
+        const { top, left } = (element as HTMLElement).style;
+        return { top, left };
+      });
+
+    // A panel keeps every tile in its row and column.
+    await gallery.evaluate((element) => {
+      element.scrollTop = element.scrollHeight;
+    });
+    await expect(tile).toBeInViewport();
+    const before = await position();
+    const panel = page.getByRole('button', {
+      name: 'Search & edit',
+      exact: true,
+    });
+    await panel.click();
+    await expect(page.getByLabel('Search media and captions')).toBeVisible();
+    await expect.poll(position).toEqual(before);
+    await expect(tile).toBeInViewport();
+    await page.getByRole('button', { name: 'Close tools' }).click();
+    await expect.poll(position).toEqual(before);
+
+    // The preview changes the column count, but the active tile stays in view both ways.
+    await tile.click();
+    await expect(page.getByAltText('Preview study-07.png')).toBeVisible();
+    await expect(tile).toBeInViewport();
+    // With the preview open too, a panel still leaves the tile in its row and column, wide or not.
+    for (const width of [1440, 1944]) {
+      await page.setViewportSize({ width, height: 800 });
+      await expect(tile).toBeInViewport();
+      const withPreview = await position();
+      await panel.click();
+      await expect(page.getByLabel('Search media and captions')).toBeVisible();
+      await expect.poll(position).toEqual(withPreview);
+      await expect(tile).toBeInViewport();
+      await page.getByRole('button', { name: 'Close tools' }).click();
+    }
+    await page.setViewportSize({ width: 1440, height: 800 });
+    await page.getByRole('button', { name: 'Close preview' }).click();
+    await expect(page.getByAltText('Preview study-07.png')).toHaveCount(0);
+    await expect(tile).toBeInViewport();
+
+    // Virtual scrolling still reaches both ends afterwards.
+    await gallery.evaluate((element) => {
+      element.scrollTop = 0;
+    });
+    await expect(
+      page.getByRole('button', { name: 'study-00.png image' }),
+    ).toBeInViewport();
+
+    // At 760 px the preview leaves the gallery usable, so another item can be chosen from it.
+    await page.setViewportSize({ width: 760, height: 800 });
+    await page.getByRole('button', { name: 'study-00.png image' }).click();
+    await expect(page.getByAltText('Preview study-00.png')).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: 'study-00.png image' }),
+    ).toBeInViewport();
+    expect((await gallery.boundingBox())!.height).toBeGreaterThan(150);
+    await gallery.evaluate((element) => {
+      element.scrollTop = 500;
+    });
+    const next = gallery.getByRole('button', { name: /^study-0[1-7]\.png/ });
+    await next.last().click();
+    await expect(page.locator('.media-viewer')).toBeVisible();
+    await expect(page.getByAltText('Preview study-00.png')).toHaveCount(0);
   } finally {
     await app.cleanup();
   }
@@ -118,7 +218,9 @@ test('separate library and editor create, populate, rename, reopen and delete wi
       .getByLabel('Dataset name', { exact: true })
       .fill('Portrait studies');
     await page.getByLabel('Dataset folder', { exact: true }).fill(app.media);
-    await page.getByRole('button', { name: 'Create managed dataset' }).click();
+    await page
+      .getByRole('button', { name: 'Create a new folder for uploads' })
+      .click();
     await expect(page.getByText('Ready for your media')).toBeVisible();
     await expect(page.getByRole('button', { name: 'New dataset' })).toHaveCount(
       0,
@@ -139,7 +241,10 @@ test('separate library and editor create, populate, rename, reopen and delete wi
     ).toHaveValue(/红/);
     await page.getByRole('button', { name: 'Add media', exact: true }).click();
     await expect(page.getByLabel('Upload files')).toBeHidden();
-    const tools = page.getByRole('button', { name: 'Tools', exact: true });
+    const tools = page.getByRole('button', {
+      name: 'Search & edit',
+      exact: true,
+    });
     await tools.focus();
     await page.keyboard.press('Enter');
     await page.getByLabel('Search media and captions').focus();
@@ -213,16 +318,15 @@ test('separate library and editor create, populate, rename, reopen and delete wi
       'A red portrait, soft light',
     );
     await page.getByRole('button', { name: 'Back to datasets' }).click();
-    page.once('dialog', async (dialog) => {
-      expect(dialog.message()).toContain('Portrait collection');
-      expect(dialog.message()).toContain(
-        'Media files, captions and recovery history stay on disk',
-      );
-      await dialog.dismiss();
-    });
     await page
       .getByRole('button', { name: 'Delete Portrait collection' })
       .click();
+    const question = page.getByRole('dialog');
+    await expect(question).toContainText('Portrait collection');
+    await expect(question).toContainText(
+      'Media files, captions and recovery history stay on disk',
+    );
+    await question.getByRole('button', { name: 'Cancel' }).click();
     await expect(
       page.getByRole('button', { name: /Portrait collection.*1 media/ }),
     ).toBeVisible();
@@ -234,10 +338,10 @@ test('separate library and editor create, populate, rename, reopen and delete wi
         });
       else await route.continue();
     });
-    page.once('dialog', (dialog) => dialog.accept());
     await page
       .getByRole('button', { name: 'Delete Portrait collection' })
       .click();
+    await question.getByRole('button', { name: 'Delete from library' }).click();
     await expect(page.getByRole('alert')).toContainText(
       'Fixture deletion failed',
     );
@@ -245,10 +349,10 @@ test('separate library and editor create, populate, rename, reopen and delete wi
       page.getByRole('button', { name: /Portrait collection.*1 media/ }),
     ).toBeVisible();
     await page.unroute(`**/api/datasets/${stored.id}`);
-    page.once('dialog', (dialog) => dialog.accept());
     await page
       .getByRole('button', { name: 'Delete Portrait collection' })
       .click();
+    await question.getByRole('button', { name: 'Delete from library' }).click();
     await expect(page.getByText('Your library starts here')).toBeVisible();
     expect(await readFile(path.join(stored.path, 'red.png'))).toEqual(
       await readFile(path.join(app.media, 'red.png')),

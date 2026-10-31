@@ -78,9 +78,37 @@ The target hardware requirement is Windows 11, RTX 3090, 96 GB RAM and 400+ GB d
 
 Choose Start training on a prepared Wan Run. Its process runs independently of the
 browser. The job can be edited while the Run retains its original revision. Repeated
-Start requests select the same Run. Logs display upstream progress without guessing
-missing step counts; nonzero exits and missing checkpoints are explicit failures.
-Checkpoint/sample locations stay associated with the originating Run.
+Start requests select the same Run. Nonzero exits and missing checkpoints are explicit
+failures. Checkpoint/sample locations stay associated with the originating Run.
+
+The top of a Run shows its stages as Caching, Training, Sample and Done, each marked
+done, in progress, not started, failed or stopped. Below them, Training shows the latest
+step count, elapsed time, ETA and loss from upstream's progress bar. Nothing is estimated:
+a value upstream hasn't reported shows as unknown, and elapsed time falls back to the
+stage's own start and finish times. A restored segment counts its own steps, because
+upstream resets the displayed counter. Stage logs are collapsed below that, and open by
+themselves when a Run has failed.
+
+## Prepare and start
+
+Prepare and start on a reviewed Job prepares a Run and then trains it with no further
+click. The request is stored with the Run, so it continues with the browser closed and
+across a backend restart. It joins the same queue as Add to queue, so it waits its turn
+if the GPU is busy. If preparation fails or is cancelled, training doesn't start. Used
+on a revision that already has an unfinished Run, it asks that Run to continue instead
+of creating another.
+
+While the app is open on any screen, the tab title announces when a Run is ready,
+finished, stopped or failed, until you return to the tab or change screen. The Runs
+screen also offers an opt-in browser notification for the same events; the choice is
+kept in that browser only.
+
+## Links and browser history
+
+The address bar names the screen and its selection, such as `#/runs/<id>` or
+`#/jobs/<id>`, so refresh, browser back and forward and saved links return to the same
+place. The sidebar reopens each screen's last selection. Leaving a job with unsaved edits
+asks first, whichever way you leave.
 
 ## Queueing
 
@@ -140,8 +168,7 @@ Browser-independent logs can still be inspected.
 
 ## Recovery
 
-If a process survives, the Run is orphaned and the GPU remains owned. Reconcile
-processes refreshes observed state; Terminate recovered work requires confirmation
+If a process survives, the Run is orphaned and the GPU remains owned. Check for leftover processes refreshes observed state; Terminate recovered work requires confirmation
 and targets only those owned processes. Uncertain identity/access or a crash during
 launch blocks replacement GPU work. A known dead process/PID reuse does not count
 as live ownership. Once all recorded work is gone, an orphaned Run with a requested stop
@@ -156,8 +183,8 @@ treated as uncertain when their ownership cannot be established safely.
 ## Deleting a Run
 
 Delete run permanently removes a Run you no longer need and gives back its disk space.
-The confirmation names the Run, shows how much space is freed and says the delete can't
-be undone. It removes the Run record, its folder under the output root, its folder under
+The confirmation dialog names the Run, shows how much space is freed and says the delete
+can't be undone; Cancel has focus and Escape cancels. It removes the Run record, its folder under the output root, its folder under
 the cache root and its output index. There is no partial delete: to keep a LoRA, download
 it first. Source datasets, other Runs, presets, model files, the Job and the shared
 tokenizer under `<cache root>/shared` are left alone.
@@ -166,7 +193,7 @@ A delete is refused, with the reason, in these cases. Nothing is removed.
 
 - The Run is active: queued, preparing, training, sampling or stopping, or orphaned or
   uncertain. Stop or cancel it first.
-- The Run still records processes to reconcile. Choose Reconcile processes first.
+- The Run still records processes to reconcile. Choose Check for leftover processes first.
 - A Run that is prepared or active still needs its files. A restored segment reads its
   source's saved state, frozen media and dataset files, and a retry reads the frozen media
   of the Run it came from. Cancel or delete that Run first.

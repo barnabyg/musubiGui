@@ -1,5 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
+import { ActionMenu } from './ActionMenu';
+import { confirmDialog } from './ConfirmDialog';
 import { apiClient } from './api';
+import { JobTable, type JobSummary } from './JobTable';
+import { componentLabels } from './labels';
+import { PathField } from './PathField';
 import './jobs.css';
 
 type JobConfig = {
@@ -133,17 +138,41 @@ function sizeLabel(bytes: number) {
 type PreparedRun = { id: string; status: string; existing: boolean };
 
 type Props = {
+  selectedId?: string;
+  onSelect?: (id?: string, replace?: boolean) => void;
   onRun?: (id: string) => void;
   onDirtyChange?: (dirty: boolean) => void;
 };
 
 const request = apiClient('Check the entered values and retry.');
 
-export function Jobs({ onRun, onDirtyChange }: Props) {
+function plural(count: number, noun: string) {
+  return `${count} ${noun}${count === 1 ? '' : 's'}`;
+}
+
+function diskVerdict(disk: Review['disk']) {
+  const short = disk.volumes.filter((volume) => volume.shortfall > 0);
+  if (short.length)
+    return `Disk: ${short
+      .map(
+        (volume) => `${sizeLabel(volume.shortfall)} short on ${volume.volume}`,
+      )
+      .join(', ')}`;
+  return disk.volumes.some((volume) => volume.free === null)
+    ? 'Disk: free space unknown'
+    : 'Disk: enough free space';
+}
+
+export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [archived, setArchived] = useState<Job[]>([]);
+  const [summaries, setSummaries] = useState<JobSummary[]>([]);
+  const nameField = useRef<HTMLInputElement>(null);
+  const focusName = useRef(false);
+  const reviewPanel = useRef<HTMLElement>(null);
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [models, setModels] = useState<Record<string, string>>({});
+  const [modelRoots, setModelRoots] = useState<string[]>([]);
   const [job, setJob] = useState<Job | null>(null);
   const [dirty, setDirty] = useState(false);
   // Busy until the initial load lands, so it cannot replace drafts created meanwhile.
@@ -155,28 +184,73 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
   const [presetName, setPresetName] = useState('');
   const [presetId, setPresetId] = useState('');
   const [transfer, setTransfer] = useState('');
-  const [conversion, setConversion] = useState<ConversionPreview | null>(null);
+  const [transferOpen, setTransferOpen] = useState(false);
   const [existingRun, setExistingRun] = useState<PreparedRun | null>(null);
 
   useEffect(() => {
     void Promise.all([
       request<Job[]>('/api/jobs'),
       request<Dataset[]>('/api/datasets'),
-      request<{ models: Record<string, string> }>('/api/settings'),
+      request<{ models: Record<string, string>; model_roots: string[] }>(
+        '/api/settings',
+      ),
       request<Preset[]>('/api/jobs/presets'),
       request<Job[]>('/api/jobs/archived'),
+      request<JobSummary[]>('/api/jobs/summaries'),
     ])
-      .then(([items, library, settings, savedPresets, hidden]) => {
+      .then(([items, library, settings, savedPresets, hidden, info]) => {
         setJobs(items);
+        setSummaries(info);
         setArchived(hidden);
         setDatasets(library);
         setModels(settings.models);
+        setModelRoots(settings.model_roots);
         setPresets(savedPresets);
         setStatus('Jobs loaded');
       })
       .catch((reason: Error) => setError(reason.message))
       .finally(() => setBusy(false));
   }, []);
+  // Follows the URL: a link, refresh or browser history can name a job that isn't open here.
+  const followRoute = useEffectEvent((items: Job[]) => {
+    if (selectedId === job?.id) return;
+    const found = items.find((item) => item.id === selectedId);
+    if (found) {
+      select(found);
+      return;
+    }
+    setJob(null);
+    setDirty(false);
+    setReview(null);
+    if (selectedId) {
+      onSelect?.(undefined, true);
+      setStatus('That job is no longer in the job list.');
+    }
+  });
+  useEffect(() => {
+    let stale = false;
+    void request<Job[]>('/api/jobs')
+      .then((items) => {
+        if (!stale) followRoute(items);
+      })
+      .catch((reason: Error) => {
+        if (!stale) setError(reason.message);
+      });
+    return () => {
+      stale = true;
+    };
+  }, [selectedId]);
+  // A new draft's name is the first thing worth changing; the field is disabled until the request lands.
+  useEffect(() => {
+    if (focusName.current && !busy && nameField.current) {
+      focusName.current = false;
+      nameField.current.focus();
+      nameField.current.select();
+    }
+  }, [busy, job?.id]);
+  useEffect(() => {
+    if (review) reviewPanel.current?.scrollIntoView({ block: 'start' });
+  }, [review]);
   useEffect(() => {
     onDirtyChange?.(dirty);
   }, [dirty, onDirtyChange]);
@@ -188,6 +262,15 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
     return () => window.removeEventListener('beforeunload', protect);
   }, [dirty]);
 
+  async function reloadJobs() {
+    const [items, info] = await Promise.all([
+      request<Job[]>('/api/jobs'),
+      request<JobSummary[]>('/api/jobs/summaries'),
+    ]);
+    setJobs(items);
+    setSummaries(info);
+    return items;
+  }
   async function perform(action: () => Promise<void>) {
     setBusy(true);
     setError('');
@@ -200,23 +283,33 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
       setBusy(false);
     }
   }
-  function select(value: Job) {
-    if (
-      dirty &&
-      !window.confirm('Discard unsaved job edits and open another draft?')
-    )
-      return;
+  function confirmDiscard(next: string) {
+    return confirmDialog({
+      title: 'Discard unsaved job edits?',
+      body: <p>Your unsaved changes to this job are lost if you {next}.</p>,
+      confirmLabel: 'Discard edits',
+      cancelLabel: 'Keep editing',
+      danger: true,
+    });
+  }
+  async function choose(value: Job) {
+    if (dirty && !(await confirmDiscard('open another job'))) return;
+    select(value);
+  }
+  function show(value: Job | null) {
     setJob(value);
+    onSelect?.(value?.id);
+  }
+  function select(value: Job) {
+    show(value);
     setDirty(false);
     setReview(null);
-    setConversion(null);
     setStatus(`Opened revision ${value.revision}`);
   }
   function edit(next: Job) {
     setJob(next);
     setDirty(true);
     setReview(null);
-    setConversion(null);
     setStatus('Unsaved draft');
   }
   function config<K extends keyof JobConfig>(key: K, value: JobConfig[K]) {
@@ -254,57 +347,82 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
     );
   }
   async function create(family: 'wan' | 'h3') {
-    if (
-      dirty &&
-      !window.confirm('Discard unsaved job edits and create a new draft?')
-    )
-      return;
+    if (dirty && !(await confirmDiscard('create a new draft'))) return;
     await perform(async () => {
+      const taken = new Set(
+        [...(await reloadJobs()), ...archived].map((item) => item.name),
+      );
+      const base = family === 'wan' ? 'New Wan job' : 'New H3 job';
+      let name = base;
+      for (let number = 2; taken.has(name); number += 1)
+        name = `${base} ${number}`;
       const created = await request<Job>('/api/jobs', 'POST', {
-        name: family === 'wan' ? 'New Wan job' : 'New H3 job',
+        name,
         family,
+        config: await request<JobConfig>(`/api/jobs/defaults/${family}`),
       });
-      setJobs(await request<Job[]>('/api/jobs'));
-      setJob(created);
+      await reloadJobs();
+      show(created);
       setDirty(false);
       setReview(null);
       setStatus('Draft created');
+      focusName.current = true;
     });
+  }
+  async function persist(draft: Job) {
+    let saved: Job;
+    try {
+      saved = await request<Job>(`/api/jobs/${draft.id}`, 'PUT', {
+        name: draft.name,
+        family: draft.family,
+        dataset_id: draft.dataset_id,
+        config: draft.config,
+        revision: draft.revision,
+      });
+    } catch (reason) {
+      setStatus('Save failed — edits retained');
+      throw reason;
+    }
+    show(saved);
+    setDirty(false);
+    setReview(null);
+    setStatus(`Draft saved — revision ${saved.revision}`);
+    await reloadJobs();
+    return saved;
   }
   async function save() {
     if (!job) return;
     await perform(async () => {
-      const saved = await request<Job>(`/api/jobs/${job.id}`, 'PUT', {
-        name: job.name,
-        family: job.family,
-        dataset_id: job.dataset_id,
-        config: job.config,
-        revision: job.revision,
-      });
-      setJob(saved);
-      setJobs(await request<Job[]>('/api/jobs'));
-      setDirty(false);
-      setReview(null);
-      setStatus(`Draft saved — revision ${saved.revision}`);
+      await persist(job);
     });
   }
   async function inspect() {
     if (!job) return;
     await perform(async () => {
-      setReview(
-        await request<Review>(`/api/jobs/${job.id}/review`, 'POST', {}),
+      // A failed save throws here, so the review never describes something other than the edits on screen.
+      const current = dirty ? await persist(job) : job;
+      const result = await request<Review>(
+        `/api/jobs/${current.id}/review`,
+        'POST',
+        {},
       );
-      setStatus(`Reviewed revision ${job.revision}`);
+      setReview(result);
+      setStatus(
+        result.valid
+          ? `Review passed for revision ${current.revision}`
+          : `Review failed for revision ${current.revision}: ${plural(result.errors.length, 'error')}`,
+      );
     });
   }
-  async function prepare() {
+  async function prepare(start = false) {
     if (!job || !review?.valid || dirty) return;
     await perform(async () => {
       const run = await request<PreparedRun>('/api/runs/prepare', 'POST', {
         job_id: job.id,
+        start,
       });
       // Prepare returns the matching unfinished or completed run instead of duplicating it.
-      if (run.existing) {
+      if (run.existing && !(start && run.status !== 'completed')) {
         setExistingRun(run);
         setStatus('Existing run returned');
         return;
@@ -321,13 +439,13 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
         'POST',
         {},
       );
-      setJobs(await request<Job[]>('/api/jobs'));
+      await reloadJobs();
       select(copied);
       setStatus('Independent copy created');
     });
   }
   async function refreshLibrary() {
-    setJobs(await request<Job[]>('/api/jobs'));
+    await reloadJobs();
     setArchived(await request<Job[]>('/api/jobs/archived'));
   }
   async function archive() {
@@ -335,9 +453,8 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
     await perform(async () => {
       await request<Job>(`/api/jobs/${job.id}/archive`, 'POST', {});
       await refreshLibrary();
-      setJob(null);
+      show(null);
       setReview(null);
-      setConversion(null);
       setStatus('Job archived');
     });
   }
@@ -354,20 +471,25 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
         `/api/jobs/${target.id}/delete-preview`,
       );
       if (preview.refusal) throw new Error(preview.refusal);
-      if (
-        !window.confirm(
-          `Permanently delete job ${target.name} and its revision history? This can't be undone. Datasets and presets are not affected.`,
-        )
-      )
-        return;
+      const confirmed = await confirmDialog({
+        title: `Permanently delete job ${target.name}?`,
+        body: (
+          <p>
+            This removes the job and its revision history, and can't be undone.
+            Datasets and presets are not affected.
+          </p>
+        ),
+        confirmLabel: 'Delete job',
+        danger: true,
+      });
+      if (!confirmed) return;
       await request(`/api/jobs/${target.id}/delete`, 'POST', {
         confirmed: true,
       });
       await refreshLibrary();
       if (job?.id === target.id) {
-        setJob(null);
+        show(null);
         setReview(null);
-        setConversion(null);
       }
       setStatus('Job deleted');
     });
@@ -391,28 +513,48 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
         'POST',
         { preset_id: presetId, revision: job.revision },
       );
-      setJobs(await request<Job[]>('/api/jobs'));
+      await reloadJobs();
       select(updated);
       setStatus('Preset applied as a new revision');
     });
   }
-  async function convert(confirmed: boolean) {
+  async function convert() {
     if (!job || dirty) return;
+    const send = (confirmed: boolean) =>
+      request<Job | ConversionPreview>(`/api/jobs/${job.id}/convert`, 'POST', {
+        family: job.family === 'wan' ? 'h3' : 'wan',
+        revision: job.revision,
+        confirmed,
+      });
     await perform(async () => {
-      const result = await request<Job | ConversionPreview>(
-        `/api/jobs/${job.id}/convert`,
-        'POST',
-        {
-          family: job.family === 'wan' ? 'h3' : 'wan',
-          revision: job.revision,
-          confirmed,
-        },
-      );
+      const preview = await send(false);
+      if ('id' in preview) return;
+      const accepted = await confirmDialog({
+        title: 'Confirm model conversion',
+        body: (
+          <>
+            <p>{preview.message}</p>
+            <ul>
+              {preview.changes.map((change) => (
+                <li key={change.field}>
+                  {change.field.replace(/_/g, ' ')}:{' '}
+                  {JSON.stringify(change.before)} →{' '}
+                  {JSON.stringify(change.after)}
+                </li>
+              ))}
+            </ul>
+          </>
+        ),
+        confirmLabel: 'Accept conversion',
+        cancelLabel: 'Cancel conversion',
+      });
+      if (!accepted) return;
+      const result = await send(true);
       if ('id' in result) {
-        setJobs(await request<Job[]>('/api/jobs'));
+        await reloadJobs();
         select(result);
         setStatus('Model conversion saved as a new revision');
-      } else setConversion(result);
+      }
     });
   }
   async function exportConfiguration() {
@@ -437,33 +579,44 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
     });
   }
   async function importConfiguration() {
-    if (
-      dirty &&
-      !window.confirm('Discard unsaved edits and import an independent draft?')
-    )
-      return;
+    if (dirty && !(await confirmDiscard('import a configuration'))) return;
     await perform(async () => {
       const imported = await request<Job>(
         '/api/jobs/import',
         'POST',
         JSON.parse(transfer),
       );
-      setJobs(await request<Job[]>('/api/jobs'));
-      setJob(imported);
+      await reloadJobs();
+      show(imported);
       setDirty(false);
       setReview(null);
-      setConversion(null);
       setStatus('Configuration imported as an independent draft');
     });
   }
+  const prepareReason = dirty
+    ? 'Choose Review configuration to save these edits and check them before preparing.'
+    : !review
+      ? 'Choose Review configuration before preparing.'
+      : !review.valid
+        ? 'Resolve the review errors before preparing.'
+        : '';
+  const savePresetReason = dirty
+    ? 'Save your edits to save them as a preset.'
+    : !presetName.trim()
+      ? 'Enter a preset name to save one.'
+      : '';
+  const applyPresetReason = dirty
+    ? 'Save your edits to apply a preset.'
+    : !presetId
+      ? 'Select a preset to apply it.'
+      : '';
   return (
     <div className="jobs-workspace">
       <section className="title">
-        <p className="eyebrow">IMMUTABLE RUNS, EDITABLE DRAFTS</p>
         <h1>Jobs</h1>
         <p>
-          Create a LoRA draft, review its resolved inputs, then prepare a frozen
-          run.
+          Set up a LoRA training job, review it, then prepare a Run. A Run keeps
+          the settings it was prepared with, so later edits don't change it.
         </p>
         <button disabled={busy} onClick={() => void create('wan')}>
           New Wan job
@@ -472,23 +625,16 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
           New H3 job
         </button>
       </section>
-      {error && (
-        <div role="alert" className="error">
-          {error}
-        </div>
+      {jobs.length > 0 && (
+        <JobTable
+          jobs={jobs}
+          summaries={summaries}
+          datasets={datasets}
+          selectedId={job?.id}
+          disabled={busy}
+          onSelect={(value) => void choose(value)}
+        />
       )}
-      <div className="job-library" aria-label="Saved jobs">
-        {jobs.map((item) => (
-          <button
-            key={item.id}
-            aria-pressed={job?.id === item.id}
-            disabled={busy}
-            onClick={() => select(item)}
-          >
-            {item.name} · {item.family.toUpperCase()} · r{item.revision}
-          </button>
-        ))}
-      </div>
       {archived.length > 0 && (
         <details className="panel">
           <summary>Archived jobs ({archived.length})</summary>
@@ -511,148 +657,162 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
           </ul>
         </details>
       )}
-      <details className="panel">
-        <summary>Import / export configuration</summary>
-        <p>
-          Version 1 JSON preserves supported values. Unsupported formats and
-          unknown fields are rejected. Recognised credentials are redacted;
-          review local paths before sharing.
-        </p>
-        <label className="field">
-          Configuration file
-          <input
-            type="file"
-            accept="application/json,.json"
-            disabled={busy}
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (file)
-                void file
-                  .text()
-                  .then(setTransfer)
-                  .catch((reason: Error) => setError(reason.message));
-            }}
-          />
-        </label>
-        <label className="field">
-          Configuration JSON
-          <textarea
-            value={transfer}
-            disabled={busy}
-            onChange={(event) => setTransfer(event.target.value)}
-          />
-        </label>
+      <div className="job-action-bar">
         <div className="actions">
-          <button
-            disabled={busy || !transfer}
-            onClick={() => void importConfiguration()}
-          >
-            Import configuration
-          </button>
-          <button
-            disabled={busy || dirty || !job}
-            onClick={() => void exportConfiguration()}
-          >
-            Export configuration
-          </button>
+          <span role="status">{status}</span>
+          {job && (
+            <>
+              <button
+                className="primary"
+                disabled={busy}
+                onClick={() => void save()}
+              >
+                Save draft
+              </button>
+              <button disabled={busy} onClick={() => void inspect()}>
+                Review configuration
+              </button>
+              <button
+                disabled={busy || !!prepareReason}
+                title={prepareReason || undefined}
+                aria-describedby={prepareReason ? 'prepare-reason' : undefined}
+                onClick={() => void prepare()}
+              >
+                Prepare run
+              </button>
+              <button
+                disabled={busy || !!prepareReason}
+                title={prepareReason || undefined}
+                aria-describedby={prepareReason ? 'prepare-reason' : undefined}
+                onClick={() => void prepare(true)}
+              >
+                Prepare and start
+              </button>
+            </>
+          )}
+          <ActionMenu
+            label="More job actions"
+            disabled={busy}
+            note={
+              dirty
+                ? 'Save your edits to use the job actions.'
+                : !job
+                  ? 'Open a job to use the job actions.'
+                  : undefined
+            }
+            items={[
+              {
+                label: 'Duplicate job',
+                disabled: !job || dirty,
+                onSelect: () => void duplicate(),
+              },
+              {
+                label: `Change model to ${job?.family === 'h3' ? 'Wan T2V' : 'H3 T2VA'}`,
+                disabled: !job || dirty,
+                onSelect: () => void convert(),
+              },
+              {
+                label: 'Archive job',
+                disabled: !job || dirty,
+                onSelect: () => void archive(),
+              },
+              {
+                label: 'Delete job',
+                disabled: !job || dirty,
+                onSelect: () => job && void deleteJob(job),
+              },
+              {
+                label: 'Import / export configuration',
+                onSelect: () => setTransferOpen(true),
+              },
+            ]}
+          />
         </div>
-      </details>
-      {job && (
+        {job && prepareReason && (
+          <p id="prepare-reason" className="hint">
+            {prepareReason}
+          </p>
+        )}
+        {error && (
+          <div role="alert" className="error">
+            {error}
+          </div>
+        )}
+      </div>
+      {transferOpen && (
         <>
-          <section className="panel">
-            <h2>Reuse configuration</h2>
-            <div className="actions">
-              <button disabled={busy || dirty} onClick={() => void duplicate()}>
-                Duplicate job
-              </button>
-              <button
-                disabled={busy || dirty}
-                onClick={() => void convert(false)}
-              >
-                Change model to {job.family === 'wan' ? 'H3 T2VA' : 'Wan T2V'}
-              </button>
-              <button disabled={busy || dirty} onClick={() => void archive()}>
-                Archive job
-              </button>
-              <button
-                disabled={busy || dirty}
-                onClick={() => void deleteJob(job)}
-              >
-                Delete job
-              </button>
-            </div>
-            {conversion && (
-              <div role="dialog" aria-label="Confirm model conversion">
-                <p>{conversion.message}</p>
-                <ul>
-                  {conversion.changes.map((change) => (
-                    <li key={change.field}>
-                      {change.field}: {JSON.stringify(change.before)} →{' '}
-                      {JSON.stringify(change.after)}
-                    </li>
-                  ))}
-                </ul>
-                <div className="actions">
-                  <button disabled={busy} onClick={() => setConversion(null)}>
-                    Cancel conversion
-                  </button>
-                  <button disabled={busy} onClick={() => void convert(true)}>
-                    Accept conversion
-                  </button>
-                </div>
-              </div>
-            )}
-            <div className="columns">
-              <label className="field">
-                Preset name
-                <input
-                  disabled={busy}
-                  value={presetName}
-                  onChange={(event) => setPresetName(event.target.value)}
-                />
-              </label>
-              <label className="field">
-                Compatible preset
-                <select
-                  disabled={busy}
-                  value={presetId}
-                  onChange={(event) => setPresetId(event.target.value)}
-                >
-                  <option value="">Select a preset</option>
-                  {presets
-                    .filter((preset) => preset.family === job.family)
-                    .map((preset) => (
-                      <option key={preset.id} value={preset.id}>
-                        {preset.name}
-                      </option>
-                    ))}
-                </select>
-              </label>
-            </div>
-            <p className="hint">
-              Measured presets set only size, frames, rank and memory controls
-              qualified on the target PC; saved presets replace all settings.
+          <section
+            className="panel"
+            aria-label="Import or export configuration"
+          >
+            <h2>Import / export configuration</h2>
+            <p>
+              Version 1 JSON preserves supported values. Unsupported formats and
+              unknown fields are rejected. Recognised credentials are redacted;
+              review local paths before sharing.
             </p>
+            <label className="field">
+              Configuration file
+              <input
+                type="file"
+                accept="application/json,.json"
+                disabled={busy}
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file)
+                    void file
+                      .text()
+                      .then(setTransfer)
+                      .catch((reason: Error) => setError(reason.message));
+                }}
+              />
+            </label>
+            <label className="field">
+              Configuration JSON
+              <textarea
+                value={transfer}
+                disabled={busy}
+                onChange={(event) => setTransfer(event.target.value)}
+              />
+            </label>
             <div className="actions">
               <button
-                disabled={busy || dirty || !presetName.trim()}
-                onClick={() => void savePreset()}
+                disabled={busy || !transfer}
+                onClick={() => void importConfiguration()}
               >
-                Save as preset
+                Import configuration
               </button>
               <button
-                disabled={busy || dirty || !presetId}
-                onClick={() => void applyPreset()}
+                disabled={busy || dirty || !job}
+                onClick={() => void exportConfiguration()}
               >
-                Apply preset
+                Export configuration
               </button>
+            </div>
+            {!transfer && (
+              <p className="hint">Choose a file or paste JSON to import it.</p>
+            )}
+            {(dirty || !job) && (
+              <p className="hint">
+                {dirty
+                  ? 'Save your edits to export them.'
+                  : 'Open a job to export it.'}
+              </p>
+            )}
+            <div className="actions">
+              <button onClick={() => setTransferOpen(false)}>Close</button>
             </div>
           </section>
+        </>
+      )}
+      {job && (
+        <>
           <section className="panel">
             <h2>Job & dataset</h2>
             <label className="field">
               Job name
               <input
+                ref={nameField}
                 disabled={busy}
                 value={job.name}
                 onChange={(event) => edit({ ...job, name: event.target.value })}
@@ -694,8 +854,7 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
                 {job.family === 'wan' ? (
                   <>
                     Native FP16 experts; one expert is trained and both experts
-                    are used for sampling. The documented converted-weight smoke
-                    recipe has target-PC execution evidence.
+                    are used for sampling.
                   </>
                 ) : (
                   <>
@@ -716,21 +875,90 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
                 ? ['wan_low', 'wan_high', 'wan_vae', 'wan_t5']
                 : ['h3_dit', 'h3_video_vae', 'h3_audio_vae', 'h3_text']
               ).map((key) => (
-                <label className="field" key={key}>
-                  {key}
-                  <input
-                    disabled={busy}
-                    value={job.config.components[key] ?? models[key] ?? ''}
-                    onChange={(event) =>
-                      config('components', {
-                        ...job.config.components,
-                        [key]: event.target.value,
-                      })
-                    }
-                  />
-                </label>
+                <PathField
+                  key={key}
+                  label={componentLabels[key]}
+                  kind="file"
+                  roots={modelRoots}
+                  disabled={busy}
+                  value={job.config.components[key] ?? models[key] ?? ''}
+                  onChange={(value) =>
+                    config('components', {
+                      ...job.config.components,
+                      [key]: value,
+                    })
+                  }
+                />
               ))}
             </details>
+          </section>
+          <section className="panel">
+            <h2>Presets</h2>
+            <div className="columns">
+              <label className="field">
+                Preset name
+                <input
+                  disabled={busy}
+                  value={presetName}
+                  onChange={(event) => setPresetName(event.target.value)}
+                />
+              </label>
+              <label className="field">
+                Compatible preset
+                <select
+                  disabled={busy}
+                  value={presetId}
+                  onChange={(event) => setPresetId(event.target.value)}
+                >
+                  <option value="">Select a preset</option>
+                  {presets
+                    .filter((preset) => preset.family === job.family)
+                    .map((preset) => (
+                      <option key={preset.id} value={preset.id}>
+                        {preset.name}
+                      </option>
+                    ))}
+                </select>
+              </label>
+            </div>
+            <p className="hint">
+              Measured presets set only size, frames, rank and memory controls
+              qualified on the target PC. Smoke tests also set steps,
+              checkpoints and the sample, to check that training runs. Saved
+              presets replace all settings.
+            </p>
+            <div className="actions">
+              <button
+                disabled={busy || !!savePresetReason}
+                title={savePresetReason || undefined}
+                aria-describedby={
+                  savePresetReason ? 'save-preset-reason' : undefined
+                }
+                onClick={() => void savePreset()}
+              >
+                Save as preset
+              </button>
+              <button
+                disabled={busy || !!applyPresetReason}
+                title={applyPresetReason || undefined}
+                aria-describedby={
+                  applyPresetReason ? 'apply-preset-reason' : undefined
+                }
+                onClick={() => void applyPreset()}
+              >
+                Apply preset
+              </button>
+            </div>
+            {savePresetReason && (
+              <p id="save-preset-reason" className="hint">
+                {savePresetReason}
+              </p>
+            )}
+            {applyPresetReason && (
+              <p id="apply-preset-reason" className="hint">
+                {applyPresetReason}
+              </p>
+            )}
           </section>
           <section className="panel">
             <h2>Dataset preparation</h2>
@@ -747,8 +975,8 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
                 'Frames',
                 'frames',
                 job.family === 'wan'
-                  ? '4*n+1 frames; 17 is the smoke default.'
-                  : '17*n+5 frames between 124 and 345; smoke default 124.',
+                  ? '4*n+1 frames; 33 is measured on the target PC.'
+                  : '17*n+5 frames between 124 and 345; 124 is measured on the target PC.',
               )}
               {number('Repeats', 'repeats')}
               {number(
@@ -843,7 +1071,7 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
               'Blocks to swap',
               'blocks_to_swap',
               job.family === 'wan'
-                ? '0–38 of 40 blocks; 36 is the reference default. 39 crashes in the upstream FP8 path.'
+                ? '0–38 of 40 blocks; 36 is the reference default.'
                 : '0–48 of 50 blocks; 48 is the reference default and upstream rejects 49. H2D-only swapping is required.',
             )}
             {toggle('Gradient checkpointing', 'gradient_checkpointing')}
@@ -893,26 +1121,6 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
               </>
             )}
           </section>
-          <div className="actions">
-            <span role="status">{status}</span>
-            <button
-              className="primary"
-              disabled={busy}
-              onClick={() => void save()}
-            >
-              Save draft
-            </button>
-            <button disabled={busy || dirty} onClick={() => void inspect()}>
-              Review configuration
-            </button>
-            <button
-              disabled={busy || dirty || !review?.valid}
-              onClick={() => void prepare()}
-            >
-              Prepare run
-            </button>
-          </div>
-          {dirty && <p>Save the draft before reviewing or preparing it.</p>}
           {review && existingRun && (
             <p>
               This revision already has a {existingRun.status} run with the same
@@ -923,14 +1131,25 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
             </p>
           )}
           {review && (
-            <section className="panel" aria-label="Configuration review">
+            <section
+              ref={reviewPanel}
+              className="panel job-review"
+              aria-label="Configuration review"
+            >
               <h2>Configuration review</h2>
-              <p>
-                {review.valid
-                  ? 'Ready for preparation'
-                  : 'Resolve the following errors before preparation'}{' '}
-                · {review.effective_count} included items
-              </p>
+              <div
+                className={`review-verdict ${review.valid ? 'passed' : 'failed'}`}
+              >
+                <strong>
+                  {review.valid
+                    ? 'Review passed. Ready for preparation.'
+                    : `Review failed: resolve ${plural(review.errors.length, 'error')} before preparation.`}
+                </strong>
+                <span>
+                  {plural(review.effective_count, 'included item')} ·{' '}
+                  {diskVerdict(review.disk)}
+                </span>
+              </div>
               {review.errors.length > 0 && (
                 <ul className="error">
                   {review.errors.map((message, index) => (
@@ -943,8 +1162,8 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
                   <li key={index}>{message}</li>
                 ))}
               </ul>
-              <div data-testid="disk-estimate">
-                <h3>Estimated disk use</h3>
+              <details data-testid="disk-estimate">
+                <summary>Estimated disk use</summary>
                 <ul>
                   <li>
                     Media snapshot:{' '}
@@ -975,7 +1194,7 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
                     </li>
                   ))}
                 </ul>
-              </div>
+              </details>
               {review.video_windows.items.length > 0 && (
                 <div data-testid="video-windows">
                   <h3>Cached video windows</h3>
@@ -1013,33 +1232,37 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
                   </details>
                 </>
               )}
-              <h3>Resolved paths</h3>
-              <pre>
-                {JSON.stringify(
-                  { ...review.paths, models: review.models },
-                  null,
-                  2,
+              <details>
+                <summary>Advanced</summary>
+                <h3>Resolved paths</h3>
+                <pre>
+                  {JSON.stringify(
+                    { ...review.paths, models: review.models },
+                    null,
+                    2,
+                  )}
+                </pre>
+                {Object.keys(review.model_provenance).length > 0 && (
+                  <details>
+                    <summary>Model precision and conversion provenance</summary>
+                    <pre>
+                      {JSON.stringify(review.model_provenance, null, 2)}
+                    </pre>
+                  </details>
                 )}
-              </pre>
-              {Object.keys(review.model_provenance).length > 0 && (
-                <details>
-                  <summary>Model precision and conversion provenance</summary>
-                  <pre>{JSON.stringify(review.model_provenance, null, 2)}</pre>
-                </details>
-              )}
-              <h3>Native dataset TOML</h3>
-              <pre data-testid="dataset-toml">{review.dataset_toml}</pre>
-              <p>
-                Paths below preview a frozen revision. Preparation allocates its
-                own immutable run directory and records the exact executed
-                arguments.
-              </p>
-              {review.stages.map((stage) => (
-                <details key={stage.name}>
-                  <summary>{stage.name} arguments</summary>
-                  <pre>{JSON.stringify(stage.args, null, 2)}</pre>
-                </details>
-              ))}
+                <h3>Native dataset TOML</h3>
+                <pre data-testid="dataset-toml">{review.dataset_toml}</pre>
+                <p>
+                  These paths are a preview. Preparing creates the Run's own
+                  folder and records the exact arguments it runs with.
+                </p>
+                {review.stages.map((stage) => (
+                  <details key={stage.name}>
+                    <summary>{stage.name} arguments</summary>
+                    <pre>{JSON.stringify(stage.args, null, 2)}</pre>
+                  </details>
+                ))}
+              </details>
             </section>
           )}
         </>

@@ -14,18 +14,17 @@ test('deleting a Run and its Job goes from the UI to the disk and survives a bac
   page,
 }) => {
   const app = await runWorkspace();
-  const dialogs: string[] = [];
   let releaseLock = () => {};
-  page.on('dialog', (dialog) => {
-    dialogs.push(dialog.message());
-    void dialog.accept();
-  });
   try {
     const job = app.manifest.jobs.find((item) => item.family === 'wan')!;
     const label = `${job.name} · WAN · r1`;
     const jobButton = page.getByRole('button', { name: label, exact: true });
     const navigate = (name: string) =>
       page.getByRole('button', { name, exact: true }).click();
+    const jobAction = async (name: string) => {
+      await page.getByRole('button', { name: 'More job actions' }).click();
+      await page.getByRole('menuitem', { name, exact: true }).click();
+    };
     const button = (name: string) =>
       page.getByRole('button', { name, exact: true });
     await page.goto(app.url);
@@ -34,9 +33,9 @@ test('deleting a Run and its Job goes from the UI to the disk and survives a bac
 
     // A Job with a Run is refused with the way forward, before any question is asked.
     await app.post('/api/runs/prepare', { job_id: job.id });
-    await button('Delete job').click();
+    await jobAction('Delete job');
     await expect(page.getByRole('alert')).toContainText('Archive job');
-    expect(dialogs).toEqual([]);
+    await expect(page.getByRole('dialog')).toHaveCount(0);
 
     await navigate('Runs');
     await jobButton.click();
@@ -58,15 +57,16 @@ test('deleting a Run and its Job goes from the UI to the disk and survives a bac
 
     // A locked file leaves the Run visible, saying what remains.
     await button('Delete run').click();
+    const question = page.getByRole('dialog');
+    await expect(question).toContainText(run.id.slice(0, 8));
+    await expect(question).toContainText(/This frees \d+ (KB|MB|GB)/);
+    await expect(question).toContainText("can't be undone");
+    await expect(question).toContainText('download any LoRA');
+    await question.getByRole('button', { name: 'Delete run' }).click();
     await expect(page.getByLabel('Unfinished delete')).toContainText(
       'inputs.json',
       { timeout: 240_000 },
     );
-    expect(dialogs).toHaveLength(1);
-    expect(dialogs[0]).toContain(run.id.slice(0, 8));
-    expect(dialogs[0]).toMatch(/This frees \d+ (KB|MB|GB)/);
-    expect(dialogs[0]).toContain("can't be undone");
-    expect(dialogs[0]).toContain('download any LoRA');
     await expect(page.getByLabel('Unfinished delete')).toContainText(
       'Still on disk:',
     );
@@ -88,6 +88,7 @@ test('deleting a Run and its Job goes from the UI to the disk and survives a bac
       page.getByText('State: deleting', { exact: true }),
     ).toBeVisible();
     await button('Delete again').click();
+    await question.getByRole('button', { name: 'Delete run' }).click();
     await expect(page.getByText(/^Run deleted\. Freed/)).toBeVisible({
       timeout: 240_000,
     });
@@ -105,10 +106,10 @@ test('deleting a Run and its Job goes from the UI to the disk and survives a bac
     await expect(jobButton).toHaveCount(0);
     await navigate('Jobs');
     await jobButton.click();
-    dialogs.length = 0;
-    await button('Delete job').click();
+    await jobAction('Delete job');
+    await expect(question).toContainText(job.name);
+    await question.getByRole('button', { name: 'Delete job' }).click();
     await expect(jobButton).toHaveCount(0);
-    expect(dialogs[0]).toContain(job.name);
     expect(await exists(path.join(app.manifest.state, 'jobs', job.id))).toBe(
       false,
     );
@@ -133,6 +134,7 @@ test('deleting a Run and its Job goes from the UI to the disk and survives a bac
     await navigate('Jobs');
     await page.getByText('Archived jobs (1)', { exact: true }).click();
     await button(`Delete ${other.name}`).click();
+    await question.getByRole('button', { name: 'Delete job' }).click();
     await expect(button(`Delete ${other.name}`)).toHaveCount(0);
     expect(await exists(path.join(app.manifest.state, 'jobs', other.id))).toBe(
       false,
@@ -143,11 +145,370 @@ test('deleting a Run and its Job goes from the UI to the disk and survives a bac
   }
 });
 
+test('outputs appear when a Run completes and a playing preview survives a refresh', async ({
+  page,
+}) => {
+  const app = await runWorkspace();
+  try {
+    const job = app.manifest.jobs.find((item) => item.family === 'wan')!;
+    await app.post('/api/runs/prepare', { job_id: job.id });
+    await page.goto(app.url);
+    await page.getByRole('button', { name: 'Runs', exact: true }).click();
+    await page
+      .getByRole('button', { name: `${job.name} · WAN · r1`, exact: true })
+      .click();
+    await expect(
+      page.getByText('State: prepared', { exact: true }),
+    ).toBeVisible({ timeout: 240_000 });
+    await expect(
+      page.getByText(/^No supported outputs found yet/),
+    ).toBeVisible();
+    await page
+      .getByRole('button', { name: 'Start training', exact: true })
+      .click();
+    const sample = page.getByRole('button', {
+      name: 'samples/sample.mp4 · available',
+      exact: true,
+    });
+    await expect(sample).toBeVisible({ timeout: 240_000 });
+    await expect(page.getByText(/^No supported outputs found yet/)).toHaveCount(
+      0,
+    );
+    await sample.click();
+    const video = page.getByLabel('Output video', { exact: true });
+    await video.evaluate(async (element) => {
+      const media = element as HTMLVideoElement;
+      element.setAttribute('data-kept', 'yes');
+      media.muted = true;
+      media.loop = true;
+      await media.play();
+    });
+    await page
+      .getByRole('button', { name: 'Refresh outputs', exact: true })
+      .click();
+    await expect(
+      page.getByRole('button', { name: 'Refresh outputs', exact: true }),
+    ).toBeEnabled();
+    await expect(sample).toHaveAttribute('aria-pressed', 'true');
+    await expect(video).toHaveAttribute('data-kept', 'yes');
+    await expect
+      .poll(() =>
+        video.evaluate((element) => !(element as HTMLVideoElement).paused),
+      )
+      .toBe(true);
+  } finally {
+    await app.close();
+  }
+});
+
+test('live progress steps through stages, reports steps and loss, and shows a failed stage', async ({
+  page,
+}) => {
+  const app = await runWorkspace();
+  try {
+    const job = app.manifest.jobs.find((item) => item.family === 'wan')!;
+    const saved = (await (
+      await fetch(`${app.url}/api/jobs/${job.id}`)
+    ).json()) as {
+      name: string;
+      family: string;
+      dataset_id: string;
+      revision: number;
+      config: Record<string, unknown>;
+    };
+    await fetch(`${app.url}/api/jobs/${job.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...saved,
+        version: undefined,
+        id: undefined,
+        config: { ...saved.config, steps: 6, save_every: 6 },
+      }),
+    });
+    await app.post('/api/runs/prepare', { job_id: job.id });
+    await page.goto(app.url);
+    await page.getByRole('button', { name: 'Runs', exact: true }).click();
+    await page
+      .getByRole('button', { name: `${job.name} · WAN · r2`, exact: true })
+      .click();
+    await expect(
+      page.getByText('State: prepared', { exact: true }),
+    ).toBeVisible({ timeout: 240_000 });
+    const steps = page.getByRole('list', { name: 'Run stages' });
+    const step = (index: number) => steps.getByRole('listitem').nth(index);
+    await expect(step(0)).toHaveClass('completed');
+    await expect(step(0)).toContainText('Caching');
+    await expect(step(1)).toHaveClass('pending');
+    await expect(step(3)).toContainText('Done');
+    await expect(page.getByLabel('Training progress')).toHaveCount(0);
+
+    await page
+      .getByRole('button', { name: 'Start training', exact: true })
+      .click();
+    await expect(step(1)).toHaveAttribute('aria-current', 'step');
+    const progress = page.getByLabel('Training progress');
+    await expect(progress).toContainText(/Step [1-5]\/6/);
+    await expect(progress).toContainText('Loss 0.0');
+    // The fixture reports no ETA, and an unreported value is not estimated.
+    await expect(progress).toContainText('ETA unknown');
+    await expect(page.getByLabel('Training steps')).toHaveAttribute('max', '6');
+    await expect(page.getByLabel('Run logs')).toBeHidden();
+
+    await expect(step(3)).toHaveClass('completed', { timeout: 240_000 });
+    await expect(step(1)).toHaveClass('completed');
+    await expect(step(2)).toHaveClass('completed');
+    await expect(progress).toContainText('Step 6/6');
+
+    // A failed stage is obvious without opening the log, which then opens by itself.
+    await writeFile(path.join(app.fixture, 'checkout', 'fail-train'), '');
+    const other = app.manifest.jobs.find(
+      (item) => item.family === 'wan' && item.id !== job.id,
+    )!;
+    await app.post('/api/runs/prepare', { job_id: other.id });
+    await page
+      .getByRole('button', { name: `${other.name} · WAN · r1`, exact: true })
+      .click();
+    await expect(
+      page.getByText('State: prepared', { exact: true }),
+    ).toBeVisible({ timeout: 240_000 });
+    await page
+      .getByRole('button', { name: 'Start training', exact: true })
+      .click();
+    await expect(step(1)).toHaveClass('failed', { timeout: 240_000 });
+    await expect(step(1)).toContainText('Exit code 3');
+    await expect(step(3)).toHaveClass('pending');
+    await expect(
+      page.getByText('Step progress unknown', { exact: false }),
+    ).toBeVisible();
+    await expect(page.getByLabel('Run logs')).toContainText(
+      'Deliberate fixture failure',
+    );
+    await expect(page.getByLabel('Run logs')).toBeVisible();
+  } finally {
+    await app.close();
+  }
+});
+
+test('Prepare and start keeps going with the tab closed, and the tab title signals a ready Run', async ({
+  page,
+}) => {
+  const app = await runWorkspace();
+  try {
+    const [first, second] = app.manifest.jobs.filter(
+      (item) => item.family === 'wan',
+    );
+    const openJob = async (name: string, target = page) => {
+      await target.goto(app.url);
+      await target.getByRole('button', { name: 'Jobs', exact: true }).click();
+      await target
+        .getByRole('button', { name: `${name} · WAN · r1`, exact: true })
+        .click();
+      await target
+        .getByRole('button', { name: 'Review configuration', exact: true })
+        .click();
+    };
+
+    // Prepare alone stops at prepared, and says so in the title from any screen.
+    await openJob(first.name);
+    await page
+      .getByRole('button', { name: 'Prepare run', exact: true })
+      .click();
+    await expect(page).toHaveTitle(`Ready: ${first.name} — Musubi`, {
+      timeout: 240_000,
+    });
+    await expect(
+      page.getByText('State: prepared', { exact: true }),
+    ).toBeVisible();
+    await page.getByRole('button', { name: 'Jobs', exact: true }).click();
+    await expect(page).not.toHaveTitle(/Ready/);
+
+    await openJob(second.name);
+    await page
+      .getByRole('button', { name: 'Prepare and start', exact: true })
+      .click();
+    await expect(
+      page.getByText('State: pending_preparation', { exact: true }),
+    ).toBeVisible();
+    await page.close();
+    await expect
+      .poll(
+        async () =>
+          (await app.records()).find((run) => run.job.id === second.id)?.status,
+        { timeout: 240_000 },
+      )
+      .toBe('completed');
+
+    // Failed preparation never reaches training.
+    await writeFile(
+      path.join(app.fixture, 'checkout', 'fail-latent_cache'),
+      '',
+    );
+    const h3 = app.manifest.jobs.find((item) => item.family === 'h3')!;
+    const failed = (await app.post('/api/runs/prepare', {
+      job_id: h3.id,
+      start: true,
+    })) as { id: string };
+    await expect
+      .poll(
+        async () =>
+          (await app.records()).find((run) => run.id === failed.id)?.status,
+        { timeout: 240_000 },
+      )
+      .toBe('failed');
+    const record = (await app.records()).find((run) => run.id === failed.id)!;
+    expect(record.stages.find((stage) => stage.name === 'train')?.status).toBe(
+      'pending',
+    );
+  } finally {
+    await app.close();
+  }
+});
+
+test('the URL keeps the screen and selection across navigation, refresh and browser history', async ({
+  page,
+}) => {
+  const app = await runWorkspace();
+  try {
+    const job = app.manifest.jobs.find((item) => item.family === 'wan')!;
+    const other = app.manifest.jobs.find((item) => item.family === 'h3')!;
+    const nav = (name: string) =>
+      page.getByRole('button', { name, exact: true });
+    const jobName = page.getByLabel('Job name', { exact: true });
+    await page.goto(app.url);
+    await nav('Jobs').click();
+    await page
+      .getByRole('button', { name: `${job.name} · WAN · r1`, exact: true })
+      .click();
+    await expect(jobName).toHaveValue(job.name);
+    expect(new URL(page.url()).hash).toBe(`#/jobs/${job.id}`);
+
+    // Returning through the sidebar and browser back both reopen the job.
+    await nav('Runs').click();
+    await expect(page.getByRole('heading', { name: 'Runs' })).toBeVisible();
+    await nav('Jobs').click();
+    await expect(jobName).toHaveValue(job.name);
+    await nav('Runs').click();
+    await page.goBack();
+    await expect(jobName).toHaveValue(job.name);
+    await page.goForward();
+    await expect(page.getByRole('heading', { name: 'Runs' })).toBeVisible();
+    await page.goBack();
+    await page.reload();
+    await expect(jobName).toHaveValue(job.name);
+
+    // Back moves between selections too.
+    await page
+      .getByRole('button', { name: `${other.name} · H3 · r1`, exact: true })
+      .click();
+    await expect(jobName).toHaveValue(other.name);
+    await page.goBack();
+    await expect(jobName).toHaveValue(job.name);
+
+    // Unsaved edits ask first, on back as on the sidebar.
+    await page.getByLabel('Training steps', { exact: true }).fill('33');
+    await page.goBack();
+    const leave = page.getByRole('dialog', { name: 'Leave this job?' });
+    await leave.getByRole('button', { name: 'Keep editing' }).click();
+    await expect(
+      page.getByLabel('Training steps', { exact: true }),
+    ).toHaveValue('33');
+    expect(new URL(page.url()).hash).toBe(`#/jobs/${job.id}`);
+    // Keeping the edits leaves history as it was, including what lay ahead.
+    await page.goBack();
+    await leave.getByRole('button', { name: 'Keep editing' }).click();
+    await expect(
+      page.getByLabel('Training steps', { exact: true }),
+    ).toHaveValue('33');
+    await page.goBack();
+    await leave.getByRole('button', { name: 'Discard changes' }).click();
+    await expect(jobName).toHaveCount(0);
+    // Discarding really leaves: the next step back doesn't return to the discarded job.
+    await page.goForward();
+    await expect(jobName).toHaveValue(job.name);
+    await expect(
+      page.getByLabel('Training steps', { exact: true }),
+    ).not.toHaveValue('33');
+    await page.goBack();
+    await expect(
+      page.getByLabel('Training steps', { exact: true }),
+    ).toHaveCount(0);
+    await nav('Settings').click();
+
+    // A link to a Run opens it, and a stale link falls back to the list.
+    const run = (await app.post('/api/runs/prepare', { job_id: job.id })) as {
+      id: string;
+    };
+    await page.goto(`${app.url}/#/runs/${run.id}`);
+    await expect(
+      page.getByText(`Run ${run.id}`, { exact: true }),
+    ).toBeVisible();
+    await page.reload();
+    await expect(
+      page.getByText(`Run ${run.id}`, { exact: true }),
+    ).toBeVisible();
+    await page.goto(`${app.url}/#/runs/${'0'.repeat(32)}`);
+    await expect.poll(() => new URL(page.url()).hash).toBe('#/runs');
+
+    // The selected dataset survives a refresh and the trip to another screen.
+    await nav('Datasets').click();
+    await page.getByRole('button', { name: /^WAN acceptance/ }).click();
+    await expect(
+      page.getByRole('button', { name: 'Back to datasets' }).first(),
+    ).toBeVisible();
+    expect(new URL(page.url()).hash).toMatch(/^#\/datasets\/\w+$/);
+    await page.reload();
+    await expect(
+      page.getByRole('button', { name: 'Back to datasets' }).first(),
+    ).toBeVisible();
+    await page.goBack();
+    await expect(
+      page.getByRole('button', { name: /^WAN acceptance/ }),
+    ).toBeVisible();
+  } finally {
+    await app.close();
+  }
+});
+
+test('work finishing on one screen does not pull the user back to it', async ({
+  page,
+}) => {
+  const app = await runWorkspace();
+  try {
+    const job = app.manifest.jobs.find((item) => item.family === 'wan')!;
+    const run = (await app.post('/api/runs/prepare', { job_id: job.id })) as {
+      id: string;
+    };
+    await expect
+      .poll(async () => (await app.records())[0]?.status, { timeout: 240_000 })
+      .toBe('prepared');
+    let release = () => {};
+    const held = new Promise<void>((resolve) => (release = resolve));
+    await page.route(`**/api/runs/${run.id}/delete`, async (route) => {
+      await held;
+      await route.continue();
+    });
+    await page.goto(`${app.url}/#/runs/${run.id}`);
+    await page.getByRole('button', { name: 'Delete run', exact: true }).click();
+    await page
+      .getByRole('dialog')
+      .getByRole('button', { name: 'Delete run' })
+      .click();
+    await page.getByRole('button', { name: 'Jobs', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Jobs' })).toBeVisible();
+    release();
+    await expect.poll(async () => (await app.records()).length).toBe(0);
+    await expect(page.getByRole('heading', { name: 'Jobs' })).toBeVisible();
+    expect(new URL(page.url()).hash).toBe('#/jobs');
+  } finally {
+    await app.close();
+  }
+});
+
 test('a Run that reused a deleted Run cache still shows it and can be used', async ({
   page,
 }) => {
   const app = await runWorkspace();
-  page.on('dialog', (dialog) => void dialog.accept());
   try {
     const job = app.manifest.jobs.find((item) => item.family === 'wan')!;
     const prepared = async (count: number) =>
@@ -181,6 +542,10 @@ test('a Run that reused a deleted Run cache still shows it and can be used', asy
       page.getByText(`Run ${first.id}`, { exact: true }),
     ).toBeVisible();
     await page.getByRole('button', { name: 'Delete run', exact: true }).click();
+    await page
+      .getByRole('dialog')
+      .getByRole('button', { name: 'Delete run' })
+      .click();
     await expect(page.getByText(/^Run deleted\. Freed/)).toBeVisible({
       timeout: 240_000,
     });
@@ -279,9 +644,6 @@ test('Wan and H3 prepare and train through the GUI with frozen captions cache re
       await expect(
         page.getByText('State: completed', { exact: true }),
       ).toBeVisible({ timeout: 240_000 });
-      await page
-        .getByRole('button', { name: 'Refresh outputs', exact: true })
-        .click();
       await page
         .getByRole('button', {
           name: 'samples/sample.mp4 · available',
@@ -406,9 +768,12 @@ test('backend interruption retains GPU ownership and offers explicit recovery wi
     ).toBeVisible();
     await expect(page.getByRole('status')).toContainText(run.id);
     expect(await app.records()).toHaveLength(1);
-    page.once('dialog', (dialog) => void dialog.accept());
     await page
       .getByRole('button', { name: 'Terminate recovered work', exact: true })
+      .click();
+    await page
+      .getByRole('dialog')
+      .getByRole('button', { name: 'Terminate recovered work' })
       .click();
     await expect(
       page.getByText('State: interrupted', { exact: true }),
@@ -508,16 +873,22 @@ test('a gracefully stopped revision can be prepared and started again', async ({
     await expect(page.getByLabel('Run logs')).toContainText(
       'SYNTHETIC ACCEPTANCE FIXTURE: train',
     );
-    page.once('dialog', (dialog) => void dialog.accept());
     await page
       .getByRole('button', { name: 'Force terminate', exact: true })
+      .click();
+    await page
+      .getByRole('dialog')
+      .getByRole('button', { name: 'Force terminate' })
       .click();
     await expect(
       page.getByText('State: stopped', { exact: true }),
     ).toBeVisible();
     await expect(
-      page.locator('p', { hasText: /^train: stopped/ }),
-    ).toBeVisible();
+      page
+        .getByRole('list', { name: 'Run stages' })
+        .getByRole('listitem')
+        .nth(1),
+    ).toContainText('TrainingStopped');
     await expect(page.getByRole('status')).toHaveText('GPU available');
   } finally {
     await app.close();
@@ -571,10 +942,10 @@ test('a queued Run refuses delete and archive; archiving hides a job, keeps its 
       exact: true,
     });
     const jobsTab = page.getByRole('button', { name: 'Jobs', exact: true });
-    const archiveButton = page.getByRole('button', {
-      name: 'Archive job',
-      exact: true,
-    });
+    const archive = async () => {
+      await page.getByRole('button', { name: 'More job actions' }).click();
+      await page.getByRole('menuitem', { name: 'Archive job' }).click();
+    };
     await page.goto(app.url);
     await app.leaseGpu('acquire');
     await jobsTab.click();
@@ -604,7 +975,7 @@ test('a queued Run refuses delete and archive; archiving hides a job, keeps its 
     // A queued Run keeps its job in the list, and the refusal says why.
     await jobsTab.click();
     await library.click();
-    await archiveButton.click();
+    await archive();
     await expect(page.getByRole('alert')).toContainText('active Run', {
       timeout: 240_000,
     });
@@ -616,11 +987,13 @@ test('a queued Run refuses delete and archive; archiving hides a job, keeps its 
       .toBe('prepared');
     const [run] = await app.records();
 
-    await archiveButton.click();
+    await archive();
     await expect(library).toHaveCount(0);
+    await page.getByRole('button', { name: 'More job actions' }).click();
     await expect(
-      page.getByRole('button', { name: 'Archive job', exact: true }),
-    ).toHaveCount(0);
+      page.getByRole('menuitem', { name: 'Archive job' }),
+    ).toBeDisabled();
+    await page.keyboard.press('Escape');
 
     // Still archived after a reload, and its Run stays browsable from Runs.
     await page.reload();

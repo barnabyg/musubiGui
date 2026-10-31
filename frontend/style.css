@@ -87,14 +87,33 @@ nav button span {
   width: 22px;
 }
 .local {
-  margin: auto 12px 0;
+  margin: auto 0 0;
+  padding: 10px 12px;
+  border: none;
+  background: none;
+  text-align: left;
   font-size: 12px;
   color: #a7aeb9;
+}
+.local.problems {
+  color: #ffc9c9;
+}
+.local.problems i {
+  background: #ef8d8d;
+}
+.local.warnings {
+  color: #f0b87c;
+}
+.local.warnings i {
+  background: #f0b87c;
+}
+.local.ready i {
+  background: #8ed4aa;
 }
 .local i {
   width: 6px;
   height: 6px;
-  background: #8ed4aa;
+  background: #727987;
   border-radius: 50%;
   display: inline-block;
   margin-right: 8px;
@@ -129,11 +148,6 @@ header {
 }
 .title {
   margin: 40px 0 28px;
-}
-.eyebrow {
-  color: #b2a1e0;
-  font-size: 10px;
-  letter-spacing: 1.6px;
 }
 h1 {
   font-size: 34px;
@@ -209,6 +223,84 @@ small {
   color: #888f9f;
   line-height: 1.5;
 }
+.path-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 9px 0 7px;
+}
+.path-row input,
+.path-row textarea {
+  margin: 0;
+  min-width: 0;
+  flex: 1;
+  text-overflow: ellipsis;
+}
+.path-row button {
+  flex-shrink: 0;
+}
+.path-field small {
+  display: block;
+}
+/* Overlays what follows: losing focus to a button below must not move that button mid-click. */
+.path-full {
+  position: absolute;
+  z-index: 4;
+  max-width: 100%;
+  padding: 4px 8px;
+  overflow-wrap: anywhere;
+  color: #c3c7d2;
+  background: #26252d;
+  border: 1px solid #484555;
+  border-radius: 5px;
+}
+.path-field {
+  position: relative;
+}
+.path-warning {
+  color: #f0b87c;
+}
+.path-check {
+  min-height: 1.5em;
+  font-size: 11px;
+  line-height: 1.5;
+}
+/* Any number of roots can warn, so the list scrolls inside a fixed height. */
+.path-root-checks {
+  height: 3em;
+  overflow: auto;
+}
+.dataset-folder-field .path-check {
+  min-height: 3em;
+}
+.path-browser .path-location {
+  overflow-wrap: anywhere;
+}
+.path-browser ul {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+  max-height: 45vh;
+  overflow: auto;
+  border: 1px solid #30343e;
+  border-radius: 6px;
+}
+.path-browser li button {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  background: none;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.path-browser li button:hover,
+.path-browser li button:focus-visible {
+  background: #302941;
+}
+.path-browser li.hint {
+  padding: 8px 10px;
+}
 .columns {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -251,6 +343,35 @@ button.primary {
   color: #21172e;
   border-color: #c1a4ef;
   font-weight: 650;
+}
+button.danger {
+  background: #a8434f;
+  color: #fff;
+  border-color: #c9606c;
+  font-weight: 650;
+}
+.confirm-dialog {
+  width: min(520px, calc(100vw - 32px));
+  padding: 24px;
+  color: #e5e7ec;
+  background: #191c22;
+  border: 1px solid #484555;
+  border-radius: 10px;
+}
+.confirm-dialog::backdrop {
+  background: #0009;
+}
+.confirm-dialog li {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.confirm-body {
+  max-height: 50vh;
+  overflow: auto;
+}
+.confirm-dialog .actions {
+  justify-content: flex-end;
+  margin-top: 16px;
 }
 .error {
   background: #3b2329;

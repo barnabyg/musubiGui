@@ -13,7 +13,7 @@ from typing import Any, Literal
 import av
 from PIL import Image
 
-from musubi_gui.jobs import Job, default_config
+from musubi_gui.jobs import Job, smoke_config
 from musubi_gui.runs import ExecutionPlan, RunService
 from musubi_gui.settings import Settings, atomic_json, save_settings
 
@@ -80,7 +80,7 @@ def prepare(root: Path) -> dict[str, Any]:
     for family in families:
         for revision in [1, 2]:
             token = f"{family}-revision-{revision}"
-            config = default_config(family).model_copy(update={"rank": 4 * revision})
+            config = smoke_config(family).model_copy(update={"rank": 4 * revision})
             job = Job(id=family + "-fixture", name=token, family=family, revision=revision, config=config)
             run = service.submit(
                 ExecutionPlan(

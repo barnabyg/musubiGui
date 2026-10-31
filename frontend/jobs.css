@@ -1,3 +1,50 @@
+.job-table {
+  overflow-x: auto;
+  border: 1px solid #30343e;
+  border-radius: 10px;
+}
+.job-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.job-table th,
+.job-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid #30343e;
+  text-align: left;
+  font-weight: 400;
+  white-space: nowrap;
+}
+.job-table tbody th {
+  white-space: normal;
+  min-width: 180px;
+}
+.job-table tbody tr:last-child > * {
+  border-bottom: none;
+}
+.job-table button {
+  padding: 4px 0;
+  border: none;
+  background: none;
+  text-align: left;
+}
+.job-table thead button {
+  color: #a1a7b5;
+}
+.job-table [aria-sort='ascending'] button::after {
+  content: ' ▲' / '';
+}
+.job-table [aria-sort='descending'] button::after {
+  content: ' ▼' / '';
+}
+.job-table tbody tr.selected {
+  background: #302941;
+  box-shadow: inset 3px 0 0 #c1a4ef;
+}
+.job-table tbody tr.selected button {
+  font-weight: 650;
+}
 .job-library {
   display: flex;
   gap: 8px;
@@ -36,4 +83,80 @@
 }
 .jobs-workspace .error {
   padding-left: 32px;
+}
+.job-action-bar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  margin: 20px 0;
+  padding: 10px 0;
+  background: #101216;
+  border-bottom: 1px solid #292d36;
+}
+.job-action-bar .actions {
+  flex-wrap: wrap;
+}
+.job-action-bar .error {
+  margin: 10px 0 0;
+  max-height: 30vh;
+  overflow: auto;
+}
+/* Keeps keyboard focus and scrolled-to content clear of the sticky bar, which can wrap on narrow windows. */
+:root:has(.job-action-bar) {
+  scroll-padding-top: 130px;
+}
+.action-menu {
+  position: relative;
+}
+.action-menu [role='menu'] {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  min-width: 260px;
+  padding: 6px;
+  background: #191c22;
+  border: 1px solid #484555;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px #0009;
+}
+.action-menu [role='menuitem'] {
+  border: none;
+  background: none;
+  text-align: left;
+}
+.action-menu [role='menuitem']:focus-visible,
+.action-menu [role='menuitem']:hover:not(:disabled) {
+  background: #302941;
+}
+.action-menu .hint {
+  margin: 6px 16px;
+}
+.review-verdict {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 12px 0;
+  padding: 14px 16px;
+  border: 1px solid;
+  border-radius: 7px;
+  font-size: 13px;
+}
+.review-verdict strong {
+  font-size: 15px;
+}
+.review-verdict.passed {
+  border-color: #4f8a68;
+  background: #1c2e25;
+  color: #d9f3e3;
+}
+.review-verdict.failed {
+  border-color: #925764;
+  background: #3b2329;
+  color: #ffd7dc;
+}
+.job-review {
+  scroll-margin-top: 130px;
 }

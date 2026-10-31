@@ -149,7 +149,7 @@ def test_a_run_with_live_processes_to_reconcile_is_refused(state: Path, service:
     run = add_run(service, "first", status=status, processes=[process_identity()])
     refused = client.post(f"/api/runs/{run['id']}/delete", json={"confirmed": True})
     assert refused.status_code == 409
-    assert "Reconcile" in refused.json()["detail"]
+    assert "leftover processes" in refused.json()["detail"]
     assert all(folder.exists() for folder in folders(run))
 
 

@@ -15,7 +15,9 @@ test('picked files publish media and captions, and a rejected upload can be canc
       .getByLabel('Dataset name', { exact: true })
       .fill('Uploads library');
     await page.getByLabel('Dataset folder', { exact: true }).fill(app.media);
-    await page.getByRole('button', { name: 'Create managed dataset' }).click();
+    await page
+      .getByRole('button', { name: 'Create a new folder for uploads' })
+      .click();
     await expect(
       page.getByRole('heading', { name: 'Upload media and captions' }),
     ).toBeVisible();

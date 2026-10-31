@@ -22,6 +22,7 @@ from musubi_gui.media_probe import inspect as inspect_media
 from musubi_gui.processes import identity_status, observed_tree, process_identity, terminate_owned
 from musubi_gui.reference import Stage, redact, reference_environment
 from musubi_gui.run_deletion import failure_message, folder_bytes, output_index_file, plan_deletion, remove_folder
+from musubi_gui.run_progress import parse_progress
 from musubi_gui.run_store import DeviceLease, RunStore, blocks_revision, preparation_transaction
 from musubi_gui.saved_state import discover_states
 from musubi_gui.settings import Settings, atomic_json, load_settings
@@ -96,13 +97,23 @@ class RunService:
     def get(self, run_id: str) -> dict[str, Any]:
         return self.store.get(run_id)
 
-    def prepare(self, job_id: str) -> dict[str, Any]:
+    def prepare(self, job_id: str, *, start: bool = False) -> dict[str, Any]:
         with preparation_transaction(self.root):
             inputs = identify_snapshot(self.root, job_id, fixture_mode=self.fixture_mode)
             for previous in self.list():
                 if blocks_revision(previous, inputs.fingerprint):
-                    return {**previous, "existing": True}
-            return {**self.submit(ExecutionPlan(**materialize_snapshot(inputs))), "existing": False}
+                    return {**(self._start_when_prepared(previous["id"]) if start else previous), "existing": True}
+            plan = ExecutionPlan(**materialize_snapshot(inputs))
+            return {**self.submit(plan, start_after_prepare=start), "existing": False}
+
+    def _start_when_prepared(self, run_id: str) -> dict[str, Any]:
+        def change(record: dict[str, Any]) -> None:
+            if record["status"] in {"pending_preparation", "preparing"}:
+                record.update(start_after_prepare=True)
+            elif record["status"] == "prepared" and any(stage["name"] == "train" for stage in record["stages"]):
+                record.update(status="pending_training", phase="train", order=time.time_ns())
+
+        return self.store.update(run_id, change)
 
     def start(self, run_id: str) -> dict[str, Any]:
         return self._request_training(run_id, allow_wait=False)
@@ -139,7 +150,7 @@ class RunService:
 
         return self.store.update(run_id, change)
 
-    def submit(self, plan: ExecutionPlan) -> dict[str, Any]:
+    def submit(self, plan: ExecutionPlan, *, start_after_prepare: bool = False) -> dict[str, Any]:
         """Trusted local adapter seam; API requests never supply command arrays."""
         data: dict[str, Any] = {
             "version": 1,
@@ -161,6 +172,8 @@ class RunService:
             "stage_keys": plan.stage_keys,
             "input_files": plan.input_files,
             "provenance": plan.provenance,
+            # Stored with the Run, so training still follows if the browser closes or the backend restarts.
+            "start_after_prepare": start_after_prepare,
         }
         plan.directory.mkdir(parents=True, exist_ok=True)
         plan.cache.mkdir(parents=True, exist_ok=True)
@@ -181,6 +194,14 @@ class RunService:
                     parts.append(f"--- {stage['name']} ---\n" + redact(stream.read().decode("utf-8", errors="replace")))
         return "\n".join(parts)
 
+    def progress(self, run_id: str) -> dict[str, Any] | None:
+        file = Path(self.get(run_id)["directory"]) / "train.log"
+        if not file.is_file():
+            return None
+        with file.open("rb") as stream:
+            stream.seek(max(0, file.stat().st_size - 64_000))
+            return parse_progress(stream.read().decode("utf-8", errors="replace"))
+
     def close(self) -> None:
         self.stopping.set()
         if self.thread.is_alive():
@@ -189,7 +210,9 @@ class RunService:
     def retry(self, run_id: str) -> dict[str, Any]:
         previous = self.get(run_id)
         if previous["status"] not in {"failed", "cancelled", "interrupted"} or previous.get("processes"):
-            raise ValueError("Only failed or cancelled preparation can be retried. Reconcile interrupted work first.")
+            raise ValueError(
+                "Only failed or cancelled preparation can be retried. Choose Check for leftover processes first."
+            )
         verify_inputs(previous)
         directory = Path(previous["directory"]).parent / ("retry-" + uuid.uuid4().hex)
         cache = Path(previous["cache"]).parent / ("retry-" + uuid.uuid4().hex)
@@ -286,7 +309,7 @@ class RunService:
                 lambda r: r.update(
                     status=status,
                     processes=identities,
-                    error="Recorded work is still alive or cannot be safely identified. No replacement GPU work will start. Reconcile again or confirm termination of known owned processes.",
+                    error="Recorded work is still alive or cannot be safely identified. No replacement GPU work will start. Check again or confirm termination of known owned processes.",
                 ),
             )
         self.device.release(run_id)
@@ -304,7 +327,7 @@ class RunService:
             record.update(
                 status="interrupted",
                 processes=[],
-                error="The original processes are gone. Inspect outputs/state, then retry frozen preparation or restore validated optimizer state as a new segment.",
+                error="The original processes are gone. Inspect outputs/state, then retry preparation or restore validated optimizer state as a new segment.",
             )
 
         return self.store.update(run_id, finish)
@@ -355,7 +378,7 @@ class RunService:
         if run["status"] not in {"completed", "stopped", "failed", "cancelled", "interrupted"}:
             return []
         if run.get("processes"):
-            raise ValueError("Reconcile remaining process ownership before inspecting saved state.")
+            raise ValueError("Choose Check for leftover processes before inspecting saved state.")
         states = discover_states(run)
         self.store.update(run_id, lambda r: r.update(saved_states=states))
         return states
@@ -572,7 +595,7 @@ class RunService:
                                 run_id,
                                 lambda r: r.update(
                                     status="interrupted",
-                                    error="Service stopped; reconcile the recorded process before retrying.",
+                                    error="Service stopped; check for leftover processes before retrying.",
                                 ),
                             )
                             if isinstance(process, WindowsProcess):
@@ -592,7 +615,7 @@ class RunService:
                                 lambda r: r.update(
                                     status="interrupted",
                                     processes=identities,
-                                    error="Service stopped; reconcile the recorded process before retrying.",
+                                    error="Service stopped; check for leftover processes before retrying.",
                                 ),
                             )
                             return
@@ -601,7 +624,7 @@ class RunService:
                             lambda r: r.update(
                                 status="orphaned",
                                 processes=identities,
-                                error="The launcher exited but a descendant remains active. Reconcile before starting another GPU operation.",
+                                error="The launcher exited but a descendant remains active. Check for leftover processes before starting another GPU operation.",
                             ),
                         )
                         return
@@ -658,12 +681,21 @@ class RunService:
                             raise ValueError("H3 sample is incomplete: decodable video and audio are both required.")
                         inspected.append({"path": str(file), "status": "playable", "metadata": metadata})
                     self.store.update(run_id, lambda r: r.update(samples=inspected))
-            self.store.update(
-                run_id,
-                lambda r: r.update(
+
+            def finish(record: dict[str, Any]) -> None:
+                record.update(
                     status="prepared" if preparing else "completed", processes=[], exit_code=0, finished=utc_now()
-                ),
-            )
+                )
+                if (
+                    preparing
+                    and record.get("start_after_prepare")
+                    and not record.get("cancel_requested")
+                    and any(stage["name"] == "train" for stage in record["stages"])
+                ):
+                    # Atomic with the end of preparation: a crash can't leave it prepared but never started.
+                    record.update(status="pending_training", phase="train", order=time.time_ns())
+
+            self.store.update(run_id, finish)
         except Exception as error:
             failure = redact(str(error))
         finally:

@@ -12,6 +12,7 @@ from musubi_gui.runs import RunService
 class PrepareRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     job_id: str
+    start: bool = False
 
 
 class QueueOrder(BaseModel):
@@ -68,7 +69,7 @@ def runs_router(service: RunService) -> APIRouter:
     @router.post("/prepare")
     def prepare(request: PrepareRequest) -> dict[str, Any]:
         with run_errors():
-            return service.prepare(request.job_id)
+            return service.prepare(request.job_id, start=request.start)
 
     @router.get("/queue")
     def queue() -> list[dict[str, Any]]:
@@ -87,9 +88,9 @@ def runs_router(service: RunService) -> APIRouter:
             return service.get(run_id)
 
     @router.get("/{run_id}/logs")
-    def logs(run_id: str) -> dict[str, str]:
+    def logs(run_id: str) -> dict[str, Any]:
         with run_errors():
-            return {"text": service.logs(run_id)}
+            return {"text": service.logs(run_id), "progress": service.progress(run_id)}
 
     @router.post("/{run_id}/retry")
     def retry(run_id: str) -> dict[str, Any]:

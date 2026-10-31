@@ -1,15 +1,18 @@
 # Run outputs and revision comparison
 
-Choose a persistent Run, then use Run outputs to refresh the checkpoint/sample
+Choose a persistent Run, then use Run outputs to browse the checkpoint/sample
 inventory. Select a file to inspect its originating Run, metadata and availability.
 Image, video and audio samples play in the browser; Open output in browser and
 Download output use only the recorded file identity. Checkpoint downloads remain
-binary attachments. Legacy `.pt`/`.pth`/`.ckpt` files are never unpickled.
+binary attachments, named after the job as `<job name>-r<revision>[-step<N>].safetensors`
+with unsafe filename characters replaced. Files on disk keep their job-ID names, because
+existing Runs and duplicate removal rely on them. Legacy `.pt`/`.pth`/`.ckpt` files are never unpickled.
 
 The inventory survives restart and retains previously observed missing files.
 Missing/moved, unreadable, empty/truncated and blocked outputs have separate status
-messages; browsing never deletes or repairs a source file. Refresh after an active producer
-finishes writing. An available file means it can be read/decoded or its checkpoint
+messages; browsing never deletes or repairs a source file. The inventory reloads by itself
+whenever the Run or one of its stages changes state, keeping the selected output and any
+playing preview. Refresh outputs picks up a checkpoint saved partway through a stage. An available file means it can be read/decoded or its checkpoint
 header/payload bounds can be inspected; it does not establish training quality,
 complete optimizer state or resumability. H3 video samples without a decodable audio
 stream are explicitly incomplete joint AV output.

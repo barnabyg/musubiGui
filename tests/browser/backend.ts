@@ -53,6 +53,20 @@ export async function localBackend(options: {
         stdio: 'pipe',
       },
     );
+    // Reading the output keeps a full pipe from stalling the backend, and leaves evidence if it dies.
+    let output = '';
+    const keep = (chunk: Buffer) => {
+      output = (output + chunk.toString()).slice(-4000);
+    };
+    backend.stdout?.on('data', keep);
+    backend.stderr?.on('data', keep);
+    const started = backend;
+    started.once('exit', (code, signal) => {
+      if (backend === started)
+        console.error(
+          `Backend on port ${port} exited unexpectedly (code ${code}, signal ${signal}):\n${output}`,
+        );
+    });
     await expect.poll(status).toBe(200);
   };
   const stop = async () => {

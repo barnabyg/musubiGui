@@ -8,6 +8,7 @@ import sqlite3
 import threading
 import uuid
 from contextlib import closing, contextmanager
+from datetime import UTC, datetime
 from importlib import import_module
 from pathlib import Path
 from typing import Any, Iterator, Literal
@@ -32,6 +33,9 @@ TRAINING_VIDEOS = frozenset({".mp4", ".webm", ".avi", ".mkv", ".mov", ".flv", ".
 # Highest block-swap values that trained on the target PC; the next value up fails (docs/reference).
 WAN_MAX_BLOCKS_TO_SWAP = 38
 H3_MAX_BLOCKS_TO_SWAP = 48
+# Below this a LoRA has made no visible change to samples in the owner's experience on the target PC.
+LOW_STEPS_WARNING = 600
+NEW_DRAFT_STEPS = 600
 
 
 class JobConfig(BaseModel):
@@ -69,7 +73,11 @@ class JobConfig(BaseModel):
     seed: int = 42
 
 
-def default_config(family: str) -> JobConfig:
+def smoke_config(family: str) -> JobConfig:
+    """The quick execution check, which proves mechanics and not learning.
+
+    H3 fields missing from saved revisions and version 1 exports resolve to these values, so they must stay fixed.
+    """
     if family == "h3":
         return JobConfig(
             recipe="guidance-loss",
@@ -82,6 +90,18 @@ def default_config(family: str) -> JobConfig:
             sample_prompt=CAPTION + " A steady sine tone plays.",
         )
     return JobConfig()
+
+
+def default_config(family: str) -> JobConfig:
+    """Where a new draft starts: the capacity measured in #26, long enough to learn, and no placeholder prompt."""
+    size: dict[str, Any] = (
+        {"width": 640, "height": 352, "rank": 8, "alpha": 8, "sample_steps": 10}
+        if family == "h3"
+        else {"width": 832, "height": 480, "frames": 33, "rank": 16, "alpha": 16, "sample_steps": 20}
+    )
+    return smoke_config(family).model_copy(
+        update={**size, "steps": NEW_DRAFT_STEPS, "save_every": 100, "save_state": True, "sample_prompt": ""}
+    )
 
 
 class JobDraft(BaseModel):
@@ -98,7 +118,7 @@ class JobDraft(BaseModel):
         if isinstance(value, dict) and value.get("family") == "h3":
             supplied = value.get("config", {})
             if isinstance(supplied, dict):
-                return {**value, "config": {**default_config("h3").model_dump(), **supplied}}
+                return {**value, "config": {**smoke_config("h3").model_dump(), **supplied}}
         return value
 
 
@@ -152,7 +172,7 @@ MEASURED_PRESETS = {
             id="measured-wan-832x480x33-r16",
             name="Measured · Wan 832×480 · 33 frames · rank 16",
             family="wan",
-            config=default_config("wan").model_copy(
+            config=smoke_config("wan").model_copy(
                 update={"width": 832, "height": 480, "frames": 33, "rank": 16, "alpha": 16, "blocks_to_swap": 36}
             ),
         ),
@@ -160,8 +180,25 @@ MEASURED_PRESETS = {
             id="measured-h3-640x352x124-r8",
             name="Measured · H3 640×352 · 124 frames · rank 8",
             family="h3",
-            config=default_config("h3").model_copy(update={"width": 640, "height": 352, "rank": 8, "alpha": 8}),
+            config=smoke_config("h3").model_copy(update={"width": 640, "height": 352, "rank": 8, "alpha": 8}),
         ),
+    ]
+}
+# Applying one replaces everything that decides how long the check takes, and keeps components, learning rate and seed.
+SMOKE_CONTROLS = (
+    *MEASURED_CONTROLS,
+    "steps",
+    "save_every",
+    "save_state",
+    "sample_enabled",
+    "sample_prompt",
+    "sample_steps",
+)
+SMOKE_PRESETS = {
+    preset.id: preset
+    for preset in [
+        Preset(id="smoke-wan", name="Smoke test · Wan · 2 steps", family="wan", config=smoke_config("wan")),
+        Preset(id="smoke-h3", name="Smoke test · H3 · 2 steps", family="h3", config=smoke_config("h3")),
     ]
 }
 
@@ -208,8 +245,6 @@ def conversion_draft(job: Job, family: Literal["wan", "h3"]) -> JobDraft:
             "repeats",
             "enable_bucket",
             "bucket_no_upscale",
-            "rank",
-            "alpha",
             "learning_rate",
             "steps",
             "gradient_accumulation",
@@ -222,10 +257,17 @@ def conversion_draft(job: Job, family: Literal["wan", "h3"]) -> JobDraft:
             "seed",
         }
     }
-    for key in ["width", "height"]:
-        value = getattr(job.config, key)
-        if value >= 64 and value % (32 if family == "h3" else 16) == 0:
-            shared[key] = value
+    # Values still at the source model's new-draft default move to the target's: one model's measured
+    # capacity is not the other's, and Wan's 832×480 runs H3 out of VRAM. Values the user chose are kept.
+    source = default_config(job.family)
+    for key in ["rank", "alpha"]:
+        if getattr(job.config, key) != getattr(source, key):
+            shared[key] = getattr(job.config, key)
+    if (job.config.width, job.config.height) != (source.width, source.height):
+        for key in ["width", "height"]:
+            value = getattr(job.config, key)
+            if value >= 64 and value % (32 if family == "h3" else 16) == 0:
+                shared[key] = value
     config = default_config(family).model_copy(update=shared)
     return JobDraft(name=job.name, family=family, dataset_id=job.dataset_id, config=config)
 
@@ -327,6 +369,23 @@ class JobStore:
     def list(self) -> list[Job]:
         return [job for job in self._stored() if not self.is_archived(job.id)]
 
+    def summaries(self) -> builtins.list[dict[str, Any]]:
+        """What the job list shows beyond the revision: when it was last saved and how its last Run went."""
+        latest: dict[str, dict[str, Any]] = {}
+        for run in sorted(RunStore(self.root.parent).list(), key=lambda run: run["created"]):
+            latest[run["job"]["id"]] = {"id": run["id"], "status": run["status"]}
+        return [
+            {
+                "id": job.id,
+                # The revision file's time: revision files stay as version 1 wrote them, with no time field.
+                "edited": datetime.fromtimestamp(
+                    (self.root / job.id / f"{job.revision}.json").stat().st_mtime, UTC
+                ).isoformat(),
+                "last_run": latest.get(job.id),
+            }
+            for job in self.list()
+        ]
+
     def _stored(self) -> builtins.list[Job]:
         jobs = []
         for directory in sorted(self.root.glob("*")):
@@ -385,7 +444,7 @@ class JobStore:
             return job
 
     def presets(self) -> builtins.list[Preset]:
-        return [*MEASURED_PRESETS.values()] + [
+        return [*MEASURED_PRESETS.values(), *SMOKE_PRESETS.values()] + [
             Preset.model_validate_json(file.read_text(encoding="utf-8"))
             for file in sorted((self.root.parent / "presets").glob("*.json"))
         ]
@@ -404,9 +463,9 @@ class JobStore:
     def apply_preset(self, job_id: str, selection: PresetSelection) -> Job:
         with _lock:
             job = self.get(job_id)
-            measured = MEASURED_PRESETS.get(selection.preset_id)
-            if measured:
-                preset = measured
+            built_in = MEASURED_PRESETS.get(selection.preset_id) or SMOKE_PRESETS.get(selection.preset_id)
+            if built_in:
+                preset = built_in
             else:
                 identifier(selection.preset_id)
                 preset = Preset.model_validate_json(
@@ -416,9 +475,10 @@ class JobStore:
                     raise ValueError("Preset identity mismatch; preserve its file before repair.")
             if job.family != preset.family:
                 raise ValueError("This preset belongs to another model. Preview and accept a model conversion first.")
+            controls = SMOKE_CONTROLS if selection.preset_id in SMOKE_PRESETS else MEASURED_CONTROLS
             config = (
-                job.config.model_copy(update={key: getattr(preset.config, key) for key in MEASURED_CONTROLS})
-                if measured
+                job.config.model_copy(update={key: getattr(preset.config, key) for key in controls})
+                if built_in
                 else preset.config
             )
             draft = as_draft(job).model_copy(update={"config": config})
@@ -635,6 +695,15 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
         else "H3 has short-run execution evidence on the 96 GB host; training quality and larger workloads remain unqualified.",
         "Changes to geometry, duration or memory controls need their own capacity validation.",
     ]
+    if 0 < job.config.steps < LOW_STEPS_WARNING:
+        warnings.append(
+            f"Training steps: {job.config.steps} steps can check that training runs, but expect no visible change "
+            f"in samples below about {LOW_STEPS_WARNING} steps."
+        )
+    if job.family == "h3" and job.config.width * job.config.height > 640 * 352:
+        warnings.append(
+            "Geometry: H3 is qualified up to 640×352 on the target PC; 832×480 ran out of VRAM at the first step."
+        )
     settings = effective_settings(job, settings)
     for label, value in [("Output root", settings.output_root), ("Cache root", settings.cache_root)]:
         if not value:

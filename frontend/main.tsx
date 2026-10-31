@@ -1,10 +1,21 @@
-import { useEffect, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+} from 'react';
 import { createRoot } from 'react-dom/client';
 import { apiClient } from './api';
 import './style.css';
+import { ConfirmDialogHost, confirmDialog } from './ConfirmDialog';
 import { Jobs } from './Jobs';
 import { Runs } from './Runs';
 import { Datasets } from './Datasets';
+import { componentLabels } from './labels';
+import { PathField, RootsField } from './PathField';
+import { formatRoute, parseRoute, screens, type Screen } from './route';
+import { useRunSignals } from './runSignals';
 
 type Settings = {
   version: number;
@@ -18,19 +29,28 @@ type Settings = {
 };
 type RootKey = 'model_roots' | 'dataset_roots';
 type Report = {
+  ran_at: string;
+  current: boolean;
   checks: { name: string; status: string; message: string }[];
   environment: Record<string, unknown>;
 };
-const components = [
-  ['wan_low', 'Wan low-noise DiT'],
-  ['wan_high', 'Wan high-noise DiT'],
-  ['wan_vae', 'Wan 2.1 VAE'],
-  ['wan_t5', 'Wan T5 encoder'],
-  ['h3_dit', 'H3 DiT'],
-  ['h3_video_vae', 'H3 video VAE'],
-  ['h3_audio_vae', 'H3 audio VAE'],
-  ['h3_text', 'H3 Qwen text encoder'],
-];
+
+function setupHealth(report: Report | null, dirty: boolean) {
+  if (!report) return { state: 'unknown', label: 'Not checked' };
+  const problems = report.checks.filter((check) => check.status === 'error');
+  const outdated = dirty || !report.current;
+  if (problems.length)
+    return {
+      state: 'problems',
+      label: `Problems found${outdated ? ' · out of date' : ''}`,
+    };
+  if (outdated) return { state: 'unknown', label: 'Out of date' };
+  // A warning can mean training can't run yet, such as no model paths, so it isn't Ready.
+  const warnings = report.checks.filter((check) => check.status !== 'ok');
+  return warnings.length
+    ? { state: 'warnings', label: `${warnings.length} to check` }
+    : { state: 'ready', label: 'Ready' };
+}
 
 // Root textareas keep raw text while editing so Enter can start an empty line.
 function rootLines(text: string) {
@@ -38,6 +58,16 @@ function rootLines(text: string) {
     .split('\n')
     .map((line) => line.trim())
     .filter(Boolean);
+}
+
+function confirmLeaveJob() {
+  return confirmDialog({
+    title: 'Leave this job?',
+    body: <p>Your unsaved changes to this job will be discarded.</p>,
+    confirmLabel: 'Discard changes',
+    cancelLabel: 'Keep editing',
+    danger: true,
+  });
 }
 
 const api = apiClient(
@@ -55,19 +85,100 @@ function App() {
   const [busy, setBusy] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [report, setReport] = useState<Report | null>(null);
-  const [screen, setScreen] = useState('Settings');
+  const [initialRoute] = useState(() => parseRoute(window.location.hash));
+  const [screen, setScreen] = useState<Screen>(initialRoute.screen);
+  // Each screen's selection, kept while elsewhere so that returning reopens it.
+  const [selection, setSelection] = useState<Partial<Record<Screen, string>>>(
+    initialRoute.id ? { [initialRoute.screen]: initialRoute.id } : {},
+  );
+  // Set before the browser reports the change, so only history moves look external.
+  const currentHash = useRef(formatRoute(initialRoute));
+  const currentScreen = useRef(initialRoute.screen);
+  const leaving = useRef(false);
+  // Where this page sits in the tab's history, stored on each entry so that a move back or
+  // forward can be undone exactly. It survives a reload along with the entry.
+  const [initialPosition] = useState(() => {
+    const stored = (window.history.state as { position?: number } | null)
+      ?.position;
+    window.history.replaceState({ position: stored ?? 0 }, '');
+    return stored ?? 0;
+  });
+  const position = useRef(initialPosition);
   const [jobDirty, setJobDirty] = useState(false);
   const [datasetEditor, setDatasetEditor] = useState(false);
-  const [runId, setRunId] = useState<string>();
-  function navigate(name: string) {
-    if (
-      screen === 'Jobs' &&
-      jobDirty &&
-      !window.confirm('Leave this job and discard unsaved changes?')
-    )
-      return;
-    setScreen(name);
+  useRunSignals(screen);
+  const go = useCallback((target: Screen, id?: string, replace = false) => {
+    currentScreen.current = target;
+    setScreen(target);
+    setSelection((value) => ({ ...value, [target]: id }));
+    const hash = formatRoute({ screen: target, id });
+    if (hash === currentHash.current) return;
+    currentHash.current = hash;
+    if (replace) {
+      window.history.replaceState({ position: position.current }, '', hash);
+    } else {
+      window.location.hash = hash;
+      position.current += 1;
+      window.history.replaceState({ position: position.current }, '');
+    }
+  }, []);
+  // A screen's work can finish after the user has moved on: it updates that screen's selection
+  // without taking them back there.
+  const selectOn = useCallback(
+    (target: Screen, id?: string, replace?: boolean) => {
+      if (currentScreen.current === target) go(target, id, replace);
+      else setSelection((value) => ({ ...value, [target]: id }));
+    },
+    [go],
+  );
+  const selectDataset = useCallback(
+    (id?: string, replace?: boolean) => selectOn('Datasets', id, replace),
+    [selectOn],
+  );
+  const selectJob = useCallback(
+    (id?: string, replace?: boolean) => selectOn('Jobs', id, replace),
+    [selectOn],
+  );
+  const selectRun = useCallback(
+    (id?: string, replace?: boolean) => selectOn('Runs', id, replace),
+    [selectOn],
+  );
+  const openRun = useCallback((id: string) => go('Runs', id), [go]);
+  async function navigate(name: Screen) {
+    if (screen === 'Jobs' && jobDirty && !(await confirmLeaveJob())) return;
+    go(name, selection[name]);
   }
+  const followHistory = useEffectEvent(async () => {
+    if (window.location.hash === currentHash.current) return;
+    const next = parseRoute(window.location.hash);
+    const state = window.history.state as { position?: number } | null;
+    // An address typed by hand is a new entry, with no position recorded yet.
+    const arrival = state?.position ?? position.current + 1;
+    const moved = arrival - position.current;
+    if (state?.position === undefined)
+      window.history.replaceState({ position: arrival }, '');
+    if (screen === 'Jobs' && jobDirty && !leaving.current) {
+      // The browser has already moved. Step back to this job while the question is open, which
+      // leaves the rest of the history as it was.
+      window.history.go(-moved);
+      if (!(await confirmLeaveJob())) return;
+      leaving.current = true;
+      setJobDirty(false);
+      window.history.go(moved);
+      return;
+    }
+    leaving.current = false;
+    position.current = arrival;
+    currentHash.current = window.location.hash;
+    currentScreen.current = next.screen;
+    setScreen(next.screen);
+    setSelection((value) => ({ ...value, [next.screen]: next.id }));
+  });
+  useEffect(() => {
+    const listener = () => void followHistory();
+    window.addEventListener('hashchange', listener);
+    return () => window.removeEventListener('hashchange', listener);
+  }, []);
   function load(value: Settings) {
     setSettings(value);
     setRootText({
@@ -76,9 +187,13 @@ function App() {
     });
   }
   useEffect(() => {
-    void api<Settings>('/api/settings')
-      .then((value) => {
+    void Promise.all([
+      api<Settings>('/api/settings'),
+      api<Report | null>('/api/diagnostics'),
+    ])
+      .then(([value, latest]) => {
         load(value);
+        setReport(latest);
         setStatus('Settings loaded');
       })
       .catch((reason: Error) => {
@@ -96,7 +211,6 @@ function App() {
   function changed() {
     setDirty(true);
     setStatus('Unsaved changes');
-    setReport(null);
   }
   function update(next: Settings) {
     setSettings(next);
@@ -115,6 +229,7 @@ function App() {
         }),
       );
       setDirty(false);
+      setReport(await api<Report | null>('/api/diagnostics'));
       setStatus('Settings saved');
     } catch (reason) {
       setError((reason as Error).message);
@@ -126,7 +241,6 @@ function App() {
   async function diagnose() {
     setBusy(true);
     setError('');
-    setReport(null);
     try {
       setReport(await api<Report>('/api/diagnostics', 'POST', {}));
     } catch (reason) {
@@ -135,46 +249,51 @@ function App() {
       setBusy(false);
     }
   }
+  async function showReport() {
+    await navigate('Settings');
+    window.requestAnimationFrame(() =>
+      document.getElementById('diagnostics-report')?.scrollIntoView(),
+    );
+  }
+  const health = setupHealth(report, dirty);
   function field(
     label: string,
     key: 'checkout' | 'python' | 'output_root' | 'cache_root',
     help: string,
+    kind: 'folder' | 'file' = 'folder',
   ) {
     return (
-      <label className="field">
-        {label}
-        <input
-          value={settings?.[key] ?? ''}
-          disabled={busy}
-          placeholder="C:\…"
-          onChange={(event) =>
-            settings && update({ ...settings, [key]: event.target.value })
-          }
-        />
-        <small>{help}</small>
-      </label>
+      <PathField
+        label={label}
+        kind={kind}
+        value={settings?.[key] ?? ''}
+        disabled={busy}
+        placeholder="C:\…"
+        help={help}
+        onChange={(value) => settings && update({ ...settings, [key]: value })}
+      />
     );
   }
   function rootsField(
     label: string,
+    browseLabel: string,
     key: RootKey,
     placeholder: string,
     help: string,
   ) {
     return (
-      <label className="field">
-        {label}
-        <textarea
-          disabled={busy}
-          value={rootText[key]}
-          onChange={(event) => {
-            setRootText({ ...rootText, [key]: event.target.value });
-            changed();
-          }}
-          placeholder={placeholder}
-        />
-        <small>{help}</small>
-      </label>
+      <RootsField
+        label={label}
+        browseLabel={browseLabel}
+        disabled={busy}
+        value={rootText[key]}
+        placeholder={placeholder}
+        help={help}
+        onChange={(value) => {
+          setRootText({ ...rootText, [key]: value });
+          changed();
+        }}
+      />
     );
   }
   return (
@@ -190,11 +309,11 @@ function App() {
         </a>
         <div className="workspace">WORKSPACE</div>
         <nav>
-          {['Datasets', 'Jobs', 'Runs', 'Settings'].map((name) => (
+          {screens.map((name) => (
             <button
               key={name}
               className={screen === name ? 'active' : ''}
-              onClick={() => navigate(name)}
+              onClick={() => void navigate(name)}
             >
               <span aria-hidden="true">
                 {name === 'Datasets' ? '▦' : name === 'Jobs' ? '▷' : '⚙'}
@@ -203,9 +322,13 @@ function App() {
             </button>
           ))}
         </nav>
-        <div className="local">
-          <i /> Local connection<small>Training stays on your machine</small>
-        </div>
+        <button
+          className={`local ${health.state}`}
+          onClick={() => void showReport()}
+        >
+          <i /> Setup: {health.label}
+          <small>Training stays on your machine</small>
+        </button>
       </aside>
       <main
         className={
@@ -220,23 +343,24 @@ function App() {
           <Datasets
             onEditorChange={setDatasetEditor}
             visible={screen === 'Datasets'}
+            selectedId={selection.Datasets}
+            onSelect={selectDataset}
             defaultFolder={settings?.dataset_roots[0] ?? ''}
+            datasetRoots={settings?.dataset_roots}
           />
         </div>
         {screen === 'Jobs' ? (
           <Jobs
+            selectedId={selection.Jobs}
+            onSelect={selectJob}
             onDirtyChange={setJobDirty}
-            onRun={(id) => {
-              setRunId(id);
-              setScreen('Runs');
-            }}
+            onRun={openRun}
           />
         ) : screen === 'Runs' ? (
-          <Runs key={runId} selectedId={runId} />
+          <Runs selectedId={selection.Runs} onSelect={selectRun} />
         ) : screen === 'Datasets' ? null : (
           <>
             <section className="title">
-              <p className="eyebrow">YOUR MACHINE, YOUR MODELS</p>
               <h1>Settings</h1>
               <p>
                 Connect an existing musubi-tuner installation and check that it
@@ -270,6 +394,7 @@ function App() {
                     'Training Python executable',
                     'python',
                     'Select the python.exe inside your existing training environment.',
+                    'file',
                   )}
                 </section>
                 <section className="panel">
@@ -297,12 +422,14 @@ function App() {
                   </div>
                   {rootsField(
                     'Model roots (one per line)',
+                    'a model root',
                     'model_roots',
                     'C:\\ai\\models',
                     'All component paths must be contained in one of these directories.',
                   )}
                   {rootsField(
                     'Dataset roots (one per line)',
+                    'a dataset root',
                     'dataset_roots',
                     'C:\\datasets',
                     'Registered folders and managed uploads stay within these local roots. Keep them separate from output/cache directories.',
@@ -312,23 +439,21 @@ function App() {
                       Model component paths <span>Wan 2.2 · MiniMax H3</span>
                     </summary>
                     <div className="columns">
-                      {components.map(([key, label]) => (
-                        <label className="field" key={key}>
-                          {label}
-                          <input
-                            disabled={busy}
-                            value={settings.models[key] ?? ''}
-                            onChange={(event) =>
-                              update({
-                                ...settings,
-                                models: {
-                                  ...settings.models,
-                                  [key]: event.target.value,
-                                },
-                              })
-                            }
-                          />
-                        </label>
+                      {Object.entries(componentLabels).map(([key, label]) => (
+                        <PathField
+                          key={key}
+                          label={label}
+                          kind="file"
+                          roots={rootLines(rootText.model_roots)}
+                          disabled={busy}
+                          value={settings.models[key] ?? ''}
+                          onChange={(value) =>
+                            update({
+                              ...settings,
+                              models: { ...settings.models, [key]: value },
+                            })
+                          }
+                        />
                       ))}
                     </div>
                   </details>
@@ -355,8 +480,18 @@ function App() {
                   </p>
                 )}
                 {report && (
-                  <section className="panel">
+                  <section className="panel" id="diagnostics-report">
                     <h2>Installation diagnostics</h2>
+                    <p>
+                      Last run {new Date(report.ran_at).toLocaleString()}.
+                      {(dirty || !report.current) && (
+                        <strong>
+                          {' '}
+                          Out of date: settings have changed since this ran. Run
+                          diagnostics again.
+                        </strong>
+                      )}
+                    </p>
                     <p>
                       These checks do not establish model support. Each
                       reference workflow must pass on the target hardware.
@@ -387,6 +522,7 @@ function App() {
           </>
         )}
       </main>
+      <ConfirmDialogHost />
     </div>
   );
 }

@@ -5,12 +5,54 @@ import os
 import shutil
 import subprocess  # nosec B404
 import tempfile
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import psutil
 
-from musubi_gui.settings import Settings, validate_paths, within_root
+from musubi_gui.settings import Settings, atomic_json, validate_paths, within_root
+
+REPORT_VERSION = 1
+
+
+def record_report(root: Path, settings: Settings, report: dict[str, Any]) -> dict[str, Any]:
+    """Keep the latest result beside settings.json, which stays as version 1 wrote it.
+
+    A write failure loses only the memory of this result, so the checks still reach the screen.
+    """
+    saved = {
+        "version": REPORT_VERSION,
+        "ran_at": datetime.now(UTC).isoformat(),
+        "settings": settings.model_dump(),
+        **report,
+    }
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+        atomic_json(root / "diagnostics.json", saved)
+    except OSError:
+        pass
+    return _view(saved, settings)
+
+
+def latest_report(root: Path, settings: Settings) -> dict[str, Any] | None:
+    """The kept result, or None when there is none this version can read: it can always be run again."""
+    try:
+        saved = json.loads((root / "diagnostics.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(saved, dict) or saved.get("version") != REPORT_VERSION:
+        return None
+    return _view(saved, settings)
+
+
+def _view(saved: dict[str, Any], settings: Settings) -> dict[str, Any]:
+    return {
+        "ran_at": saved.get("ran_at"),
+        "checks": saved.get("checks", []),
+        "environment": saved.get("environment", {}),
+        "current": saved.get("settings") == settings.model_dump(),
+    }
 
 
 def training_environment(

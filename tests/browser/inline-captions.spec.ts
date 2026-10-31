@@ -15,7 +15,7 @@ async function openDataset(
     .getByLabel('Dataset name', { exact: true })
     .fill('Inline captions');
   await page.getByLabel('Dataset folder', { exact: true }).fill(app.media);
-  await page.getByRole('button', { name: 'Register folder' }).click();
+  await page.getByRole('button', { name: 'Use existing folder' }).click();
   await expect(page.locator('.dataset-identity [role="status"]')).toHaveText(
     `Scan: complete ${count}/${count}`,
     { timeout: 240_000 },
@@ -292,7 +292,9 @@ test('autosave keeps a focused inline caption stable when its text stops matchin
   const app = await datasetHarness();
   try {
     await openDataset(page, app);
-    await page.getByRole('button', { name: 'Tools', exact: true }).click();
+    await page
+      .getByRole('button', { name: 'Search & edit', exact: true })
+      .click();
     await page.getByLabel('Search media and captions').fill('red square');
     const red = page.getByLabel('Caption for red.png', { exact: true });
     await red.fill('A completely different description');

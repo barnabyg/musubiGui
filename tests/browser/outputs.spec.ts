@@ -101,12 +101,14 @@ test('Wan and H3 output playback comparison download and missing states retain r
     await page
       .getByRole('link', { name: 'Download output', exact: true })
       .click();
-    expect((await download).suggestedFilename()).toBe('fixture.safetensors');
+    expect((await download).suggestedFilename()).toBe(
+      'h3-revision-1-r1.safetensors',
+    );
     await page
       .getByRole('combobox', { name: 'Compare with run', exact: true })
       .selectOption(nextH3.id);
     await page
-      .getByRole('button', { name: 'Compare revisions', exact: true })
+      .getByRole('button', { name: 'Compare inputs', exact: true })
       .click();
     const comparison = page.getByLabel('Run comparison', { exact: true });
     await expect(comparison).toContainText('job.config.rank');

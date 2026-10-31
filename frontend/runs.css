@@ -1,0 +1,51 @@
+.run-stepper {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 6px;
+  list-style: none;
+  margin: 16px 0;
+  padding: 0;
+}
+.run-stepper li {
+  border-top: 3px solid #373d49;
+  padding-top: 8px;
+  font-size: 13px;
+  color: #a1a7b5;
+}
+.run-stepper strong {
+  display: block;
+  font-weight: 600;
+}
+.run-stepper small {
+  display: block;
+  margin-top: 2px;
+  overflow-wrap: anywhere;
+}
+.run-stepper .completed {
+  border-color: #6dbb8d;
+  color: #d9f3e3;
+}
+.run-stepper .current {
+  border-color: #c1a4ef;
+  color: #f3f1fa;
+}
+.run-stepper .failed {
+  border-color: #ef8d8d;
+  color: #ffc9c9;
+}
+.run-stepper .stopped {
+  border-color: #d9b56b;
+  color: #f2dfb5;
+}
+.run-progress progress {
+  display: block;
+  width: 100%;
+  height: 10px;
+  margin: 8px 0;
+  accent-color: #c1a4ef;
+}
+.run-progress p {
+  margin: 4px 0;
+  font-size: 13px;
+}

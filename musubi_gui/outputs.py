@@ -3,6 +3,7 @@
 import hashlib
 import json
 import mimetypes
+import re
 import threading
 from contextlib import contextmanager
 from pathlib import Path
@@ -23,6 +24,20 @@ VIDEOS = {".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v"}
 AUDIO = {".aac", ".flac", ".m4a", ".mp3", ".ogg", ".opus", ".wav"}
 CHECKPOINTS = {".safetensors", ".pt", ".pth", ".ckpt"}
 BEING_DELETED = "This Run is being deleted, so its outputs are no longer offered."
+WINDOWS_RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"{port}{n}" for port in ["COM", "LPT"] for n in range(1, 10))}
+
+
+def download_name(job: dict[str, Any], file: Path) -> str:
+    """Name a downloaded LoRA after its job, since the name on disk carries only the job's ID."""
+    name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", str(job.get("name", ""))).strip(" .")[:120].strip(" .") or "job"
+    if name.split(".")[0].strip().upper() in WINDOWS_RESERVED:
+        name = "_" + name
+    # A saved state's weights sit in `<name>[-stepN]-state/`, and must not pass for the final LoRA.
+    state = file.parent.name.endswith("-state")
+    source = file.parent.name.removesuffix("-state") if state else file.stem
+    step = re.search(r"-step(\d+)$", source)
+    tag = f"-step{int(step[1])}" if step else ""
+    return f"{name}-r{job.get('revision', 0)}{tag}{f'-state-{file.stem}' if state else ''}{file.suffix}"
 
 
 def output_id(run_id: str, relative: str) -> str:
@@ -215,7 +230,7 @@ class OutputBrowser:
             "status": run["status"],
             "outputs": sorted(entries.values(), key=lambda entry: entry["path"]),
             "warnings": warnings,
-            "note": "Outputs belong to this frozen run. No quality ranking or complete training-state claim is inferred.",
+            "note": "These files belong to this Run.",
         }
 
     def file(self, run_id: str, identity: str, download: bool) -> FileResponse:
@@ -240,7 +255,7 @@ class OutputBrowser:
             media_type="application/octet-stream"
             if attachment
             else mimetypes.guess_type(file.name)[0] or "application/octet-stream",
-            filename=file.name if attachment else None,
+            filename=(download_name(run["job"], file) if kind == "checkpoint" else file.name) if attachment else None,
         )
 
 
@@ -277,7 +292,7 @@ def compare_runs(first: dict[str, Any], second: dict[str, Any]) -> dict[str, Any
         "after": second["id"],
         "changes": changes,
         "quality_ranking": None,
-        "note": "This comparison describes recorded inputs and provenance; it does not rank quality or establish resumability.",
+        "note": "This compares what each Run recorded as its inputs, not the quality of its results.",
     }
 
 

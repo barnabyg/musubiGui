@@ -37,7 +37,14 @@ type Comparison = {
 
 const read = apiClient('Output records could not be read. Refresh and retry.');
 
-export function Outputs({ runId }: { runId: string }) {
+export function Outputs({
+  runId,
+  runState,
+}: {
+  runId: string;
+  // Changes whenever the Run or one of its stages does, so finished work appears without a click.
+  runState: string;
+}) {
   const [result, setResult] = useState<OutputList | null>(null);
   const [runs, setRuns] = useState<RunChoice[]>([]);
   const [selected, setSelected] = useState('');
@@ -67,7 +74,7 @@ export function Outputs({ runId }: { runId: string }) {
     return () => {
       current = false;
     };
-  }, [runId, refresh]);
+  }, [runId, runState, refresh]);
   const currentResult = result?.run_id === runId ? result : null;
   const output = currentResult?.outputs.find((item) => item.id === selected);
   async function compare() {
@@ -87,10 +94,7 @@ export function Outputs({ runId }: { runId: string }) {
   return (
     <section className="panel" aria-label="Run outputs">
       <h2>Run outputs</h2>
-      <p>
-        Checkpoints and samples belong to run {runId}. A LoRA checkpoint alone
-        does not prove resumable optimizer state.
-      </p>
+      <p>Checkpoints and samples from Run {runId}.</p>
       <button
         disabled={busy}
         onClick={() => {
@@ -118,8 +122,8 @@ export function Outputs({ runId }: { runId: string }) {
           ))}
           {currentResult.outputs.length === 0 && (
             <p>
-              No supported outputs found yet. Refresh after the checkpoint or
-              sample stage completes.
+              No supported outputs found yet. They appear here when a training
+              or sample stage finishes.
             </p>
           )}
           <div className="job-library" aria-label="Output files">
@@ -205,7 +209,7 @@ export function Outputs({ runId }: { runId: string }) {
           <p>{currentResult.note}</p>
         </>
       )}
-      <h3>Compare frozen run inputs</h3>
+      <h3>Compare with another Run</h3>
       <label className="field">
         Compare with run
         <select
@@ -229,7 +233,7 @@ export function Outputs({ runId }: { runId: string }) {
         </select>
       </label>
       <button disabled={busy || !other} onClick={() => void compare()}>
-        Compare revisions
+        Compare inputs
       </button>
       {comparison && comparison.before === runId && (
         <div className="output-comparison" aria-label="Run comparison">

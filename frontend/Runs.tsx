@@ -1,6 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useEffectEvent, useState } from 'react';
 import { apiClient } from './api';
+import { confirmDialog } from './ConfirmDialog';
 import { Outputs } from './Outputs';
+import { notificationsWanted, setNotificationsWanted } from './runSignals';
+import './runs.css';
 
 type Run = {
   id: string;
@@ -17,9 +20,12 @@ type Run = {
     status: string;
     exit_code?: number;
     reused_from?: string;
+    started?: string;
+    finished?: string;
   }[];
   directory: string;
   order: number;
+  start_after_prepare?: boolean;
   deletion?: {
     error: string | null;
     remaining: { path: string; bytes?: number }[];
@@ -32,6 +38,116 @@ type DeletePreview = {
   dependents?: { id: string; status: string }[];
 };
 type DeleteResult = { deleted: boolean; freed_bytes?: number };
+type Progress = {
+  step: number;
+  total: number;
+  elapsed: string | null;
+  eta: string | null;
+  loss: string | null;
+};
+type StepState = 'pending' | 'current' | 'completed' | 'failed' | 'stopped';
+const stepLabels: Record<StepState, string> = {
+  pending: 'Not started',
+  current: 'In progress',
+  completed: 'Done',
+  failed: 'Failed',
+  stopped: 'Stopped',
+};
+
+// Groups the stages into what the user is waiting for. A Run can fail outside any stage, such as
+// when frozen inputs changed, so that failure lands on the first step that did not finish.
+function runSteps(run: Run) {
+  const groups = [
+    { label: 'Caching', names: ['latent_cache', 'text_cache'] },
+    { label: 'Training', names: ['train'] },
+    { label: 'Sample', names: ['generate'] },
+  ];
+  const steps = groups.flatMap(({ label, names }) => {
+    const stages = run.stages.filter((stage) => names.includes(stage.name));
+    if (stages.length === 0) return [];
+    const has = (...values: string[]) =>
+      stages.some((stage) => values.includes(stage.status));
+    const state: StepState = has('failed')
+      ? 'failed'
+      : has('stopped', 'interrupted')
+        ? 'stopped'
+        : has('running')
+          ? 'current'
+          : stages.every((stage) =>
+                ['completed', 'reused'].includes(stage.status),
+              )
+            ? 'completed'
+            : 'pending';
+    const failed =
+      state === 'failed' && stages.find((stage) => stage.exit_code);
+    const detail = failed
+      ? `Exit code ${failed.exit_code}`
+      : stages.some((stage) => stage.reused_from)
+        ? 'verified cache reused'
+        : stepLabels[state];
+    return [{ label, state, detail }];
+  });
+  if (
+    run.status === 'failed' &&
+    !steps.some((step) => step.state === 'failed')
+  ) {
+    const step =
+      steps.find((item) => item.state !== 'completed') ?? steps.at(-1);
+    if (step) Object.assign(step, { state: 'failed', detail: 'Failed' });
+  }
+  const done: StepState = run.status === 'completed' ? 'completed' : 'pending';
+  return [...steps, { label: 'Done', state: done, detail: stepLabels[done] }];
+}
+
+function duration(from: string, to?: string) {
+  const seconds = Math.max(
+    0,
+    Math.round(((to ? Date.parse(to) : Date.now()) - Date.parse(from)) / 1000),
+  );
+  const minutes = Math.floor(seconds / 60);
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return minutes >= 60
+    ? `${Math.floor(minutes / 60)}:${pad(minutes % 60)}:${pad(seconds % 60)}`
+    : `${pad(minutes)}:${pad(seconds % 60)}`;
+}
+
+function TrainingProgress({
+  run,
+  progress,
+}: {
+  run: Run;
+  progress: Progress | null;
+}) {
+  const train = run.stages.find((stage) => stage.name === 'train');
+  if (!train || train.status === 'pending') return null;
+  if (!progress)
+    return (
+      <div className="run-progress" aria-label="Training progress">
+        <p>Step progress unknown: training has not reported a step yet.</p>
+      </div>
+    );
+  const elapsed =
+    progress.elapsed ??
+    (train.started ? duration(train.started, train.finished) : 'unknown');
+  return (
+    <div className="run-progress" aria-label="Training progress">
+      <p>
+        <strong>
+          Step {progress.step}/{progress.total}
+        </strong>
+      </p>
+      <progress
+        aria-label="Training steps"
+        max={progress.total}
+        value={progress.step}
+      />
+      <p>
+        Elapsed {elapsed} · ETA {progress.eta ?? 'unknown'} · Loss{' '}
+        {progress.loss ?? 'unknown'}
+      </p>
+    </div>
+  );
+}
 
 function sizeLabel(bytes: number) {
   if (bytes >= 100_000_000) return `${(bytes / 1_000_000_000).toFixed(1)} GB`;
@@ -40,10 +156,9 @@ function sizeLabel(bytes: number) {
     : `${Math.ceil(bytes / 1_000)} KB`;
 }
 
-function deleteQuestion(run: Run, preview: DeletePreview) {
+function confirmDelete(run: Run, preview: DeletePreview) {
   const lines = [
-    `Permanently delete run ${run.id.slice(0, 8)} of ${run.job.name} (r${run.job.revision})?`,
-    `This frees ${sizeLabel(preview.bytes ?? 0)} and can't be undone. Its checkpoints, samples, saved states, logs and frozen inputs are removed, so download any LoRA you want to keep first.`,
+    `This frees ${sizeLabel(preview.bytes ?? 0)} and can't be undone. Its checkpoints, samples, saved states, logs and saved inputs are removed, so download any LoRA you want to keep first.`,
   ];
   if (preview.shared_cache)
     lines.push(
@@ -53,7 +168,12 @@ function deleteQuestion(run: Run, preview: DeletePreview) {
     lines.push(
       `${preview.dependents.length} later run(s) came from this one. They stay browsable, but can no longer be retried or restored from.`,
     );
-  return lines.join('\n\n');
+  return confirmDialog({
+    title: `Permanently delete run ${run.id.slice(0, 8)} of ${run.job.name} (r${run.job.revision})?`,
+    body: lines.map((line) => <p key={line}>{line}</p>),
+    confirmLabel: 'Delete run',
+    danger: true,
+  });
 }
 
 const request = apiClient('Run request failed.');
@@ -118,14 +238,20 @@ function SavedStates({
           {state.valid ? `optimizer step ${state.optimizer_step}` : state.error}
           <button
             disabled={!state.valid || !Number.isInteger(steps) || steps < 1}
-            onClick={() => {
-              if (
-                window.confirm(
-                  'Restore this optimizer state as a new segment? The displayed step counter and data position restart. Original run inputs are preserved.',
-                )
-              )
-                void onRestore(state.id, steps);
-            }}
+            onClick={() =>
+              void confirmDialog({
+                title: 'Restore this optimizer state as a new segment?',
+                body: (
+                  <p>
+                    The displayed step counter and data position restart.
+                    Original run inputs are preserved.
+                  </p>
+                ),
+                confirmLabel: 'Restore as new segment',
+              }).then((confirmed) => {
+                if (confirmed) void onRestore(state.id, steps);
+              })
+            }
           >
             Restore as new segment
           </button>
@@ -135,16 +261,29 @@ function SavedStates({
   );
 }
 
-export function Runs({ selectedId }: { selectedId?: string }) {
+export function Runs({
+  selectedId,
+  onSelect,
+}: {
+  selectedId?: string;
+  onSelect?: (id?: string, replace?: boolean) => void;
+}) {
   const [runs, setRuns] = useState<Run[]>([]);
-  const [selected, setSelected] = useState(selectedId ?? '');
-  const [logs, setLogs] = useState('');
+  const selected = selectedId ?? '';
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [deleting, setDeleting] = useState('');
   const [busy, setBusy] = useState(false);
   const [owner, setOwner] = useState<{ run_id: string } | null>(null);
   const [fixture, setFixture] = useState(false);
+  const [notify, setNotify] = useState(notificationsWanted);
+  const [live, setLive] = useState<{
+    runId: string;
+    text: string;
+    progress: Progress | null;
+  } | null>(null);
+  // Deleted, perhaps from another tab, or never there: a stale link leaves nothing to show.
+  const forgetRun = useEffectEvent(() => onSelect?.(undefined, true));
   useEffect(() => {
     let current = true;
     async function refresh() {
@@ -160,14 +299,13 @@ export function Runs({ selectedId }: { selectedId?: string }) {
         setOwner(capabilities.gpu_owner);
         setFixture(capabilities.fixture);
         if (selected && !records.some((record) => record.id === selected)) {
-          // Deleted, perhaps from another tab: there is nothing left to show.
-          setSelected('');
-          setLogs('');
+          forgetRun();
         } else if (selected) {
-          const result = await request<{ text: string }>(
-            `/api/runs/${selected}/logs`,
-          );
-          if (current) setLogs(result.text);
+          const result = await request<{
+            text: string;
+            progress: Progress | null;
+          }>(`/api/runs/${selected}/logs`);
+          if (current) setLive({ runId: selected, ...result });
         }
       } catch (reason) {
         if (current) setError((reason as Error).message);
@@ -181,6 +319,7 @@ export function Runs({ selectedId }: { selectedId?: string }) {
     };
   }, [selected]);
   const run = runs.find((record) => record.id === selected);
+  const current = live?.runId === run?.id ? live : null;
   const showFiles = run && run.status !== 'deleting' && run.id !== deleting;
   async function action(name: string, body: object = {}) {
     if (!run) return;
@@ -192,7 +331,7 @@ export function Runs({ selectedId }: { selectedId?: string }) {
         'POST',
         body,
       );
-      setSelected(result.id);
+      onSelect?.(result.id);
       setRuns(await request<Run[]>('/api/runs'));
     } catch (reason) {
       setError((reason as Error).message);
@@ -210,7 +349,7 @@ export function Runs({ selectedId }: { selectedId?: string }) {
         `/api/runs/${run.id}/delete-preview`,
       );
       if (preview.refusal) throw new Error(preview.refusal);
-      if (!window.confirm(deleteQuestion(run, preview))) return;
+      if (!(await confirmDelete(run, preview))) return;
       setNotice('Deleting run…');
       // Unmounting the outputs closes any preview stream holding one of the files open.
       setDeleting(run.id);
@@ -224,10 +363,7 @@ export function Runs({ selectedId }: { selectedId?: string }) {
           ? `Run deleted. Freed ${sizeLabel(result.freed_bytes ?? 0)}.`
           : '',
       );
-      if (result.deleted) {
-        setSelected('');
-        setLogs('');
-      }
+      if (result.deleted) onSelect?.();
       setRuns(await request<Run[]>('/api/runs'));
     } catch (reason) {
       setNotice('');
@@ -258,11 +394,10 @@ export function Runs({ selectedId }: { selectedId?: string }) {
   return (
     <>
       <section className="title">
-        <p className="eyebrow">PREPARATION & EXECUTION</p>
         <h1>Runs</h1>
         <p>
-          Each run keeps its reviewed job revision and frozen dataset inputs.
-          Closing the browser leaves the worker running.
+          Each Run keeps the job settings and dataset files it was prepared
+          with. Closing the browser leaves training running.
         </p>
       </section>
       {fixture && (
@@ -280,6 +415,16 @@ export function Runs({ selectedId }: { selectedId?: string }) {
         {owner ? `GPU owned by run ${owner.run_id}` : 'GPU available'}
       </p>
       {notice && <p role="status">{notice}</p>}
+      <label className="job-toggle">
+        <input
+          type="checkbox"
+          checked={notify}
+          onChange={(event) =>
+            void setNotificationsWanted(event.target.checked).then(setNotify)
+          }
+        />
+        <span>Send a browser notification when a Run is ready or finished</span>
+      </label>
       <div className="columns">
         <section className="panel">
           <h2>Pending queue</h2>
@@ -303,7 +448,7 @@ export function Runs({ selectedId }: { selectedId?: string }) {
             ))}
         </section>
         <section className="panel">
-          <h2>Persistent run history</h2>
+          <h2>Run history</h2>
           {runs.length === 0 && (
             <p>Save and review a job, then choose Prepare.</p>
           )}
@@ -311,7 +456,7 @@ export function Runs({ selectedId }: { selectedId?: string }) {
             <p key={record.id}>
               <button
                 aria-pressed={selected === record.id}
-                onClick={() => setSelected(record.id)}
+                onClick={() => onSelect?.(record.id)}
               >
                 {record.job.name} · {record.job.family.toUpperCase()} · r
                 {record.job.revision}
@@ -331,6 +476,10 @@ export function Runs({ selectedId }: { selectedId?: string }) {
               <strong>State: {run.status}</strong>
             </p>
             {run.error && <p className="error">{run.error}</p>}
+            {run.start_after_prepare &&
+              ['pending_preparation', 'preparing'].includes(run.status) && (
+                <p>Training starts by itself when preparation succeeds.</p>
+              )}
             {run.status === 'deleting' && (
               <div aria-label="Unfinished delete">
                 <p className="error">
@@ -362,19 +511,29 @@ export function Runs({ selectedId }: { selectedId?: string }) {
                     disabled={busy}
                     onClick={() => void action('reconcile')}
                   >
-                    Reconcile processes
+                    Check for leftover processes
                   </button>
                   {run.status !== 'interrupted' && (
                     <button
                       disabled={busy}
-                      onClick={() => {
-                        if (
-                          window.confirm(
-                            'Terminate the recovered processes belonging to this run? Unsaved work may be lost.',
-                          )
-                        )
-                          void action('terminate-orphan', { confirmed: true });
-                      }}
+                      onClick={() =>
+                        void confirmDialog({
+                          title: 'Terminate recovered work?',
+                          body: (
+                            <p>
+                              This ends the recovered processes belonging to
+                              this run. Unsaved work may be lost.
+                            </p>
+                          ),
+                          confirmLabel: 'Terminate recovered work',
+                          danger: true,
+                        }).then((confirmed) => {
+                          if (confirmed)
+                            void action('terminate-orphan', {
+                              confirmed: true,
+                            });
+                        })
+                      }
                     >
                       Terminate recovered work
                     </button>
@@ -391,14 +550,22 @@ export function Runs({ selectedId }: { selectedId?: string }) {
                   </button>
                   <button
                     disabled={busy}
-                    onClick={() => {
-                      if (
-                        window.confirm(
-                          'Force terminate this run process tree? Unsaved checkpoints and optimizer state may be lost.',
-                        )
-                      )
-                        void action('stop', { force: true, confirmed: true });
-                    }}
+                    onClick={() =>
+                      void confirmDialog({
+                        title: 'Force terminate this Run?',
+                        body: (
+                          <p>
+                            This ends the Run's whole process tree. Unsaved
+                            checkpoints and optimizer state may be lost.
+                          </p>
+                        ),
+                        confirmLabel: 'Force terminate',
+                        danger: true,
+                      }).then((confirmed) => {
+                        if (confirmed)
+                          void action('stop', { force: true, confirmed: true });
+                      })
+                    }
                   >
                     Force terminate
                   </button>
@@ -429,23 +596,32 @@ export function Runs({ selectedId }: { selectedId?: string }) {
               )}
               {['failed', 'cancelled', 'interrupted'].includes(run.status) && (
                 <button disabled={busy} onClick={() => void action('retry')}>
-                  Retry frozen preparation
+                  Retry preparation
                 </button>
               )}
               <button disabled={busy} onClick={() => void deleteRun()}>
                 {run.status === 'deleting' ? 'Delete again' : 'Delete run'}
               </button>
             </div>
-            {run.stages.map((stage) => (
-              <p key={stage.name}>
-                <strong>{stage.name}</strong>: {stage.status}
-                {stage.exit_code !== undefined && ` (exit ${stage.exit_code})`}
-                {stage.reused_from && ' · verified cache reused'}
-              </p>
-            ))}
+            {run.stages.length > 0 && (
+              <ol className="run-stepper" aria-label="Run stages">
+                {runSteps(run).map((step) => (
+                  <li
+                    key={step.label}
+                    className={step.state}
+                    aria-current={step.state === 'current' ? 'step' : undefined}
+                  >
+                    <strong>{step.label}</strong>
+                    <small>{step.detail}</small>
+                  </li>
+                ))}
+              </ol>
+            )}
+            <TrainingProgress run={run} progress={current?.progress ?? null} />
             <details>
               <summary>
-                Frozen inputs ({run.manifest.items.length} included items)
+                Inputs saved with this Run ({run.manifest.items.length} included
+                items)
               </summary>
               <pre>{JSON.stringify(run.manifest, null, 2)}</pre>
             </details>
@@ -453,6 +629,14 @@ export function Runs({ selectedId }: { selectedId?: string }) {
           </section>
         )}
       </div>
+      {run && (
+        <details className="panel" open={run.status === 'failed'}>
+          <summary>Stage logs</summary>
+          <pre aria-label="Run logs">
+            {current?.text || 'Waiting for stage output…'}
+          </pre>
+        </details>
+      )}
       {showFiles && (
         <SavedStates
           key={`states-${run.id}`}
@@ -466,16 +650,15 @@ export function Runs({ selectedId }: { selectedId?: string }) {
           }
         />
       )}
-      {showFiles && <Outputs key={`outputs-${run.id}`} runId={run.id} />}
-      {run && (
-        <section className="panel">
-          <h2>Live stage logs</h2>
-          <p>
-            Progress appears as reported by upstream. Missing step information
-            means progress is unknown.
-          </p>
-          <pre aria-label="Run logs">{logs || 'Waiting for stage output…'}</pre>
-        </section>
+      {showFiles && (
+        <Outputs
+          key={`outputs-${run.id}`}
+          runId={run.id}
+          runState={[
+            run.status,
+            ...run.stages.map((stage) => stage.status),
+          ].join()}
+        />
       )}
     </>
   );
