@@ -994,3 +994,47 @@ test('a review size error leads to the dimension that is wrong', async ({
     await app.close();
   }
 });
+
+test('a saved value Review rejects has a control to fix it, even where the form usually hides it', async ({
+  page,
+}) => {
+  const app = await workspace();
+  try {
+    await openJobs(page, app.url);
+    await page.getByRole('button', { name: 'New H3 job', exact: true }).click();
+    await expect(page).toHaveURL(/#\/jobs\/\w+/);
+    const h3 = { id: page.url().split('/').at(-1)! };
+    const saved = (await (
+      await page.request.get(`${app.url}/api/jobs/${h3.id}`)
+    ).json()) as {
+      revision: number;
+      name: string;
+      family: string;
+      dataset_id: string;
+      config: Record<string, unknown>;
+    };
+    const updated = await page.request.put(`${app.url}/api/jobs/${h3.id}`, {
+      data: {
+        name: saved.name,
+        family: saved.family,
+        dataset_id: saved.dataset_id,
+        revision: saved.revision,
+        config: { ...saved.config, fp8_scaled: true },
+      },
+    });
+    expect(updated.ok()).toBe(true);
+    await page.reload();
+    await page
+      .getByRole('button', { name: 'Review configuration', exact: true })
+      .click();
+    await page
+      .getByRole('button', { name: /^Memory: H3 does not support FP8/ })
+      .click();
+    const toggle = page.getByRole('checkbox', { name: /^Runtime FP8 scaling/ });
+    await expect(toggle).toBeFocused();
+    await toggle.uncheck();
+    await expect(toggle).toHaveCount(0);
+  } finally {
+    await app.close();
+  }
+});

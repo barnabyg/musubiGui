@@ -1229,13 +1229,21 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
                   'offload_inactive_dit',
                   'Not supported by this single-expert recipe; review will explain conflicts.',
                 )}
+                {job.config.block_swap_h2d_only &&
+                  toggle('H2D-only block swapping', 'block_swap_h2d_only')}
               </>
             ) : (
-              toggle(
-                'H2D-only block swapping',
-                'block_swap_h2d_only',
-                'Required for the guidance-loss restart forward; classic swapping failed in the reference scenario.',
-              )
+              <>
+                {toggle(
+                  'H2D-only block swapping',
+                  'block_swap_h2d_only',
+                  'Required for the guidance-loss restart forward; classic swapping failed in the reference scenario.',
+                )}
+                {job.config.fp8_scaled &&
+                  toggle('Runtime FP8 scaling', 'fp8_scaled')}
+                {job.config.offload_inactive_dit &&
+                  toggle('Offload inactive DiT', 'offload_inactive_dit')}
+              </>
             )}
           </section>
           <section className="panel" id="job-section-checkpoints" tabIndex={-1}>
@@ -1267,6 +1275,9 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
                 {number('Sample inference steps', 'sample_steps')}
               </>
             )}
+            {!job.config.sample_enabled &&
+              problems.sample_steps &&
+              number('Sample inference steps', 'sample_steps')}
           </section>
           {review && existingRun && (
             <p>
