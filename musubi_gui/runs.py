@@ -22,6 +22,7 @@ from musubi_gui.media_probe import inspect as inspect_media
 from musubi_gui.processes import identity_status, observed_tree, process_identity, terminate_owned
 from musubi_gui.reference import Stage, redact, reference_environment
 from musubi_gui.run_deletion import failure_message, folder_bytes, output_index_file, plan_deletion, remove_folder
+from musubi_gui.run_progress import parse_progress
 from musubi_gui.run_store import DeviceLease, RunStore, blocks_revision, preparation_transaction
 from musubi_gui.saved_state import discover_states
 from musubi_gui.settings import Settings, atomic_json, load_settings
@@ -180,6 +181,14 @@ class RunService:
                     stream.seek(max(0, file.stat().st_size - 256_000))
                     parts.append(f"--- {stage['name']} ---\n" + redact(stream.read().decode("utf-8", errors="replace")))
         return "\n".join(parts)
+
+    def progress(self, run_id: str) -> dict[str, Any] | None:
+        file = Path(self.get(run_id)["directory"]) / "train.log"
+        if not file.is_file():
+            return None
+        with file.open("rb") as stream:
+            stream.seek(max(0, file.stat().st_size - 64_000))
+            return parse_progress(stream.read().decode("utf-8", errors="replace"))
 
     def close(self) -> None:
         self.stopping.set()

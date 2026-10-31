@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { apiClient } from './api';
 import { Outputs } from './Outputs';
+import './runs.css';
 
 type Run = {
   id: string;
@@ -17,6 +18,8 @@ type Run = {
     status: string;
     exit_code?: number;
     reused_from?: string;
+    started?: string;
+    finished?: string;
   }[];
   directory: string;
   order: number;
@@ -32,6 +35,116 @@ type DeletePreview = {
   dependents?: { id: string; status: string }[];
 };
 type DeleteResult = { deleted: boolean; freed_bytes?: number };
+type Progress = {
+  step: number;
+  total: number;
+  elapsed: string | null;
+  eta: string | null;
+  loss: string | null;
+};
+type StepState = 'pending' | 'current' | 'completed' | 'failed' | 'stopped';
+const stepLabels: Record<StepState, string> = {
+  pending: 'Not started',
+  current: 'In progress',
+  completed: 'Done',
+  failed: 'Failed',
+  stopped: 'Stopped',
+};
+
+// Groups the stages into what the user is waiting for. A Run can fail outside any stage, such as
+// when frozen inputs changed, so that failure lands on the first step that did not finish.
+function runSteps(run: Run) {
+  const groups = [
+    { label: 'Caching', names: ['latent_cache', 'text_cache'] },
+    { label: 'Training', names: ['train'] },
+    { label: 'Sample', names: ['generate'] },
+  ];
+  const steps = groups.flatMap(({ label, names }) => {
+    const stages = run.stages.filter((stage) => names.includes(stage.name));
+    if (stages.length === 0) return [];
+    const has = (...values: string[]) =>
+      stages.some((stage) => values.includes(stage.status));
+    const state: StepState = has('failed')
+      ? 'failed'
+      : has('stopped', 'interrupted')
+        ? 'stopped'
+        : has('running')
+          ? 'current'
+          : stages.every((stage) =>
+                ['completed', 'reused'].includes(stage.status),
+              )
+            ? 'completed'
+            : 'pending';
+    const failed =
+      state === 'failed' && stages.find((stage) => stage.exit_code);
+    const detail = failed
+      ? `Exit code ${failed.exit_code}`
+      : stages.some((stage) => stage.reused_from)
+        ? 'verified cache reused'
+        : stepLabels[state];
+    return [{ label, state, detail }];
+  });
+  if (
+    run.status === 'failed' &&
+    !steps.some((step) => step.state === 'failed')
+  ) {
+    const step =
+      steps.find((item) => item.state !== 'completed') ?? steps.at(-1);
+    if (step) Object.assign(step, { state: 'failed', detail: 'Failed' });
+  }
+  const done: StepState = run.status === 'completed' ? 'completed' : 'pending';
+  return [...steps, { label: 'Done', state: done, detail: stepLabels[done] }];
+}
+
+function duration(from: string, to?: string) {
+  const seconds = Math.max(
+    0,
+    Math.round(((to ? Date.parse(to) : Date.now()) - Date.parse(from)) / 1000),
+  );
+  const minutes = Math.floor(seconds / 60);
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return minutes >= 60
+    ? `${Math.floor(minutes / 60)}:${pad(minutes % 60)}:${pad(seconds % 60)}`
+    : `${pad(minutes)}:${pad(seconds % 60)}`;
+}
+
+function TrainingProgress({
+  run,
+  progress,
+}: {
+  run: Run;
+  progress: Progress | null;
+}) {
+  const train = run.stages.find((stage) => stage.name === 'train');
+  if (!train || train.status === 'pending') return null;
+  if (!progress)
+    return (
+      <div className="run-progress" aria-label="Training progress">
+        <p>Step progress unknown: training has not reported a step yet.</p>
+      </div>
+    );
+  const elapsed =
+    progress.elapsed ??
+    (train.started ? duration(train.started, train.finished) : 'unknown');
+  return (
+    <div className="run-progress" aria-label="Training progress">
+      <p>
+        <strong>
+          Step {progress.step}/{progress.total}
+        </strong>
+      </p>
+      <progress
+        aria-label="Training steps"
+        max={progress.total}
+        value={progress.step}
+      />
+      <p>
+        Elapsed {elapsed} · ETA {progress.eta ?? 'unknown'} · Loss{' '}
+        {progress.loss ?? 'unknown'}
+      </p>
+    </div>
+  );
+}
 
 function sizeLabel(bytes: number) {
   if (bytes >= 100_000_000) return `${(bytes / 1_000_000_000).toFixed(1)} GB`;
@@ -145,6 +258,10 @@ export function Runs({ selectedId }: { selectedId?: string }) {
   const [busy, setBusy] = useState(false);
   const [owner, setOwner] = useState<{ run_id: string } | null>(null);
   const [fixture, setFixture] = useState(false);
+  const [progress, setProgress] = useState<{
+    runId: string;
+    value: Progress | null;
+  } | null>(null);
   useEffect(() => {
     let current = true;
     async function refresh() {
@@ -164,10 +281,14 @@ export function Runs({ selectedId }: { selectedId?: string }) {
           setSelected('');
           setLogs('');
         } else if (selected) {
-          const result = await request<{ text: string }>(
-            `/api/runs/${selected}/logs`,
-          );
-          if (current) setLogs(result.text);
+          const result = await request<{
+            text: string;
+            progress: Progress | null;
+          }>(`/api/runs/${selected}/logs`);
+          if (current) {
+            setLogs(result.text);
+            setProgress({ runId: selected, value: result.progress });
+          }
         }
       } catch (reason) {
         if (current) setError((reason as Error).message);
@@ -436,13 +557,24 @@ export function Runs({ selectedId }: { selectedId?: string }) {
                 {run.status === 'deleting' ? 'Delete again' : 'Delete run'}
               </button>
             </div>
-            {run.stages.map((stage) => (
-              <p key={stage.name}>
-                <strong>{stage.name}</strong>: {stage.status}
-                {stage.exit_code !== undefined && ` (exit ${stage.exit_code})`}
-                {stage.reused_from && ' · verified cache reused'}
-              </p>
-            ))}
+            {run.stages.length > 0 && (
+              <ol className="run-stepper" aria-label="Run stages">
+                {runSteps(run).map((step) => (
+                  <li
+                    key={step.label}
+                    className={step.state}
+                    aria-current={step.state === 'current' ? 'step' : undefined}
+                  >
+                    <strong>{step.label}</strong>
+                    <small>{step.detail}</small>
+                  </li>
+                ))}
+              </ol>
+            )}
+            <TrainingProgress
+              run={run}
+              progress={progress?.runId === run.id ? progress.value : null}
+            />
             <details>
               <summary>
                 Frozen inputs ({run.manifest.items.length} included items)
@@ -453,6 +585,12 @@ export function Runs({ selectedId }: { selectedId?: string }) {
           </section>
         )}
       </div>
+      {run && (
+        <details className="panel" open={run.status === 'failed'}>
+          <summary>Stage logs</summary>
+          <pre aria-label="Run logs">{logs || 'Waiting for stage output…'}</pre>
+        </details>
+      )}
       {showFiles && (
         <SavedStates
           key={`states-${run.id}`}
@@ -475,16 +613,6 @@ export function Runs({ selectedId }: { selectedId?: string }) {
             ...run.stages.map((stage) => stage.status),
           ].join()}
         />
-      )}
-      {run && (
-        <section className="panel">
-          <h2>Live stage logs</h2>
-          <p>
-            Progress appears as reported by upstream. Missing step information
-            means progress is unknown.
-          </p>
-          <pre aria-label="Run logs">{logs || 'Waiting for stage output…'}</pre>
-        </section>
       )}
     </>
   );

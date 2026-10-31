@@ -199,6 +199,95 @@ test('outputs appear when a Run completes and a playing preview survives a refre
   }
 });
 
+test('live progress steps through stages, reports steps and loss, and shows a failed stage', async ({
+  page,
+}) => {
+  const app = await runWorkspace();
+  try {
+    const job = app.manifest.jobs.find((item) => item.family === 'wan')!;
+    const saved = (await (
+      await fetch(`${app.url}/api/jobs/${job.id}`)
+    ).json()) as {
+      name: string;
+      family: string;
+      dataset_id: string;
+      revision: number;
+      config: Record<string, unknown>;
+    };
+    await fetch(`${app.url}/api/jobs/${job.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...saved,
+        version: undefined,
+        id: undefined,
+        config: { ...saved.config, steps: 6, save_every: 6 },
+      }),
+    });
+    await app.post('/api/runs/prepare', { job_id: job.id });
+    await page.goto(app.url);
+    await page.getByRole('button', { name: 'Runs', exact: true }).click();
+    await page
+      .getByRole('button', { name: `${job.name} · WAN · r2`, exact: true })
+      .click();
+    await expect(
+      page.getByText('State: prepared', { exact: true }),
+    ).toBeVisible({ timeout: 240_000 });
+    const steps = page.getByRole('list', { name: 'Run stages' });
+    const step = (index: number) => steps.getByRole('listitem').nth(index);
+    await expect(step(0)).toHaveClass('completed');
+    await expect(step(0)).toContainText('Caching');
+    await expect(step(1)).toHaveClass('pending');
+    await expect(step(3)).toContainText('Done');
+    await expect(page.getByLabel('Training progress')).toHaveCount(0);
+
+    await page
+      .getByRole('button', { name: 'Start training', exact: true })
+      .click();
+    await expect(step(1)).toHaveAttribute('aria-current', 'step');
+    const progress = page.getByLabel('Training progress');
+    await expect(progress).toContainText(/Step [1-5]\/6/);
+    await expect(progress).toContainText('Loss 0.0');
+    // The fixture reports no ETA, and an unreported value is not estimated.
+    await expect(progress).toContainText('ETA unknown');
+    await expect(page.getByLabel('Training steps')).toHaveAttribute('max', '6');
+    await expect(page.getByLabel('Run logs')).toBeHidden();
+
+    await expect(step(3)).toHaveClass('completed', { timeout: 240_000 });
+    await expect(step(1)).toHaveClass('completed');
+    await expect(step(2)).toHaveClass('completed');
+    await expect(progress).toContainText('Step 6/6');
+
+    // A failed stage is obvious without opening the log, which then opens by itself.
+    await writeFile(path.join(app.fixture, 'checkout', 'fail-train'), '');
+    const other = app.manifest.jobs.find(
+      (item) => item.family === 'wan' && item.id !== job.id,
+    )!;
+    await app.post('/api/runs/prepare', { job_id: other.id });
+    await page
+      .getByRole('button', { name: `${other.name} · WAN · r1`, exact: true })
+      .click();
+    await expect(
+      page.getByText('State: prepared', { exact: true }),
+    ).toBeVisible({ timeout: 240_000 });
+    await page
+      .getByRole('button', { name: 'Start training', exact: true })
+      .click();
+    await expect(step(1)).toHaveClass('failed', { timeout: 240_000 });
+    await expect(step(1)).toContainText('Exit code 3');
+    await expect(step(3)).toHaveClass('pending');
+    await expect(
+      page.getByText('Step progress unknown', { exact: false }),
+    ).toBeVisible();
+    await expect(page.getByLabel('Run logs')).toContainText(
+      'Deliberate fixture failure',
+    );
+    await expect(page.getByLabel('Run logs')).toBeVisible();
+  } finally {
+    await app.close();
+  }
+});
+
 test('a Run that reused a deleted Run cache still shows it and can be used', async ({
   page,
 }) => {
@@ -569,8 +658,11 @@ test('a gracefully stopped revision can be prepared and started again', async ({
       page.getByText('State: stopped', { exact: true }),
     ).toBeVisible();
     await expect(
-      page.locator('p', { hasText: /^train: stopped/ }),
-    ).toBeVisible();
+      page
+        .getByRole('list', { name: 'Run stages' })
+        .getByRole('listitem')
+        .nth(1),
+    ).toContainText('TrainingStopped');
     await expect(page.getByRole('status')).toHaveText('GPU available');
   } finally {
     await app.close();

@@ -78,9 +78,16 @@ The target hardware requirement is Windows 11, RTX 3090, 96 GB RAM and 400+ GB d
 
 Choose Start training on a prepared Wan Run. Its process runs independently of the
 browser. The job can be edited while the Run retains its original revision. Repeated
-Start requests select the same Run. Logs display upstream progress without guessing
-missing step counts; nonzero exits and missing checkpoints are explicit failures.
-Checkpoint/sample locations stay associated with the originating Run.
+Start requests select the same Run. Nonzero exits and missing checkpoints are explicit
+failures. Checkpoint/sample locations stay associated with the originating Run.
+
+The top of a Run shows its stages as Caching, Training, Sample and Done, each marked
+done, in progress, not started, failed or stopped. Below them, Training shows the latest
+step count, elapsed time, ETA and loss from upstream's progress bar. Nothing is estimated:
+a value upstream hasn't reported shows as unknown, and elapsed time falls back to the
+stage's own start and finish times. A restored segment counts its own steps, because
+upstream resets the displayed counter. Stage logs are collapsed below that, and open by
+themselves when a Run has failed.
 
 ## Queueing
 

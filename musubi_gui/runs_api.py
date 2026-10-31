@@ -87,9 +87,9 @@ def runs_router(service: RunService) -> APIRouter:
             return service.get(run_id)
 
     @router.get("/{run_id}/logs")
-    def logs(run_id: str) -> dict[str, str]:
+    def logs(run_id: str) -> dict[str, Any]:
         with run_errors():
-            return {"text": service.logs(run_id)}
+            return {"text": service.logs(run_id), "progress": service.progress(run_id)}
 
     @router.post("/{run_id}/retry")
     def retry(run_id: str) -> dict[str, Any]:
