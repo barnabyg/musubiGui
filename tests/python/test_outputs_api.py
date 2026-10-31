@@ -6,11 +6,12 @@ from pathlib import Path
 from typing import Any
 
 import av
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from PIL import Image
 
-from musubi_gui.outputs import output_router
+from musubi_gui.outputs import download_name, output_router
 from musubi_gui.runs import ExecutionPlan, RunService
 from musubi_gui.settings import Settings, save_settings
 
@@ -72,6 +73,64 @@ def test_outputs_keep_run_association_checkpoint_metadata_and_missing_history_af
     assert remembered["id"] == output["id"]
     assert remembered["status"] == "missing"
     assert restarted.get(output["file_url"]).status_code == 404
+
+
+def test_downloaded_checkpoints_are_named_after_the_job_and_files_stay_unchanged(tmp_path: Path) -> None:
+    client, service = output_client(tmp_path)
+    run = submit_run(service, tmp_path, "WAN acceptance 1")
+    checkpoints = tmp_path / "output" / "WAN acceptance 1" / "checkpoints"
+    checkpoint(checkpoints / "wan-abc.safetensors")
+    checkpoint(checkpoints / "wan-abc-step00000100.safetensors")
+    outputs = {item["name"]: item for item in client.get(f"/api/runs/{run['id']}/outputs").json()["outputs"]}
+
+    def disposition(name: str) -> str:
+        response = client.get(outputs[name]["file_url"] + "?download=true")
+        assert response.status_code == 200
+        return response.headers["content-disposition"]
+
+    assert "filename*=utf-8''WAN%20acceptance%201-r1.safetensors" in disposition("wan-abc.safetensors")
+    assert "WAN%20acceptance%201-r1-step100.safetensors" in disposition("wan-abc-step00000100.safetensors")
+    assert (checkpoints / "wan-abc.safetensors").is_file()
+    assert outputs["wan-abc.safetensors"]["path"] == "checkpoints/wan-abc.safetensors"
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        ("Plain name", "Plain name-r3.safetensors"),
+        ('a/b\\c:d*e?f"g<h>i|j', "a_b_c_d_e_f_g_h_i_j-r3.safetensors"),
+        ("../../escape", "_.._escape-r3.safetensors"),
+        ("CON", "_CON-r3.safetensors"),
+        ("aux.draft", "_aux.draft-r3.safetensors"),
+        ("Console", "Console-r3.safetensors"),
+        ("  trailing. ", "trailing-r3.safetensors"),
+        ("...", "job-r3.safetensors"),
+        ("", "job-r3.safetensors"),
+        ("雪と音", "雪と音-r3.safetensors"),
+        ("x" * 300, "x" * 120 + "-r3.safetensors"),
+    ],
+)
+def test_download_names_are_safe_on_windows(name: str, expected: str) -> None:
+    assert download_name({"name": name, "revision": 3}, Path("wan-id.safetensors")) == expected
+
+
+def test_non_ascii_job_names_download_with_an_encoded_filename(tmp_path: Path) -> None:
+    client, service = output_client(tmp_path)
+    run = submit_run(service, tmp_path, "雪と音")
+    checkpoint(tmp_path / "output" / "雪と音" / "checkpoints" / "wan-abc.safetensors")
+    output = client.get(f"/api/runs/{run['id']}/outputs").json()["outputs"][0]
+    disposition = client.get(output["file_url"] + "?download=true").headers["content-disposition"]
+    assert disposition == "attachment; filename*=utf-8''%E9%9B%AA%E3%81%A8%E9%9F%B3-r1.safetensors"
+
+
+def test_samples_keep_their_own_download_names(tmp_path: Path) -> None:
+    client, service = output_client(tmp_path)
+    run = submit_run(service, tmp_path, "named")
+    samples = tmp_path / "output" / "named" / "samples"
+    samples.mkdir(parents=True)
+    Image.new("RGB", (4, 4)).save(samples / "still.png")
+    output = client.get(f"/api/runs/{run['id']}/outputs").json()["outputs"][0]
+    assert 'filename="still.png"' in client.get(output["file_url"] + "?download=true").headers["content-disposition"]
 
 
 def test_output_delivery_rechecks_current_root_before_serving_a_known_output(tmp_path: Path) -> None:

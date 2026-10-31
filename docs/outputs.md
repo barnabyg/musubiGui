@@ -4,7 +4,9 @@ Choose a persistent Run, then use Run outputs to browse the checkpoint/sample
 inventory. Select a file to inspect its originating Run, metadata and availability.
 Image, video and audio samples play in the browser; Open output in browser and
 Download output use only the recorded file identity. Checkpoint downloads remain
-binary attachments. Legacy `.pt`/`.pth`/`.ckpt` files are never unpickled.
+binary attachments, named after the job as `<job name>-r<revision>[-step<N>].safetensors`
+with unsafe filename characters replaced. Files on disk keep their job-ID names, because
+existing Runs and duplicate removal rely on them. Legacy `.pt`/`.pth`/`.ckpt` files are never unpickled.
 
 The inventory survives restart and retains previously observed missing files.
 Missing/moved, unreadable, empty/truncated and blocked outputs have separate status

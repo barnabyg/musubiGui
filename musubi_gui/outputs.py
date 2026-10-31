@@ -3,6 +3,7 @@
 import hashlib
 import json
 import mimetypes
+import re
 import threading
 from contextlib import contextmanager
 from pathlib import Path
@@ -23,6 +24,16 @@ VIDEOS = {".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v"}
 AUDIO = {".aac", ".flac", ".m4a", ".mp3", ".ogg", ".opus", ".wav"}
 CHECKPOINTS = {".safetensors", ".pt", ".pth", ".ckpt"}
 BEING_DELETED = "This Run is being deleted, so its outputs are no longer offered."
+WINDOWS_RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"{port}{n}" for port in ["COM", "LPT"] for n in range(1, 10))}
+
+
+def download_name(job: dict[str, Any], file: Path) -> str:
+    """Name a downloaded LoRA after its job, since the name on disk carries only the job's ID."""
+    name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", str(job.get("name", ""))).strip(" .")[:120].strip(" .") or "job"
+    if name.split(".")[0].strip().upper() in WINDOWS_RESERVED:
+        name = "_" + name
+    step = re.search(r"-step(\d+)$", file.stem)
+    return f"{name}-r{job.get('revision', 0)}{f'-step{int(step[1])}' if step else ''}{file.suffix}"
 
 
 def output_id(run_id: str, relative: str) -> str:
@@ -240,7 +251,7 @@ class OutputBrowser:
             media_type="application/octet-stream"
             if attachment
             else mimetypes.guess_type(file.name)[0] or "application/octet-stream",
-            filename=file.name if attachment else None,
+            filename=(download_name(run["job"], file) if kind == "checkpoint" else file.name) if attachment else None,
         )
 
 
