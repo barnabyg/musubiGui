@@ -242,12 +242,36 @@ small {
 .path-field small {
   display: block;
 }
+/* Overlays what follows: losing focus to a button below must not move that button mid-click. */
 .path-full {
+  position: absolute;
+  z-index: 4;
+  max-width: 100%;
+  padding: 4px 8px;
   overflow-wrap: anywhere;
   color: #c3c7d2;
+  background: #26252d;
+  border: 1px solid #484555;
+  border-radius: 5px;
+}
+.path-field {
+  position: relative;
 }
 .path-warning {
   color: #f0b87c;
+}
+.path-check {
+  min-height: 1.5em;
+  font-size: 11px;
+  line-height: 1.5;
+}
+/* Any number of roots can warn, so the list scrolls inside a fixed height. */
+.path-root-checks {
+  height: 3em;
+  overflow: auto;
+}
+.dataset-folder-field .path-check {
+  min-height: 3em;
 }
 .path-browser .path-location {
   overflow-wrap: anywhere;

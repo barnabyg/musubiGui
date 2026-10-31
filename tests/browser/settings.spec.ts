@@ -210,6 +210,47 @@ test('path fields warn before saving, browse local folders and show the full pat
         .then((response) => response.json()),
     ).toMatchObject({ output_root: '' });
 
+    // Warnings arriving after typing leave the buttons below where they were.
+    const save = page.getByRole('button', { name: 'Save settings' });
+    const pageTop = (button: typeof save) =>
+      button.evaluate(
+        (element) => element.getBoundingClientRect().top + window.scrollY,
+      );
+    const saveAt = () => pageTop(save);
+    const before = await saveAt();
+    await output.fill(chosen);
+    await expect(
+      page.locator('.path-field', { has: output }).getByRole('alert'),
+    ).toHaveCount(0);
+    expect(await saveAt()).toBe(before);
+    await page
+      .getByLabel('Dataset roots (one per line)')
+      .fill(
+        `${path.join(root, 'a')}\n${path.join(root, 'b')}\n${path.join(root, 'c')}`,
+      );
+    await expect(
+      page.getByText(`${path.join(root, 'c')}: This folder doesn't exist.`),
+    ).toBeAttached();
+    expect(await saveAt()).toBe(before);
+    await page.getByLabel('Dataset roots (one per line)').fill(root);
+    await page.getByRole('button', { name: 'Datasets', exact: true }).click();
+    await page.getByRole('button', { name: 'New dataset' }).click();
+    const folder = page.getByLabel('Dataset folder', { exact: true });
+    const useExisting = page.getByRole('button', {
+      name: 'Use existing folder',
+    });
+    await folder.fill(path.join(root, 'datasets', 'missing'));
+    await expect(
+      page.getByText("This folder doesn't exist yet."),
+    ).toBeVisible();
+    const buttonAt = await pageTop(useExisting);
+    await folder.fill('');
+    await expect(page.getByText("This folder doesn't exist yet.")).toHaveCount(
+      0,
+    );
+    expect(await pageTop(useExisting)).toBe(buttonAt);
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+
     // The wrong kind of thing is named before saving, too.
     await output.fill(path.join(root, 'plain.txt'));
     await expect(page.getByText('This is not a folder.')).toBeVisible();

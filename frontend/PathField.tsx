@@ -189,12 +189,17 @@ function Browse({
   );
 }
 
+// The slot keeps its space while empty. A check lands a moment after typing, and must not move
+// the buttons below while someone is reaching for them.
 function CheckMessage({ id, check }: { id: string; check?: Check }) {
-  if (!check?.message) return null;
   return (
-    <small id={id} className="path-warning" role="alert">
-      {check.message}
-    </small>
+    <div className="path-check">
+      {check?.message && (
+        <small id={id} className="path-warning" role="alert">
+          {check.message}
+        </small>
+      )}
+    </div>
   );
 }
 
@@ -204,6 +209,7 @@ export function PathField({
   kind,
   roots = [],
   help,
+  className,
   missingMessage,
   placeholder,
   disabled,
@@ -214,6 +220,7 @@ export function PathField({
   kind: Kind;
   roots?: string[];
   help?: string;
+  className?: string;
   // For a field where a missing path is fine, because the action creates it.
   missingMessage?: string;
   placeholder?: string;
@@ -228,7 +235,7 @@ export function PathField({
       ? { ...result, message: missingMessage }
       : result;
   return (
-    <div className="field path-field">
+    <div className={`field path-field ${className ?? ''}`}>
       <label htmlFor={id}>{label}</label>
       <div className="path-row">
         <input
@@ -251,22 +258,20 @@ export function PathField({
           onChoose={onChange}
         />
       </div>
-      {focused && value && <small className="path-full">{value}</small>}
       <CheckMessage id={`${id}-check`} check={check} />
+      {focused && value && <small className="path-full">{value}</small>}
       {help && <small>{help}</small>}
     </div>
   );
 }
 
 function RootLineCheck({ line }: { line: string }) {
-  const id = useId();
   const check = usePathCheck(line, 'folder', []);
   if (!check?.message) return null;
   return (
-    <CheckMessage
-      id={id}
-      check={{ ...check, message: `${line}: ${check.message}` }}
-    />
+    <small className="path-warning" role="alert">
+      {line}: {check.message}
+    </small>
   );
 }
 
@@ -317,9 +322,11 @@ export function RootsField({
           }
         />
       </div>
-      {lines.map((line) => (
-        <RootLineCheck key={line} line={line} />
-      ))}
+      <div className="path-check path-root-checks">
+        {lines.map((line) => (
+          <RootLineCheck key={line} line={line} />
+        ))}
+      </div>
       {help && <small>{help}</small>}
     </div>
   );
