@@ -347,6 +347,11 @@ test('an unconfigured app opens on Settings with a checklist of real progress', 
       page.getByRole('heading', { name: 'Settings', exact: true }),
     ).toBeVisible();
     await expect(checklist).toHaveCount(0);
+
+    // The dismissal is per browser, and setup can go away: a new state folder, for one.
+    await page.unroute('**/api/settings');
+    await page.reload();
+    await expect(checklist).toBeVisible();
   } finally {
     await stop();
     await rm(root, {

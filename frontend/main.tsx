@@ -440,6 +440,7 @@ function App() {
             {settings && (
               <>
                 <SetupChecklist
+                  configured={setupComplete(settings)}
                   connected={!dirty && setupComplete(settings)}
                   diagnosed={!!report && report.current && !dirty}
                 />

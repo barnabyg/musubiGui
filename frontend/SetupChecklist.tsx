@@ -30,9 +30,11 @@ function startedTraining(run: RunRecord) {
 }
 
 export function SetupChecklist({
+  configured,
   connected,
   diagnosed,
 }: {
+  configured: boolean;
   connected: boolean;
   diagnosed: boolean;
 }) {
@@ -90,7 +92,7 @@ export function SetupChecklist({
     { label: 'Create a job', done: progress.jobs, href: '#/jobs' },
     { label: 'Start a Run', done: progress.runs, href: '#/runs' },
   ];
-  if (dismissed) return null;
+  if (dismissed && configured) return null;
   const complete = items.every((item) => item.done);
   return (
     <section className="panel setup-checklist" aria-label="Setup checklist">
