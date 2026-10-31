@@ -35,7 +35,7 @@ def backend(root: Path) -> Iterator[str]:
     # Only the real public job router is hosted: no training worker or shared GPU resource is started.
     code = (
         "import sys,uvicorn\nfrom pathlib import Path\nfrom fastapi import FastAPI\n"
-        "from musubi_gui.jobs import jobs_router\napp=FastAPI()\n"
+        "from musubi_gui.jobs_api import jobs_router\napp=FastAPI()\n"
         "app.include_router(jobs_router(Path(sys.argv[1])))\n"
         "uvicorn.run(app,host='127.0.0.1',port=int(sys.argv[2]),access_log=False,log_level='error')\n"
     )

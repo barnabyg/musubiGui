@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 
 from musubi_gui.acceptance import prepare
 from musubi_gui.disk_estimate import FREE_SPACE_OVERRIDE
-from musubi_gui.jobs import jobs_router
+from musubi_gui.jobs_api import jobs_router
 from musubi_gui.runs import RunService
 from musubi_gui.runs_api import runs_router
 
