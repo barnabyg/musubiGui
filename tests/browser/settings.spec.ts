@@ -53,13 +53,17 @@ test('settings survive backend restart and invalid installations explain correct
     ).toHaveValue(defaultDatasets);
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
     await page
-      .getByLabel('musubi-tuner checkout')
+      .getByLabel('musubi-tuner checkout', { exact: true })
       .fill(path.join(root, 'missing'));
     await page
-      .getByLabel('Training Python executable')
+      .getByLabel('Training Python executable', { exact: true })
       .fill(path.resolve('.venv/Scripts/python.exe'));
-    await page.getByLabel('Output root').fill(path.join(root, 'output'));
-    await page.getByLabel('Cache root').fill(path.join(root, 'cache'));
+    await page
+      .getByLabel('Output root', { exact: true })
+      .fill(path.join(root, 'output'));
+    await page
+      .getByLabel('Cache root', { exact: true })
+      .fill(path.join(root, 'cache'));
     await page.getByRole('button', { name: 'Save settings' }).click();
     await expect(page.getByRole('status')).toHaveText('Settings saved');
     expect(
@@ -82,7 +86,9 @@ test('settings survive backend restart and invalid installations explain correct
         'Select a musubi-tuner checkout containing both training entry points.',
       ),
     ).toBeVisible();
-    await page.getByLabel('musubi-tuner checkout').fill(checkout);
+    await page
+      .getByLabel('musubi-tuner checkout', { exact: true })
+      .fill(checkout);
     await page.getByRole('button', { name: 'Save settings' }).click();
     await expect(page.getByRole('status')).toHaveText('Settings saved');
     await stop();
@@ -91,9 +97,9 @@ test('settings survive backend restart and invalid installations explain correct
     await expect(page.getByLabel('Dataset roots (one per line)')).toHaveValue(
       defaultDatasets,
     );
-    await expect(page.getByLabel('musubi-tuner checkout')).toHaveValue(
-      checkout,
-    );
+    await expect(
+      page.getByLabel('musubi-tuner checkout', { exact: true }),
+    ).toHaveValue(checkout);
     await page.getByRole('button', { name: 'Run diagnostics' }).click();
     await expect(page.getByText('Training entry points found.')).toBeVisible();
     await expect(
@@ -143,7 +149,9 @@ test('diagnostics persist, drive the sidebar and go out of date when settings ch
     await health.click();
     await expect(report).toBeInViewport();
 
-    await page.getByLabel('Cache root').fill(path.join(root, 'cache'));
+    await page
+      .getByLabel('Cache root', { exact: true })
+      .fill(path.join(root, 'cache'));
     await expect(health).toContainText('out of date');
     await expect(report).toContainText('Out of date');
     await page.getByRole('button', { name: 'Save settings' }).click();
@@ -151,6 +159,88 @@ test('diagnostics persist, drive the sidebar and go out of date when settings ch
     await expect(report).toContainText('Out of date');
     await page.reload();
     await expect(health).toContainText('out of date');
+  } finally {
+    await stop();
+    await rm(root, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 100,
+    });
+  }
+});
+
+test('path fields warn before saving, browse local folders and show the full path', async ({
+  page,
+}) => {
+  const root = await realpath(
+    await mkdtemp(path.join(tmpdir(), 'musubi-paths-')),
+  );
+  const chosen = path.join(root, 'chosen folder');
+  await mkdir(chosen);
+  await writeFile(path.join(root, 'plain.txt'), 'not a folder');
+  const { url, start, stop } = await settingsBackend(root);
+  try {
+    await start();
+    await page.goto(url);
+    const output = page.getByLabel('Output root', { exact: true });
+    await output.fill(path.join(root, 'missing'));
+    await expect(
+      page.getByText("This folder doesn't exist.", { exact: true }),
+    ).toBeVisible();
+    await expect(page.getByRole('status')).toHaveText('Unsaved changes');
+    expect(
+      await page.request
+        .get(`${url}/api/settings`)
+        .then((response) => response.json()),
+    ).toMatchObject({ output_root: '' });
+
+    // The wrong kind of thing is named before saving, too.
+    await output.fill(path.join(root, 'plain.txt'));
+    await expect(page.getByText('This is not a folder.')).toBeVisible();
+
+    // The whole path stays readable however narrow the field is.
+    await output.focus();
+    await expect(output).toHaveAttribute('title', path.join(root, 'plain.txt'));
+    await expect(page.locator('.path-full')).toHaveText(
+      path.join(root, 'plain.txt'),
+    );
+
+    await page.getByRole('button', { name: 'Browse for Output root' }).click();
+    const browser = page.getByRole('dialog', { name: 'Choose Output root' });
+    await expect(browser.locator('.path-location')).toHaveText(root);
+    await expect(browser.getByText('plain.txt')).toHaveCount(0);
+    await browser.getByRole('button', { name: /chosen folder/ }).click();
+    await expect(browser.locator('.path-location')).toHaveText(chosen);
+    await browser.getByRole('button', { name: '↑ Up' }).click();
+    await expect(browser.locator('.path-location')).toHaveText(root);
+    await browser.getByRole('button', { name: /chosen folder/ }).click();
+    await browser.getByRole('button', { name: 'Choose this folder' }).click();
+    await expect(output).toHaveValue(chosen);
+    await expect(page.getByText('This is not a folder.')).toHaveCount(0);
+    await expect(
+      page.getByRole('button', { name: 'Browse for Output root' }),
+    ).toBeFocused();
+
+    // Typing still works, and a component outside its root is called out.
+    await page.getByLabel('Model roots (one per line)').fill(chosen);
+    await page.getByText('Model component paths').click();
+    await page
+      .getByLabel('Wan low-noise DiT', { exact: true })
+      .fill(path.join(root, 'plain.txt'));
+    await expect(
+      page.getByText('This is outside the configured roots.'),
+    ).toBeVisible();
+
+    // File fields choose a file.
+    await page
+      .getByRole('button', { name: 'Browse for Training Python executable' })
+      .click();
+    const files = page.getByRole('dialog', {
+      name: 'Choose Training Python executable',
+    });
+    await files.getByRole('button', { name: 'Cancel' }).click();
+    await expect(files).toHaveCount(0);
   } finally {
     await stop();
     await rm(root, {

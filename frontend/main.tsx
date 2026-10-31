@@ -13,6 +13,7 @@ import { Jobs } from './Jobs';
 import { Runs } from './Runs';
 import { Datasets } from './Datasets';
 import { componentLabels } from './labels';
+import { PathField, RootsField } from './PathField';
 import { formatRoute, parseRoute, screens, type Screen } from './route';
 import { useRunSignals } from './runSignals';
 
@@ -214,42 +215,40 @@ function App() {
     label: string,
     key: 'checkout' | 'python' | 'output_root' | 'cache_root',
     help: string,
+    kind: 'folder' | 'file' = 'folder',
   ) {
     return (
-      <label className="field">
-        {label}
-        <input
-          value={settings?.[key] ?? ''}
-          disabled={busy}
-          placeholder="C:\…"
-          onChange={(event) =>
-            settings && update({ ...settings, [key]: event.target.value })
-          }
-        />
-        <small>{help}</small>
-      </label>
+      <PathField
+        label={label}
+        kind={kind}
+        value={settings?.[key] ?? ''}
+        disabled={busy}
+        placeholder="C:\…"
+        help={help}
+        onChange={(value) => settings && update({ ...settings, [key]: value })}
+      />
     );
   }
   function rootsField(
     label: string,
+    browseLabel: string,
     key: RootKey,
     placeholder: string,
     help: string,
   ) {
     return (
-      <label className="field">
-        {label}
-        <textarea
-          disabled={busy}
-          value={rootText[key]}
-          onChange={(event) => {
-            setRootText({ ...rootText, [key]: event.target.value });
-            changed();
-          }}
-          placeholder={placeholder}
-        />
-        <small>{help}</small>
-      </label>
+      <RootsField
+        label={label}
+        browseLabel={browseLabel}
+        disabled={busy}
+        value={rootText[key]}
+        placeholder={placeholder}
+        help={help}
+        onChange={(value) => {
+          setRootText({ ...rootText, [key]: value });
+          changed();
+        }}
+      />
     );
   }
   return (
@@ -302,6 +301,7 @@ function App() {
             selectedId={selection.Datasets}
             onSelect={selectDataset}
             defaultFolder={settings?.dataset_roots[0] ?? ''}
+            datasetRoots={settings?.dataset_roots}
           />
         </div>
         {screen === 'Jobs' ? (
@@ -349,6 +349,7 @@ function App() {
                     'Training Python executable',
                     'python',
                     'Select the python.exe inside your existing training environment.',
+                    'file',
                   )}
                 </section>
                 <section className="panel">
@@ -376,12 +377,14 @@ function App() {
                   </div>
                   {rootsField(
                     'Model roots (one per line)',
+                    'a model root',
                     'model_roots',
                     'C:\\ai\\models',
                     'All component paths must be contained in one of these directories.',
                   )}
                   {rootsField(
                     'Dataset roots (one per line)',
+                    'a dataset root',
                     'dataset_roots',
                     'C:\\datasets',
                     'Registered folders and managed uploads stay within these local roots. Keep them separate from output/cache directories.',
@@ -392,22 +395,20 @@ function App() {
                     </summary>
                     <div className="columns">
                       {Object.entries(componentLabels).map(([key, label]) => (
-                        <label className="field" key={key}>
-                          {label}
-                          <input
-                            disabled={busy}
-                            value={settings.models[key] ?? ''}
-                            onChange={(event) =>
-                              update({
-                                ...settings,
-                                models: {
-                                  ...settings.models,
-                                  [key]: event.target.value,
-                                },
-                              })
-                            }
-                          />
-                        </label>
+                        <PathField
+                          key={key}
+                          label={label}
+                          kind="file"
+                          roots={rootLines(rootText.model_roots)}
+                          disabled={busy}
+                          value={settings.models[key] ?? ''}
+                          onChange={(value) =>
+                            update({
+                              ...settings,
+                              models: { ...settings.models, [key]: value },
+                            })
+                          }
+                        />
                       ))}
                     </div>
                   </details>

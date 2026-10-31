@@ -217,6 +217,60 @@ small {
   color: #888f9f;
   line-height: 1.5;
 }
+.path-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 9px 0 7px;
+}
+.path-row input,
+.path-row textarea {
+  margin: 0;
+  min-width: 0;
+  flex: 1;
+  text-overflow: ellipsis;
+}
+.path-row button {
+  flex-shrink: 0;
+}
+.path-field small {
+  display: block;
+}
+.path-full {
+  overflow-wrap: anywhere;
+  color: #c3c7d2;
+}
+.path-warning {
+  color: #f0b87c;
+}
+.path-browser .path-location {
+  overflow-wrap: anywhere;
+}
+.path-browser ul {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+  max-height: 45vh;
+  overflow: auto;
+  border: 1px solid #30343e;
+  border-radius: 6px;
+}
+.path-browser li button {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  background: none;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.path-browser li button:hover,
+.path-browser li button:focus-visible {
+  background: #302941;
+}
+.path-browser li.hint {
+  padding: 8px 10px;
+}
 .columns {
   display: grid;
   grid-template-columns: 1fr 1fr;

@@ -4,6 +4,7 @@ import { confirmDialog } from './ConfirmDialog';
 import { apiClient } from './api';
 import { JobTable, type JobSummary } from './JobTable';
 import { componentLabels } from './labels';
+import { PathField } from './PathField';
 import './jobs.css';
 
 type JobConfig = {
@@ -171,6 +172,7 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
   const reviewPanel = useRef<HTMLElement>(null);
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [models, setModels] = useState<Record<string, string>>({});
+  const [modelRoots, setModelRoots] = useState<string[]>([]);
   const [job, setJob] = useState<Job | null>(null);
   const [dirty, setDirty] = useState(false);
   // Busy until the initial load lands, so it cannot replace drafts created meanwhile.
@@ -189,7 +191,9 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
     void Promise.all([
       request<Job[]>('/api/jobs'),
       request<Dataset[]>('/api/datasets'),
-      request<{ models: Record<string, string> }>('/api/settings'),
+      request<{ models: Record<string, string>; model_roots: string[] }>(
+        '/api/settings',
+      ),
       request<Preset[]>('/api/jobs/presets'),
       request<Job[]>('/api/jobs/archived'),
       request<JobSummary[]>('/api/jobs/summaries'),
@@ -200,6 +204,7 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
         setArchived(hidden);
         setDatasets(library);
         setModels(settings.models);
+        setModelRoots(settings.model_roots);
         setPresets(savedPresets);
         setStatus('Jobs loaded');
       })
@@ -853,19 +858,20 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
                 ? ['wan_low', 'wan_high', 'wan_vae', 'wan_t5']
                 : ['h3_dit', 'h3_video_vae', 'h3_audio_vae', 'h3_text']
               ).map((key) => (
-                <label className="field" key={key}>
-                  {componentLabels[key]}
-                  <input
-                    disabled={busy}
-                    value={job.config.components[key] ?? models[key] ?? ''}
-                    onChange={(event) =>
-                      config('components', {
-                        ...job.config.components,
-                        [key]: event.target.value,
-                      })
-                    }
-                  />
-                </label>
+                <PathField
+                  key={key}
+                  label={componentLabels[key]}
+                  kind="file"
+                  roots={modelRoots}
+                  disabled={busy}
+                  value={job.config.components[key] ?? models[key] ?? ''}
+                  onChange={(value) =>
+                    config('components', {
+                      ...job.config.components,
+                      [key]: value,
+                    })
+                  }
+                />
               ))}
             </details>
           </section>

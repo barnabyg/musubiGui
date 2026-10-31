@@ -9,6 +9,7 @@ import {
 import './datasets.css';
 import { apiClient } from './api';
 import { confirmDialog } from './ConfirmDialog';
+import { PathField } from './PathField';
 import { CaptionEditor } from './CaptionEditor';
 import { InlineCaption } from './InlineCaption';
 import { type Caption, useCaptionSession } from './captionSession';
@@ -50,12 +51,14 @@ export function Datasets({
   selectedId,
   onSelect,
   defaultFolder = '',
+  datasetRoots,
   onEditorChange,
 }: {
   visible?: boolean;
   selectedId?: string;
   onSelect?: (id?: string, replace?: boolean) => void;
   defaultFolder?: string;
+  datasetRoots?: string[];
   onEditorChange?: (editing: boolean) => void;
 }) {
   const [datasets, setDatasets] = useState<Dataset[]>([]);
@@ -580,14 +583,14 @@ export function Datasets({
                 onChange={(event) => setName(event.target.value)}
               />
             </label>
-            <label className="field">
-              Dataset folder
-              <input
-                value={folder}
-                onChange={(event) => setFolder(event.target.value)}
-                placeholder="C:\datasets\…"
-              />
-            </label>
+            <PathField
+              label="Dataset folder"
+              kind="folder"
+              roots={datasetRoots}
+              value={folder}
+              placeholder="C:\datasets\…"
+              onChange={setFolder}
+            />
           </div>
           <p>
             Use a folder within the dataset roots configured in Settings.
