@@ -13,9 +13,10 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
 from musubi_gui.media_probe import inspect
-from musubi_gui.reference import redact, safetensors_header
+from musubi_gui.redaction import redact
 from musubi_gui.run_deletion import output_index_file
 from musubi_gui.runs import RunService
+from musubi_gui.safetensors_file import safetensors_header
 from musubi_gui.settings import atomic_json, load_settings, within_root
 
 _lock = threading.RLock()

@@ -6,7 +6,7 @@ import subprocess  # nosec B404
 from pathlib import Path
 from typing import Any
 
-from musubi_gui.reference import safetensors_header
+from musubi_gui.safetensors_file import safetensors_header
 from musubi_gui.settings import within_root
 from musubi_gui.snapshots import digest_file
 

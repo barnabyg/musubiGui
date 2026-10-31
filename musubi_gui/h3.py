@@ -2,7 +2,8 @@
 
 from pathlib import Path
 
-from musubi_gui.reference import CAPTION, Stage, cli, python_args, safetensors_header
+from musubi_gui.recipe import CAPTION, Stage, cli, python_args
+from musubi_gui.safetensors_file import safetensors_header
 from musubi_gui.settings import Settings
 
 

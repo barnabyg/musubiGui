@@ -3,7 +3,7 @@
 The initial validated smoke recipe trains the low-noise expert alone. It uses rank/alpha 8, batch one,
 256×256, 17 frames at 16 fps, two optimizer steps, FP16 training, FP8 conversion from native
 FP16 source, 36 swapped blocks, gradient checkpointing, AdamW and SDPA.
-`reference.py` is the reusable command/config generator; each run saves resolved arguments
+`wan.py` is the reusable command/config generator; each run saves resolved arguments
 and dataset TOML. The expected final outputs are `checkpoints/wan-reference.safetensors`
 and an MP4 under `samples/` in the unique configured output directory.
 
