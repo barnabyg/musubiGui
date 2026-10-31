@@ -24,6 +24,7 @@ import { componentLabels } from './labels';
 import { PathField, RootsField } from './PathField';
 import { formatRoute, parseRoute, screens, type Screen } from './route';
 import { useRunSignals } from './runSignals';
+import { StatusBadge, type Tone } from './StatusBadge';
 
 type Settings = {
   version: number;
@@ -41,6 +42,12 @@ type Report = {
   current: boolean;
   checks: { name: string; status: string; message: string }[];
   environment: Record<string, unknown>;
+};
+
+const checkBadges: Record<string, { tone: Tone; label: string }> = {
+  ok: { tone: 'success', label: 'Passed' },
+  warning: { tone: 'warning', label: 'Warning' },
+  error: { tone: 'failure', label: 'Failed' },
 };
 
 const screenIcons: Record<Screen, LucideIcon> = {
@@ -513,15 +520,18 @@ function App() {
                     <div className="checks">
                       {report.checks.map((check) => (
                         <div
-                          className={`check ${check.status}`}
+                          className={`check check-${check.status}`}
                           key={check.name}
                         >
-                          <span>{check.status === 'ok' ? '✓' : '!'}</span>
                           <div>
                             <strong>{check.name}</strong>
                             <p>{check.message}</p>
                           </div>
-                          <small>{check.status}</small>
+                          <StatusBadge
+                            tone={checkBadges[check.status]?.tone ?? 'neutral'}
+                          >
+                            {checkBadges[check.status]?.label ?? check.status}
+                          </StatusBadge>
                         </div>
                       ))}
                     </div>

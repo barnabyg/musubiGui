@@ -185,6 +185,65 @@ test('diagnostics persist, drive the sidebar and go out of date when settings ch
   }
 });
 
+test('diagnostic rows share one layout and state their status in a badge', async ({
+  page,
+}) => {
+  const root = await realpath(
+    await mkdtemp(path.join(tmpdir(), 'musubi-checks-')),
+  );
+  const { url, start, stop } = await settingsBackend(root);
+  try {
+    await start();
+    await page.route('**/api/diagnostics', async (route) => {
+      await route.fulfill({
+        json: {
+          ran_at: '2026-10-31T00:00:00+00:00',
+          current: true,
+          environment: {},
+          checks: [
+            { name: 'Python', status: 'ok', message: 'Found.' },
+            { name: 'Roots', status: 'warning', message: 'None set.' },
+            { name: 'PyTorch', status: 'error', message: 'Not installed.' },
+          ],
+        },
+      });
+    });
+    await page.goto(url);
+    const rows = page.locator('.check');
+    await expect(rows).toHaveCount(3);
+    await expect(rows.locator('.status-badge')).toHaveText([
+      'Passed',
+      'Warning',
+      'Failed',
+    ]);
+    const layout = await rows.evaluateAll((elements) =>
+      elements.map((element) => {
+        const style = getComputedStyle(element);
+        return {
+          left: element.getBoundingClientRect().left,
+          textLeft: element.querySelector('strong')!.getBoundingClientRect()
+            .left,
+          badgeRight: element
+            .querySelector('.status-badge')!
+            .getBoundingClientRect().right,
+          background: style.backgroundColor,
+          padding: style.paddingLeft,
+        };
+      }),
+    );
+    expect(layout[1]).toEqual(layout[0]);
+    expect(layout[2]).toEqual(layout[0]);
+  } finally {
+    await stop();
+    await rm(root, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 100,
+    });
+  }
+});
+
 test('path fields warn before saving, browse local folders and show the full path', async ({
   page,
 }) => {
@@ -381,7 +440,7 @@ test('typed Enter separates model and dataset roots and diagnostics name missing
     await expect(datasetRoots).toHaveValue(`${datasets}\n${sampleVids}`);
     await page.getByRole('button', { name: 'Run diagnostics' }).click();
     const warning = page
-      .locator('.check.warning')
+      .locator('.check-warning')
       .filter({ hasText: 'Dataset roots' });
     await expect(warning).toContainText(
       `Not an existing folder: ${sampleVids}.`,
