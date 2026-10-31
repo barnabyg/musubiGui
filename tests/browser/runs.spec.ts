@@ -26,6 +26,10 @@ test('deleting a Run and its Job goes from the UI to the disk and survives a bac
     const jobButton = page.getByRole('button', { name: label, exact: true });
     const navigate = (name: string) =>
       page.getByRole('button', { name, exact: true }).click();
+    const jobAction = async (name: string) => {
+      await page.getByRole('button', { name: 'More job actions' }).click();
+      await page.getByRole('menuitem', { name, exact: true }).click();
+    };
     const button = (name: string) =>
       page.getByRole('button', { name, exact: true });
     await page.goto(app.url);
@@ -34,7 +38,7 @@ test('deleting a Run and its Job goes from the UI to the disk and survives a bac
 
     // A Job with a Run is refused with the way forward, before any question is asked.
     await app.post('/api/runs/prepare', { job_id: job.id });
-    await button('Delete job').click();
+    await jobAction('Delete job');
     await expect(page.getByRole('alert')).toContainText('Archive job');
     expect(dialogs).toEqual([]);
 
@@ -106,7 +110,7 @@ test('deleting a Run and its Job goes from the UI to the disk and survives a bac
     await navigate('Jobs');
     await jobButton.click();
     dialogs.length = 0;
-    await button('Delete job').click();
+    await jobAction('Delete job');
     await expect(jobButton).toHaveCount(0);
     expect(dialogs[0]).toContain(job.name);
     expect(await exists(path.join(app.manifest.state, 'jobs', job.id))).toBe(
@@ -791,10 +795,10 @@ test('a queued Run refuses delete and archive; archiving hides a job, keeps its 
       exact: true,
     });
     const jobsTab = page.getByRole('button', { name: 'Jobs', exact: true });
-    const archiveButton = page.getByRole('button', {
-      name: 'Archive job',
-      exact: true,
-    });
+    const archive = async () => {
+      await page.getByRole('button', { name: 'More job actions' }).click();
+      await page.getByRole('menuitem', { name: 'Archive job' }).click();
+    };
     await page.goto(app.url);
     await app.leaseGpu('acquire');
     await jobsTab.click();
@@ -824,7 +828,7 @@ test('a queued Run refuses delete and archive; archiving hides a job, keeps its 
     // A queued Run keeps its job in the list, and the refusal says why.
     await jobsTab.click();
     await library.click();
-    await archiveButton.click();
+    await archive();
     await expect(page.getByRole('alert')).toContainText('active Run', {
       timeout: 240_000,
     });
@@ -836,11 +840,13 @@ test('a queued Run refuses delete and archive; archiving hides a job, keeps its 
       .toBe('prepared');
     const [run] = await app.records();
 
-    await archiveButton.click();
+    await archive();
     await expect(library).toHaveCount(0);
+    await page.getByRole('button', { name: 'More job actions' }).click();
     await expect(
-      page.getByRole('button', { name: 'Archive job', exact: true }),
-    ).toHaveCount(0);
+      page.getByRole('menuitem', { name: 'Archive job' }),
+    ).toBeDisabled();
+    await page.keyboard.press('Escape');
 
     // Still archived after a reload, and its Run stays browsable from Runs.
     await page.reload();

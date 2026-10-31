@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { ActionMenu } from './ActionMenu';
 import { apiClient } from './api';
 import './jobs.css';
 
@@ -155,6 +156,7 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
   const [presetName, setPresetName] = useState('');
   const [presetId, setPresetId] = useState('');
   const [transfer, setTransfer] = useState('');
+  const [transferOpen, setTransferOpen] = useState(false);
   const [conversion, setConversion] = useState<ConversionPreview | null>(null);
   const [existingRun, setExistingRun] = useState<PreparedRun | null>(null);
 
@@ -474,11 +476,6 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
           New H3 job
         </button>
       </section>
-      {error && (
-        <div role="alert" className="error">
-          {error}
-        </div>
-      )}
       <div className="job-library" aria-label="Saved jobs">
         {jobs.map((item) => (
           <button
@@ -513,145 +510,152 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
           </ul>
         </details>
       )}
-      <details className="panel">
-        <summary>Import / export configuration</summary>
-        <p>
-          Version 1 JSON preserves supported values. Unsupported formats and
-          unknown fields are rejected. Recognised credentials are redacted;
-          review local paths before sharing.
-        </p>
-        <label className="field">
-          Configuration file
-          <input
-            type="file"
-            accept="application/json,.json"
-            disabled={busy}
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (file)
-                void file
-                  .text()
-                  .then(setTransfer)
-                  .catch((reason: Error) => setError(reason.message));
-            }}
-          />
-        </label>
-        <label className="field">
-          Configuration JSON
-          <textarea
-            value={transfer}
-            disabled={busy}
-            onChange={(event) => setTransfer(event.target.value)}
-          />
-        </label>
+      <div className="job-action-bar">
         <div className="actions">
-          <button
-            disabled={busy || !transfer}
-            onClick={() => void importConfiguration()}
-          >
-            Import configuration
-          </button>
-          <button
-            disabled={busy || dirty || !job}
-            onClick={() => void exportConfiguration()}
-          >
-            Export configuration
-          </button>
+          <span role="status">{status}</span>
+          {job && (
+            <>
+              <button
+                className="primary"
+                disabled={busy}
+                onClick={() => void save()}
+              >
+                Save draft
+              </button>
+              <button disabled={busy || dirty} onClick={() => void inspect()}>
+                Review configuration
+              </button>
+              <button
+                disabled={busy || dirty || !review?.valid}
+                onClick={() => void prepare()}
+              >
+                Prepare run
+              </button>
+              <button
+                disabled={busy || dirty || !review?.valid}
+                onClick={() => void prepare(true)}
+              >
+                Prepare and start
+              </button>
+            </>
+          )}
+          <ActionMenu
+            label="More job actions"
+            disabled={busy}
+            note={dirty ? 'Save your edits to use the job actions.' : undefined}
+            items={[
+              {
+                label: 'Duplicate job',
+                disabled: !job || dirty,
+                onSelect: () => void duplicate(),
+              },
+              {
+                label: `Change model to ${job?.family === 'h3' ? 'Wan T2V' : 'H3 T2VA'}`,
+                disabled: !job || dirty,
+                onSelect: () => void convert(false),
+              },
+              {
+                label: 'Archive job',
+                disabled: !job || dirty,
+                onSelect: () => void archive(),
+              },
+              {
+                label: 'Delete job',
+                disabled: !job || dirty,
+                onSelect: () => job && void deleteJob(job),
+              },
+              {
+                label: 'Import / export configuration',
+                onSelect: () => setTransferOpen(true),
+              },
+            ]}
+          />
         </div>
-      </details>
-      {job && (
+        {error && (
+          <div role="alert" className="error">
+            {error}
+          </div>
+        )}
+      </div>
+      {transferOpen && (
         <>
-          <section className="panel">
-            <h2>Reuse configuration</h2>
-            <div className="actions">
-              <button disabled={busy || dirty} onClick={() => void duplicate()}>
-                Duplicate job
-              </button>
-              <button
-                disabled={busy || dirty}
-                onClick={() => void convert(false)}
-              >
-                Change model to {job.family === 'wan' ? 'H3 T2VA' : 'Wan T2V'}
-              </button>
-              <button disabled={busy || dirty} onClick={() => void archive()}>
-                Archive job
-              </button>
-              <button
-                disabled={busy || dirty}
-                onClick={() => void deleteJob(job)}
-              >
-                Delete job
-              </button>
-            </div>
-            {conversion && (
-              <div role="dialog" aria-label="Confirm model conversion">
-                <p>{conversion.message}</p>
-                <ul>
-                  {conversion.changes.map((change) => (
-                    <li key={change.field}>
-                      {change.field}: {JSON.stringify(change.before)} →{' '}
-                      {JSON.stringify(change.after)}
-                    </li>
-                  ))}
-                </ul>
-                <div className="actions">
-                  <button disabled={busy} onClick={() => setConversion(null)}>
-                    Cancel conversion
-                  </button>
-                  <button disabled={busy} onClick={() => void convert(true)}>
-                    Accept conversion
-                  </button>
-                </div>
-              </div>
-            )}
-            <div className="columns">
-              <label className="field">
-                Preset name
-                <input
-                  disabled={busy}
-                  value={presetName}
-                  onChange={(event) => setPresetName(event.target.value)}
-                />
-              </label>
-              <label className="field">
-                Compatible preset
-                <select
-                  disabled={busy}
-                  value={presetId}
-                  onChange={(event) => setPresetId(event.target.value)}
-                >
-                  <option value="">Select a preset</option>
-                  {presets
-                    .filter((preset) => preset.family === job.family)
-                    .map((preset) => (
-                      <option key={preset.id} value={preset.id}>
-                        {preset.name}
-                      </option>
-                    ))}
-                </select>
-              </label>
-            </div>
-            <p className="hint">
-              Measured presets set only size, frames, rank and memory controls
-              qualified on the target PC. Smoke tests also set steps,
-              checkpoints and the sample, to check that training runs. Saved
-              presets replace all settings.
+          <section
+            className="panel"
+            aria-label="Import or export configuration"
+          >
+            <h2>Import / export configuration</h2>
+            <p>
+              Version 1 JSON preserves supported values. Unsupported formats and
+              unknown fields are rejected. Recognised credentials are redacted;
+              review local paths before sharing.
             </p>
+            <label className="field">
+              Configuration file
+              <input
+                type="file"
+                accept="application/json,.json"
+                disabled={busy}
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file)
+                    void file
+                      .text()
+                      .then(setTransfer)
+                      .catch((reason: Error) => setError(reason.message));
+                }}
+              />
+            </label>
+            <label className="field">
+              Configuration JSON
+              <textarea
+                value={transfer}
+                disabled={busy}
+                onChange={(event) => setTransfer(event.target.value)}
+              />
+            </label>
             <div className="actions">
               <button
-                disabled={busy || dirty || !presetName.trim()}
-                onClick={() => void savePreset()}
+                disabled={busy || !transfer}
+                onClick={() => void importConfiguration()}
               >
-                Save as preset
+                Import configuration
               </button>
               <button
-                disabled={busy || dirty || !presetId}
-                onClick={() => void applyPreset()}
+                disabled={busy || dirty || !job}
+                onClick={() => void exportConfiguration()}
               >
-                Apply preset
+                Export configuration
               </button>
+            </div>
+            <div className="actions">
+              <button onClick={() => setTransferOpen(false)}>Close</button>
             </div>
           </section>
+        </>
+      )}
+      {job && (
+        <>
+          {conversion && (
+            <div role="dialog" aria-label="Confirm model conversion">
+              <p>{conversion.message}</p>
+              <ul>
+                {conversion.changes.map((change) => (
+                  <li key={change.field}>
+                    {change.field}: {JSON.stringify(change.before)} →{' '}
+                    {JSON.stringify(change.after)}
+                  </li>
+                ))}
+              </ul>
+              <div className="actions">
+                <button disabled={busy} onClick={() => setConversion(null)}>
+                  Cancel conversion
+                </button>
+                <button disabled={busy} onClick={() => void convert(true)}>
+                  Accept conversion
+                </button>
+              </div>
+            </div>
+          )}
           <section className="panel">
             <h2>Job & dataset</h2>
             <label className="field">
@@ -735,6 +739,56 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
                 </label>
               ))}
             </details>
+          </section>
+          <section className="panel">
+            <h2>Presets</h2>
+            <div className="columns">
+              <label className="field">
+                Preset name
+                <input
+                  disabled={busy}
+                  value={presetName}
+                  onChange={(event) => setPresetName(event.target.value)}
+                />
+              </label>
+              <label className="field">
+                Compatible preset
+                <select
+                  disabled={busy}
+                  value={presetId}
+                  onChange={(event) => setPresetId(event.target.value)}
+                >
+                  <option value="">Select a preset</option>
+                  {presets
+                    .filter((preset) => preset.family === job.family)
+                    .map((preset) => (
+                      <option key={preset.id} value={preset.id}>
+                        {preset.name}
+                      </option>
+                    ))}
+                </select>
+              </label>
+            </div>
+            <p className="hint">
+              Measured presets set only size, frames, rank and memory controls
+              qualified on the target PC. Smoke tests also set steps,
+              checkpoints and the sample, to check that training runs. Saved
+              presets replace all settings.
+            </p>
+            <div className="actions">
+              <button
+                disabled={busy || dirty || !presetName.trim()}
+                onClick={() => void savePreset()}
+              >
+                Save as preset
+              </button>
+              <button
+                disabled={busy || dirty || !presetId}
+                onClick={() => void applyPreset()}
+              >
+                Apply preset
+              </button>
+            </div>
           </section>
           <section className="panel">
             <h2>Dataset preparation</h2>
@@ -897,31 +951,6 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
               </>
             )}
           </section>
-          <div className="actions">
-            <span role="status">{status}</span>
-            <button
-              className="primary"
-              disabled={busy}
-              onClick={() => void save()}
-            >
-              Save draft
-            </button>
-            <button disabled={busy || dirty} onClick={() => void inspect()}>
-              Review configuration
-            </button>
-            <button
-              disabled={busy || dirty || !review?.valid}
-              onClick={() => void prepare()}
-            >
-              Prepare run
-            </button>
-            <button
-              disabled={busy || dirty || !review?.valid}
-              onClick={() => void prepare(true)}
-            >
-              Prepare and start
-            </button>
-          </div>
           {dirty && <p>Save the draft before reviewing or preparing it.</p>}
           {review && existingRun && (
             <p>

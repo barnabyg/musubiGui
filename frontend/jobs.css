@@ -37,3 +37,53 @@
 .jobs-workspace .error {
   padding-left: 32px;
 }
+.job-action-bar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  margin: 20px 0;
+  padding: 10px 0;
+  background: #101216;
+  border-bottom: 1px solid #292d36;
+}
+.job-action-bar .actions {
+  flex-wrap: wrap;
+}
+.job-action-bar .error {
+  margin: 10px 0 0;
+  max-height: 30vh;
+  overflow: auto;
+}
+/* Keeps keyboard focus and scrolled-to content clear of the sticky bar, which can wrap on narrow windows. */
+:root:has(.job-action-bar) {
+  scroll-padding-top: 130px;
+}
+.action-menu {
+  position: relative;
+}
+.action-menu [role='menu'] {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  min-width: 260px;
+  padding: 6px;
+  background: #191c22;
+  border: 1px solid #484555;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px #0009;
+}
+.action-menu [role='menuitem'] {
+  border: none;
+  background: none;
+  text-align: left;
+}
+.action-menu [role='menuitem']:focus-visible,
+.action-menu [role='menuitem']:hover:not(:disabled) {
+  background: #302941;
+}
+.action-menu .hint {
+  margin: 6px 16px;
+}

@@ -4,7 +4,10 @@
 
 Launch with `launch.cmd`, register a dataset, and open Jobs. New Wan job creates an
 incomplete saveable draft. Select its dataset and edit the grouped preparation,
-LoRA, memory, checkpoint and sample controls. Save draft creates a new immutable
+LoRA, memory, checkpoint and sample controls. Save draft, Review configuration, Prepare
+run and the status stay visible in a bar as you scroll. Duplicate job, Change model,
+Archive job, Delete job and Import / export configuration are in the bar's ⋯ menu.
+Save draft creates a new immutable
 revision; reopening the application retains every supported value. An outdated tab
 cannot overwrite a newer revision.
 Revision allocation is serialized across backend processes sharing the same state

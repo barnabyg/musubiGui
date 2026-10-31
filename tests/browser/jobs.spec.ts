@@ -64,6 +64,81 @@ async function openJobs(page: Page, url: string) {
   ).toBeVisible();
 }
 
+async function jobAction(page: Page, name: string) {
+  await page.getByRole('button', { name: 'More job actions' }).click();
+  await page.getByRole('menuitem', { name, exact: true }).click();
+}
+
+test('the action bar stays visible, identity comes first and rare actions are in a keyboard menu', async ({
+  page,
+}) => {
+  const app = await workspace();
+  try {
+    await openJobs(page, app.url);
+    await page
+      .getByRole('button', { name: 'New Wan job', exact: true })
+      .click();
+    const save = page.getByRole('button', { name: 'Save draft', exact: true });
+    const inView = async () => {
+      const box = await save.boundingBox();
+      return (
+        box !== null &&
+        box.y >= 0 &&
+        box.y + box.height <= page.viewportSize()!.height
+      );
+    };
+    await expect.poll(inView).toBe(true);
+    await page.evaluate(() =>
+      window.scrollTo(0, document.documentElement.scrollHeight),
+    );
+    await expect.poll(inView).toBe(true);
+
+    // Tabbing to a field below the bar scrolls it clear of the bar.
+    const seed = page.getByLabel('Seed', { exact: true });
+    await seed.focus();
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.getByLabel('Seed', { exact: true }).focus();
+    const bar = await page.locator('.job-action-bar').boundingBox();
+    const field = await seed.boundingBox();
+    expect(field!.y).toBeGreaterThanOrEqual(bar!.y + bar!.height);
+
+    // Job name and dataset lead the editor; presets follow them.
+    const headings = await page
+      .getByRole('heading', { level: 2 })
+      .allInnerTexts();
+    expect(headings.slice(0, 2)).toEqual(['Job & dataset', 'Presets']);
+
+    const menu = page.getByRole('button', { name: 'More job actions' });
+    await menu.focus();
+    await page.keyboard.press('Enter');
+    const items = page.getByRole('menuitem');
+    await expect(items).toHaveText([
+      'Duplicate job',
+      'Change model to H3 T2VA',
+      'Archive job',
+      'Delete job',
+      'Import / export configuration',
+    ]);
+    await expect(items.first()).toBeFocused();
+    await page.keyboard.press('ArrowUp');
+    await expect(items.last()).toBeFocused();
+    await page.keyboard.press('ArrowDown');
+    await expect(items.first()).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(items).toHaveCount(0);
+    await expect(menu).toBeFocused();
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('End');
+    await page.keyboard.press('Enter');
+    await expect(
+      page.getByRole('heading', { name: 'Import / export configuration' }),
+    ).toBeVisible();
+    await expect.poll(inView).toBe(true);
+  } finally {
+    await app.close();
+  }
+});
+
 test('Wan draft controls, validation and reviewed native configuration survive service restart', async ({
   page,
 }) => {
@@ -330,9 +405,7 @@ test('duplication presets cancelled conversion and versioned export import keep 
       .getByRole('button', { name: 'Save as preset', exact: true })
       .click();
     await expect(page.getByRole('status')).toHaveText('Preset saved');
-    await page
-      .getByRole('button', { name: 'Duplicate job', exact: true })
-      .click();
+    await jobAction(page, 'Duplicate job');
     await expect(page.getByLabel('Job name', { exact: true })).toHaveValue(
       'Reusable copy',
     );
@@ -371,9 +444,7 @@ test('duplication presets cancelled conversion and versioned export import keep 
     await expect(
       page.getByLabel('Training steps', { exact: true }),
     ).toHaveValue('800');
-    await page
-      .getByRole('button', { name: 'Change model to H3 T2VA', exact: true })
-      .click();
+    await jobAction(page, 'Change model to H3 T2VA');
     await expect(
       page.getByRole('dialog', { name: 'Confirm model conversion' }),
     ).toContainText('frames: 33 → 124');
@@ -383,9 +454,7 @@ test('duplication presets cancelled conversion and versioned export import keep 
     await expect(page.getByRole('combobox', { name: /^Recipe/ })).toHaveValue(
       'low-noise',
     );
-    await page
-      .getByText('Import / export configuration', { exact: true })
-      .click();
+    await jobAction(page, 'Import / export configuration');
     const download = page.waitForEvent('download');
     await page
       .getByRole('button', { name: 'Export configuration', exact: true })
@@ -411,9 +480,7 @@ test('duplication presets cancelled conversion and versioned export import keep 
     await expect(page.getByLabel('LoRA rank', { exact: true })).toHaveValue(
       '16',
     );
-    await page
-      .getByRole('button', { name: 'Change model to H3 T2VA', exact: true })
-      .click();
+    await jobAction(page, 'Change model to H3 T2VA');
     await page
       .getByRole('button', { name: 'Accept conversion', exact: true })
       .click();
