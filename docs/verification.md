@@ -20,6 +20,12 @@ All diagnostics and warnings must be resolved; pytest warnings and ESLint warnin
 When `CI` is set, pytest and Playwright each stop at their first failure, so a failing run
 ends soon after its first useful signal. Local runs still report every failure. The Verify
 job has a 120-minute limit, well above the slowest passing hosted run of about 18 minutes.
+It runs for pull requests and pushes to `main`. A branch without a pull request can run it
+by hand with `gh workflow run Verify --ref <branch>`.
+
+Pytest and Playwright each run in parallel: four workers locally and two when `CI` is set.
+Each test owns its temporary state, backend port and GPU lease file. The focused pytest
+command below runs serially unless given `-n`.
 
 Test deadlines are upper bounds, not targets, so they carry a lot of margin. A passing test
 never waits them out, while a tight deadline fails correct code when a hosted Windows runner
