@@ -962,7 +962,8 @@ test('a review error about a model component opens and focuses its field', async
     await page
       .getByRole('button', { name: 'Review configuration', exact: true })
       .click();
-    await page.getByRole('button', { name: message }).click();
+    // The fixture's own review can report this too, so it may be listed twice.
+    await page.getByRole('button', { name: message }).first().click();
     await expect(
       page.getByRole('textbox', { name: 'Wan low-noise DiT' }),
     ).toBeFocused();
@@ -1032,7 +1033,7 @@ test('a saved value Review rejects has a control to fix it, even where the form 
       .click();
     const toggle = page.getByRole('checkbox', { name: /^Runtime FP8 scaling/ });
     await expect(toggle).toBeFocused();
-    await toggle.uncheck();
+    await toggle.click();
     await expect(toggle).toHaveCount(0);
   } finally {
     await app.close();

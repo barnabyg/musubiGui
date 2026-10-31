@@ -152,7 +152,7 @@ test('a configured app opens on Datasets, or on a Run in progress', async ({
     const held = new Promise<void>((resolve) => (release = resolve));
     await page.route('**/api/settings', async (route) => {
       await held;
-      await route.continue();
+      await route.continue().catch(() => undefined);
     });
     await page.goto(app.url);
     const entries = await page.evaluate(() => window.history.length);
