@@ -9,3 +9,7 @@ export const componentLabels: Record<string, string> = {
   h3_audio_vae: 'H3 audio VAE',
   h3_text: 'H3 Qwen text encoder',
 };
+
+export function plural(count: number, noun: string) {
+  return `${count} ${noun}${count === 1 ? '' : 's'}`;
+}
