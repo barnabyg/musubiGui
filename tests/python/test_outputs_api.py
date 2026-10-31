@@ -114,6 +114,15 @@ def test_download_names_are_safe_on_windows(name: str, expected: str) -> None:
     assert download_name({"name": name, "revision": 3}, Path("wan-id.safetensors")) == expected
 
 
+def test_saved_state_weights_do_not_download_under_the_final_lora_name() -> None:
+    job = {"name": "Job", "revision": 2}
+    assert download_name(job, Path("wan-id-state/model.safetensors")) == "Job-r2-state-model.safetensors"
+    assert (
+        download_name(job, Path("wan-id-step00000100-state/model.safetensors"))
+        == "Job-r2-step100-state-model.safetensors"
+    )
+
+
 def test_non_ascii_job_names_download_with_an_encoded_filename(tmp_path: Path) -> None:
     client, service = output_client(tmp_path)
     run = submit_run(service, tmp_path, "雪と音")

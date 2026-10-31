@@ -32,8 +32,12 @@ def download_name(job: dict[str, Any], file: Path) -> str:
     name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", str(job.get("name", ""))).strip(" .")[:120].strip(" .") or "job"
     if name.split(".")[0].strip().upper() in WINDOWS_RESERVED:
         name = "_" + name
-    step = re.search(r"-step(\d+)$", file.stem)
-    return f"{name}-r{job.get('revision', 0)}{f'-step{int(step[1])}' if step else ''}{file.suffix}"
+    # A saved state's weights sit in `<name>[-stepN]-state/`, and must not pass for the final LoRA.
+    state = file.parent.name.endswith("-state")
+    source = file.parent.name.removesuffix("-state") if state else file.stem
+    step = re.search(r"-step(\d+)$", source)
+    tag = f"-step{int(step[1])}" if step else ""
+    return f"{name}-r{job.get('revision', 0)}{tag}{f'-state-{file.stem}' if state else ''}{file.suffix}"
 
 
 def output_id(run_id: str, relative: str) -> str:
