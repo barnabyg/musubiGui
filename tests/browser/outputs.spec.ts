@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { localBackend } from './backend';
+import { localBackend, python } from './backend';
 
 type FixtureRun = {
   id: string;
@@ -18,7 +18,6 @@ test('Wan and H3 output playback comparison download and missing states retain r
 }) => {
   const parent = await mkdtemp(path.join(tmpdir(), 'musubi-outputs-'));
   const fixture = path.join(parent, 'fixture');
-  const python = path.resolve('.venv/Scripts/python.exe');
   const { url, start, stop } = await localBackend({
     state: path.join(fixture, 'state'),
     readyRoute: '/api/runs',

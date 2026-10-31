@@ -10,7 +10,7 @@ import {
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { localBackend } from './backend';
+import { localBackend, python } from './backend';
 
 function settingsBackend(root: string) {
   return localBackend({
@@ -57,7 +57,7 @@ test('settings survive backend restart and invalid installations explain correct
       .fill(path.join(root, 'missing'));
     await page
       .getByLabel('Training Python executable', { exact: true })
-      .fill(path.resolve('.venv/Scripts/python.exe'));
+      .fill(python);
     await page
       .getByLabel('Output root', { exact: true })
       .fill(path.join(root, 'output'));
