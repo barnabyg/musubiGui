@@ -47,6 +47,25 @@ export type DatasetItem = {
 
 const api = apiClient((status) => `Request failed (${status}).`);
 
+// A panel beside the gallery narrows the tiles but leaves the column count alone, so they keep
+// their rows and columns. It takes width from the preview too, so with both open the count comes
+// from the width the gallery would have without the panel: these numbers mirror
+// `.dataset-workspace.has-viewer` in datasets.css. On narrow windows the panel overlays.
+function galleryColumns(gallery: HTMLElement, width: number) {
+  const screen = gallery.closest('.editor-screen');
+  const panel = screen?.querySelector<HTMLElement>(
+    '.dataset-panel:not([hidden])',
+  );
+  let available = width;
+  if (panel && getComputedStyle(panel).position !== 'absolute') {
+    const workspace = gallery.closest('.dataset-workspace') as HTMLElement;
+    const inner = workspace.clientWidth - 16 + panel.offsetWidth;
+    const viewer = workspace.querySelector('.media-viewer');
+    available = viewer ? inner - Math.max(280, inner * 0.36) - 12 : inner;
+  }
+  return Math.max(1, Math.floor(available / 230));
+}
+
 export function Datasets({
   visible = true,
   selectedId,
@@ -150,21 +169,7 @@ export function Datasets({
     if (!gallery.current) return;
     const element = gallery.current;
     const observer = new ResizeObserver((entries) => {
-      // A panel beside the gallery narrows the tiles but leaves the column count alone, so they
-      // keep their rows and columns. On narrow windows the panel overlays and takes no width.
-      const panel = element
-        .closest('.editor-screen')
-        ?.querySelector<HTMLElement>('.dataset-panel:not([hidden])');
-      const panelWidth =
-        panel && getComputedStyle(panel).position !== 'absolute'
-          ? panel.offsetWidth
-          : 0;
-      setColumns(
-        Math.max(
-          1,
-          Math.floor((entries[0].contentRect.width + panelWidth) / 230),
-        ),
-      );
+      setColumns(galleryColumns(element, entries[0].contentRect.width));
       setGalleryHeight(entries[0].contentRect.height);
     });
     observer.observe(element);

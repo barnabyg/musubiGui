@@ -152,9 +152,18 @@ test('the active tile stays in view and panels keep the column count', async ({
     await tile.click();
     await expect(page.getByAltText('Preview study-07.png')).toBeVisible();
     await expect(tile).toBeInViewport();
-    await panel.click();
-    await expect(tile).toBeInViewport();
-    await page.getByRole('button', { name: 'Close tools' }).click();
+    // With the preview open too, a panel still leaves the tile in its row and column, wide or not.
+    for (const width of [1440, 1944]) {
+      await page.setViewportSize({ width, height: 800 });
+      await expect(tile).toBeInViewport();
+      const withPreview = await position();
+      await panel.click();
+      await expect(page.getByLabel('Search media and captions')).toBeVisible();
+      await expect.poll(position).toEqual(withPreview);
+      await expect(tile).toBeInViewport();
+      await page.getByRole('button', { name: 'Close tools' }).click();
+    }
+    await page.setViewportSize({ width: 1440, height: 800 });
     await page.getByRole('button', { name: 'Close preview' }).click();
     await expect(page.getByAltText('Preview study-07.png')).toHaveCount(0);
     await expect(tile).toBeInViewport();
