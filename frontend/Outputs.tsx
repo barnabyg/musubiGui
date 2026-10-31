@@ -169,8 +169,7 @@ export function RunResult({ outputs }: { outputs: RunOutputs }) {
           <span>
             <strong>Final LoRA</strong> {byteLabel(final)}
           </span>
-          {final.file_url &&
-          !['missing', 'blocked', 'unreadable'].includes(final.status) ? (
+          {final.file_url && final.status === 'available' ? (
             <a
               className="button-link"
               href={`${final.file_url}?download=true`}
@@ -179,7 +178,7 @@ export function RunResult({ outputs }: { outputs: RunOutputs }) {
               <Download /> Download final LoRA
             </a>
           ) : (
-            <span className="error-text">{final.error}</span>
+            <span className="error-text">{final.error ?? final.status}</span>
           )}
         </div>
       )}

@@ -1124,3 +1124,61 @@ test('a finished Run leads with its sample and final LoRA, and groups the other 
     await app.close();
   }
 });
+
+async function preparedRun(app: Awaited<ReturnType<typeof runWorkspace>>) {
+  const job = app.manifest.jobs.find((item) => item.family === 'wan')!;
+  await app.post('/api/runs/prepare', { job_id: job.id });
+  await expect
+    .poll(async () => (await app.records())[0].status, { timeout: 240_000 })
+    .toBe('prepared');
+  return (await app.records())[0];
+}
+
+function outputList(
+  run: { id: string },
+  status: string,
+  outputs: Record<string, unknown>[],
+) {
+  return {
+    run_id: run.id,
+    job: { name: 'Mocked', family: 'wan', revision: 1 },
+    status,
+    warnings: [],
+    note: 'These files belong to this Run.',
+    outputs: outputs.map((output) => ({
+      run_id: run.id,
+      file_url: '/nowhere',
+      bytes: 2000,
+      ...output,
+    })),
+  };
+}
+
+test('a damaged final LoRA is called out rather than offered as the result', async ({
+  page,
+}) => {
+  const app = await runWorkspace();
+  try {
+    const run = await preparedRun(app);
+    await page.route('**/api/runs/*/outputs', (route) =>
+      route.fulfill({
+        json: outputList(run, 'completed', [
+          {
+            id: 'final',
+            name: 'wan.safetensors',
+            path: 'checkpoints/wan.safetensors',
+            kind: 'checkpoint',
+            status: 'incomplete',
+            error: 'Output is empty.',
+          },
+        ]),
+      }),
+    );
+    await page.goto(`${app.url}/#/runs/${run.id}`);
+    const result = page.getByRole('region', { name: 'Run result' });
+    await expect(result).toContainText('Output is empty.');
+    await expect(result.getByRole('link')).toHaveCount(0);
+  } finally {
+    await app.close();
+  }
+});
