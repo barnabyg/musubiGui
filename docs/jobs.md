@@ -24,7 +24,9 @@ Review configuration scrolls to its result, which opens with pass or fail, the e
 count, the included item count and whether the disk has room. Errors and warnings
 follow. The disk breakdown is collapsed, and Advanced holds the resolved component/output
 paths, model provenance, native dataset TOML and each upstream argument array. Errors
-block preparation while the draft remains editable. Component overrides must stay inside the configured
+block preparation while the draft remains editable. Review configuration saves unsaved
+edits as a new revision first; if the save fails, the review stops and the edits stay on
+screen. Prepare run needs a current, passing review, and says what is missing until then. Component overrides must stay inside the configured
 model roots. The GUI's Wan recipe trains the low-noise expert. A separate
 [native-weight CLI acceptance scenario](reference/wan.md#native-weight-qualification)
 also passed high-noise-only training; that recipe is not exposed by the GUI.

@@ -223,6 +223,79 @@ test('review leads with the verdict, comes into view and collapses technical det
   }
 });
 
+test('Review saves a dirty draft first, and disabled actions explain themselves', async ({
+  page,
+}) => {
+  const app = await workspace();
+  try {
+    await openJobs(page, app.url);
+    await page
+      .getByRole('button', { name: 'New Wan job', exact: true })
+      .click();
+    const prepare = page.getByRole('button', {
+      name: 'Prepare run',
+      exact: true,
+    });
+    const review = page.getByRole('button', {
+      name: 'Review configuration',
+      exact: true,
+    });
+    await expect(prepare).toBeDisabled();
+    await expect(prepare).toHaveAccessibleDescription(
+      'Choose Review configuration before preparing.',
+    );
+    await expect(
+      page.getByRole('button', { name: 'Save as preset', exact: true }),
+    ).toHaveAccessibleDescription('Enter a preset name to save one.');
+    await expect(
+      page.getByRole('button', { name: 'Apply preset', exact: true }),
+    ).toHaveAccessibleDescription('Select a preset to apply it.');
+
+    const steps = page.getByLabel('Training steps', { exact: true });
+    await steps.fill('700');
+    await expect(prepare).toHaveAccessibleDescription(/save these edits/);
+    await expect(review).toBeEnabled();
+
+    // A failed save stops the review and leaves the edits on screen.
+    await page.route('**/api/jobs/*', async (route) => {
+      if (route.request().method() === 'PUT')
+        await route.fulfill({
+          status: 409,
+          contentType: 'application/json',
+          body: JSON.stringify({ detail: 'This job changed in another tab.' }),
+        });
+      else await route.continue();
+    });
+    await review.click();
+    await expect(page.getByRole('alert')).toContainText('another tab');
+    await expect(page.getByRole('status')).toHaveText(
+      'Save failed — edits retained',
+    );
+    await expect(steps).toHaveValue('700');
+    await expect(
+      page.getByRole('region', { name: 'Configuration review' }),
+    ).toHaveCount(0);
+    await page.unroute('**/api/jobs/*');
+
+    await review.click();
+    await expect(page.getByRole('status')).toContainText(
+      'Review failed for revision 2',
+    );
+    await expect(
+      page.getByRole('button', { name: /^New Wan job · WAN · r2$/ }),
+    ).toBeVisible();
+    await expect(prepare).toHaveAccessibleDescription(
+      'Resolve the review errors before preparing.',
+    );
+    const stored = (await (
+      await page.request.get(`${app.url}/api/jobs`)
+    ).json()) as { config: { steps: number } }[];
+    expect(stored[0].config.steps).toBe(700);
+  } finally {
+    await app.close();
+  }
+});
+
 test('Wan draft controls, validation and reviewed native configuration survive service restart', async ({
   page,
 }) => {

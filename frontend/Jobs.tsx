@@ -326,36 +326,48 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
       focusName.current = true;
     });
   }
+  async function persist(draft: Job) {
+    let saved: Job;
+    try {
+      saved = await request<Job>(`/api/jobs/${draft.id}`, 'PUT', {
+        name: draft.name,
+        family: draft.family,
+        dataset_id: draft.dataset_id,
+        config: draft.config,
+        revision: draft.revision,
+      });
+    } catch (reason) {
+      setStatus('Save failed — edits retained');
+      throw reason;
+    }
+    setJob(saved);
+    setDirty(false);
+    setReview(null);
+    setStatus(`Draft saved — revision ${saved.revision}`);
+    await reloadJobs();
+    return saved;
+  }
   async function save() {
     if (!job) return;
     await perform(async () => {
-      const saved = await request<Job>(`/api/jobs/${job.id}`, 'PUT', {
-        name: job.name,
-        family: job.family,
-        dataset_id: job.dataset_id,
-        config: job.config,
-        revision: job.revision,
-      });
-      setJob(saved);
-      await reloadJobs();
-      setDirty(false);
-      setReview(null);
-      setStatus(`Draft saved — revision ${saved.revision}`);
+      await persist(job);
     });
   }
   async function inspect() {
     if (!job) return;
     await perform(async () => {
+      // A failed save throws here, so the review never describes something other than the edits on screen.
+      const current = dirty ? await persist(job) : job;
       const result = await request<Review>(
-        `/api/jobs/${job.id}/review`,
+        `/api/jobs/${current.id}/review`,
         'POST',
         {},
       );
       setReview(result);
       setStatus(
         result.valid
-          ? `Review passed for revision ${job.revision}`
-          : `Review failed for revision ${job.revision}: ${plural(result.errors.length, 'error')}`,
+          ? `Review passed for revision ${current.revision}`
+          : `Review failed for revision ${current.revision}: ${plural(result.errors.length, 'error')}`,
       );
     });
   }
@@ -519,6 +531,23 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
       setStatus('Configuration imported as an independent draft');
     });
   }
+  const prepareReason = dirty
+    ? 'Choose Review configuration to save these edits and check them before preparing.'
+    : !review
+      ? 'Choose Review configuration before preparing.'
+      : !review.valid
+        ? 'Resolve the review errors before preparing.'
+        : '';
+  const savePresetReason = dirty
+    ? 'Save your edits to save them as a preset.'
+    : !presetName.trim()
+      ? 'Enter a preset name to save one.'
+      : '';
+  const applyPresetReason = dirty
+    ? 'Save your edits to apply a preset.'
+    : !presetId
+      ? 'Select a preset to apply it.'
+      : '';
   return (
     <div className="jobs-workspace">
       <section className="title">
@@ -579,17 +608,21 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
               >
                 Save draft
               </button>
-              <button disabled={busy || dirty} onClick={() => void inspect()}>
+              <button disabled={busy} onClick={() => void inspect()}>
                 Review configuration
               </button>
               <button
-                disabled={busy || dirty || !review?.valid}
+                disabled={busy || !!prepareReason}
+                title={prepareReason || undefined}
+                aria-describedby={prepareReason ? 'prepare-reason' : undefined}
                 onClick={() => void prepare()}
               >
                 Prepare run
               </button>
               <button
-                disabled={busy || dirty || !review?.valid}
+                disabled={busy || !!prepareReason}
+                title={prepareReason || undefined}
+                aria-describedby={prepareReason ? 'prepare-reason' : undefined}
                 onClick={() => void prepare(true)}
               >
                 Prepare and start
@@ -628,6 +661,11 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
             ]}
           />
         </div>
+        {job && prepareReason && (
+          <p id="prepare-reason" className="hint">
+            {prepareReason}
+          </p>
+        )}
         {error && (
           <div role="alert" className="error">
             {error}
@@ -835,18 +873,36 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
             </p>
             <div className="actions">
               <button
-                disabled={busy || dirty || !presetName.trim()}
+                disabled={busy || !!savePresetReason}
+                title={savePresetReason || undefined}
+                aria-describedby={
+                  savePresetReason ? 'save-preset-reason' : undefined
+                }
                 onClick={() => void savePreset()}
               >
                 Save as preset
               </button>
               <button
-                disabled={busy || dirty || !presetId}
+                disabled={busy || !!applyPresetReason}
+                title={applyPresetReason || undefined}
+                aria-describedby={
+                  applyPresetReason ? 'apply-preset-reason' : undefined
+                }
                 onClick={() => void applyPreset()}
               >
                 Apply preset
               </button>
             </div>
+            {savePresetReason && (
+              <p id="save-preset-reason" className="hint">
+                {savePresetReason}
+              </p>
+            )}
+            {applyPresetReason && (
+              <p id="apply-preset-reason" className="hint">
+                {applyPresetReason}
+              </p>
+            )}
           </section>
           <section className="panel">
             <h2>Dataset preparation</h2>
@@ -1009,7 +1065,6 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
               </>
             )}
           </section>
-          {dirty && <p>Save the draft before reviewing or preparing it.</p>}
           {review && existingRun && (
             <p>
               This revision already has a {existingRun.status} run with the same
