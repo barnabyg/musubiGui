@@ -193,10 +193,11 @@ function App() {
   );
   const openRun = useCallback((id: string) => go('Runs', id), [go]);
   async function navigate(name: Screen) {
+    const replace = landingPending.current;
     landingPending.current = false;
     setLanding(false);
     if (screen === 'Jobs' && jobDirty && !(await confirmLeaveJob())) return;
-    go(name, selection[name]);
+    go(name, selection[name], replace);
   }
   const followHistory = useEffectEvent(async () => {
     if (window.location.hash === currentHash.current) return;

@@ -146,6 +146,22 @@ test('a configured app opens on Datasets, or on a Run in progress', async ({
       page.getByRole('button', { name: 'Datasets', exact: true }),
     ).toHaveClass('active');
 
+    // Choosing a screen before the opening one is decided leaves no blank entry to go back to.
+    await page.goto('about:blank');
+    let release = () => {};
+    const held = new Promise<void>((resolve) => (release = resolve));
+    await page.route('**/api/settings', async (route) => {
+      await held;
+      await route.continue();
+    });
+    await page.goto(app.url);
+    const entries = await page.evaluate(() => window.history.length);
+    await page.getByRole('button', { name: 'Jobs', exact: true }).click();
+    await expect(page).toHaveURL(/#\/jobs$/);
+    expect(await page.evaluate(() => window.history.length)).toBe(entries);
+    release();
+    await page.unroute('**/api/settings');
+
     // A link that names nothing opens the same place.
     await page.goto('about:blank');
     await page.goto(`${app.url}/#/jobs/not.a.job`);
