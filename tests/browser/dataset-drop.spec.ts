@@ -194,7 +194,7 @@ test('drop feedback handles child boundaries and non-file drags, and busy upload
     ).toContainText('Uploading');
     await expect(picker).toBeDisabled();
     await page
-      .getByRole('button', { name: 'Search & edit', exact: true })
+      .getByRole('button', { name: 'Bulk actions', exact: true })
       .click();
     await expect(picker).toBeHidden();
     await page.getByRole('button', { name: 'Add media', exact: true }).click();

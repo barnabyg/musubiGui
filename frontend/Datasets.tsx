@@ -24,6 +24,7 @@ import { type Caption, useCaptionSession } from './captionSession';
 import { H3Coverage, H3Inspector } from './H3Inspector';
 import { DatasetBulkActions } from './DatasetBulkActions';
 import { DatasetUploads } from './DatasetUploads';
+import { StatusBadge } from './StatusBadge';
 
 export type Dataset = {
   id: string;
@@ -53,6 +54,10 @@ export type DatasetItem = {
 };
 
 const api = apiClient((status) => `Request failed (${status}).`);
+
+function hasCaption(item: DatasetItem) {
+  return !!item.caption.text.trim();
+}
 
 // A panel beside the gallery narrows the tiles but leaves the column count alone, so they keep
 // their rows and columns. It takes width from the preview too, so with both open the count comes
@@ -361,7 +366,7 @@ export function Datasets({
       return (
         matches &&
         (filter === 'all' ||
-          (filter === 'missing' && !item.caption.text.trim()) ||
+          (filter === 'missing' && !hasCaption(item)) ||
           (filter === 'invalid' && !item.valid) ||
           (filter === 'excluded' && item.excluded) ||
           (filter === 'included' && item.valid && !item.excluded) ||
@@ -508,6 +513,55 @@ export function Datasets({
               )}
             </small>
           </div>
+          <div className="dataset-filters">
+            <input
+              aria-label="Search media and captions"
+              placeholder="Search media and captions"
+              value={query}
+              onChange={(event) => {
+                setQuery(event.target.value);
+                setScroll(0);
+              }}
+            />
+            <select
+              aria-label="Filter media"
+              value={filter}
+              onChange={(event) => {
+                setFilter(event.target.value);
+                setScroll(0);
+              }}
+            >
+              <option value="all">All media</option>
+              <option value="missing">Missing captions</option>
+              <option value="invalid">Invalid media</option>
+              <option value="excluded">Excluded</option>
+              <option value="included">Included</option>
+              <option value="selected">Selected</option>
+            </select>
+            <select
+              aria-label="Sort media"
+              value={sort}
+              onChange={(event) => {
+                setSort(event.target.value);
+                setScroll(0);
+              }}
+            >
+              <option value="name">Name A–Z</option>
+              <option value="name-desc">Name Z–A</option>
+              <option value="caption">Caption</option>
+            </select>
+            <button
+              className="quiet"
+              aria-pressed={filter === 'missing'}
+              title="Show only media with no caption"
+              onClick={() => {
+                setFilter(filter === 'missing' ? 'all' : 'missing');
+                setScroll(0);
+              }}
+            >
+              {items.filter(hasCaption).length} of {items.length} captioned
+            </button>
+          </div>
           <div className="dataset-topbar-actions">
             {dataset.managed && (
               <button
@@ -526,19 +580,13 @@ export function Datasets({
               ref={(element) => {
                 panelButtons.current.tools = element;
               }}
-              className={
-                query || filter !== 'all' || selected.size ? 'has-filters' : ''
-              }
+              className={selected.size ? 'has-filters' : ''}
               aria-expanded={panel === 'tools'}
               aria-controls="dataset-tools-panel"
               onClick={() => setPanel(panel === 'tools' ? null : 'tools')}
             >
-              Search &amp; edit
-              {selected.size > 0
-                ? ` · ${selected.size}`
-                : query || filter !== 'all'
-                  ? ' · filtered'
-                  : ''}
+              Bulk actions
+              {selected.size > 0 ? ` · ${selected.size}` : ''}
             </button>
             <button
               ref={(element) => {
@@ -757,63 +805,18 @@ export function Datasets({
           <section
             id="dataset-tools-panel"
             className="dataset-panel"
-            aria-label="Dataset tools"
+            aria-label="Bulk actions"
             hidden={panel !== 'tools'}
           >
             <div className="dataset-panel-heading">
-              <h2>Search and selection</h2>
+              <h2>Bulk actions</h2>
               <button
                 className="quiet"
-                aria-label="Close tools"
+                aria-label="Close bulk actions"
                 onClick={closePanel}
               >
                 <X />
               </button>
-            </div>
-            <div className="columns dataset-filters">
-              <label className="field">
-                Search media and captions
-                <input
-                  value={query}
-                  onChange={(event) => {
-                    setQuery(event.target.value);
-                    setScroll(0);
-                  }}
-                />
-              </label>
-              <label className="field">
-                Filter media
-                <select
-                  aria-label="Filter media"
-                  value={filter}
-                  onChange={(event) => {
-                    setFilter(event.target.value);
-                    setScroll(0);
-                  }}
-                >
-                  <option value="all">All media</option>
-                  <option value="missing">Missing captions</option>
-                  <option value="invalid">Invalid media</option>
-                  <option value="excluded">Excluded</option>
-                  <option value="included">Included</option>
-                  <option value="selected">Selected</option>
-                </select>
-              </label>
-              <label className="field">
-                Sort media
-                <select
-                  aria-label="Sort media"
-                  value={sort}
-                  onChange={(event) => {
-                    setSort(event.target.value);
-                    setScroll(0);
-                  }}
-                >
-                  <option value="name">Name A–Z</option>
-                  <option value="name-desc">Name Z–A</option>
-                  <option value="caption">Caption</option>
-                </select>
-              </label>
             </div>
             <div className="dataset-selection">
               <p>
@@ -937,7 +940,7 @@ export function Datasets({
                         <div className="media-card-content">
                           <button
                             className={`media-tile ${active?.id === item.id ? 'selected' : ''}`}
-                            aria-label={`${item.name} ${item.kind} · ${item.caption.exists ? 'caption' : 'missing caption'}${item.excluded ? ' · excluded' : ''}`}
+                            aria-label={`${item.name} ${item.kind} · ${hasCaption(item) ? 'caption' : 'missing caption'}${item.excluded ? ' · excluded' : ''}${item.valid ? '' : ' · invalid'}`}
                             aria-pressed={active?.id === item.id}
                             onClick={() => void select(item)}
                           >
@@ -955,13 +958,24 @@ export function Datasets({
                             <span className="media-name" title={item.name}>
                               {item.name}
                             </span>
-                            <small>
-                              {item.kind}
-                              {item.caption.exists
-                                ? ' · caption'
-                                : ' · missing caption'}
-                              {item.excluded ? ' · excluded' : ''}
-                            </small>
+                            <small>{item.kind}</small>
+                            <span className="media-badges">
+                              {!hasCaption(item) && (
+                                <StatusBadge tone="warning">
+                                  Missing caption
+                                </StatusBadge>
+                              )}
+                              {item.excluded && (
+                                <StatusBadge tone="neutral">
+                                  Excluded
+                                </StatusBadge>
+                              )}
+                              {!item.valid && (
+                                <StatusBadge tone="failure">
+                                  Invalid
+                                </StatusBadge>
+                              )}
+                            </span>
                           </button>
                           <InlineCaption
                             session={captions}

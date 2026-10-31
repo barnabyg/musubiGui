@@ -23,7 +23,7 @@ test('filters retain explicit selection, bulk previews report conflicts, restore
       'utf8',
     );
     await page
-      .getByRole('button', { name: 'Search & edit', exact: true })
+      .getByRole('button', { name: 'Bulk actions', exact: true })
       .click();
     await page
       .getByLabel('Filter media', { exact: true })
@@ -85,9 +85,6 @@ test('filters retain explicit selection, bulk previews report conflicts, restore
     await app.start();
     // The dataset stays open across a reload, read back from the restarted backend.
     await page.reload();
-    await page
-      .getByRole('button', { name: 'Search & edit', exact: true })
-      .click();
     await page
       .getByLabel('Filter media', { exact: true })
       .selectOption('excluded');

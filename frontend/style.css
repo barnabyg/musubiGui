@@ -491,6 +491,7 @@ summary:focus-visible,
   line-height: 1.5;
   white-space: nowrap;
   color: var(--color-text-label);
+  background: var(--color-surface);
 }
 .status-badge .lucide {
   width: 14px;
