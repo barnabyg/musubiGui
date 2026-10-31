@@ -51,6 +51,10 @@ Focused commands: `npm.cmd run typecheck`, `.venv\Scripts\python.exe -m mypy`,
 `.venv\Scripts\python.exe -m pytest tests/python/test_settings_api.py -q`, and
 `npm.cmd run test:browser -- tests/browser/settings.spec.ts`.
 
+To run one test case:
+`.venv\Scripts\python.exe -m pytest tests/python/test_settings_api.py::test_saved_dataset_roots_are_preserved -q` and
+`npm.cmd run test:browser -- tests/browser/settings.spec.ts -g "diagnostic rows share one layout"`.
+
 Exceptions: subprocess calls have narrow Bandit `B603` annotations beside their fixed
 argument arrays or explicitly selected training executable. They never use a shell.
 The `B404` import exception permits those same controlled subprocess operations.
