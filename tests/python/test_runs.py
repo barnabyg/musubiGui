@@ -5,8 +5,8 @@ import time
 from pathlib import Path
 
 import pytest
+from helpers import acceptance_workspace
 
-from musubi_gui.acceptance import prepare as prepare_acceptance
 from musubi_gui.reference import Stage
 from musubi_gui.runs import ExecutionPlan, RunService
 from musubi_gui.settings import Settings
@@ -251,7 +251,7 @@ def test_graceful_stop_waits_for_descendants_still_exiting_after_the_launcher(tm
 
 def test_final_save_at_a_checkpoint_interval_is_stored_once(tmp_path: Path) -> None:
     # The fixture job trains two steps with a checkpoint interval of one and saved state on.
-    fixture = prepare_acceptance(tmp_path / "acceptance", "fixture", None)
+    fixture = acceptance_workspace(tmp_path)
     service = RunService(Path(fixture["state"]), fixture_mode=True, device_path=tmp_path / "gpu.sqlite")
     try:
         run = service.prepare(fixture["jobs"][0]["id"])
@@ -281,7 +281,7 @@ def test_final_save_at_a_checkpoint_interval_is_stored_once(tmp_path: Path) -> N
 
 
 def test_saved_optimizer_state_restores_as_a_new_segment_and_rejects_tampering(tmp_path: Path) -> None:
-    fixture = prepare_acceptance(tmp_path / "acceptance", "fixture", None)
+    fixture = acceptance_workspace(tmp_path)
     service = RunService(Path(fixture["state"]), fixture_mode=True, device_path=tmp_path / "gpu.sqlite")
     try:
         run = service.prepare(fixture["jobs"][0]["id"])

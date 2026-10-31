@@ -3,8 +3,8 @@ from pathlib import Path
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from helpers import acceptance_workspace
 
-from musubi_gui.acceptance import prepare
 from musubi_gui.disk_estimate import FREE_SPACE_OVERRIDE
 from musubi_gui.jobs_api import jobs_router
 from musubi_gui.runs import RunService
@@ -13,7 +13,7 @@ from musubi_gui.runs_api import runs_router
 
 @pytest.fixture
 def fixture(tmp_path: Path) -> dict:
-    return prepare(tmp_path / "acceptance", "fixture", None)
+    return acceptance_workspace(tmp_path)
 
 
 @pytest.fixture

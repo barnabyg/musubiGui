@@ -5,9 +5,9 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
+from helpers import acceptance_workspace
 
 from musubi_gui import snapshots
-from musubi_gui.acceptance import prepare
 from musubi_gui.datasets import DatasetStore
 from musubi_gui.runs import RunService
 
@@ -15,7 +15,7 @@ from musubi_gui.runs import RunService
 def test_parallel_prepare_calls_share_one_materialization_and_actual_media_changes_allocate_another(
     tmp_path: Path,
 ) -> None:
-    fixture = prepare(tmp_path / "acceptance", "fixture", None)
+    fixture = acceptance_workspace(tmp_path)
     service = RunService(
         Path(fixture["state"]), fixture_mode=True, device_path=tmp_path / "device.sqlite", autostart=False
     )
@@ -69,7 +69,7 @@ def test_parallel_prepare_calls_share_one_materialization_and_actual_media_chang
 def test_failed_materialization_keeps_its_source_manifest_and_releases_preparation_gate(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    fixture = prepare(tmp_path / "acceptance", "fixture", None)
+    fixture = acceptance_workspace(tmp_path)
     service = RunService(
         Path(fixture["state"]), fixture_mode=True, device_path=tmp_path / "device.sqlite", autostart=False
     )
@@ -100,7 +100,7 @@ def test_failed_materialization_keeps_its_source_manifest_and_releases_preparati
 
 @pytest.mark.parametrize("ended", ["stopped", "interrupted", "failed", "cancelled"])
 def test_preparing_a_revision_whose_run_ended_early_creates_a_new_run(tmp_path: Path, ended: str) -> None:
-    fixture = prepare(tmp_path / "acceptance", "fixture", None)
+    fixture = acceptance_workspace(tmp_path)
     service = RunService(
         Path(fixture["state"]), fixture_mode=True, device_path=tmp_path / "device.sqlite", autostart=False
     )
@@ -121,7 +121,7 @@ def test_preparing_a_revision_whose_run_ended_early_creates_a_new_run(tmp_path: 
 
 
 def test_an_interrupted_run_with_unreconciled_processes_still_blocks_its_revision(tmp_path: Path) -> None:
-    fixture = prepare(tmp_path / "acceptance", "fixture", None)
+    fixture = acceptance_workspace(tmp_path)
     service = RunService(
         Path(fixture["state"]), fixture_mode=True, device_path=tmp_path / "device.sqlite", autostart=False
     )

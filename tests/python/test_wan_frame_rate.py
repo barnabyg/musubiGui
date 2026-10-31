@@ -6,14 +6,15 @@ from typing import Any
 
 import av
 from fastapi.testclient import TestClient
+from helpers import acceptance_workspace
 
-from musubi_gui.acceptance import prepare, synthetic_video
+from musubi_gui.acceptance import synthetic_video
 from musubi_gui.app import create_app
 from musubi_gui.runs import RunService
 
 
 def wan_job(tmp_path: Path, clips: dict[str, tuple[Fraction, int]], **config: Any) -> tuple[Path, str, TestClient]:
-    fixture = prepare(tmp_path / "acceptance", "fixture", None)
+    fixture = acceptance_workspace(tmp_path)
     folder = tmp_path / "acceptance" / "datasets" / "rates"
     for name, (rate, frames) in clips.items():
         synthetic_video(folder / name, frames, rate=rate)
@@ -90,7 +91,7 @@ def test_mixed_wan_frame_rates_prepare_one_resampled_section_per_rate(tmp_path: 
 
 
 def test_h3_preparation_still_ignores_source_fps(tmp_path: Path) -> None:
-    fixture = prepare(tmp_path / "acceptance", "fixture", None)
+    fixture = acceptance_workspace(tmp_path)
     job = next(job for job in fixture["jobs"] if job["family"] == "h3")
     service = RunService(Path(fixture["state"]), fixture_mode=True, device_path=tmp_path / "device.sqlite")
     try:

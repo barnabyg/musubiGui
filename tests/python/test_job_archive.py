@@ -3,8 +3,8 @@ from pathlib import Path
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from helpers import acceptance_workspace
 
-from musubi_gui.acceptance import prepare
 from musubi_gui.jobs_api import jobs_router
 from musubi_gui.run_store import RunStore
 from musubi_gui.runs import RunService
@@ -123,7 +123,7 @@ def test_archiving_or_restoring_a_missing_job_is_not_found(tmp_path: Path) -> No
 
 
 def test_prepare_refuses_an_archived_job_and_its_runs_stay_browsable(tmp_path: Path) -> None:
-    fixture = prepare(tmp_path / "acceptance", "fixture", None)
+    fixture = acceptance_workspace(tmp_path)
     root = Path(fixture["state"])
     service = RunService(root, fixture_mode=True, device_path=tmp_path / "device.sqlite", autostart=False)
     try:

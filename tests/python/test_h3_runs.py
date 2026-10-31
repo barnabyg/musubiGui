@@ -3,7 +3,8 @@ import shutil
 import time
 from pathlib import Path
 
-from musubi_gui.acceptance import prepare
+from helpers import acceptance_workspace
+
 from musubi_gui.datasets import DatasetStore
 from musubi_gui.media_probe import inspect
 from musubi_gui.runs import RunService
@@ -22,7 +23,7 @@ def wait(service: RunService, run_id: str, status: str) -> dict:
 
 
 def test_h3_preparation_freezes_audio_and_keeps_guidance_stages(tmp_path: Path) -> None:
-    fixture = prepare(tmp_path / "acceptance", "fixture", None)
+    fixture = acceptance_workspace(tmp_path)
     service = RunService(Path(fixture["state"]), fixture_mode=True, device_path=tmp_path / "device.sqlite")
     try:
         job = next(job for job in fixture["jobs"] if job["family"] == "h3")
@@ -42,7 +43,7 @@ def test_h3_preparation_freezes_audio_and_keeps_guidance_stages(tmp_path: Path) 
 
 
 def test_explicit_audio_in_a_video_container_cannot_replace_the_frozen_target_video(tmp_path: Path) -> None:
-    fixture = prepare(tmp_path / "acceptance", "fixture", None)
+    fixture = acceptance_workspace(tmp_path)
     root = Path(fixture["state"])
     job = next(job for job in fixture["jobs"] if job["family"] == "h3")
     store = DatasetStore(root)
@@ -64,7 +65,7 @@ def test_explicit_audio_in_a_video_container_cannot_replace_the_frozen_target_vi
 
 
 def test_h3_training_outputs_a_checkpoint_and_decodable_video_with_audio(tmp_path: Path) -> None:
-    fixture = prepare(tmp_path / "acceptance", "fixture", None)
+    fixture = acceptance_workspace(tmp_path)
     service = RunService(Path(fixture["state"]), fixture_mode=True, device_path=tmp_path / "device.sqlite")
     try:
         job = next(job for job in fixture["jobs"] if job["family"] == "h3")

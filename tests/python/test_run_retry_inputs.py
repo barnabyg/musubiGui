@@ -3,14 +3,14 @@ import time
 from pathlib import Path
 
 import pytest
+from helpers import acceptance_workspace
 
-from musubi_gui.acceptance import prepare
 from musubi_gui.runs import RunService
 
 
 @pytest.mark.parametrize("family", ["wan", "h3"])
 def test_retry_seals_its_executed_native_inputs_and_rejects_edits_before_launch(tmp_path: Path, family: str) -> None:
-    fixture = prepare(tmp_path / "acceptance", "fixture", None)
+    fixture = acceptance_workspace(tmp_path)
     service = RunService(
         Path(fixture["state"]), fixture_mode=True, device_path=tmp_path / "device.sqlite", autostart=False
     )

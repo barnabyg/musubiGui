@@ -1,16 +1,16 @@
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+from helpers import acceptance_workspace
 from PIL import Image
 
-from musubi_gui.acceptance import prepare
 from musubi_gui.app import create_app
 
 
 def test_gallery_only_gif_tiff_formats_block_job_review_until_excluded_while_png_remains_supported(
     tmp_path: Path,
 ) -> None:
-    fixture = prepare(tmp_path / "acceptance", "fixture", None)
+    fixture = acceptance_workspace(tmp_path)
     folder = tmp_path / "source images"
     folder.mkdir()
     for name in ["animated.gif", "scan.tif", "scan2.tiff", "supported.png"]:

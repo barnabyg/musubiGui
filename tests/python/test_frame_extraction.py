@@ -4,9 +4,9 @@ from pathlib import Path
 from typing import Any
 
 from fastapi.testclient import TestClient
+from helpers import acceptance_workspace
 from test_wan_frame_rate import wan_review
 
-from musubi_gui.acceptance import prepare
 from musubi_gui.app import create_app
 from musubi_gui.runs import RunService
 
@@ -63,7 +63,7 @@ def test_wan_chunk_and_uniform_extraction_count_distinct_cached_windows(tmp_path
 
 
 def test_h3_blocks_frame_extraction_other_than_head(tmp_path: Path) -> None:
-    fixture = prepare(tmp_path / "acceptance", "fixture", None)
+    fixture = acceptance_workspace(tmp_path)
     job = next(job for job in fixture["jobs"] if job["family"] == "h3")
     client = fixture_client(tmp_path, fixture)
     revised = revise(client, job["id"], frame_extraction="slide")
@@ -73,7 +73,7 @@ def test_h3_blocks_frame_extraction_other_than_head(tmp_path: Path) -> None:
 
 
 def test_saved_version_one_jobs_without_extraction_fields_keep_head_toml(tmp_path: Path) -> None:
-    fixture = prepare(tmp_path / "acceptance", "fixture", None)
+    fixture = acceptance_workspace(tmp_path)
     client = fixture_client(tmp_path, fixture)
     expected = {
         "wan": 'target_frames = [17]\nframe_extraction = "head"\nsource_fps = 16.0\n',
@@ -93,7 +93,7 @@ def test_saved_version_one_jobs_without_extraction_fields_keep_head_toml(tmp_pat
 
 
 def test_changing_wan_frame_extraction_invalidates_latent_and_text_caches(tmp_path: Path) -> None:
-    fixture = prepare(tmp_path / "acceptance", "fixture", None)
+    fixture = acceptance_workspace(tmp_path)
     job = next(job for job in fixture["jobs"] if job["family"] == "wan")
     client = fixture_client(tmp_path, fixture)
     service = RunService(

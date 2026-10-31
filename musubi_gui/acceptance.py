@@ -133,7 +133,7 @@ def synthetic_checkout(root: Path, sample: Path) -> dict[str, str]:
     return components
 
 
-def prepare(workspace: Path, mode: str, selected: Path | None) -> dict[str, Any]:
+def prepare(workspace: Path, mode: str, selected: Path | None, *, scan_library: bool = True) -> dict[str, Any]:
     workspace = workspace.resolve()
     if workspace.exists():
         raise ValueError("Choose a new, nonexistent directory; acceptance never overwrites an existing workspace.")
@@ -217,7 +217,8 @@ def prepare(workspace: Path, mode: str, selected: Path | None) -> dict[str, Any]
                 )
                 manifest["jobs"].append({"id": job.id, "name": job.name, "family": family, "dataset_id": dataset["id"]})
         library = store.register("Mixed media and invalid item", str(workspace / "library" / "media 资料"))
-        store.scan(library["id"])
+        if scan_library:
+            store.scan(library["id"])
         manifest["library_dataset"] = library["id"]
         manifest["status"] = "ready"
     except Exception:
@@ -235,12 +236,13 @@ def main() -> None:
     parser.add_argument("--settings", type=Path)
     parser.add_argument("--prepare-only", action="store_true")
     parser.add_argument("--no-browser", action="store_true")
+    parser.add_argument("--skip-library-scan", action="store_true")
     parser.add_argument("--port", type=int, default=8767)
     args = parser.parse_args()
     if isinstance(sys.stdout, io.TextIOWrapper):
         sys.stdout.reconfigure(encoding="utf-8")
     try:
-        manifest = prepare(args.workspace, args.mode, args.settings)
+        manifest = prepare(args.workspace, args.mode, args.settings, scan_library=not args.skip_library_scan)
     except (ValueError, OSError, subprocess.SubprocessError) as error:
         print(f"Acceptance preparation failed: {error}")
         raise SystemExit(2) from error

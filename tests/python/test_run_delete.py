@@ -10,9 +10,9 @@ from typing import Any, Iterator
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from helpers import acceptance_workspace
 
 from musubi_gui import runs as runs_module
-from musubi_gui.acceptance import prepare as prepare_acceptance
 from musubi_gui.jobs import JobStore
 from musubi_gui.jobs_api import jobs_router
 from musubi_gui.outputs import output_router
@@ -458,7 +458,7 @@ def test_an_unknown_run_database_version_stays_blocked(state: Path, service: Run
 
 
 def test_prepare_creates_a_new_run_after_a_delete_and_other_runs_keep_working(tmp_path: Path) -> None:
-    fixture = prepare_acceptance(tmp_path / "acceptance", "fixture", None)
+    fixture = acceptance_workspace(tmp_path)
     root = Path(fixture["state"])
     running = RunService(root, fixture_mode=True, device_path=tmp_path / "device.sqlite")
     try:
@@ -494,7 +494,7 @@ def test_prepare_creates_a_new_run_after_a_delete_and_other_runs_keep_working(tm
 
 
 def test_a_run_that_reused_a_deleted_runs_cache_keeps_working(tmp_path: Path) -> None:
-    fixture = prepare_acceptance(tmp_path / "acceptance", "fixture", None)
+    fixture = acceptance_workspace(tmp_path)
     root = Path(fixture["state"])
     running = RunService(root, fixture_mode=True, device_path=tmp_path / "device.sqlite")
     try:
@@ -522,7 +522,7 @@ def test_a_run_that_reused_a_deleted_runs_cache_keeps_working(tmp_path: Path) ->
 
 
 def test_a_real_restored_segment_blocks_its_source_until_finished_then_outlives_it(tmp_path: Path) -> None:
-    fixture = prepare_acceptance(tmp_path / "acceptance", "fixture", None)
+    fixture = acceptance_workspace(tmp_path)
     root = Path(fixture["state"])
     running = RunService(root, fixture_mode=True, device_path=tmp_path / "device.sqlite")
     try:

@@ -29,6 +29,7 @@ export async function runWorkspace(options: { freeBytes?: number } = {}) {
     '--workspace',
     fixture,
     '--prepare-only',
+    '--skip-library-scan',
   ]);
   const manifest = JSON.parse(
     await readFile(path.join(fixture, 'acceptance.json'), 'utf8'),

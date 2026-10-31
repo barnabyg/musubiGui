@@ -2,16 +2,16 @@ import copy
 from pathlib import Path
 
 import pytest
+from helpers import acceptance_workspace
 
 from musubi_gui import snapshots
-from musubi_gui.acceptance import prepare
 from musubi_gui.runs import RunService
 
 
 def test_cache_identity_changes_with_source_or_packages_but_not_volatile_probe_values(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    fixture = prepare(tmp_path / "acceptance", "fixture", None)
+    fixture = acceptance_workspace(tmp_path)
     environment = {
         "python": "3.12.10",
         "platform": "Windows-11",
