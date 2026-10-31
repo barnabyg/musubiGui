@@ -112,6 +112,56 @@ test('settings survive backend restart and invalid installations explain correct
   }
 });
 
+test('diagnostics persist, drive the sidebar and go out of date when settings change', async ({
+  page,
+}) => {
+  const root = await realpath(
+    await mkdtemp(path.join(tmpdir(), 'musubi-health-')),
+  );
+  const { url, start, stop } = await settingsBackend(root);
+  try {
+    await start();
+    await page.goto(url);
+    const health = page.getByRole('button', { name: /^Setup:/ });
+    await expect(health).toContainText('Setup: Not checked');
+    await page.getByRole('button', { name: 'Run diagnostics' }).click();
+    await expect(health).toContainText('Setup: Problems found');
+    const report = page.locator('#diagnostics-report');
+    await expect(report).toContainText(
+      'These checks do not establish model support',
+    );
+    await expect(report).toContainText('Last run');
+
+    await stop();
+    await start();
+    await page.reload();
+    await expect(health).toContainText('Setup: Problems found');
+    await expect(report).toContainText('Last run');
+
+    await page.getByRole('button', { name: 'Jobs', exact: true }).click();
+    await expect(report).toHaveCount(0);
+    await health.click();
+    await expect(report).toBeInViewport();
+
+    await page.getByLabel('Cache root').fill(path.join(root, 'cache'));
+    await expect(health).toContainText('out of date');
+    await expect(report).toContainText('Out of date');
+    await page.getByRole('button', { name: 'Save settings' }).click();
+    await expect(page.getByRole('status')).toHaveText('Settings saved');
+    await expect(report).toContainText('Out of date');
+    await page.reload();
+    await expect(health).toContainText('out of date');
+  } finally {
+    await stop();
+    await rm(root, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 100,
+    });
+  }
+});
+
 test('typed Enter separates model and dataset roots and diagnostics name missing roots', async ({
   page,
 }) => {

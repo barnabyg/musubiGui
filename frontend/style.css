@@ -87,14 +87,27 @@ nav button span {
   width: 22px;
 }
 .local {
-  margin: auto 12px 0;
+  margin: auto 0 0;
+  padding: 10px 12px;
+  border: none;
+  background: none;
+  text-align: left;
   font-size: 12px;
   color: #a7aeb9;
+}
+.local.problems {
+  color: #ffc9c9;
+}
+.local.problems i {
+  background: #ef8d8d;
+}
+.local.ready i {
+  background: #8ed4aa;
 }
 .local i {
   width: 6px;
   height: 6px;
-  background: #8ed4aa;
+  background: #727987;
   border-radius: 50%;
   display: inline-block;
   margin-right: 8px;

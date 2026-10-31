@@ -28,9 +28,25 @@ type Settings = {
 };
 type RootKey = 'model_roots' | 'dataset_roots';
 type Report = {
+  ran_at: string;
+  current: boolean;
   checks: { name: string; status: string; message: string }[];
   environment: Record<string, unknown>;
 };
+
+function setupHealth(report: Report | null, dirty: boolean) {
+  if (!report) return { state: 'unknown', label: 'Not checked' };
+  const problems = report.checks.filter((check) => check.status === 'error');
+  const outdated = dirty || !report.current;
+  if (problems.length)
+    return {
+      state: 'problems',
+      label: `Problems found${outdated ? ' · out of date' : ''}`,
+    };
+  return outdated
+    ? { state: 'unknown', label: 'Out of date' }
+    : { state: 'ready', label: 'Ready' };
+}
 
 // Root textareas keep raw text while editing so Enter can start an empty line.
 function rootLines(text: string) {
@@ -125,9 +141,13 @@ function App() {
     });
   }
   useEffect(() => {
-    void api<Settings>('/api/settings')
-      .then((value) => {
+    void Promise.all([
+      api<Settings>('/api/settings'),
+      api<Report | null>('/api/diagnostics'),
+    ])
+      .then(([value, latest]) => {
         load(value);
+        setReport(latest);
         setStatus('Settings loaded');
       })
       .catch((reason: Error) => {
@@ -145,7 +165,6 @@ function App() {
   function changed() {
     setDirty(true);
     setStatus('Unsaved changes');
-    setReport(null);
   }
   function update(next: Settings) {
     setSettings(next);
@@ -164,6 +183,7 @@ function App() {
         }),
       );
       setDirty(false);
+      setReport(await api<Report | null>('/api/diagnostics'));
       setStatus('Settings saved');
     } catch (reason) {
       setError((reason as Error).message);
@@ -175,7 +195,6 @@ function App() {
   async function diagnose() {
     setBusy(true);
     setError('');
-    setReport(null);
     try {
       setReport(await api<Report>('/api/diagnostics', 'POST', {}));
     } catch (reason) {
@@ -184,6 +203,13 @@ function App() {
       setBusy(false);
     }
   }
+  async function showReport() {
+    await navigate('Settings');
+    window.requestAnimationFrame(() =>
+      document.getElementById('diagnostics-report')?.scrollIntoView(),
+    );
+  }
+  const health = setupHealth(report, dirty);
   function field(
     label: string,
     key: 'checkout' | 'python' | 'output_root' | 'cache_root',
@@ -252,9 +278,13 @@ function App() {
             </button>
           ))}
         </nav>
-        <div className="local">
-          <i /> Local connection<small>Training stays on your machine</small>
-        </div>
+        <button
+          className={`local ${health.state}`}
+          onClick={() => void showReport()}
+        >
+          <i /> Setup: {health.label}
+          <small>Training stays on your machine</small>
+        </button>
       </aside>
       <main
         className={
@@ -404,8 +434,18 @@ function App() {
                   </p>
                 )}
                 {report && (
-                  <section className="panel">
+                  <section className="panel" id="diagnostics-report">
                     <h2>Installation diagnostics</h2>
+                    <p>
+                      Last run {new Date(report.ran_at).toLocaleString()}.
+                      {(dirty || !report.current) && (
+                        <strong>
+                          {' '}
+                          Out of date: settings have changed since this ran. Run
+                          diagnostics again.
+                        </strong>
+                      )}
+                    </p>
                     <p>
                       These checks do not establish model support. Each
                       reference workflow must pass on the target hardware.

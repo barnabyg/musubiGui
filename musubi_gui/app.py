@@ -14,7 +14,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.responses import Response
 
 from musubi_gui.datasets_api import dataset_router
-from musubi_gui.diagnostics import diagnostics
+from musubi_gui.diagnostics import diagnostics, latest_report, record_report
 from musubi_gui.jobs_api import jobs_router
 from musubi_gui.outputs import output_router
 from musubi_gui.runs import RunService
@@ -88,9 +88,14 @@ def create_app(
             ) from error
         return settings
 
+    @app.get("/api/diagnostics")
+    def get_diagnostics() -> dict[str, Any] | None:
+        return latest_report(root, current())
+
     @app.post("/api/diagnostics")
     def post_diagnostics() -> dict[str, Any]:
-        return diagnostics(current())
+        settings = current()
+        return record_report(root, settings, diagnostics(settings))
 
     app.include_router(jobs_router(root, fixture_mode=fixture_mode))
     app.include_router(runs_router(service))

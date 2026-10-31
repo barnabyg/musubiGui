@@ -38,6 +38,11 @@ and job revisions remain versioned JSON. Set `MUSUBI_GUI_STATE` to an absolute p
 different application state directory. Unknown persisted versions are preserved and blocked.
 Credentials are not a settings field. Use local filesystem paths, never credential-bearing URLs.
 
+Run diagnostics keeps its latest result, with its time and the settings it checked, in a
+versioned `diagnostics.json` beside `settings.json`. The sidebar shows it as Ready, Problems
+found or Not checked and links to the report, which stays until the next run and is marked out
+of date once settings change. These checks do not establish model support.
+
 Manual setup scenario: select a nonexistent checkout, save, and run diagnostics. Correct the
 reported checkout/Python paths, save, and rerun. Stop the backend, relaunch, and confirm that
 the fields persist. Change a field without saving: diagnostics require a save and closing
