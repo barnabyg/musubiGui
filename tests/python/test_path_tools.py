@@ -75,6 +75,15 @@ def test_browse_refuses_network_and_relative_paths(value: str) -> None:
         browse_path(value, "folder")
 
 
+def test_browse_reports_an_unreadable_folder_as_a_refusal(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def denied(_: Path) -> bool:
+        raise PermissionError
+
+    monkeypatch.setattr(Path, "is_dir", denied)
+    with pytest.raises(ValueError, match="permissions"):
+        browse_path(str(tmp_path), "folder")
+
+
 def test_routes_are_local_only(tmp_path: Path) -> None:
     assets = tmp_path / "web"
     assets.mkdir()

@@ -74,10 +74,13 @@ def browse_path(value: str, kind: Kind) -> dict[str, Any]:
         raise ValueError(problem)
     folder = Path(value)
     # Opening on a file, or a folder that doesn't exist yet, shows the closest folder that does.
-    while not folder.is_dir():
-        if folder.parent == folder:
-            return browse_path("", kind)
-        folder = folder.parent
+    try:
+        while not folder.is_dir():
+            if folder.parent == folder:
+                return browse_path("", kind)
+            folder = folder.parent
+    except OSError as error:
+        raise ValueError("This folder can't be read; check its permissions.") from error
     entries = []
     try:
         with os.scandir(folder) as found:

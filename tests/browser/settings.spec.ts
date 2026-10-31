@@ -159,6 +159,21 @@ test('diagnostics persist, drive the sidebar and go out of date when settings ch
     await expect(report).toContainText('Out of date');
     await page.reload();
     await expect(health).toContainText('out of date');
+
+    // Only warnings isn't Ready: with no model paths, training can't run yet.
+    await page.route('**/api/diagnostics', async (route) => {
+      await route.fulfill({
+        json: {
+          ran_at: '2026-10-31T00:00:00+00:00',
+          current: true,
+          environment: {},
+          checks: [{ name: 'Models', status: 'warning', message: 'None set.' }],
+        },
+      });
+    });
+    await page.reload();
+    await expect(health).toContainText('Setup: 1 to check');
+    await page.unroute('**/api/diagnostics');
   } finally {
     await stop();
     await rm(root, {
@@ -231,6 +246,32 @@ test('path fields warn before saving, browse local folders and show the full pat
     await expect(
       page.getByText('This is outside the configured roots.'),
     ).toBeVisible();
+
+    // A path Browse can't start from still leaves the drives to choose from.
+    await output.fill('not absolute');
+    await page.getByRole('button', { name: 'Browse for Output root' }).click();
+    const recovered = page.getByRole('dialog', { name: 'Choose Output root' });
+    await expect(recovered.getByRole('alert')).toContainText('absolute');
+    await expect(recovered.locator('.path-location')).toHaveText('Drives');
+    await expect(
+      recovered
+        .getByRole('list', { name: 'Folder contents' })
+        .getByRole('button'),
+    ).not.toHaveCount(0);
+    await recovered.getByRole('button', { name: 'Cancel' }).click();
+
+    // The same root twice is one line to check.
+    const errors: string[] = [];
+    page.on('console', (message) => {
+      if (message.type() === 'error') errors.push(message.text());
+    });
+    await page
+      .getByLabel('Model roots (one per line)')
+      .fill(`${chosen}\n${chosen}`);
+    await expect(page.getByLabel('Model roots (one per line)')).toHaveValue(
+      `${chosen}\n${chosen}`,
+    );
+    expect(errors).toEqual([]);
 
     // File fields choose a file.
     await page

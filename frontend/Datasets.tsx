@@ -629,6 +629,7 @@ export function Datasets({
               label="Dataset folder"
               kind="folder"
               roots={datasetRoots}
+              missingMessage="This folder doesn't exist yet. Create a new folder for uploads will create it; Use existing folder needs it to exist."
               value={folder}
               placeholder="C:\datasets\…"
               onChange={setFolder}

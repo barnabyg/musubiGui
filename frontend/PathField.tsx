@@ -36,6 +36,7 @@ function usePathCheck(value: string, kind: Kind, roots: string[]) {
       window.clearTimeout(timer);
     };
     // `key` stands for value, kind and the contents of roots, whose array identity changes on render.
+    // Review if callers come to pass a stable roots array.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
   return value.trim() && result?.for === key ? result : undefined;
@@ -58,6 +59,10 @@ function PathBrowser({
   const [location, setLocation] = useState(start);
   const [listing, setListing] = useState<Listing>();
   const [error, setError] = useState('');
+  function go(path: string) {
+    setError('');
+    setLocation(path);
+  }
   useEffect(() => {
     dialog.current?.showModal();
   }, []);
@@ -68,12 +73,13 @@ function PathBrowser({
       kind,
     })
       .then((value) => {
-        if (!current) return;
-        setListing(value);
-        setError('');
+        if (current) setListing(value);
       })
       .catch((reason: Error) => {
-        if (current) setError(reason.message);
+        if (!current) return;
+        setError(reason.message);
+        // A typed value can be unusable as a starting point, which still leaves somewhere to go.
+        if (location) setLocation('');
       });
     return () => {
       current = false;
@@ -99,18 +105,14 @@ function PathBrowser({
       <ul aria-label="Folder contents">
         {listing && listing.parent !== null && (
           <li>
-            <button onClick={() => setLocation(listing.parent ?? '')}>
-              ↑ Up
-            </button>
+            <button onClick={() => go(listing.parent ?? '')}>↑ Up</button>
           </li>
         )}
         {listing?.entries.map((entry) => (
           <li key={entry.path}>
             <button
               onClick={() =>
-                entry.kind === 'folder'
-                  ? setLocation(entry.path)
-                  : onChoose(entry.path)
+                entry.kind === 'folder' ? go(entry.path) : onChoose(entry.path)
               }
             >
               <span aria-hidden="true">
@@ -202,6 +204,7 @@ export function PathField({
   kind,
   roots = [],
   help,
+  missingMessage,
   placeholder,
   disabled,
   onChange,
@@ -211,13 +214,19 @@ export function PathField({
   kind: Kind;
   roots?: string[];
   help?: string;
+  // For a field where a missing path is fine, because the action creates it.
+  missingMessage?: string;
   placeholder?: string;
   disabled?: boolean;
   onChange: (value: string) => void;
 }) {
   const id = useId();
   const [focused, setFocused] = useState(false);
-  const check = usePathCheck(value, kind, roots);
+  const result = usePathCheck(value, kind, roots);
+  const check =
+    result?.state === 'missing' && missingMessage
+      ? { ...result, message: missingMessage }
+      : result;
   return (
     <div className="field path-field">
       <label htmlFor={id}>{label}</label>
@@ -279,10 +288,14 @@ export function RootsField({
   onChange: (value: string) => void;
 }) {
   const id = useId();
-  const lines = value
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean);
+  const lines = [
+    ...new Set(
+      value
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean),
+    ),
+  ];
   return (
     <div className="field path-field">
       <label htmlFor={id}>{label}</label>
