@@ -394,11 +394,10 @@ export function Runs({
   return (
     <>
       <section className="title">
-        <p className="eyebrow">PREPARATION & EXECUTION</p>
         <h1>Runs</h1>
         <p>
-          Each run keeps its reviewed job revision and frozen dataset inputs.
-          Closing the browser leaves the worker running.
+          Each Run keeps the job settings and dataset files it was prepared
+          with. Closing the browser leaves training running.
         </p>
       </section>
       {fixture && (
@@ -449,7 +448,7 @@ export function Runs({
             ))}
         </section>
         <section className="panel">
-          <h2>Persistent run history</h2>
+          <h2>Run history</h2>
           {runs.length === 0 && (
             <p>Save and review a job, then choose Prepare.</p>
           )}
@@ -512,7 +511,7 @@ export function Runs({
                     disabled={busy}
                     onClick={() => void action('reconcile')}
                   >
-                    Reconcile processes
+                    Check for leftover processes
                   </button>
                   {run.status !== 'interrupted' && (
                     <button
@@ -597,7 +596,7 @@ export function Runs({
               )}
               {['failed', 'cancelled', 'interrupted'].includes(run.status) && (
                 <button disabled={busy} onClick={() => void action('retry')}>
-                  Retry frozen preparation
+                  Retry preparation
                 </button>
               )}
               <button disabled={busy} onClick={() => void deleteRun()}>
@@ -621,7 +620,8 @@ export function Runs({
             <TrainingProgress run={run} progress={current?.progress ?? null} />
             <details>
               <summary>
-                Frozen inputs ({run.manifest.items.length} included items)
+                Inputs saved with this Run ({run.manifest.items.length} included
+                items)
               </summary>
               <pre>{JSON.stringify(run.manifest, null, 2)}</pre>
             </details>

@@ -226,7 +226,7 @@ class OutputBrowser:
             "status": run["status"],
             "outputs": sorted(entries.values(), key=lambda entry: entry["path"]),
             "warnings": warnings,
-            "note": "Outputs belong to this frozen run. No quality ranking or complete training-state claim is inferred.",
+            "note": "These files belong to this Run.",
         }
 
     def file(self, run_id: str, identity: str, download: bool) -> FileResponse:
@@ -288,7 +288,7 @@ def compare_runs(first: dict[str, Any], second: dict[str, Any]) -> dict[str, Any
         "after": second["id"],
         "changes": changes,
         "quality_ranking": None,
-        "note": "This comparison describes recorded inputs and provenance; it does not rank quality or establish resumability.",
+        "note": "This compares what each Run recorded as its inputs, not the quality of its results.",
     }
 
 

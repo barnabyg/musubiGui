@@ -349,6 +349,31 @@ test('confirmation dialogs start on the safe choice, trap focus and cancel with 
   }
 });
 
+test('Jobs names components as Settings does and leaves out internal wording', async ({
+  page,
+}) => {
+  const app = await workspace();
+  try {
+    await openJobs(page, app.url);
+    await page
+      .getByRole('button', { name: 'New Wan job', exact: true })
+      .click();
+    await page.getByText('Model components', { exact: true }).click();
+    const component = page.getByRole('textbox', { name: 'Wan low-noise DiT' });
+    await expect(component).toBeVisible();
+    await expect(page.getByText('wan_low', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('IMMUTABLE RUNS')).toHaveCount(0);
+    await expect(page.getByText(/39 crashes/)).toHaveCount(0);
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.getByText('Model component paths').click();
+    await expect(
+      page.getByRole('textbox', { name: 'Wan low-noise DiT' }),
+    ).toBeVisible();
+  } finally {
+    await app.close();
+  }
+});
+
 test('Wan draft controls, validation and reviewed native configuration survive service restart', async ({
   page,
 }) => {

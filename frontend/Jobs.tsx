@@ -3,6 +3,7 @@ import { ActionMenu } from './ActionMenu';
 import { confirmDialog } from './ConfirmDialog';
 import { apiClient } from './api';
 import { JobTable, type JobSummary } from './JobTable';
+import { componentLabels } from './labels';
 import './jobs.css';
 
 type JobConfig = {
@@ -606,11 +607,10 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
   return (
     <div className="jobs-workspace">
       <section className="title">
-        <p className="eyebrow">IMMUTABLE RUNS, EDITABLE DRAFTS</p>
         <h1>Jobs</h1>
         <p>
-          Create a LoRA draft, review its resolved inputs, then prepare a frozen
-          run.
+          Set up a LoRA training job, review it, then prepare a Run. A Run keeps
+          the settings it was prepared with, so later edits don't change it.
         </p>
         <button disabled={busy} onClick={() => void create('wan')}>
           New Wan job
@@ -832,8 +832,7 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
                 {job.family === 'wan' ? (
                   <>
                     Native FP16 experts; one expert is trained and both experts
-                    are used for sampling. The documented converted-weight smoke
-                    recipe has target-PC execution evidence.
+                    are used for sampling.
                   </>
                 ) : (
                   <>
@@ -855,7 +854,7 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
                 : ['h3_dit', 'h3_video_vae', 'h3_audio_vae', 'h3_text']
               ).map((key) => (
                 <label className="field" key={key}>
-                  {key}
+                  {componentLabels[key]}
                   <input
                     disabled={busy}
                     value={job.config.components[key] ?? models[key] ?? ''}
@@ -1049,7 +1048,7 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
               'Blocks to swap',
               'blocks_to_swap',
               job.family === 'wan'
-                ? '0–38 of 40 blocks; 36 is the reference default. 39 crashes in the upstream FP8 path.'
+                ? '0–38 of 40 blocks; 36 is the reference default.'
                 : '0–48 of 50 blocks; 48 is the reference default and upstream rejects 49. H2D-only swapping is required.',
             )}
             {toggle('Gradient checkpointing', 'gradient_checkpointing')}

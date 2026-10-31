@@ -210,7 +210,9 @@ class RunService:
     def retry(self, run_id: str) -> dict[str, Any]:
         previous = self.get(run_id)
         if previous["status"] not in {"failed", "cancelled", "interrupted"} or previous.get("processes"):
-            raise ValueError("Only failed or cancelled preparation can be retried. Reconcile interrupted work first.")
+            raise ValueError(
+                "Only failed or cancelled preparation can be retried. Choose Check for leftover processes first."
+            )
         verify_inputs(previous)
         directory = Path(previous["directory"]).parent / ("retry-" + uuid.uuid4().hex)
         cache = Path(previous["cache"]).parent / ("retry-" + uuid.uuid4().hex)
@@ -307,7 +309,7 @@ class RunService:
                 lambda r: r.update(
                     status=status,
                     processes=identities,
-                    error="Recorded work is still alive or cannot be safely identified. No replacement GPU work will start. Reconcile again or confirm termination of known owned processes.",
+                    error="Recorded work is still alive or cannot be safely identified. No replacement GPU work will start. Check again or confirm termination of known owned processes.",
                 ),
             )
         self.device.release(run_id)
@@ -325,7 +327,7 @@ class RunService:
             record.update(
                 status="interrupted",
                 processes=[],
-                error="The original processes are gone. Inspect outputs/state, then retry frozen preparation or restore validated optimizer state as a new segment.",
+                error="The original processes are gone. Inspect outputs/state, then retry preparation or restore validated optimizer state as a new segment.",
             )
 
         return self.store.update(run_id, finish)
@@ -376,7 +378,7 @@ class RunService:
         if run["status"] not in {"completed", "stopped", "failed", "cancelled", "interrupted"}:
             return []
         if run.get("processes"):
-            raise ValueError("Reconcile remaining process ownership before inspecting saved state.")
+            raise ValueError("Choose Check for leftover processes before inspecting saved state.")
         states = discover_states(run)
         self.store.update(run_id, lambda r: r.update(saved_states=states))
         return states
@@ -593,7 +595,7 @@ class RunService:
                                 run_id,
                                 lambda r: r.update(
                                     status="interrupted",
-                                    error="Service stopped; reconcile the recorded process before retrying.",
+                                    error="Service stopped; check for leftover processes before retrying.",
                                 ),
                             )
                             if isinstance(process, WindowsProcess):
@@ -613,7 +615,7 @@ class RunService:
                                 lambda r: r.update(
                                     status="interrupted",
                                     processes=identities,
-                                    error="Service stopped; reconcile the recorded process before retrying.",
+                                    error="Service stopped; check for leftover processes before retrying.",
                                 ),
                             )
                             return
@@ -622,7 +624,7 @@ class RunService:
                             lambda r: r.update(
                                 status="orphaned",
                                 processes=identities,
-                                error="The launcher exited but a descendant remains active. Reconcile before starting another GPU operation.",
+                                error="The launcher exited but a descendant remains active. Check for leftover processes before starting another GPU operation.",
                             ),
                         )
                         return

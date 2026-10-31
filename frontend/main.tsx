@@ -12,6 +12,7 @@ import { ConfirmDialogHost, confirmDialog } from './ConfirmDialog';
 import { Jobs } from './Jobs';
 import { Runs } from './Runs';
 import { Datasets } from './Datasets';
+import { componentLabels } from './labels';
 import { formatRoute, parseRoute, screens, type Screen } from './route';
 import { useRunSignals } from './runSignals';
 
@@ -30,16 +31,6 @@ type Report = {
   checks: { name: string; status: string; message: string }[];
   environment: Record<string, unknown>;
 };
-const components = [
-  ['wan_low', 'Wan low-noise DiT'],
-  ['wan_high', 'Wan high-noise DiT'],
-  ['wan_vae', 'Wan 2.1 VAE'],
-  ['wan_t5', 'Wan T5 encoder'],
-  ['h3_dit', 'H3 DiT'],
-  ['h3_video_vae', 'H3 video VAE'],
-  ['h3_audio_vae', 'H3 audio VAE'],
-  ['h3_text', 'H3 Qwen text encoder'],
-];
 
 // Root textareas keep raw text while editing so Enter can start an empty line.
 function rootLines(text: string) {
@@ -295,7 +286,6 @@ function App() {
         ) : screen === 'Datasets' ? null : (
           <>
             <section className="title">
-              <p className="eyebrow">YOUR MACHINE, YOUR MODELS</p>
               <h1>Settings</h1>
               <p>
                 Connect an existing musubi-tuner installation and check that it
@@ -371,7 +361,7 @@ function App() {
                       Model component paths <span>Wan 2.2 · MiniMax H3</span>
                     </summary>
                     <div className="columns">
-                      {components.map(([key, label]) => (
+                      {Object.entries(componentLabels).map(([key, label]) => (
                         <label className="field" key={key}>
                           {label}
                           <input

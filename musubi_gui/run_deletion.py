@@ -37,7 +37,9 @@ def plan_deletion(run: dict[str, Any], others: list[dict[str, Any]], settings: S
     """The folders to remove and the Runs affected, or a ValueError giving why this Run can't be deleted."""
     if is_active(run):
         if run.get("processes"):
-            raise ValueError("This Run still records processes. Reconcile them before deleting it.")
+            raise ValueError(
+                "This Run still records processes. Choose Check for leftover processes before deleting it."
+            )
         raise ValueError(f"This Run is active ({run['status']}). Stop or cancel it before deleting it.")
     directory = str(_run_folder(run["directory"], settings.output_root, "output"))
     cache = str(_run_folder(run["cache"], settings.cache_root, "cache"))

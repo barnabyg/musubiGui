@@ -15,7 +15,7 @@ test('register mixed media, preview, and recover library after service restart',
       .getByLabel('Dataset name', { exact: true })
       .fill('Mixed library');
     await page.getByLabel('Dataset folder', { exact: true }).fill(app.media);
-    await page.getByRole('button', { name: 'Register folder' }).click();
+    await page.getByRole('button', { name: 'Use existing folder' }).click();
     await expect(page.getByText('Scan: complete 4/4')).toBeVisible({
       timeout: 240_000,
     });
@@ -57,7 +57,7 @@ test('caption autosave flushes navigation, preserves failed drafts, rejects exte
       .getByLabel('Dataset name', { exact: true })
       .fill('Caption library');
     await page.getByLabel('Dataset folder', { exact: true }).fill(app.media);
-    await page.getByRole('button', { name: 'Register folder' }).click();
+    await page.getByRole('button', { name: 'Use existing folder' }).click();
     await expect(page.getByText('Scan: complete 4/4')).toBeVisible({
       timeout: 240_000,
     });
@@ -132,11 +132,8 @@ test('caption autosave flushes navigation, preserves failed drafts, rejects exte
       .toBe('红色\nupdated immediately');
     await app.stop();
     await app.start();
+    // The dataset stays open across a reload, read back from the restarted backend.
     await page.reload();
-    await page.getByRole('button', { name: 'Datasets', exact: true }).click();
-    await page
-      .getByRole('button', { name: /Caption library.*4 media/ })
-      .click();
     await page.getByRole('button', { name: 'red.png image' }).click();
     await expect(page.getByLabel('Caption', { exact: true })).toHaveValue(
       '红色\nupdated immediately',

@@ -25,7 +25,7 @@ test('large galleries scroll, resize and filter without losing access to media',
       .getByLabel('Dataset name', { exact: true })
       .fill('Large collection');
     await page.getByLabel('Dataset folder', { exact: true }).fill(app.media);
-    await page.getByRole('button', { name: 'Register folder' }).click();
+    await page.getByRole('button', { name: 'Use existing folder' }).click();
     await expect(page.locator('.dataset-identity [role="status"]')).toHaveText(
       'Scan: complete 8/8',
       { timeout: 240_000 },
@@ -73,7 +73,9 @@ test('large galleries scroll, resize and filter without losing access to media',
     await gallery.focus();
     await page.keyboard.press('End');
     await expect(last).toBeVisible();
-    await page.getByRole('button', { name: 'Tools', exact: true }).click();
+    await page
+      .getByRole('button', { name: 'Search & edit', exact: true })
+      .click();
     await page.getByLabel('Search media and captions').fill('blue.png');
     await expect(
       page.getByRole('button', { name: 'blue.png image' }),
@@ -118,7 +120,9 @@ test('separate library and editor create, populate, rename, reopen and delete wi
       .getByLabel('Dataset name', { exact: true })
       .fill('Portrait studies');
     await page.getByLabel('Dataset folder', { exact: true }).fill(app.media);
-    await page.getByRole('button', { name: 'Create managed dataset' }).click();
+    await page
+      .getByRole('button', { name: 'Create a new folder for uploads' })
+      .click();
     await expect(page.getByText('Ready for your media')).toBeVisible();
     await expect(page.getByRole('button', { name: 'New dataset' })).toHaveCount(
       0,
@@ -139,7 +143,10 @@ test('separate library and editor create, populate, rename, reopen and delete wi
     ).toHaveValue(/红/);
     await page.getByRole('button', { name: 'Add media', exact: true }).click();
     await expect(page.getByLabel('Upload files')).toBeHidden();
-    const tools = page.getByRole('button', { name: 'Tools', exact: true });
+    const tools = page.getByRole('button', {
+      name: 'Search & edit',
+      exact: true,
+    });
     await tools.focus();
     await page.keyboard.press('Enter');
     await page.getByLabel('Search media and captions').focus();

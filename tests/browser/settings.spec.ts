@@ -70,7 +70,9 @@ test('settings survive backend restart and invalid installations explain correct
     await page
       .getByLabel('Dataset name', { exact: true })
       .fill('Default location');
-    await page.getByRole('button', { name: 'Create managed dataset' }).click();
+    await page
+      .getByRole('button', { name: 'Create a new folder for uploads' })
+      .click();
     await expect(page.getByText('Scan: complete 0/0')).toBeVisible();
     expect(await readdir(defaultDatasets)).toHaveLength(1);
     await page.getByRole('button', { name: 'Settings', exact: true }).click();

@@ -24,7 +24,9 @@ async function createDataset(page: Page, url: string, media: string) {
   await page.getByRole('button', { name: 'New dataset' }).click();
   await page.getByLabel('Dataset name', { exact: true }).fill('Dropped media');
   await page.getByLabel('Dataset folder', { exact: true }).fill(media);
-  await page.getByRole('button', { name: 'Create managed dataset' }).click();
+  await page
+    .getByRole('button', { name: 'Create a new folder for uploads' })
+    .click();
   // Creation scans the new folder before responding, so it gets the scan deadline.
   // Stopping at an alert reports a creation error instead of a missing drop area.
   const dropArea = page.getByLabel('Dataset file drop area');
@@ -134,11 +136,8 @@ test('dropped images, video and captions use managed uploads, preserve collision
     await collision.dispose();
     await app.stop();
     await app.start();
+    // The dataset stays open across a reload, read back from the restarted backend.
     await page.reload();
-    await page.getByRole('button', { name: 'Datasets', exact: true }).click();
-    await page
-      .getByRole('button', { name: /Dropped media.*3 media.*2 captioned/ })
-      .click();
     await page.getByRole('button', { name: 'red.png image' }).click();
     await expect(page.getByLabel('Caption', { exact: true })).toHaveValue(
       (await readFile(path.join(app.media, 'red.txt'), 'utf8')).replace(
@@ -194,7 +193,9 @@ test('drop feedback handles child boundaries and non-file drags, and busy upload
       page.getByLabel('Upload result blue.png', { exact: true }),
     ).toContainText('Uploading');
     await expect(picker).toBeDisabled();
-    await page.getByRole('button', { name: 'Tools', exact: true }).click();
+    await page
+      .getByRole('button', { name: 'Search & edit', exact: true })
+      .click();
     await expect(picker).toBeHidden();
     await page.getByRole('button', { name: 'Add media', exact: true }).click();
     await expect(picker).toBeDisabled();

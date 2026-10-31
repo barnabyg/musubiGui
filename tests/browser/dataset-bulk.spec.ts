@@ -13,7 +13,7 @@ test('filters retain explicit selection, bulk previews report conflicts, restore
     await page.getByRole('button', { name: 'New dataset' }).click();
     await page.getByLabel('Dataset name', { exact: true }).fill('Bulk library');
     await page.getByLabel('Dataset folder', { exact: true }).fill(app.media);
-    await page.getByRole('button', { name: 'Register folder' }).click();
+    await page.getByRole('button', { name: 'Use existing folder' }).click();
     await expect(page.getByText('Scan: complete 4/4')).toBeVisible({
       timeout: 240_000,
     });
@@ -22,7 +22,9 @@ test('filters retain explicit selection, bulk previews report conflicts, restore
       path.join(app.media, 'motion.txt'),
       'utf8',
     );
-    await page.getByRole('button', { name: 'Tools', exact: true }).click();
+    await page
+      .getByRole('button', { name: 'Search & edit', exact: true })
+      .click();
     await page
       .getByLabel('Filter media', { exact: true })
       .selectOption('missing');
@@ -81,10 +83,11 @@ test('filters retain explicit selection, bulk previews report conflicts, restore
     ).toBeVisible();
     await app.stop();
     await app.start();
+    // The dataset stays open across a reload, read back from the restarted backend.
     await page.reload();
-    await page.getByRole('button', { name: 'Datasets', exact: true }).click();
-    await page.getByRole('button', { name: /Bulk library.*4 media/ }).click();
-    await page.getByRole('button', { name: 'Tools', exact: true }).click();
+    await page
+      .getByRole('button', { name: 'Search & edit', exact: true })
+      .click();
     await page
       .getByLabel('Filter media', { exact: true })
       .selectOption('excluded');

@@ -168,8 +168,7 @@ Browser-independent logs can still be inspected.
 
 ## Recovery
 
-If a process survives, the Run is orphaned and the GPU remains owned. Reconcile
-processes refreshes observed state; Terminate recovered work requires confirmation
+If a process survives, the Run is orphaned and the GPU remains owned. Check for leftover processes refreshes observed state; Terminate recovered work requires confirmation
 and targets only those owned processes. Uncertain identity/access or a crash during
 launch blocks replacement GPU work. A known dead process/PID reuse does not count
 as live ownership. Once all recorded work is gone, an orphaned Run with a requested stop
@@ -194,7 +193,7 @@ A delete is refused, with the reason, in these cases. Nothing is removed.
 
 - The Run is active: queued, preparing, training, sampling or stopping, or orphaned or
   uncertain. Stop or cancel it first.
-- The Run still records processes to reconcile. Choose Reconcile processes first.
+- The Run still records processes to reconcile. Choose Check for leftover processes first.
 - A Run that is prepared or active still needs its files. A restored segment reads its
   source's saved state, frozen media and dataset files, and a retry reads the frozen media
   of the Run it came from. Cancel or delete that Run first.

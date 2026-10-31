@@ -8,19 +8,19 @@ list, are preserved; change them in Settings to use a different location.
 
 The Datasets library lists registered and managed datasets, their media/caption
 counts, storage locations and edit/delete actions. Choose **New dataset** to open
-the creation screen, then register an existing folder or create a managed dataset.
+the creation screen, then choose **Use existing folder** to register a folder as it is, or **Create a new folder for uploads** to create a managed dataset.
 Both flows open the individual dataset editor. **Back to datasets** returns to
 the library after saving the active caption; a failed save keeps the draft open.
 
 The individual editor fills the available window with thumbnails and editable captions.
 A compact top bar contains back navigation, the dataset name/scan status, **Add media**,
-**Tools** and **Dataset settings**. Thumbnails start directly below this bar; the
+**Search & edit** and **Dataset settings**. Thumbnails start directly below this bar; the
 workspace banner and large page heading are omitted on this screen.
 Type directly in the caption field beneath any thumbnail. Each field autosaves after
 350 ms and saves immediately when focus leaves it, with a per-caption save indicator.
 Select the thumbnail to open its full preview, larger caption editor and recovery
 history; both editors share the same draft and revision. **Close preview** saves
-pending captions and returns to the full gallery. **Tools** opens a side panel containing
+pending captions and returns to the full gallery. **Search & edit** opens a side panel containing
 search, filters, sorting, selection counts and bulk caption actions. **Dataset settings**
 opens a side panel holding the editable display
 name, storage path and H3 coverage. Renaming changes the library name without moving
@@ -84,7 +84,7 @@ in an isolated application subprocess with a 45-second timeout. Long clips that 
 need shorter source clips. Geometry, timestamps and playback are preflight evidence;
 actual upstream caching remains the final authority for crop-specific supervision.
 
-Open **Tools** to search names/caption text, sort and filter missing captions, invalid media, exclusions or selected items.
+Open **Search & edit** to search names/caption text, sort and filter missing captions, invalid media, exclusions or selected items.
 Checkbox selections remain explicit across filters; the counter identifies selected items hidden by the
 current filter. Excluding changes library metadata without changing or deleting source media. The
 included count is the effective training count. Select **Selection and bulk caption actions** to preview
@@ -93,7 +93,7 @@ caption revision and reports saved/conflict/failed outcomes independently. Previ
 a failed/conflicting item. **Restore successful captions** restores only that operation's successful
 items and refuses any item edited afterward. Sidecar history remains available for individual recovery.
 
-For uploads, use the same fixture command and choose **Create managed dataset** with the printed folder
+For uploads, use the same fixture command and choose **Create a new folder for uploads** with the printed folder
 as its storage root. Upload the fixture's `red.png`/`red.txt` and `invalid.mp4`; expect the media/caption
 to appear immediately and the invalid file to fail independently. Upload the same filename again to
 see an explicit collision. Restart and reopen the managed dataset to confirm persistence.

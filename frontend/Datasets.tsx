@@ -385,7 +385,6 @@ export function Datasets({
           )}
           <section className="title dataset-heading">
             <div>
-              <p className="eyebrow">YOUR MEDIA, YOUR CAPTIONS</p>
               <h1 ref={heading} tabIndex={-1}>
                 {screen === 'library' ? 'Datasets' : 'New dataset'}
               </h1>
@@ -477,7 +476,7 @@ export function Datasets({
               aria-controls="dataset-tools-panel"
               onClick={() => setPanel(panel === 'tools' ? null : 'tools')}
             >
-              Tools
+              Search &amp; edit
               {selected.size > 0
                 ? ` · ${selected.size}`
                 : query || filter !== 'all'
@@ -601,13 +600,13 @@ export function Datasets({
               disabled={busy || !name.trim() || !folder.trim()}
               onClick={() => void create(true)}
             >
-              Create managed dataset
+              Create a new folder for uploads
             </button>
             <button
               disabled={busy || !name.trim() || !folder.trim()}
               onClick={() => void create(false)}
             >
-              Register folder
+              Use existing folder
             </button>
           </div>
           {busy && <p role="status">Opening dataset…</p>}
