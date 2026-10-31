@@ -1,5 +1,4 @@
 import { test, expect } from '@playwright/test';
-import { spawn, type ChildProcess } from 'node:child_process';
 import {
   mkdtemp,
   mkdir,
@@ -11,55 +10,15 @@ import {
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { createServer } from 'node:net';
-import { stopBackendTree } from './processes';
+import { localBackend } from './backend';
 
-async function settingsBackend(root: string) {
-  const reservation = createServer();
-  await new Promise<void>((resolve) =>
-    reservation.listen(0, '127.0.0.1', resolve),
-  );
-  const address = reservation.address();
-  if (typeof address !== 'object' || !address) throw new Error('No test port');
-  const port = address.port;
-  await new Promise<void>((resolve) => reservation.close(() => resolve()));
-  const url = `http://127.0.0.1:${port}`;
-  let backend: ChildProcess | undefined;
-  const start = async () => {
-    backend = spawn(
-      path.resolve('.venv/Scripts/python.exe'),
-      ['-m', 'musubi_gui', '--port', String(port), '--no-browser'],
-      {
-        cwd: root,
-        env: {
-          ...process.env,
-          PYTHONPATH: process.cwd(),
-          MUSUBI_GUI_STATE: path.join(root, 'state'),
-        },
-        stdio: 'pipe',
-      },
-    );
-    await expect
-      .poll(async () => {
-        try {
-          return (await fetch(`${url}/api/settings`)).status;
-        } catch {
-          return 0;
-        }
-      })
-      .toBe(200);
-  };
-  const stop = async () => {
-    if (backend && backend.exitCode === null && backend.signalCode === null) {
-      const exited = new Promise<void>((resolve) =>
-        backend!.once('exit', () => resolve()),
-      );
-      if (!backend.pid) throw new Error('Missing backend PID');
-      await stopBackendTree(backend.pid);
-      await exited;
-    }
-  };
-  return { url, start, stop };
+function settingsBackend(root: string) {
+  return localBackend({
+    state: path.join(root, 'state'),
+    readyRoute: '/api/settings',
+    cwd: root,
+    env: { PYTHONPATH: process.cwd() },
+  });
 }
 
 test('settings survive backend restart and invalid installations explain corrections', async ({

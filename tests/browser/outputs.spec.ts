@@ -1,11 +1,10 @@
 import { test, expect } from '@playwright/test';
-import { execFile, spawn, type ChildProcess } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { mkdtemp, readFile, rm, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { createServer } from 'node:net';
 import { promisify } from 'node:util';
-import { stopBackendTree } from './processes';
+import { localBackend } from './backend';
 
 type FixtureRun = {
   id: string;
@@ -20,51 +19,11 @@ test('Wan and H3 output playback comparison download and missing states retain r
   const parent = await mkdtemp(path.join(tmpdir(), 'musubi-outputs-'));
   const fixture = path.join(parent, 'fixture');
   const python = path.resolve('.venv/Scripts/python.exe');
-  const reservation = createServer();
-  await new Promise<void>((resolve) =>
-    reservation.listen(0, '127.0.0.1', resolve),
-  );
-  const address = reservation.address();
-  if (typeof address !== 'object' || !address) throw new Error('No test port');
-  const port = address.port;
-  await new Promise<void>((resolve) => reservation.close(() => resolve()));
-  const url = `http://127.0.0.1:${port}`;
-  let backend: ChildProcess | undefined;
-  const start = async () => {
-    backend = spawn(
-      python,
-      [
-        '-m',
-        'musubi_gui',
-        '--port',
-        String(port),
-        '--no-browser',
-        '--acceptance-fixture',
-      ],
-      {
-        env: { ...process.env, MUSUBI_GUI_STATE: path.join(fixture, 'state') },
-        stdio: 'pipe',
-      },
-    );
-    await expect
-      .poll(async () => {
-        try {
-          return (await fetch(`${url}/api/runs`)).status;
-        } catch {
-          return 0;
-        }
-      })
-      .toBe(200);
-  };
-  const stop = async () => {
-    if (backend && backend.exitCode === null) {
-      const exited = new Promise<void>((resolve) =>
-        backend!.once('exit', () => resolve()),
-      );
-      await stopBackendTree(backend.pid!);
-      await exited;
-    }
-  };
+  const { url, start, stop } = await localBackend({
+    state: path.join(fixture, 'state'),
+    readyRoute: '/api/runs',
+    args: ['--acceptance-fixture'],
+  });
   try {
     await promisify(execFile)(python, [
       '-m',

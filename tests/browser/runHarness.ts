@@ -2,9 +2,9 @@ import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { createServer } from 'node:net';
 import { promisify } from 'node:util';
 import { expect } from '@playwright/test';
+import { reservePort } from './backend';
 
 const execute = promisify(execFile);
 
@@ -38,15 +38,7 @@ export async function runWorkspace(options: { freeBytes?: number } = {}) {
     jobs: { id: string; name: string; family: string; dataset_id: string }[];
   };
   const identityFile = path.join(parent, 'backend.json');
-  const reservation = createServer();
-  await new Promise<void>((resolve) =>
-    reservation.listen(0, '127.0.0.1', resolve),
-  );
-  const address = reservation.address();
-  if (!address || typeof address !== 'object')
-    throw new Error('No fixture port');
-  const port = address.port;
-  await new Promise<void>((resolve) => reservation.close(() => resolve()));
+  const port = await reservePort();
   const url = `http://127.0.0.1:${port}`;
   let backend: ChildProcess | undefined;
   let output = '';
