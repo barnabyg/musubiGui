@@ -443,6 +443,9 @@ function App() {
                   configured={setupComplete(settings)}
                   connected={!dirty && setupComplete(settings)}
                   diagnosed={!!report && report.current && !dirty}
+                  problemsFound={
+                    !!report?.checks.some((check) => check.status === 'error')
+                  }
                 />
                 <section className="panel" id="settings-environment">
                   <div className="section-heading">

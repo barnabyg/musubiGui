@@ -1,5 +1,5 @@
 import { useEffect, useState, type MouseEvent } from 'react';
-import { Circle, CircleCheck } from 'lucide-react';
+import { Circle, CircleCheck, TriangleAlert } from 'lucide-react';
 
 const dismissedKey = 'musubi.setupChecklistDismissed';
 
@@ -33,10 +33,12 @@ export function SetupChecklist({
   configured,
   connected,
   diagnosed,
+  problemsFound,
 }: {
   configured: boolean;
   connected: boolean;
   diagnosed: boolean;
+  problemsFound: boolean;
 }) {
   const [progress, setProgress] = useState<Progress>({
     datasets: false,
@@ -79,18 +81,35 @@ export function SetupChecklist({
     {
       label: 'Connect your musubi-tuner installation',
       done: connected,
+      note: undefined,
       href: '#/settings',
       onClick: jump('settings-environment'),
     },
     {
       label: 'Check it with diagnostics',
       done: diagnosed,
+      note: diagnosed && problemsFound ? 'Problems found' : undefined,
       href: '#/settings',
       onClick: jump('settings-actions'),
     },
-    { label: 'Add a dataset', done: progress.datasets, href: '#/datasets' },
-    { label: 'Create a job', done: progress.jobs, href: '#/jobs' },
-    { label: 'Start a Run', done: progress.runs, href: '#/runs' },
+    {
+      label: 'Add a dataset',
+      done: progress.datasets,
+      note: undefined,
+      href: '#/datasets',
+    },
+    {
+      label: 'Create a job',
+      done: progress.jobs,
+      note: undefined,
+      href: '#/jobs',
+    },
+    {
+      label: 'Start a Run',
+      done: progress.runs,
+      note: undefined,
+      href: '#/runs',
+    },
   ];
   if (dismissed && configured) return null;
   const complete = items.every((item) => item.done);
@@ -99,13 +118,13 @@ export function SetupChecklist({
       <h2>Getting started</h2>
       <p>Training works in this order: Dataset, then Job, then Run.</p>
       <ol>
-        {items.map(({ label, done, href, onClick }) => (
-          <li key={label} className={done ? 'done' : ''}>
-            {done ? <CircleCheck /> : <Circle />}
+        {items.map(({ label, done, note, href, onClick }) => (
+          <li key={label} className={note ? 'noted' : done ? 'done' : ''}>
+            {note ? <TriangleAlert /> : done ? <CircleCheck /> : <Circle />}
             <a href={href} onClick={onClick}>
               {label}
             </a>
-            <small>{done ? 'Done' : 'To do'}</small>
+            <small>{note ?? (done ? 'Done' : 'To do')}</small>
           </li>
         ))}
       </ol>

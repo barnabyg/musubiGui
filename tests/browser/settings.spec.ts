@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Route } from '@playwright/test';
 import {
   mkdtemp,
   mkdir,
@@ -340,6 +340,21 @@ test('an unconfigured app opens on Settings with a checklist of real progress', 
     );
     await page.reload();
     await expect(items.locator('small')).toHaveText(Array(5).fill('Done'));
+
+    const failing = (route: Route) =>
+      route.fulfill({
+        json: {
+          ran_at: '2026-10-31T00:00:00+00:00',
+          current: true,
+          environment: {},
+          checks: [{ name: 'GPU', status: 'error', message: 'None.' }],
+        },
+      });
+    await page.route('**/api/diagnostics', failing);
+    await page.reload();
+    await expect(items.nth(1).locator('small')).toHaveText('Problems found');
+    await page.unroute('**/api/diagnostics', failing);
+    await page.reload();
     await dismiss.click();
     await expect(checklist).toHaveCount(0);
     await page.reload();

@@ -385,6 +385,10 @@ small {
 .setup-checklist li.done .lucide {
   color: var(--color-success);
 }
+.setup-checklist li.noted .lucide,
+.setup-checklist li.noted small {
+  color: var(--color-warning);
+}
 .setup-checklist li small {
   margin-left: auto;
 }
