@@ -15,6 +15,10 @@ CI uses the same command. When it fails, CI keeps Playwright's `test-results`
 `playwright-results` artifact for 14 days. Registry access is required by vulnerability and lock checks.
 All diagnostics and warnings must be resolved; pytest warnings and ESLint warnings fail.
 
+When `CI` is set, pytest and Playwright each stop at their first failure, so a failing run
+ends soon after its first useful signal. Local runs still report every failure. The Verify
+job has a 120-minute limit, well above the slowest passing hosted run of about 18 minutes.
+
 Test deadlines are upper bounds, not targets, so they carry a lot of margin. A passing test
 never waits them out, while a tight deadline fails correct code when a hosted Windows runner
 crawls. Hosted runs have taken over 45 seconds to scan four media files, and over 60 seconds
@@ -26,7 +30,7 @@ SQLite writes and media subprocesses. Long upload, scan, inspection, preparation
 operations use explicit 240-second waits. Each test has a single 30-minute budget, which
 exceeds the sum of its waits. Pytest polls for Run states for up to 180 seconds, and its
 subprocesses and requests have 300 seconds. The cost is that a truly hung test takes longer
-to fail. This is a correctness suite, not a latency benchmark: assertions still require the
+to fail, up to the job limit in CI. This is a correctness suite, not a latency benchmark: assertions still require the
 exact expected result.
 
 The gallery/inline-caption virtual scrolling fixtures use eight real media files and
