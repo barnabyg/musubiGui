@@ -911,6 +911,8 @@ test('invalid fields are flagged while typing and review errors lead to their fi
     const blocks = page.getByRole('spinbutton', { name: 'Blocks to swap' });
     await blocks.fill('39');
     await expect(blocks).toHaveAccessibleDescription('Enter 0 to 38.');
+    await blocks.fill('1.5');
+    await expect(blocks).toHaveAccessibleDescription('Enter a whole number.');
     await blocks.fill('36');
 
     // Nothing is blocked: an invalid draft can still be saved.

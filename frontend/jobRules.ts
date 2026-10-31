@@ -25,6 +25,17 @@ const positive = [
   'save_every',
   'sample_steps',
 ];
+const whole = [
+  ...positive,
+  'width',
+  'height',
+  'frames',
+  'blocks_to_swap',
+  'batch_size',
+  'frame_stride',
+  'frame_sample',
+  'seed',
+];
 
 export function fieldProblems(family: Family, config: RuleConfig) {
   const problems: Record<string, string> = {};
@@ -53,6 +64,8 @@ export function fieldProblems(family: Family, config: RuleConfig) {
     problems.frame_stride = 'Enter 1 or more.';
   if (config.frame_extraction === 'uniform' && config.frame_sample < 2)
     problems.frame_sample = 'Enter 2 or more.';
+  for (const key of whole)
+    if (!Number.isInteger(config[key])) problems[key] = 'Enter a whole number.';
   return problems;
 }
 
