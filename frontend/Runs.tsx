@@ -439,6 +439,7 @@ export function Runs({
               <p key={record.id}>
                 {index + 1}. {record.job.name} · {record.status}{' '}
                 <button
+                  className="quiet"
                   disabled={index === 0}
                   onClick={() => void moveEarlier(record.id)}
                 >
@@ -515,6 +516,7 @@ export function Runs({
                   </button>
                   {run.status !== 'interrupted' && (
                     <button
+                      className="danger"
                       disabled={busy}
                       onClick={() =>
                         void confirmDialog({
@@ -549,6 +551,7 @@ export function Runs({
                     Request graceful stop
                   </button>
                   <button
+                    className="danger"
                     disabled={busy}
                     onClick={() =>
                       void confirmDialog({
@@ -599,7 +602,11 @@ export function Runs({
                   Retry preparation
                 </button>
               )}
-              <button disabled={busy} onClick={() => void deleteRun()}>
+              <button
+                className="danger"
+                disabled={busy}
+                onClick={() => void deleteRun()}
+              >
                 {run.status === 'deleting' ? 'Delete again' : 'Delete run'}
               </button>
             </div>

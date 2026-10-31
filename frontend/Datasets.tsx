@@ -433,7 +433,7 @@ export function Datasets({
         <>
           {screen !== 'library' && (
             <button
-              className="dataset-back"
+              className="dataset-back quiet"
               disabled={busy}
               onClick={() => void back()}
             >
@@ -472,7 +472,7 @@ export function Datasets({
       {screen === 'edit' && dataset && (
         <div className="dataset-topbar">
           <button
-            className="dataset-back-icon"
+            className="dataset-back-icon quiet"
             aria-label="Back to datasets"
             title="Back to datasets"
             disabled={busy}
@@ -511,7 +511,7 @@ export function Datasets({
           <div className="dataset-topbar-actions">
             {dataset.managed && (
               <button
-                className="primary"
+                className={items.length ? '' : 'primary'}
                 ref={(element) => {
                   panelButtons.current.uploads = element;
                 }}
@@ -610,7 +610,7 @@ export function Datasets({
                       : 'Local folder'}
                 </span>
                 <button
-                  className="dataset-delete"
+                  className="danger"
                   aria-label={`Delete ${value.name}`}
                   disabled={
                     busy || ['pending', 'scanning'].includes(value.scan.state)
@@ -689,7 +689,11 @@ export function Datasets({
           >
             <div className="dataset-panel-heading">
               <h2>Dataset settings</h2>
-              <button aria-label="Close settings" onClick={closePanel}>
+              <button
+                className="quiet"
+                aria-label="Close settings"
+                onClick={closePanel}
+              >
                 <X />
               </button>
             </div>
@@ -731,7 +735,11 @@ export function Datasets({
             >
               <div className="dataset-panel-heading">
                 <h2>Add media</h2>
-                <button aria-label="Close uploads" onClick={closePanel}>
+                <button
+                  className="quiet"
+                  aria-label="Close uploads"
+                  onClick={closePanel}
+                >
                   <X />
                 </button>
               </div>
@@ -754,7 +762,11 @@ export function Datasets({
           >
             <div className="dataset-panel-heading">
               <h2>Search and selection</h2>
-              <button aria-label="Close tools" onClick={closePanel}>
+              <button
+                className="quiet"
+                aria-label="Close tools"
+                onClick={closePanel}
+              >
                 <X />
               </button>
             </div>
@@ -1008,7 +1020,7 @@ export function Datasets({
               >
                 <div className="actions viewer-heading">
                   <h2>{active.name}</h2>
-                  <button onClick={() => void select(null)}>
+                  <button className="quiet" onClick={() => void select(null)}>
                     Close preview
                   </button>
                 </div>

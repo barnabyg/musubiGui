@@ -124,6 +124,9 @@
   background: none;
   text-align: left;
 }
+.action-menu [role='menuitem'].danger:hover:not(:disabled) {
+  background: var(--color-danger-surface);
+}
 .action-menu [role='menuitem']:focus-visible,
 .action-menu [role='menuitem']:hover:not(:disabled) {
   background: var(--color-accent-surface);

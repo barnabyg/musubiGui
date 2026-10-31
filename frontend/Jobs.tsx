@@ -649,7 +649,11 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
                 <button disabled={busy} onClick={() => void restore(item.id)}>
                   Restore {item.name}
                 </button>{' '}
-                <button disabled={busy} onClick={() => void deleteJob(item)}>
+                <button
+                  className="danger"
+                  disabled={busy}
+                  onClick={() => void deleteJob(item)}
+                >
                   Delete {item.name}
                 </button>
               </li>
@@ -663,13 +667,17 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
           {job && (
             <>
               <button
-                className="primary"
+                className={dirty ? 'primary' : ''}
                 disabled={busy}
                 onClick={() => void save()}
               >
                 Save draft
               </button>
-              <button disabled={busy} onClick={() => void inspect()}>
+              <button
+                className={!dirty && !review?.valid ? 'primary' : ''}
+                disabled={busy}
+                onClick={() => void inspect()}
+              >
                 Review configuration
               </button>
               <button
@@ -681,6 +689,7 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
                 Prepare run
               </button>
               <button
+                className={prepareReason ? '' : 'primary'}
                 disabled={busy || !!prepareReason}
                 title={prepareReason || undefined}
                 aria-describedby={prepareReason ? 'prepare-reason' : undefined}
@@ -718,6 +727,7 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
               },
               {
                 label: 'Delete job',
+                danger: true,
                 disabled: !job || dirty,
                 onSelect: () => job && void deleteJob(job),
               },

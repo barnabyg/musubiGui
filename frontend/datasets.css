@@ -13,8 +13,6 @@
 }
 .dataset-back {
   margin-top: var(--space-7);
-  background: transparent;
-  border-color: transparent;
   padding-left: 0;
   color: var(--color-accent-text);
   padding-top: var(--space-3);
@@ -35,12 +33,6 @@
 }
 .datasets-screen > [role='status'] {
   margin: var(--space-4) 0;
-}
-.datasets-screen button:focus-visible,
-.datasets-screen summary:focus-visible,
-.dataset-gallery:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 3px;
 }
 .dataset-library {
   display: grid;
@@ -102,11 +94,6 @@
   color: var(--color-danger-text);
   background: var(--color-danger-surface);
 }
-.dataset-delete {
-  background: transparent;
-  color: var(--color-danger-text);
-  border-color: var(--color-danger-border);
-}
 .dataset-empty {
   padding: var(--space-12) var(--space-9);
   border: 1px dashed var(--color-border-control);
@@ -161,8 +148,6 @@ main.dataset-editor-shell {
   background: var(--color-surface);
 }
 .dataset-back-icon {
-  border-color: transparent;
-  background: transparent;
   padding: var(--space-2) var(--space-3);
 }
 .dataset-identity {

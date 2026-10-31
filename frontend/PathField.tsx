@@ -1,4 +1,4 @@
-import { ArrowUp } from 'lucide-react';
+import { ArrowUp, Folder } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import { apiClient } from './api';
 
@@ -118,9 +118,7 @@ function PathBrowser({
                 entry.kind === 'folder' ? go(entry.path) : onChoose(entry.path)
               }
             >
-              <span aria-hidden="true">
-                {entry.kind === 'folder' ? '▸ ' : ''}
-              </span>
+              {entry.kind === 'folder' && <Folder />}
               {entry.name}
             </button>
           </li>

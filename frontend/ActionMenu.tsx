@@ -5,6 +5,7 @@ type Item = {
   label: string;
   onSelect: () => void;
   disabled?: boolean;
+  danger?: boolean;
 };
 
 // A menu button following the WAI-ARIA menu pattern: arrows move, Escape closes and returns focus.
@@ -81,6 +82,7 @@ export function ActionMenu({
             <button
               key={item.label}
               role="menuitem"
+              className={item.danger ? 'danger' : ''}
               disabled={item.disabled}
               onClick={() => {
                 close();

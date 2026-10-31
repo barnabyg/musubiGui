@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { localBackend } from './backend';
 import { datasetHarness } from './datasetHarness';
+import { runWorkspace } from './runHarness';
 
 test('navigation has four distinct matching icons and icon-only buttons have names', async ({
   page,
@@ -73,5 +74,60 @@ test('the dataset editor uses icons with accessible names, not text glyphs', asy
     await expect(close).toHaveText('');
   } finally {
     await app.cleanup();
+  }
+});
+
+test('each view has one primary action, destructive actions look dangerous and focus always shows', async ({
+  page,
+}) => {
+  const app = await runWorkspace();
+  try {
+    const job = app.manifest.jobs.find((item) => item.family === 'wan')!;
+    await page.goto(`${app.url}/#/jobs/${job.id}`);
+    const primaries = page.locator('button.primary:visible');
+    const named = (name: string) =>
+      page.getByRole('button', { name, exact: true });
+
+    // The primary action follows the job through its workflow.
+    await expect(primaries).toHaveText(['Review configuration']);
+    await page.getByLabel('Job name').fill(`${job.name} edited`);
+    await expect(primaries).toHaveText(['Save draft']);
+    await named('Save draft').click();
+    await expect(primaries).toHaveText(['Review configuration']);
+    await named('Review configuration').click();
+    await expect(primaries).toHaveText(['Prepare and start']);
+
+    await named('More job actions').click();
+    await expect(
+      page.getByRole('menuitem', { name: 'Delete job', exact: true }),
+    ).toHaveClass(/danger/);
+    await page.keyboard.press('Escape');
+
+    // Keyboard focus is visible on every stop through the form.
+    await page.getByLabel('Job name').focus();
+    for (let stop = 0; stop < 12; stop += 1) {
+      await page.keyboard.press('Tab');
+      const focus = await page.evaluate(() => {
+        const element = document.activeElement!;
+        const style = getComputedStyle(element);
+        return {
+          tag: element.tagName,
+          outline: style.outlineStyle,
+          width: style.outlineWidth,
+        };
+      });
+      expect(focus.outline, focus.tag).toBe('solid');
+      expect(focus.width, focus.tag).toBe('2px');
+    }
+
+    await named('Prepare run').click();
+    await expect(page.getByLabel('Run stages')).toBeVisible();
+    await expect(named('Delete run')).toHaveClass(/danger/);
+    await expect
+      .poll(async () => (await app.records())[0].status, { timeout: 240_000 })
+      .toBe('prepared');
+    await expect(primaries).toHaveText(['Start training']);
+  } finally {
+    await app.close();
   }
 });
