@@ -120,8 +120,8 @@ values are also the fixed fallbacks for fields missing from saved revisions and
 version 1 exports, so existing jobs keep their meaning. Acceptance fixtures use them
 and stay quick.
 
-Changing capacity controls requires capacity validation on Windows 11 / RTX 3090 /
-96 GB RAM. Draft validation is not proof of successful GPU execution. Sampling runs
+Changing capacity controls requires capacity validation on the
+[target hardware](../README.md#target-hardware). Draft validation is not proof of successful GPU execution. Sampling runs
 after training and can be disabled; no checkpoint-on-stop guarantee is made. Saving
 optimizer/training state is distinct from saving LoRA weights.
 

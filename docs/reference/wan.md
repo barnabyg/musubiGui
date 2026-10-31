@@ -66,7 +66,7 @@ totalled approximately 2.02 GB, including unrelated activity; this excludes
 results establish short-scenario execution with these particular lossy-derived
 weights. They do not establish visual quality, useful learning or production
 capacity. The raw measurement text in the evidence retains the earlier 64 GB
-wording; its measured values are unchanged and the corrected target is 96 GB.
+wording; its measured values are unchanged and the target is now 96 GB.
 
 Compatible public sources are [Comfy-Org/Wan-2.2](https://huggingface.co/Comfy-Org/Wan-2.2/tree/main/split_files/diffusion_models)
 (`wan2.2_t2v_low_noise_14B_fp16.safetensors` and `wan2.2_t2v_high_noise_14B_fp16.safetensors`),

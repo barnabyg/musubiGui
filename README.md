@@ -1,9 +1,9 @@
 # Musubi GUI
 
 A local Windows LoRA training application for an **existing musubi-tuner installation**.
-It supports Wan 2.2 A14B T2V and MiniMax H3 T2VA on Windows 11 / RTX 3090 /
-96 GB RAM, with 400+ GB available disk. React/TypeScript provides the interface;
-FastAPI serves the local API and a durable worker manages preparation and training.
+It supports Wan 2.2 A14B T2V and MiniMax H3 T2VA on the [target hardware](#target-hardware).
+React/TypeScript provides the interface; FastAPI serves the local API and a durable worker
+manages preparation and training.
 
 Register existing datasets or upload into managed folders, browse images/video/audio,
 and edit authoritative `.txt` captions with immediate saves, conflict detection and
@@ -64,15 +64,27 @@ scenario with datasets and Wan/H3 jobs. See [release acceptance](docs/release.md
 [outputs](docs/outputs.md) for commands and recovery scenarios.
 
 Stop is observed rather than assumed, and force termination requires confirmation.
-Complete saved optimizer state can be restored as a new segment. The pinned upstream
-resets its displayed step counter and data position, so seamless resume is unsupported.
-LoRA checkpoints alone do not restore optimizer state.
+Complete saved optimizer state can be restored as a new segment, within the
+[limits of saved state](docs/runs.md#saved-state).
 
 Run the measured Wan/H3 acceptance scenarios with `.venv\Scripts\python.exe -m musubi_gui.reference wan`
 or the same command ending in `h3`. See [reference workflows](docs/reference/README.md)
 for compatible weights, exact recipes, evidence and unresolved support limits.
 
+## Target hardware
+
+Native Windows 11, an RTX 3090 with 24 GB VRAM, nominal 96 GB RAM (95.6 GiB usable) and at
+least 400 GB available disk.
+
+## Licences and credits
+
 The interface takes interaction inspiration from [AI Toolkit](https://github.com/ostris/ai-toolkit):
 a persistent sidebar and grouped settings. No AI Toolkit source/assets are copied.
 [musubi-tuner](https://github.com/kohya-ss/musubi-tuner) owns all training; it remains a separate
 installation with its own licences. No upstream code or model weights are distributed here.
+
+Model weights retain their model-card licences. In particular, consult the
+[MiniMax H3 Community License](https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE)
+and the model cards before using or redistributing weights. The original synthetic fixture
+media and captions are dedicated to the public domain under
+[CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/).
