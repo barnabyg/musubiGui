@@ -303,9 +303,7 @@ function App() {
       <aside>
         <a className="brand" href="/">
           ◈{' '}
-          <span>
-            musubi<small>LOCAL TRAINING STUDIO</small>
-          </span>
+          <span>musubi</span>
         </a>
         <div className="workspace">WORKSPACE</div>
         <nav>

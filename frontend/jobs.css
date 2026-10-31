@@ -6,7 +6,7 @@
 .job-table table {
   width: 100%;
   border-collapse: collapse;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
 }
 .job-table th,
 .job-table td {
@@ -68,7 +68,7 @@
   align-items: center;
   gap: var(--space-5);
   margin: var(--space-7) 0;
-  font-size: var(--text-md);
+  font-size: var(--text-base);
 }
 .job-toggle input {
   width: auto;
@@ -78,7 +78,7 @@
   margin-top: var(--space-2);
 }
 .jobs-workspace li {
-  font-size: var(--text-md);
+  font-size: var(--text-base);
   line-height: 1.7;
 }
 .jobs-workspace .error {
@@ -142,10 +142,10 @@
   padding: var(--space-6) var(--space-7);
   border: 1px solid;
   border-radius: var(--radius-md);
-  font-size: var(--text-md);
+  font-size: var(--text-base);
 }
 .review-verdict strong {
-  font-size: var(--text-xl);
+  font-size: var(--text-large);
 }
 .review-verdict.passed {
   border-color: var(--color-success-border);

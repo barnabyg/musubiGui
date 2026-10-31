@@ -13,7 +13,7 @@
   width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
 }
 .output-comparison th,
 .output-comparison td {

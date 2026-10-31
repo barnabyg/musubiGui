@@ -10,7 +10,7 @@
 .run-stepper li {
   border-top: 3px solid var(--color-border-input);
   padding-top: var(--space-4);
-  font-size: var(--text-md);
+  font-size: var(--text-base);
   color: var(--color-text-muted);
 }
 .run-stepper strong {
@@ -47,5 +47,5 @@
 }
 .run-progress p {
   margin: var(--space-2) 0;
-  font-size: var(--text-md);
+  font-size: var(--text-base);
 }
