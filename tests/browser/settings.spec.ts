@@ -286,10 +286,10 @@ test('an unconfigured app opens on Settings with a checklist of real progress', 
           checkout: 'C:\\checkout',
           python: 'C:\\python.exe',
           model_roots: [],
-          dataset_roots: [],
+          dataset_roots: ['C:\\datasets'],
           models: {},
-          output_root: '',
-          cache_root: '',
+          output_root: 'C:\\output',
+          cache_root: 'C:\\cache',
         },
       }),
     );
@@ -561,6 +561,45 @@ test('typed Enter separates model and dataset roots and diagnostics name missing
     );
     await expect(warning).not.toContainText(datasets);
     await expect(page.getByText('Model roots', { exact: true })).toHaveCount(0);
+  } finally {
+    await stop();
+    await rm(root, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 100,
+    });
+  }
+});
+
+test('an installation with no storage folders still opens on Settings', async ({
+  page,
+}) => {
+  const root = await realpath(
+    await mkdtemp(path.join(tmpdir(), 'musubi-storage-')),
+  );
+  const { url, start, stop } = await settingsBackend(root);
+  try {
+    await start();
+    await page.route('**/api/settings', (route) =>
+      route.fulfill({
+        json: {
+          version: 1,
+          checkout: 'C:\\checkout',
+          python: 'C:\\python.exe',
+          model_roots: [],
+          dataset_roots: ['C:\\datasets'],
+          models: {},
+          output_root: '',
+          cache_root: '',
+        },
+      }),
+    );
+    await page.goto(url);
+    await expect(
+      page.getByRole('heading', { name: 'Settings', exact: true }),
+    ).toBeVisible();
+    await expect(page).toHaveURL(/#\/settings$/);
   } finally {
     await stop();
     await rm(root, {

@@ -73,6 +73,16 @@ const activeStatuses = [
   'stopping',
 ];
 
+function setupComplete(value: Settings) {
+  return !!(
+    value.checkout &&
+    value.python &&
+    value.output_root &&
+    value.cache_root &&
+    value.dataset_roots.length
+  );
+}
+
 function setupHealth(report: Report | null, dirty: boolean) {
   if (!report) return { state: 'unknown', label: 'Not checked' };
   const problems = report.checks.filter((check) => check.status === 'error');
@@ -248,7 +258,7 @@ function App() {
         ).catch(() => []);
         if (!landingPending.current) return;
         const active = runs.find((run) => activeStatuses.includes(run.status));
-        if (!value.checkout || !value.python) go('Settings', undefined, true);
+        if (!setupComplete(value)) go('Settings', undefined, true);
         else if (active) go('Runs', active.id, true);
         else go('Datasets', undefined, true);
       })
@@ -430,7 +440,7 @@ function App() {
             {settings && (
               <>
                 <SetupChecklist
-                  connected={!dirty && !!settings.checkout && !!settings.python}
+                  connected={!dirty && setupComplete(settings)}
                   diagnosed={!!report && report.current && !dirty}
                 />
                 <section className="panel" id="settings-environment">
