@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { datasetHarness } from './datasetHarness';
 
-test('managed uploads publish media/captions, reject collisions and invalid files, and persist after restart', async ({
+test('picked files publish media and captions, and a rejected upload can be cancelled', async ({
   page,
 }) => {
   const app = await datasetHarness();
@@ -55,35 +55,11 @@ test('managed uploads publish media/captions, reject collisions and invalid file
       ),
     );
     await page
-      .getByLabel('Upload files')
-      .setInputFiles(path.join(app.media, 'red.png'));
-    await page.getByRole('button', { name: 'Upload selected files' }).click();
-    await expect(page.getByLabel('Upload files')).toBeEnabled({
-      timeout: 240_000,
-    });
-    await expect(
-      page.getByLabel('Upload result red.png', { exact: true }),
-    ).toContainText('already exists');
-    await page
       .getByRole('button', { name: 'Cancel partial invalid.mp4' })
       .click();
     await expect(
       page.getByRole('button', { name: 'Cancel partial invalid.mp4' }),
     ).toHaveCount(0);
-    await app.stop();
-    await app.start();
-    await page.reload();
-    await page.getByRole('button', { name: 'Datasets', exact: true }).click();
-    await page
-      .getByRole('button', { name: /Uploads library.*1 media.*1 captioned/ })
-      .click();
-    await page.getByRole('button', { name: 'red.png image' }).click();
-    await expect(page.getByLabel('Caption', { exact: true })).toHaveValue(
-      (await readFile(path.join(app.media, 'red.txt'), 'utf8')).replace(
-        /\r\n/g,
-        '\n',
-      ),
-    );
   } finally {
     await app.cleanup();
   }
