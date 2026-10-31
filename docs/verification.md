@@ -12,6 +12,7 @@ current `frontend/` source before testing, through its `pretest:browser` script,
 it is given a single spec file. Running `playwright test` directly skips that build.
 `tests/browser/api.spec.ts` is the exception to real browser testing: it runs the shared
 request helper in Node with a stubbed `fetch`, to reach error responses the backend doesn't produce.
+Python that browser tests run lives in `tests/browser/helper.py`, under the same format, lint and type checks.
 CI uses the same command. When it fails, CI keeps Playwright's `test-results`
 (page snapshots and failure screenshots of synthetic fixtures) as the
 `playwright-results` artifact for 14 days. Registry access is required by vulnerability and lock checks.

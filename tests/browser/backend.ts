@@ -4,7 +4,10 @@ import { createServer } from 'node:net';
 import path from 'node:path';
 import { stopBackendTree } from './processes';
 
-export async function reservePort(): Promise<number> {
+export const python = path.resolve('.venv/Scripts/python.exe');
+export const helper = path.resolve('tests/browser/helper.py');
+
+async function reservePort(): Promise<number> {
   const reservation = createServer();
   await new Promise<void>((resolve) =>
     reservation.listen(0, '127.0.0.1', resolve),
@@ -18,9 +21,12 @@ export async function reservePort(): Promise<number> {
 export async function localBackend(options: {
   state: string;
   readyRoute: string;
+  // What Python runs; the port and args follow it. Defaults to the real entry point.
+  entry?: string[];
   args?: string[];
   cwd?: string;
   env?: Record<string, string>;
+  readyTimeout?: number;
 }) {
   const port = await reservePort();
   const url = `http://127.0.0.1:${port}`;
@@ -34,13 +40,11 @@ export async function localBackend(options: {
   let backend: ChildProcess | undefined;
   const start = async () => {
     backend = spawn(
-      path.resolve('.venv/Scripts/python.exe'),
+      python,
       [
-        '-m',
-        'musubi_gui',
+        ...(options.entry ?? ['-m', 'musubi_gui', '--no-browser']),
         '--port',
         String(port),
-        '--no-browser',
         ...(options.args ?? []),
       ],
       {
@@ -67,20 +71,28 @@ export async function localBackend(options: {
           `Backend on port ${port} exited unexpectedly (code ${code}, signal ${signal}):\n${output}`,
         );
     });
-    await expect.poll(status).toBe(200);
+    await expect.poll(status, { timeout: options.readyTimeout }).toBe(200);
+  };
+  const running = () =>
+    backend !== undefined &&
+    backend.exitCode === null &&
+    backend.signalCode === null;
+  // Ends the backend on purpose, so its exit isn't reported as unexpected.
+  const end = async (terminate: (pid: number) => Promise<unknown>) => {
+    const current = backend;
+    const wasRunning = running();
+    backend = undefined;
+    if (!current || !wasRunning) return false;
+    const exited = new Promise<void>((resolve) =>
+      current.once('exit', () => resolve()),
+    );
+    if (!current.pid) throw new Error('Missing backend PID');
+    await terminate(current.pid);
+    await exited;
+    return true;
   };
   const stop = async () => {
-    const current = backend;
-    backend = undefined;
-    if (current && current.exitCode === null && current.signalCode === null) {
-      const exited = new Promise<void>((resolve) =>
-        current.once('exit', () => resolve()),
-      );
-      if (!current.pid) throw new Error('Missing backend PID');
-      await stopBackendTree(current.pid);
-      await exited;
-      await expect.poll(status).toBe(0);
-    }
+    if (await end(stopBackendTree)) await expect.poll(status).toBe(0);
   };
-  return { url, start, stop };
+  return { url, start, stop, end, running };
 }

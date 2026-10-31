@@ -24,9 +24,9 @@ def main() -> None:
     npm = shutil.which("npm.cmd" if os.name == "nt" else "npm")
     if not npm:
         raise SystemExit("Node.js/npm is required.")
-    run(python, "-m", "ruff", "format", "--check", "musubi_gui", "tools", "tests/python")
+    run(python, "-m", "ruff", "format", "--check", "musubi_gui", "tools", "tests/python", "tests/browser")
     run(npm, "run", "format:check")
-    run(python, "-m", "ruff", "check", "musubi_gui", "tools", "tests/python")
+    run(python, "-m", "ruff", "check", "musubi_gui", "tools", "tests/python", "tests/browser")
     run(npm, "run", "lint")
     run(python, "-m", "mypy")
     run(npm, "run", "typecheck")
