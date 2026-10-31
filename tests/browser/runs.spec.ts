@@ -202,33 +202,6 @@ test('a Run that reused a deleted Run cache still shows it and can be used', asy
   }
 });
 
-test('Delete run on an active Run is refused with the reason', async ({
-  page,
-}) => {
-  const app = await runWorkspace();
-  try {
-    const job = app.manifest.jobs.find((item) => item.family === 'wan')!;
-    await app.leaseGpu('acquire');
-    await app.post('/api/runs/prepare', { job_id: job.id });
-    await page.goto(app.url);
-    await page.getByRole('button', { name: 'Runs', exact: true }).click();
-    await page
-      .getByRole('button', { name: `${job.name} · WAN · r1`, exact: true })
-      .click();
-    await expect(
-      page.getByText('State: pending_preparation', { exact: true }),
-    ).toBeVisible();
-    await page.getByRole('button', { name: 'Delete run', exact: true }).click();
-    await expect(page.getByRole('alert')).toContainText('active');
-    const [run] = await app.records();
-    expect(run.status).toBe('pending_preparation');
-    expect(await exists(run.directory)).toBe(true);
-    await app.leaseGpu('release');
-  } finally {
-    await app.close();
-  }
-});
-
 test('Wan and H3 prepare and train through the GUI with frozen captions cache reuse and playable outputs', async ({
   page,
 }) => {
@@ -588,7 +561,7 @@ test('low disk space warns in review and preparation still goes ahead', async ({
   }
 });
 
-test('archiving hides a job, keeps its Runs browsable and restores it', async ({
+test('a queued Run refuses delete and archive; archiving hides a job, keeps its Runs browsable and restores it', async ({
   page,
 }) => {
   const app = await runWorkspace();
@@ -616,6 +589,18 @@ test('archiving hides a job, keeps its Runs browsable and restores it', async ({
     await expect
       .poll(async () => (await app.records())[0]?.status, { timeout: 240_000 })
       .toBe('pending_preparation');
+
+    // Deleting a queued Run is refused with the reason.
+    await page.getByRole('button', { name: 'Runs', exact: true }).click();
+    await library.click();
+    await expect(
+      page.getByText('State: pending_preparation', { exact: true }),
+    ).toBeVisible();
+    await page.getByRole('button', { name: 'Delete run', exact: true }).click();
+    await expect(page.getByRole('alert')).toContainText('active');
+    const [queued] = await app.records();
+    expect(queued.status).toBe('pending_preparation');
+    expect(await exists(queued.directory)).toBe(true);
 
     // A queued Run keeps its job in the list, and the refusal says why.
     await jobsTab.click();
