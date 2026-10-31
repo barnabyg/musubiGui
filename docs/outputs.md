@@ -1,7 +1,9 @@
 # Run outputs and revision comparison
 
-Choose a persistent Run, then use Run outputs to browse the checkpoint/sample
-inventory. Select a file to inspect its originating Run, metadata and availability.
+Choose a persistent Run. Its sample and a download for the final LoRA come first, with any
+warnings. Run outputs below lists the samples and, collapsed, the LoRA checkpoints with step
+and size; weights inside a saved state's folder are listed under Saved optimizer state, not
+as LoRAs. Select a file to inspect its originating Run, metadata and availability.
 Image, video and audio samples play in the browser; Open output in browser and
 Download output use only the recorded file identity. Checkpoint downloads remain
 binary attachments, named after the job as `<job name>-r<revision>[-step<N>].safetensors`

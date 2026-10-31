@@ -1,5 +1,9 @@
 # Runs
 
+Runs lists the queue and history beside the selected Run. Statuses read as labels such as
+Preparing or Ready to start, and the stored values are unchanged. The GPU line names the job
+using the GPU and links to its Run.
+
 ## Preparation
 
 Preparation reserves snapshot creation through a separate state-scoped SQLite gate.

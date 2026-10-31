@@ -349,6 +349,11 @@ export function Runs({
     };
   }, [selected]);
   const run = runs.find((record) => record.id === selected);
+  const queue = runs
+    .filter((record) =>
+      ['pending_preparation', 'pending_training'].includes(record.status),
+    )
+    .sort((a, b) => a.order - b.order);
   const ownerRun = runs.find((record) => record.id === owner?.run_id);
   const current = live?.runId === run?.id ? live : null;
   const showFiles = run && run.status !== 'deleting' && run.id !== deleting;
@@ -464,16 +469,10 @@ export function Runs({
       {notice && <p role="status">{notice}</p>}
       <div className="runs-layout">
         <div>
-          <section className="panel">
-            <h2>Pending queue</h2>
-            {runs
-              .filter((record) =>
-                ['pending_preparation', 'pending_training'].includes(
-                  record.status,
-                ),
-              )
-              .sort((a, b) => a.order - b.order)
-              .map((record, index) => (
+          {queue.length > 0 && (
+            <section className="panel">
+              <h2>Pending queue</h2>
+              {queue.map((record, index) => (
                 <p key={record.id}>
                   {index + 1}. {record.job.name}{' '}
                   <RunBadge status={record.status} />{' '}
@@ -486,7 +485,8 @@ export function Runs({
                   </button>
                 </p>
               ))}
-          </section>
+            </section>
+          )}
           <section className="panel run-history">
             <h2>Run history</h2>
             {runs.length === 0 && (
