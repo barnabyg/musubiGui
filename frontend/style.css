@@ -90,6 +90,9 @@ input,
 textarea {
   font: inherit;
 }
+a {
+  color: var(--color-accent-text);
+}
 button {
   cursor: pointer;
 }

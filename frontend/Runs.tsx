@@ -1,10 +1,16 @@
 import { useEffect, useEffectEvent, useState } from 'react';
 import { apiClient } from './api';
 import { confirmDialog } from './ConfirmDialog';
-import { Outputs } from './Outputs';
+import {
+  Outputs,
+  RunResult,
+  stateFiles,
+  useRunOutputs,
+  type Output,
+} from './Outputs';
 import { formatRoute } from './route';
 import { notificationsWanted, setNotificationsWanted } from './runSignals';
-import { readableTime, runStatus } from './runStatus';
+import { readableTime, runStatus, sizeLabel } from './runStatus';
 import { StatusBadge } from './StatusBadge';
 import './runs.css';
 
@@ -152,13 +158,6 @@ function TrainingProgress({
   );
 }
 
-function sizeLabel(bytes: number) {
-  if (bytes >= 100_000_000) return `${(bytes / 1_000_000_000).toFixed(1)} GB`;
-  return bytes >= 1_000_000
-    ? `${(bytes / 1_000_000).toFixed(0)} MB`
-    : `${Math.ceil(bytes / 1_000)} KB`;
-}
-
 function confirmDelete(run: Run, preview: DeletePreview) {
   const lines = [
     `This frees ${sizeLabel(preview.bytes ?? 0)} and can't be undone. Its checkpoints, samples, saved states, logs and saved inputs are removed, so download any LoRA you want to keep first.`,
@@ -188,9 +187,11 @@ function RunBadge({ status }: { status: string }) {
 
 function SavedStates({
   runId,
+  files,
   onRestore,
 }: {
   runId: string;
+  files: Output[];
   onRestore: (stateId: string, steps: number) => Promise<void>;
 }) {
   const [states, setStates] = useState<
@@ -226,6 +227,27 @@ function SavedStates({
         LoRA checkpoint alone cannot restore training state. Stopping does not
         guarantee a checkpoint or state save.
       </p>
+      {files.length > 0 && (
+        <details>
+          <summary>Optimizer state files ({files.length})</summary>
+          <ul className="state-files">
+            {files.map((file) => (
+              <li key={file.id}>
+                {file.path}
+                {file.bytes !== undefined && ` · ${sizeLabel(file.bytes)}`}
+                {file.file_url && (
+                  <>
+                    {' · '}
+                    <a href={`${file.file_url}?download=true`} download>
+                      Download
+                    </a>
+                  </>
+                )}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
       <button disabled={inspecting} onClick={() => void inspect()}>
         Inspect saved states
       </button>
@@ -330,6 +352,11 @@ export function Runs({
   const ownerRun = runs.find((record) => record.id === owner?.run_id);
   const current = live?.runId === run?.id ? live : null;
   const showFiles = run && run.status !== 'deleting' && run.id !== deleting;
+  // Changes whenever the Run or one of its stages does, so finished work appears without a click.
+  const outputs = useRunOutputs(
+    showFiles ? run.id : undefined,
+    run ? [run.status, ...run.stages.map((stage) => stage.status)].join() : '',
+  );
   async function action(name: string, body: object = {}) {
     if (!run) return;
     setBusy(true);
@@ -435,264 +462,285 @@ export function Runs({
         )}
       </p>
       {notice && <p role="status">{notice}</p>}
-      <label className="job-toggle">
-        <input
-          type="checkbox"
-          checked={notify}
-          onChange={(event) =>
-            void setNotificationsWanted(event.target.checked).then(setNotify)
-          }
-        />
-        <span>Send a browser notification when a Run is ready or finished</span>
-      </label>
-      <div className="columns">
-        <section className="panel">
-          <h2>Pending queue</h2>
-          {runs
-            .filter((record) =>
-              ['pending_preparation', 'pending_training'].includes(
-                record.status,
-              ),
-            )
-            .sort((a, b) => a.order - b.order)
-            .map((record, index) => (
-              <p key={record.id}>
-                {index + 1}. {record.job.name}{' '}
-                <RunBadge status={record.status} />{' '}
-                <button
-                  className="quiet"
-                  disabled={index === 0}
-                  onClick={() => void moveEarlier(record.id)}
-                >
-                  Move earlier
-                </button>
-              </p>
-            ))}
-        </section>
-        <section className="panel">
-          <h2>Run history</h2>
-          {runs.length === 0 && (
-            <p>Save and review a job, then choose Prepare.</p>
-          )}
-          {runs.map((record) => (
-            <p key={record.id}>
-              <button
-                aria-pressed={selected === record.id}
-                onClick={() => onSelect?.(record.id)}
-              >
-                {record.job.name} · {record.job.family.toUpperCase()} · r
-                {record.job.revision}
-              </button>
-              <br />
-              <RunBadge status={record.status} />{' '}
-              <small>{readableTime(record.created)}</small>
-            </p>
-          ))}
-        </section>
-        {run && (
+      <div className="runs-layout">
+        <div>
           <section className="panel">
-            <h2>{run.job.name}</h2>
-            <p title={run.id}>Run {run.id.slice(0, 8)}</p>
-            <p>
-              <strong>
-                State: <RunBadge status={run.status} />
-              </strong>
-            </p>
-            {run.error && <p className="error">{run.error}</p>}
-            {run.start_after_prepare &&
-              ['pending_preparation', 'preparing'].includes(run.status) && (
-                <p>Training starts by itself when preparation succeeds.</p>
-              )}
-            {run.status === 'deleting' && (
-              <div aria-label="Unfinished delete">
-                <p className="error">
-                  {run.deletion?.error ??
-                    'This run is being deleted, or its delete was interrupted. If this stays, choose Delete again.'}
+            <h2>Pending queue</h2>
+            {runs
+              .filter((record) =>
+                ['pending_preparation', 'pending_training'].includes(
+                  record.status,
+                ),
+              )
+              .sort((a, b) => a.order - b.order)
+              .map((record, index) => (
+                <p key={record.id}>
+                  {index + 1}. {record.job.name}{' '}
+                  <RunBadge status={record.status} />{' '}
+                  <button
+                    className="quiet"
+                    disabled={index === 0}
+                    onClick={() => void moveEarlier(record.id)}
+                  >
+                    Move earlier
+                  </button>
                 </p>
-                {!!run.deletion?.remaining.length && (
+              ))}
+          </section>
+          <section className="panel run-history">
+            <h2>Run history</h2>
+            {runs.length === 0 && (
+              <p>Save and review a job, then choose Prepare.</p>
+            )}
+            {runs.map((record) => (
+              <div key={record.id}>
+                <button
+                  aria-pressed={selected === record.id}
+                  onClick={() => onSelect?.(record.id)}
+                >
+                  {record.job.name} · {record.job.family.toUpperCase()} · r
+                  {record.job.revision}
+                </button>
+                <p>
+                  <RunBadge status={record.status} />{' '}
+                  <small>{readableTime(record.created)}</small>
+                </p>
+              </div>
+            ))}
+          </section>
+          <label className="job-toggle">
+            <input
+              type="checkbox"
+              checked={notify}
+              onChange={(event) =>
+                void setNotificationsWanted(event.target.checked).then(
+                  setNotify,
+                )
+              }
+            />
+            <span>
+              Send a browser notification when a Run is ready or finished
+            </span>
+          </label>
+        </div>
+        <div>
+          {!run && runs.length > 0 && <p>Choose a Run to see its details.</p>}
+          {showFiles && <RunResult outputs={outputs} />}
+          {run && (
+            <section className="panel">
+              <h2>{run.job.name}</h2>
+              <p title={run.id}>Run {run.id.slice(0, 8)}</p>
+              <p>
+                <strong>
+                  State: <RunBadge status={run.status} />
+                </strong>
+              </p>
+              {run.error && <p className="error">{run.error}</p>}
+              {run.start_after_prepare &&
+                ['pending_preparation', 'preparing'].includes(run.status) && (
+                  <p>Training starts by itself when preparation succeeds.</p>
+                )}
+              {run.status === 'deleting' && (
+                <div aria-label="Unfinished delete">
+                  <p className="error">
+                    {run.deletion?.error ??
+                      'This run is being deleted, or its delete was interrupted. If this stays, choose Delete again.'}
+                  </p>
+                  {!!run.deletion?.remaining.length && (
+                    <>
+                      <p>Still on disk:</p>
+                      <ul>
+                        {run.deletion.remaining.map((item) => (
+                          <li key={item.path}>
+                            {item.path}
+                            {item.bytes !== undefined &&
+                              ` · ${sizeLabel(item.bytes)}`}
+                          </li>
+                        ))}
+                      </ul>
+                    </>
+                  )}
+                </div>
+              )}
+              <div className="actions">
+                {['orphaned', 'uncertain', 'interrupted'].includes(
+                  run.status,
+                ) && (
                   <>
-                    <p>Still on disk:</p>
-                    <ul>
-                      {run.deletion.remaining.map((item) => (
-                        <li key={item.path}>
-                          {item.path}
-                          {item.bytes !== undefined &&
-                            ` · ${sizeLabel(item.bytes)}`}
-                        </li>
-                      ))}
-                    </ul>
+                    <button
+                      disabled={busy}
+                      onClick={() => void action('reconcile')}
+                    >
+                      Check for leftover processes
+                    </button>
+                    {run.status !== 'interrupted' && (
+                      <button
+                        className="danger"
+                        disabled={busy}
+                        onClick={() =>
+                          void confirmDialog({
+                            title: 'Terminate recovered work?',
+                            body: (
+                              <p>
+                                This ends the recovered processes belonging to
+                                this run. Unsaved work may be lost.
+                              </p>
+                            ),
+                            confirmLabel: 'Terminate recovered work',
+                            danger: true,
+                          }).then((confirmed) => {
+                            if (confirmed)
+                              void action('terminate-orphan', {
+                                confirmed: true,
+                              });
+                          })
+                        }
+                      >
+                        Terminate recovered work
+                      </button>
+                    )}
                   </>
                 )}
-              </div>
-            )}
-            <div className="actions">
-              {['orphaned', 'uncertain', 'interrupted'].includes(
-                run.status,
-              ) && (
-                <>
-                  <button
-                    disabled={busy}
-                    onClick={() => void action('reconcile')}
-                  >
-                    Check for leftover processes
-                  </button>
-                  {run.status !== 'interrupted' && (
+                {['training', 'generating', 'stopping'].includes(
+                  run.status,
+                ) && (
+                  <>
+                    <button
+                      disabled={busy || run.status === 'stopping'}
+                      onClick={() => void action('stop', { force: false })}
+                    >
+                      Request graceful stop
+                    </button>
                     <button
                       className="danger"
                       disabled={busy}
                       onClick={() =>
                         void confirmDialog({
-                          title: 'Terminate recovered work?',
+                          title: 'Force terminate this Run?',
                           body: (
                             <p>
-                              This ends the recovered processes belonging to
-                              this run. Unsaved work may be lost.
+                              This ends the Run's whole process tree. Unsaved
+                              checkpoints and optimizer state may be lost.
                             </p>
                           ),
-                          confirmLabel: 'Terminate recovered work',
+                          confirmLabel: 'Force terminate',
                           danger: true,
                         }).then((confirmed) => {
                           if (confirmed)
-                            void action('terminate-orphan', {
+                            void action('stop', {
+                              force: true,
                               confirmed: true,
                             });
                         })
                       }
                     >
-                      Terminate recovered work
+                      Force terminate
                     </button>
-                  )}
-                </>
-              )}
-              {['training', 'generating', 'stopping'].includes(run.status) && (
-                <>
+                  </>
+                )}
+                {run.status === 'prepared' && (
                   <button
-                    disabled={busy || run.status === 'stopping'}
-                    onClick={() => void action('stop', { force: false })}
-                  >
-                    Request graceful stop
-                  </button>
-                  <button
-                    className="danger"
                     disabled={busy}
-                    onClick={() =>
-                      void confirmDialog({
-                        title: 'Force terminate this Run?',
-                        body: (
-                          <p>
-                            This ends the Run's whole process tree. Unsaved
-                            checkpoints and optimizer state may be lost.
-                          </p>
-                        ),
-                        confirmLabel: 'Force terminate',
-                        danger: true,
-                      }).then((confirmed) => {
-                        if (confirmed)
-                          void action('stop', { force: true, confirmed: true });
-                      })
-                    }
+                    className="primary"
+                    onClick={() => void action('start')}
                   >
-                    Force terminate
+                    Start training
                   </button>
-                </>
-              )}
-              {run.status === 'prepared' && (
+                )}
+                {run.status === 'prepared' && (
+                  <button disabled={busy} onClick={() => void action('queue')}>
+                    Add to queue
+                  </button>
+                )}
+                {[
+                  'pending_preparation',
+                  'pending_training',
+                  'preparing',
+                ].includes(run.status) && (
+                  <button disabled={busy} onClick={() => void action('cancel')}>
+                    Cancel preparation
+                  </button>
+                )}
+                {['failed', 'cancelled', 'interrupted'].includes(
+                  run.status,
+                ) && (
+                  <button disabled={busy} onClick={() => void action('retry')}>
+                    Retry preparation
+                  </button>
+                )}
                 <button
+                  className="danger"
                   disabled={busy}
-                  className="primary"
-                  onClick={() => void action('start')}
+                  onClick={() => void deleteRun()}
                 >
-                  Start training
+                  {run.status === 'deleting' ? 'Delete again' : 'Delete run'}
                 </button>
+              </div>
+              {run.stages.length > 0 && (
+                <ol className="run-stepper" aria-label="Run stages">
+                  {runSteps(run).map((step) => (
+                    <li
+                      key={step.label}
+                      className={step.state}
+                      aria-current={
+                        step.state === 'current' ? 'step' : undefined
+                      }
+                    >
+                      <strong>{step.label}</strong>
+                      <small>{step.detail}</small>
+                    </li>
+                  ))}
+                </ol>
               )}
-              {run.status === 'prepared' && (
-                <button disabled={busy} onClick={() => void action('queue')}>
-                  Add to queue
-                </button>
-              )}
-              {[
-                'pending_preparation',
-                'pending_training',
-                'preparing',
-              ].includes(run.status) && (
-                <button disabled={busy} onClick={() => void action('cancel')}>
-                  Cancel preparation
-                </button>
-              )}
-              {['failed', 'cancelled', 'interrupted'].includes(run.status) && (
-                <button disabled={busy} onClick={() => void action('retry')}>
-                  Retry preparation
-                </button>
-              )}
-              <button
-                className="danger"
-                disabled={busy}
-                onClick={() => void deleteRun()}
-              >
-                {run.status === 'deleting' ? 'Delete again' : 'Delete run'}
-              </button>
-            </div>
-            {run.stages.length > 0 && (
-              <ol className="run-stepper" aria-label="Run stages">
-                {runSteps(run).map((step) => (
-                  <li
-                    key={step.label}
-                    className={step.state}
-                    aria-current={step.state === 'current' ? 'step' : undefined}
-                  >
-                    <strong>{step.label}</strong>
-                    <small>{step.detail}</small>
-                  </li>
-                ))}
-              </ol>
-            )}
-            <TrainingProgress run={run} progress={current?.progress ?? null} />
-            <details>
-              <summary>
-                Inputs saved with this Run ({run.manifest.items.length} included
-                items)
-              </summary>
-              <pre>{JSON.stringify(run.manifest, null, 2)}</pre>
+              <TrainingProgress
+                run={run}
+                progress={current?.progress ?? null}
+              />
+              <details>
+                <summary>
+                  Inputs saved with this Run ({run.manifest.items.length}{' '}
+                  included items)
+                </summary>
+                <pre>{JSON.stringify(run.manifest, null, 2)}</pre>
+              </details>
+              <p>Output: {run.directory}</p>
+              <details>
+                <summary>Full Run ID</summary>
+                <code>{run.id}</code>
+              </details>
+            </section>
+          )}
+          {run && (
+            <details className="panel" open={run.status === 'failed'}>
+              <summary>Stage logs</summary>
+              <pre aria-label="Run logs">
+                {current?.text || 'Waiting for stage output…'}
+              </pre>
             </details>
-            <p>Output: {run.directory}</p>
-            <details>
-              <summary>Full Run ID</summary>
-              <code>{run.id}</code>
-            </details>
-          </section>
-        )}
+          )}
+          {showFiles && (
+            <SavedStates
+              key={`states-${run.id}`}
+              runId={run.id}
+              files={stateFiles(outputs)}
+              onRestore={(stateId, steps) =>
+                action('restore-state', {
+                  state_id: stateId,
+                  additional_steps: steps,
+                  confirmed: true,
+                })
+              }
+            />
+          )}
+          {showFiles && (
+            <Outputs
+              key={`outputs-${run.id}`}
+              runId={run.id}
+              outputs={outputs}
+            />
+          )}
+        </div>
       </div>
-      {run && (
-        <details className="panel" open={run.status === 'failed'}>
-          <summary>Stage logs</summary>
-          <pre aria-label="Run logs">
-            {current?.text || 'Waiting for stage output…'}
-          </pre>
-        </details>
-      )}
-      {showFiles && (
-        <SavedStates
-          key={`states-${run.id}`}
-          runId={run.id}
-          onRestore={(stateId, steps) =>
-            action('restore-state', {
-              state_id: stateId,
-              additional_steps: steps,
-              confirmed: true,
-            })
-          }
-        />
-      )}
-      {showFiles && (
-        <Outputs
-          key={`outputs-${run.id}`}
-          runId={run.id}
-          runState={[
-            run.status,
-            ...run.stages.map((stage) => stage.status),
-          ].join()}
-        />
-      )}
     </>
   );
 }

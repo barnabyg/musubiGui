@@ -167,7 +167,7 @@ test('outputs appear when a Run completes and a playing preview survives a refre
       .getByRole('button', { name: 'Start training', exact: true })
       .click();
     const sample = page.getByRole('button', {
-      name: 'samples/sample.mp4 · available',
+      name: 'sample.mp4 · available',
       exact: true,
     });
     await expect(sample).toBeVisible({ timeout: 240_000 });
@@ -646,7 +646,7 @@ test('Wan and H3 prepare and train through the GUI with frozen captions cache re
       ).toBeVisible({ timeout: 240_000 });
       await page
         .getByRole('button', {
-          name: 'samples/sample.mp4 · available',
+          name: 'sample.mp4 · available',
           exact: true,
         })
         .click();
@@ -1074,6 +1074,52 @@ test('Runs read as labels and local times, and the GPU line links to the Run usi
       }),
     );
     await expect(gpu).toHaveText('GPU in use by other work');
+  } finally {
+    await app.close();
+  }
+});
+
+test('a finished Run leads with its sample and final LoRA, and groups the other files', async ({
+  page,
+}) => {
+  const app = await runWorkspace();
+  try {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const job = app.manifest.jobs.find((item) => item.family === 'wan')!;
+    await app.post('/api/runs/prepare', { job_id: job.id });
+    await expect
+      .poll(async () => (await app.records())[0].status, { timeout: 240_000 })
+      .toBe('prepared');
+    const [run] = await app.records();
+    await app.post(`/api/runs/${run.id}/start`);
+    await expect
+      .poll(async () => (await app.records())[0].status, { timeout: 240_000 })
+      .toBe('completed');
+    await page.goto(`${app.url}/#/runs/${run.id}`);
+
+    const result = page.getByRole('region', { name: 'Run result' });
+    const video = result.getByLabel('Output video', { exact: true });
+    const lora = result.getByRole('link', { name: 'Download final LoRA' });
+    await expect(video).toBeInViewport({ ratio: 1 });
+    await expect(lora).toBeInViewport({ ratio: 1 });
+    await expect(result).toContainText(/Final LoRA \d+ (KB|MB|GB)/);
+
+    const files = page.getByRole('region', { name: 'Run outputs' });
+    const checkpoints = files.locator('.output-checkpoints');
+    await expect(checkpoints.locator('table')).toBeHidden();
+    await checkpoints.locator('summary').click();
+    await expect(checkpoints.locator('tbody tr').last()).toContainText('Final');
+    await expect(checkpoints).toContainText(/\d+ (KB|MB|GB)/);
+    // Optimizer state weights are not offered as LoRA outputs.
+    await expect(checkpoints).not.toContainText('model.safetensors');
+    await expect(files).not.toContainText('-state/');
+    const states = page.locator('section', {
+      has: page.getByRole('heading', { name: 'Saved optimizer state' }),
+    });
+    await states.getByText(/^Optimizer state files/).click();
+    await expect(states.locator('.state-files')).toContainText(
+      'model.safetensors',
+    );
   } finally {
     await app.close();
   }

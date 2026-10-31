@@ -29,6 +29,13 @@ export function runStatus(status: string) {
   );
 }
 
+export function sizeLabel(bytes: number) {
+  if (bytes >= 100_000_000) return `${(bytes / 1_000_000_000).toFixed(1)} GB`;
+  return bytes >= 1_000_000
+    ? `${(bytes / 1_000_000).toFixed(0)} MB`
+    : `${Math.ceil(bytes / 1_000)} KB`;
+}
+
 export function readableTime(iso: string) {
   const date = new Date(iso);
   return Number.isNaN(date.getTime())
