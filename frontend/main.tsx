@@ -237,12 +237,15 @@ function App() {
     void Promise.all([
       api<Settings>('/api/settings'),
       api<Report | null>('/api/diagnostics'),
-      api<{ id: string; status: string; order: number }[]>('/api/runs'),
     ])
-      .then(([value, latest, runs]) => {
+      .then(async ([value, latest]) => {
         load(value);
         setReport(latest);
         setStatus('Settings loaded');
+        if (!landingPending.current) return;
+        const runs = await api<{ id: string; status: string }[]>(
+          '/api/runs',
+        ).catch(() => []);
         if (!landingPending.current) return;
         const active = runs.find((run) => activeStatuses.includes(run.status));
         if (!value.checkout || !value.python) go('Settings', undefined, true);
