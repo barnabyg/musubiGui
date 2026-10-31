@@ -146,6 +146,11 @@ test('a configured app opens on Datasets, or on a Run in progress', async ({
       page.getByRole('button', { name: 'Datasets', exact: true }),
     ).toHaveClass('active');
 
+    // A link that names nothing opens the same place.
+    await page.goto('about:blank');
+    await page.goto(`${app.url}/#/jobs/not.a.job`);
+    await expect(page).toHaveURL(/#\/datasets$/);
+
     // A link still opens what it names.
     await page.goto(`${app.url}/#/settings`);
     await expect(
