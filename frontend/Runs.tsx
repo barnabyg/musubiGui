@@ -2,7 +2,10 @@ import { useEffect, useEffectEvent, useState } from 'react';
 import { apiClient } from './api';
 import { confirmDialog } from './ConfirmDialog';
 import { Outputs } from './Outputs';
+import { formatRoute } from './route';
 import { notificationsWanted, setNotificationsWanted } from './runSignals';
+import { readableTime, runStatus } from './runStatus';
+import { StatusBadge } from './StatusBadge';
 import './runs.css';
 
 type Run = {
@@ -178,6 +181,11 @@ function confirmDelete(run: Run, preview: DeletePreview) {
 
 const request = apiClient('Run request failed.');
 
+function RunBadge({ status }: { status: string }) {
+  const { label, tone } = runStatus(status);
+  return <StatusBadge tone={tone}>{label}</StatusBadge>;
+}
+
 function SavedStates({
   runId,
   onRestore,
@@ -319,6 +327,7 @@ export function Runs({
     };
   }, [selected]);
   const run = runs.find((record) => record.id === selected);
+  const ownerRun = runs.find((record) => record.id === owner?.run_id);
   const current = live?.runId === run?.id ? live : null;
   const showFiles = run && run.status !== 'deleting' && run.id !== deleting;
   async function action(name: string, body: object = {}) {
@@ -412,7 +421,18 @@ export function Runs({
         </p>
       )}
       <p role="status">
-        {owner ? `GPU owned by run ${owner.run_id}` : 'GPU available'}
+        {!owner ? (
+          'GPU available'
+        ) : ownerRun ? (
+          <>
+            GPU in use by{' '}
+            <a href={formatRoute({ screen: 'Runs', id: ownerRun.id })}>
+              {ownerRun.job.name}
+            </a>
+          </>
+        ) : (
+          'GPU in use by other work'
+        )}
       </p>
       {notice && <p role="status">{notice}</p>}
       <label className="job-toggle">
@@ -437,7 +457,8 @@ export function Runs({
             .sort((a, b) => a.order - b.order)
             .map((record, index) => (
               <p key={record.id}>
-                {index + 1}. {record.job.name} · {record.status}{' '}
+                {index + 1}. {record.job.name}{' '}
+                <RunBadge status={record.status} />{' '}
                 <button
                   className="quiet"
                   disabled={index === 0}
@@ -463,18 +484,19 @@ export function Runs({
                 {record.job.revision}
               </button>
               <br />
-              <small>
-                {record.status} · {record.created}
-              </small>
+              <RunBadge status={record.status} />{' '}
+              <small>{readableTime(record.created)}</small>
             </p>
           ))}
         </section>
         {run && (
           <section className="panel">
             <h2>{run.job.name}</h2>
-            <p>Run {run.id}</p>
+            <p title={run.id}>Run {run.id.slice(0, 8)}</p>
             <p>
-              <strong>State: {run.status}</strong>
+              <strong>
+                State: <RunBadge status={run.status} />
+              </strong>
             </p>
             {run.error && <p className="error">{run.error}</p>}
             {run.start_after_prepare &&
@@ -633,6 +655,10 @@ export function Runs({
               <pre>{JSON.stringify(run.manifest, null, 2)}</pre>
             </details>
             <p>Output: {run.directory}</p>
+            <details>
+              <summary>Full Run ID</summary>
+              <code>{run.id}</code>
+            </details>
           </section>
         )}
       </div>

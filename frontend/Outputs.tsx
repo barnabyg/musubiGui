@@ -94,7 +94,7 @@ export function Outputs({
   return (
     <section className="panel" aria-label="Run outputs">
       <h2>Run outputs</h2>
-      <p>Checkpoints and samples from Run {runId}.</p>
+      <p>Checkpoints and samples from this Run.</p>
       <button
         disabled={busy}
         onClick={() => {

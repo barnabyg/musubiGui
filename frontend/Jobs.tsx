@@ -9,6 +9,7 @@ import { ActionMenu } from './ActionMenu';
 import { confirmDialog } from './ConfirmDialog';
 import { apiClient } from './api';
 import { JobTable, type JobSummary } from './JobTable';
+import { runStatus } from './runStatus';
 import { componentLabels } from './labels';
 import { errorField, fieldId, fieldProblems } from './jobRules';
 import { PathField } from './PathField';
@@ -1258,8 +1259,8 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
           </section>
           {review && existingRun && (
             <p>
-              This revision already has a {existingRun.status} run with the same
-              inputs, so no new run was created.{' '}
+              This revision already has a Run with the same inputs (
+              {runStatus(existingRun.status).label}), so no new Run was created.{' '}
               <button onClick={() => onRun?.(existingRun.id)}>
                 Open existing run
               </button>

@@ -40,7 +40,7 @@ test('deleting a Run and its Job goes from the UI to the disk and survives a bac
     await navigate('Runs');
     await jobButton.click();
     await expect(
-      page.getByText('State: prepared', { exact: true }),
+      page.getByText('State: Ready to start', { exact: true }),
     ).toBeVisible({ timeout: 240_000 });
     const [run] = await app.records();
 
@@ -71,7 +71,7 @@ test('deleting a Run and its Job goes from the UI to the disk and survives a bac
       'Still on disk:',
     );
     await expect(
-      page.getByText('State: deleting', { exact: true }),
+      page.getByText('State: Deleting', { exact: true }),
     ).toBeVisible();
     await expect(page.getByLabel('Run outputs')).toHaveCount(0);
 
@@ -85,7 +85,7 @@ test('deleting a Run and its Job goes from the UI to the disk and survives a bac
     await navigate('Runs');
     await jobButton.click();
     await expect(
-      page.getByText('State: deleting', { exact: true }),
+      page.getByText('State: Deleting', { exact: true }),
     ).toBeVisible();
     await button('Delete again').click();
     await question.getByRole('button', { name: 'Delete run' }).click();
@@ -158,7 +158,7 @@ test('outputs appear when a Run completes and a playing preview survives a refre
       .getByRole('button', { name: `${job.name} · WAN · r1`, exact: true })
       .click();
     await expect(
-      page.getByText('State: prepared', { exact: true }),
+      page.getByText('State: Ready to start', { exact: true }),
     ).toBeVisible({ timeout: 240_000 });
     await expect(
       page.getByText(/^No supported outputs found yet/),
@@ -233,7 +233,7 @@ test('live progress steps through stages, reports steps and loss, and shows a fa
       .getByRole('button', { name: `${job.name} · WAN · r2`, exact: true })
       .click();
     await expect(
-      page.getByText('State: prepared', { exact: true }),
+      page.getByText('State: Ready to start', { exact: true }),
     ).toBeVisible({ timeout: 240_000 });
     const steps = page.getByRole('list', { name: 'Run stages' });
     const step = (index: number) => steps.getByRole('listitem').nth(index);
@@ -270,7 +270,7 @@ test('live progress steps through stages, reports steps and loss, and shows a fa
       .getByRole('button', { name: `${other.name} · WAN · r1`, exact: true })
       .click();
     await expect(
-      page.getByText('State: prepared', { exact: true }),
+      page.getByText('State: Ready to start', { exact: true }),
     ).toBeVisible({ timeout: 240_000 });
     await page
       .getByRole('button', { name: 'Start training', exact: true })
@@ -318,7 +318,7 @@ test('Prepare and start keeps going with the tab closed, and the tab title signa
       timeout: 240_000,
     });
     await expect(
-      page.getByText('State: prepared', { exact: true }),
+      page.getByText('State: Ready to start', { exact: true }),
     ).toBeVisible();
     await page.getByRole('button', { name: 'Jobs', exact: true }).click();
     await expect(page).not.toHaveTitle(/Ready/);
@@ -328,7 +328,7 @@ test('Prepare and start keeps going with the tab closed, and the tab title signa
       .getByRole('button', { name: 'Prepare and start', exact: true })
       .click();
     await expect(
-      page.getByText('State: pending_preparation', { exact: true }),
+      page.getByText('State: Waiting to prepare', { exact: true }),
     ).toBeVisible();
     await page.close();
     await expect
@@ -441,11 +441,11 @@ test('the URL keeps the screen and selection across navigation, refresh and brow
     };
     await page.goto(`${app.url}/#/runs/${run.id}`);
     await expect(
-      page.getByText(`Run ${run.id}`, { exact: true }),
+      page.getByText(`Run ${run.id.slice(0, 8)}`, { exact: true }),
     ).toBeVisible();
     await page.reload();
     await expect(
-      page.getByText(`Run ${run.id}`, { exact: true }),
+      page.getByText(`Run ${run.id.slice(0, 8)}`, { exact: true }),
     ).toBeVisible();
     await page.goto(`${app.url}/#/runs/${'0'.repeat(32)}`);
     await expect.poll(() => new URL(page.url()).hash).toBe('#/runs');
@@ -539,7 +539,7 @@ test('a Run that reused a deleted Run cache still shows it and can be used', asy
     });
     await runs.last().click();
     await expect(
-      page.getByText(`Run ${first.id}`, { exact: true }),
+      page.getByText(`Run ${first.id.slice(0, 8)}`, { exact: true }),
     ).toBeVisible();
     await page.getByRole('button', { name: 'Delete run', exact: true }).click();
     await page
@@ -558,7 +558,7 @@ test('a Run that reused a deleted Run cache still shows it and can be used', asy
       .getByRole('button', { name: 'Start training', exact: true })
       .click();
     await expect(
-      page.getByText('State: completed', { exact: true }),
+      page.getByText('State: Completed', { exact: true }),
     ).toBeVisible({ timeout: 240_000 });
     expect(await exists(first.directory)).toBe(false);
   } finally {
@@ -589,7 +589,7 @@ test('Wan and H3 prepare and train through the GUI with frozen captions cache re
         .getByRole('button', { name: 'Prepare run', exact: true })
         .click();
       await expect(
-        page.getByText('State: prepared', { exact: true }),
+        page.getByText('State: Ready to start', { exact: true }),
       ).toBeVisible({ timeout: 240_000 });
       const first = (await app.records()).find((run) => run.job.id === job.id)!;
       const originalCaption = first.manifest.items[0].caption.text;
@@ -614,7 +614,7 @@ test('Wan and H3 prepare and train through the GUI with frozen captions cache re
         .getByRole('button', { name: 'Prepare run', exact: true })
         .click();
       await expect(
-        page.getByText('State: prepared', { exact: true }),
+        page.getByText('State: Ready to start', { exact: true }),
       ).toBeVisible({ timeout: 240_000 });
       const next = (await app.records()).find(
         (run) => run.job.id === job.id && run.id !== first.id,
@@ -642,7 +642,7 @@ test('Wan and H3 prepare and train through the GUI with frozen captions cache re
         .first()
         .click();
       await expect(
-        page.getByText('State: completed', { exact: true }),
+        page.getByText('State: Completed', { exact: true }),
       ).toBeVisible({ timeout: 240_000 });
       await page
         .getByRole('button', {
@@ -744,14 +744,13 @@ test('backend interruption retains GPU ownership and offers explicit recovery wi
       .getByRole('button', { name: 'Prepare run', exact: true })
       .click();
     await expect(
-      page.getByText('State: prepared', { exact: true }),
+      page.getByText('State: Ready to start', { exact: true }),
     ).toBeVisible({ timeout: 240_000 });
-    const run = (await app.records())[0];
     await page
       .getByRole('button', { name: 'Start training', exact: true })
       .click();
     await expect(
-      page.getByText('State: training', { exact: true }),
+      page.getByText('State: Training', { exact: true }),
     ).toBeVisible();
     await expect(page.getByLabel('Run logs')).toContainText(
       'SYNTHETIC ACCEPTANCE FIXTURE: train',
@@ -764,9 +763,9 @@ test('backend interruption retains GPU ownership and offers explicit recovery wi
       .getByRole('button', { name: `${job.name} · WAN · r2`, exact: true })
       .click();
     await expect(
-      page.getByText('State: orphaned', { exact: true }),
+      page.getByText('State: Needs recovery', { exact: true }),
     ).toBeVisible();
-    await expect(page.getByRole('status')).toContainText(run.id);
+    await expect(page.getByRole('status')).toContainText(job.name);
     expect(await app.records()).toHaveLength(1);
     await page
       .getByRole('button', { name: 'Terminate recovered work', exact: true })
@@ -776,7 +775,7 @@ test('backend interruption retains GPU ownership and offers explicit recovery wi
       .getByRole('button', { name: 'Terminate recovered work' })
       .click();
     await expect(
-      page.getByText('State: interrupted', { exact: true }),
+      page.getByText('State: Interrupted', { exact: true }),
     ).toBeVisible();
     await expect(page.getByRole('status')).toHaveText('GPU available');
   } finally {
@@ -824,7 +823,7 @@ test('a gracefully stopped revision can be prepared and started again', async ({
     await page.goto(app.url);
     await prepare();
     await expect(
-      page.getByText('State: prepared', { exact: true }),
+      page.getByText('State: Ready to start', { exact: true }),
     ).toBeVisible({ timeout: 240_000 });
     await page
       .getByRole('button', { name: 'Start training', exact: true })
@@ -835,7 +834,7 @@ test('a gracefully stopped revision can be prepared and started again', async ({
     await page
       .getByRole('button', { name: 'Request graceful stop', exact: true })
       .click();
-    await expect(page.getByText('State: stopped', { exact: true })).toBeVisible(
+    await expect(page.getByText('State: Stopped', { exact: true })).toBeVisible(
       { timeout: 240_000 },
     );
     const stopped = (await app.records()).find((run) => run.job.id === job.id)!;
@@ -843,7 +842,7 @@ test('a gracefully stopped revision can be prepared and started again', async ({
     // The stopped run no longer blocks preparing the same revision.
     await prepare();
     await expect(
-      page.getByText('State: prepared', { exact: true }),
+      page.getByText('State: Ready to start', { exact: true }),
     ).toBeVisible({ timeout: 240_000 });
     const fresh = (await app.records()).find(
       (run) => run.job.id === job.id && run.id !== stopped.id,
@@ -856,13 +855,15 @@ test('a gracefully stopped revision can be prepared and started again', async ({
     // Preparing again returns the new run and says so on the Jobs screen.
     await prepare();
     await expect(
-      page.getByText(/already has a prepared run with the same inputs/),
+      page.getByText(
+        /already has a Run with the same inputs \(Ready to start\)/,
+      ),
     ).toBeVisible();
     await page
       .getByRole('button', { name: 'Open existing run', exact: true })
       .click();
     await expect(
-      page.getByText('State: prepared', { exact: true }),
+      page.getByText('State: Ready to start', { exact: true }),
     ).toBeVisible();
     expect(
       (await app.records()).filter((run) => run.job.id === job.id),
@@ -881,7 +882,7 @@ test('a gracefully stopped revision can be prepared and started again', async ({
       .getByRole('button', { name: 'Force terminate' })
       .click();
     await expect(
-      page.getByText('State: stopped', { exact: true }),
+      page.getByText('State: Stopped', { exact: true }),
     ).toBeVisible();
     await expect(
       page
@@ -924,7 +925,7 @@ test('low disk space warns in review and preparation still goes ahead', async ({
       .getByRole('button', { name: 'Prepare run', exact: true })
       .click();
     await expect(
-      page.getByText('State: prepared', { exact: true }),
+      page.getByText('State: Ready to start', { exact: true }),
     ).toBeVisible({ timeout: 240_000 });
   } finally {
     await app.close();
@@ -964,7 +965,7 @@ test('a queued Run refuses delete and archive; archiving hides a job, keeps its 
     await page.getByRole('button', { name: 'Runs', exact: true }).click();
     await library.click();
     await expect(
-      page.getByText('State: pending_preparation', { exact: true }),
+      page.getByText('State: Waiting to prepare', { exact: true }),
     ).toBeVisible();
     await page.getByRole('button', { name: 'Delete run', exact: true }).click();
     await expect(page.getByRole('alert')).toContainText('active');
@@ -1006,7 +1007,7 @@ test('a queued Run refuses delete and archive; archiving hides a job, keeps its 
       .click();
     await expect(page.getByRole('heading', { name: job.name })).toBeVisible();
     await expect(
-      page.getByText('State: prepared', { exact: true }),
+      page.getByText('State: Ready to start', { exact: true }),
     ).toBeVisible();
     expect((await app.records()).map((record) => record.id)).toEqual([run.id]);
 
@@ -1015,7 +1016,7 @@ test('a queued Run refuses delete and archive; archiving hides a job, keeps its 
       .getByRole('button', { name: 'Start training', exact: true })
       .click();
     await expect(
-      page.getByText('State: completed', { exact: true }),
+      page.getByText('State: Completed', { exact: true }),
     ).toBeVisible({ timeout: 240_000 });
 
     await jobsTab.click();
@@ -1025,6 +1026,54 @@ test('a queued Run refuses delete and archive; archiving hides a job, keeps its 
       .click();
     await expect(library).toBeVisible();
     await expect(page.getByText('Archived jobs (1)')).toHaveCount(0);
+  } finally {
+    await app.close();
+  }
+});
+
+test('Runs read as labels and local times, and the GPU line links to the Run using it', async ({
+  page,
+}) => {
+  const app = await runWorkspace();
+  try {
+    const job = app.manifest.jobs.find((item) => item.family === 'wan')!;
+    await app.post('/api/runs/prepare', { job_id: job.id });
+    await expect
+      .poll(async () => (await app.records())[0].status, { timeout: 240_000 })
+      .toBe('prepared');
+    const [run] = await app.records();
+    await page.route('**/api/runs/capabilities', (route) =>
+      route.fulfill({
+        json: { fixture: true, gpu_owner: { run_id: run.id } },
+      }),
+    );
+    await page.goto(`${app.url}/#/runs`);
+    const gpu = page.getByRole('status');
+    await expect(gpu).toHaveText(`GPU in use by ${job.name}`);
+    await gpu.getByRole('link', { name: job.name }).click();
+    await expect(page).toHaveURL(new RegExp(`#/runs/${run.id}$`));
+
+    const history = page.locator('section', {
+      has: page.getByRole('heading', { name: 'Run history' }),
+    });
+    await expect(history.locator('.status-badge')).toHaveText('Ready to start');
+    await expect(history).not.toContainText('+00:00');
+    await expect(history).not.toContainText('prepared');
+    await expect(
+      page.getByText(`Run ${run.id.slice(0, 8)}`, { exact: true }),
+    ).toBeVisible();
+    await expect(page.getByText(run.id, { exact: true })).toBeHidden();
+    await page.getByText('Full Run ID').click();
+    await expect(page.getByText(run.id, { exact: true })).toBeVisible();
+
+    // Work outside this instance has no Run to name.
+    await page.unroute('**/api/runs/capabilities');
+    await page.route('**/api/runs/capabilities', (route) =>
+      route.fulfill({
+        json: { fixture: true, gpu_owner: { run_id: 'other-work' } },
+      }),
+    );
+    await expect(gpu).toHaveText('GPU in use by other work');
   } finally {
     await app.close();
   }
