@@ -100,7 +100,7 @@ export function ConfirmDialogHost() {
           {pending.cancelLabel ?? 'Cancel'}
         </button>
         <button
-          className={pending.danger ? 'danger' : 'primary'}
+          className={pending.danger ? 'danger solid' : 'primary'}
           onClick={() => finish(true)}
         >
           {pending.confirmLabel}

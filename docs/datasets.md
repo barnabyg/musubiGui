@@ -14,14 +14,14 @@ the library after saving the active caption; a failed save keeps the draft open.
 
 The individual editor fills the available window with thumbnails and editable captions.
 A compact top bar contains back navigation, the dataset name/scan status, **Add media**,
-**Search & edit** and **Dataset settings**. Thumbnails start directly below this bar; the
+**Bulk actions** and **Dataset settings**. Thumbnails start directly below this bar; the
 workspace banner and large page heading are omitted on this screen.
 Type directly in the caption field beneath any thumbnail. Each field autosaves after
 350 ms and saves immediately when focus leaves it, with a per-caption save indicator.
 Select the thumbnail to open its full preview, larger caption editor and recovery
 history; both editors share the same draft and revision. **Close preview** saves
-pending captions and returns to the full gallery. **Search & edit** opens a side panel containing
-search, filters, sorting, selection counts and bulk caption actions. **Dataset settings**
+pending captions and returns to the full gallery. Search, filter, sort and a caption count such as `2 of 4 captioned`, which shows only the missing ones when chosen, stay on the top bar. **Bulk actions** opens a side panel containing
+selection counts and bulk caption actions. **Dataset settings**
 opens a side panel holding the editable display
 name, storage path and H3 coverage. Renaming changes the library name without moving
 the folder. Opening a panel keeps the gallery's rows and columns and narrows the tiles. The preview
@@ -87,7 +87,7 @@ in an isolated application subprocess with a 45-second timeout. Long clips that 
 need shorter source clips. Geometry, timestamps and playback are preflight evidence;
 actual upstream caching remains the final authority for crop-specific supervision.
 
-Open **Search & edit** to search names/caption text, sort and filter missing captions, invalid media, exclusions or selected items.
+Use the top bar to search names/caption text, sort and filter missing captions, invalid media, exclusions or selected items. Tiles badge missing captions, exclusions and invalid media.
 Checkbox selections remain explicit across filters; the counter identifies selected items hidden by the
 current filter. Excluding changes library metadata without changing or deleting source media. The
 included count is the effective training count. Select **Selection and bulk caption actions** to preview

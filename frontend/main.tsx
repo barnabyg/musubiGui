@@ -6,6 +6,14 @@ import {
   useState,
 } from 'react';
 import { createRoot } from 'react-dom/client';
+import {
+  ClipboardList,
+  Hexagon,
+  Images,
+  Play,
+  Settings as SettingsIcon,
+  type LucideIcon,
+} from 'lucide-react';
 import { apiClient } from './api';
 import './style.css';
 import { ConfirmDialogHost, confirmDialog } from './ConfirmDialog';
@@ -14,8 +22,16 @@ import { Runs } from './Runs';
 import { Datasets } from './Datasets';
 import { componentLabels } from './labels';
 import { PathField, RootsField } from './PathField';
-import { formatRoute, parseRoute, screens, type Screen } from './route';
+import {
+  formatRoute,
+  namesScreen,
+  parseRoute,
+  screens,
+  type Screen,
+} from './route';
 import { useRunSignals } from './runSignals';
+import { SetupChecklist } from './SetupChecklist';
+import { StatusBadge, type Tone } from './StatusBadge';
 
 type Settings = {
   version: number;
@@ -34,6 +50,33 @@ type Report = {
   checks: { name: string; status: string; message: string }[];
   environment: Record<string, unknown>;
 };
+
+const checkBadges: Record<string, { tone: Tone; label: string }> = {
+  ok: { tone: 'success', label: 'Passed' },
+  warning: { tone: 'warning', label: 'Warning' },
+  error: { tone: 'failure', label: 'Failed' },
+};
+
+const screenIcons: Record<Screen, LucideIcon> = {
+  Datasets: Images,
+  Jobs: ClipboardList,
+  Runs: Play,
+  Settings: SettingsIcon,
+};
+
+// What the opening screen should show first: work in progress, then the front of the queue.
+const workingStatuses = ['training', 'generating', 'stopping', 'preparing'];
+const waitingStatuses = ['pending_preparation', 'pending_training'];
+
+function setupComplete(value: Settings) {
+  return !!(
+    value.checkout &&
+    value.python &&
+    value.output_root &&
+    value.cache_root &&
+    value.dataset_roots.length
+  );
+}
 
 function setupHealth(report: Report | null, dirty: boolean) {
   if (!report) return { state: 'unknown', label: 'Not checked' };
@@ -86,13 +129,18 @@ function App() {
   const [dirty, setDirty] = useState(false);
   const [report, setReport] = useState<Report | null>(null);
   const [initialRoute] = useState(() => parseRoute(window.location.hash));
+  // A bare address waits for the settings to choose its screen, rather than flashing the wrong one.
+  const [landing, setLanding] = useState(
+    () => !namesScreen(window.location.hash),
+  );
+  const landingPending = useRef(landing);
   const [screen, setScreen] = useState<Screen>(initialRoute.screen);
   // Each screen's selection, kept while elsewhere so that returning reopens it.
   const [selection, setSelection] = useState<Partial<Record<Screen, string>>>(
     initialRoute.id ? { [initialRoute.screen]: initialRoute.id } : {},
   );
   // Set before the browser reports the change, so only history moves look external.
-  const currentHash = useRef(formatRoute(initialRoute));
+  const currentHash = useRef(landing ? '' : formatRoute(initialRoute));
   const currentScreen = useRef(initialRoute.screen);
   const leaving = useRef(false);
   // Where this page sits in the tab's history, stored on each entry so that a move back or
@@ -145,11 +193,16 @@ function App() {
   );
   const openRun = useCallback((id: string) => go('Runs', id), [go]);
   async function navigate(name: Screen) {
+    const replace = landingPending.current;
+    landingPending.current = false;
+    setLanding(false);
     if (screen === 'Jobs' && jobDirty && !(await confirmLeaveJob())) return;
-    go(name, selection[name]);
+    go(name, selection[name], replace);
   }
   const followHistory = useEffectEvent(async () => {
     if (window.location.hash === currentHash.current) return;
+    landingPending.current = false;
+    setLanding(false);
     const next = parseRoute(window.location.hash);
     const state = window.history.state as { position?: number } | null;
     // An address typed by hand is a new entry, with no position recorded yet.
@@ -191,16 +244,33 @@ function App() {
       api<Settings>('/api/settings'),
       api<Report | null>('/api/diagnostics'),
     ])
-      .then(([value, latest]) => {
+      .then(async ([value, latest]) => {
         load(value);
         setReport(latest);
         setStatus('Settings loaded');
+        if (!landingPending.current) return;
+        const runs = await api<{ id: string; status: string; order: number }[]>(
+          '/api/runs',
+        ).catch(() => []);
+        if (!landingPending.current) return;
+        const active =
+          runs.find((run) => workingStatuses.includes(run.status)) ??
+          runs
+            .filter((run) => waitingStatuses.includes(run.status))
+            .sort((a, b) => a.order - b.order)[0];
+        if (!setupComplete(value)) go('Settings', undefined, true);
+        else if (active) go('Runs', active.id, true);
+        else go('Datasets', undefined, true);
       })
       .catch((reason: Error) => {
         setError(reason.message);
         setStatus('Settings could not be loaded');
+      })
+      .finally(() => {
+        landingPending.current = false;
+        setLanding(false);
       });
-  }, []);
+  }, [go]);
   useEffect(() => {
     const protect = (event: BeforeUnloadEvent) => {
       if (dirty) event.preventDefault();
@@ -302,25 +372,24 @@ function App() {
     >
       <aside>
         <a className="brand" href="/">
-          ◈{' '}
-          <span>
-            musubi<small>LOCAL TRAINING STUDIO</small>
-          </span>
+          <Hexagon />
+          <span>musubi</span>
         </a>
         <div className="workspace">WORKSPACE</div>
         <nav>
-          {screens.map((name) => (
-            <button
-              key={name}
-              className={screen === name ? 'active' : ''}
-              onClick={() => void navigate(name)}
-            >
-              <span aria-hidden="true">
-                {name === 'Datasets' ? '▦' : name === 'Jobs' ? '▷' : '⚙'}
-              </span>
-              {name}
-            </button>
-          ))}
+          {screens.map((name) => {
+            const Icon = screenIcons[name];
+            return (
+              <button
+                key={name}
+                className={!landing && screen === name ? 'active' : ''}
+                onClick={() => void navigate(name)}
+              >
+                <Icon />
+                {name}
+              </button>
+            );
+          })}
         </nav>
         <button
           className={`local ${health.state}`}
@@ -335,21 +404,17 @@ function App() {
           screen === 'Datasets' && datasetEditor ? 'dataset-editor-shell' : ''
         }
       >
-        <header>
-          <span>WORKSPACE / {screen.toUpperCase()}</span>
-          <span className="badge">LoRA · Windows</span>
-        </header>
-        <div hidden={screen !== 'Datasets'}>
+        <div hidden={landing || screen !== 'Datasets'}>
           <Datasets
             onEditorChange={setDatasetEditor}
-            visible={screen === 'Datasets'}
+            visible={!landing && screen === 'Datasets'}
             selectedId={selection.Datasets}
             onSelect={selectDataset}
             defaultFolder={settings?.dataset_roots[0] ?? ''}
             datasetRoots={settings?.dataset_roots}
           />
         </div>
-        {screen === 'Jobs' ? (
+        {landing ? null : screen === 'Jobs' ? (
           <Jobs
             selectedId={selection.Jobs}
             onSelect={selectJob}
@@ -374,16 +439,21 @@ function App() {
             )}
             {settings && (
               <>
-                <section className="panel">
+                <SetupChecklist
+                  configured={setupComplete(settings)}
+                  connected={!dirty && setupComplete(settings)}
+                  diagnosed={!!report && report.current && !dirty}
+                  problemsFound={
+                    !!report?.checks.some((check) => check.status === 'error')
+                  }
+                />
+                <section className="panel" id="settings-environment">
                   <div className="section-heading">
-                    <span className="number">01</span>
-                    <div>
-                      <h2>Training environment</h2>
-                      <p>
-                        The selected environment runs training. Setup never
-                        installs or upgrades it.
-                      </p>
-                    </div>
+                    <h2>Training environment</h2>
+                    <p>
+                      The selected environment runs training. Setup never
+                      installs or upgrades it.
+                    </p>
                   </div>
                   {field(
                     'musubi-tuner checkout',
@@ -399,14 +469,11 @@ function App() {
                 </section>
                 <section className="panel">
                   <div className="section-heading">
-                    <span className="number">02</span>
-                    <div>
-                      <h2>Storage & model components</h2>
-                      <p>
-                        Use absolute local paths. Keep generated files outside
-                        the training checkout and model roots.
-                      </p>
-                    </div>
+                    <h2>Storage & model components</h2>
+                    <p>
+                      Use absolute local paths. Keep generated files outside the
+                      training checkout and model roots.
+                    </p>
                   </div>
                   <div className="columns">
                     {field(
@@ -458,7 +525,7 @@ function App() {
                     </div>
                   </details>
                 </section>
-                <div className="actions">
+                <div className="actions" id="settings-actions">
                   <span role="status">{status}</span>
                   <button
                     disabled={busy || dirty}
@@ -499,15 +566,18 @@ function App() {
                     <div className="checks">
                       {report.checks.map((check) => (
                         <div
-                          className={`check ${check.status}`}
+                          className={`check check-${check.status}`}
                           key={check.name}
                         >
-                          <span>{check.status === 'ok' ? '✓' : '!'}</span>
                           <div>
                             <strong>{check.name}</strong>
                             <p>{check.message}</p>
                           </div>
-                          <small>{check.status}</small>
+                          <StatusBadge
+                            tone={checkBadges[check.status]?.tone ?? 'neutral'}
+                          >
+                            {checkBadges[check.status]?.label ?? check.status}
+                          </StatusBadge>
                         </div>
                       ))}
                     </div>

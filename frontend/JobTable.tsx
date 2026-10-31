@@ -1,4 +1,7 @@
 import { useState } from 'react';
+import { ArrowDown, ArrowUp } from 'lucide-react';
+import { runStatus } from './runStatus';
+import { StatusBadge } from './StatusBadge';
 
 export type JobSummary = {
   id: string;
@@ -49,7 +52,10 @@ export function JobTable<T extends Row>({
     if (key === 'model') return job.family;
     if (key === 'dataset') return dataset(job);
     if (key === 'revision') return job.revision;
-    if (key === 'run') return summary(job.id)?.last_run?.status ?? '';
+    if (key === 'run') {
+      const last = summary(job.id)?.last_run;
+      return last ? runStatus(last.status).label : '';
+    }
     return summary(job.id)?.edited ?? '';
   };
   const ordered = [...jobs].sort((a, b) => {
@@ -86,6 +92,8 @@ export function JobTable<T extends Row>({
                   }
                 >
                   {label}
+                  {sort.key === key &&
+                    (sort.descending ? <ArrowDown /> : <ArrowUp />)}
                 </button>
               </th>
             ))}
@@ -112,7 +120,15 @@ export function JobTable<T extends Row>({
                 <td>{job.family === 'wan' ? 'Wan' : 'H3'}</td>
                 <td>{dataset(job) || 'None selected'}</td>
                 <td>r{job.revision}</td>
-                <td>{info?.last_run?.status.replace('_', ' ') ?? 'No Runs'}</td>
+                <td>
+                  {info?.last_run ? (
+                    <StatusBadge tone={runStatus(info.last_run.status).tone}>
+                      {runStatus(info.last_run.status).label}
+                    </StatusBadge>
+                  ) : (
+                    'No Runs'
+                  )}
+                </td>
                 <td>{info ? new Date(info.edited).toLocaleString() : ''}</td>
               </tr>
             );

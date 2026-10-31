@@ -1,5 +1,10 @@
 # Job drafts and configuration review
 
+A sticky menu above the form jumps to each section and marks the current one. Simple rules
+such as multiples, frame formulas and ranges are flagged beside their field while typing, and
+never block saving a draft. Review stays the authority: each of its errors about a field is
+a link that focuses that field.
+
 ## Drafts and revisions
 
 Launch with `launch.cmd`, register a dataset, and open Jobs. Jobs are listed in a table

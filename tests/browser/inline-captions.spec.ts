@@ -292,9 +292,6 @@ test('autosave keeps a focused inline caption stable when its text stops matchin
   const app = await datasetHarness();
   try {
     await openDataset(page, app);
-    await page
-      .getByRole('button', { name: 'Search & edit', exact: true })
-      .click();
     await page.getByLabel('Search media and captions').fill('red square');
     const red = page.getByLabel('Caption for red.png', { exact: true });
     await red.fill('A completely different description');
@@ -306,9 +303,6 @@ test('autosave keeps a focused inline caption stable when its text stops matchin
     await page.getByRole('button', { name: 'red.png image' }).click();
     await expect(page.getByAltText('Preview red.png')).toBeVisible();
     await page.getByRole('button', { name: 'Close preview' }).click();
-    await page
-      .getByRole('button', { name: 'Close tools', exact: true })
-      .click();
     await expect(
       page.getByText('No matching media', { exact: true }),
     ).toBeVisible();

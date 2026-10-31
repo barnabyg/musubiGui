@@ -26,6 +26,7 @@
   },
   "homepage": "https://github.com/barnabyg/musubiGui#readme",
   "dependencies": {
+    "lucide-react": "1.62.0",
     "react": "19.3.1",
     "react-dom": "19.3.1"
   },

@@ -1,9 +1,17 @@
-import { useEffect, useEffectEvent, useRef, useState } from 'react';
+import {
+  useEffect,
+  useEffectEvent,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import { ActionMenu } from './ActionMenu';
 import { confirmDialog } from './ConfirmDialog';
 import { apiClient } from './api';
 import { JobTable, type JobSummary } from './JobTable';
+import { runStatus } from './runStatus';
 import { componentLabels } from './labels';
+import { componentError, errorField, fieldId, fieldProblems } from './jobRules';
 import { PathField } from './PathField';
 import './jobs.css';
 
@@ -137,6 +145,15 @@ function sizeLabel(bytes: number) {
 }
 type PreparedRun = { id: string; status: string; existing: boolean };
 
+const sections = [
+  { id: 'job-section-job', label: 'Job & dataset' },
+  { id: 'job-section-dataset', label: 'Dataset preparation' },
+  { id: 'job-section-training', label: 'LoRA & training' },
+  { id: 'job-section-memory', label: 'Memory' },
+  { id: 'job-section-checkpoints', label: 'Checkpoints & sample' },
+  { id: 'job-section-review', label: 'Review' },
+];
+
 type Props = {
   selectedId?: string;
   onSelect?: (id?: string, replace?: boolean) => void;
@@ -170,6 +187,11 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
   const nameField = useRef<HTMLInputElement>(null);
   const focusName = useRef(false);
   const reviewPanel = useRef<HTMLElement>(null);
+  const actionBar = useRef<HTMLDivElement>(null);
+  const [section, setSection] = useState(sections[0].id);
+  // A chosen section stays current until the page scrolls away from where it landed: a short last
+  // section can't reach the top of the window.
+  const chosen = useRef<{ id: string; at: number } | null>(null);
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [models, setModels] = useState<Record<string, string>>({});
   const [modelRoots, setModelRoots] = useState<string[]>([]);
@@ -254,6 +276,55 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
   useEffect(() => {
     onDirtyChange?.(dirty);
   }, [dirty, onDirtyChange]);
+  // Keeps focused and scrolled-to content clear of the sticky bar, however far it has wrapped.
+  useLayoutEffect(() => {
+    const bar = actionBar.current;
+    if (!bar) return;
+    const root = document.documentElement;
+    const observer = new ResizeObserver(() => {
+      root.style.scrollPaddingTop = `${bar.offsetHeight + 12}px`;
+    });
+    observer.observe(bar);
+    return () => {
+      observer.disconnect();
+      root.style.scrollPaddingTop = '';
+    };
+  }, []);
+  const hasJob = !!job;
+  useEffect(() => {
+    if (!hasJob) return;
+    const follow = () => {
+      if (chosen.current) {
+        if (Math.abs(window.scrollY - chosen.current.at) < 2) return;
+        chosen.current = null;
+      }
+      const line =
+        (actionBar.current?.getBoundingClientRect().bottom ?? 0) + 16;
+      const root = document.documentElement;
+      const atEnd =
+        window.scrollY + window.innerHeight >= root.scrollHeight - 2 &&
+        window.scrollY > 0;
+      let current = sections[0].id;
+      for (const { id } of sections)
+        if (
+          (document.getElementById(id)?.getBoundingClientRect().top ?? 0) <=
+          line
+        )
+          current = id;
+      setSection(atEnd ? sections[sections.length - 1].id : current);
+    };
+    follow();
+    window.addEventListener('scroll', follow, { passive: true });
+    return () => window.removeEventListener('scroll', follow);
+  }, [hasJob]);
+  function goToSection(id: string) {
+    const target = document.getElementById(id);
+    if (!target) return;
+    target.scrollIntoView({ block: 'start' });
+    target.focus({ preventScroll: true });
+    chosen.current = { id, at: window.scrollY };
+    setSection(id);
+  }
   useEffect(() => {
     const protect = (event: BeforeUnloadEvent) => {
       if (dirty) event.preventDefault();
@@ -315,35 +386,79 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
   function config<K extends keyof JobConfig>(key: K, value: JobConfig[K]) {
     if (job) edit({ ...job, config: { ...job.config, [key]: value } });
   }
+  const liveProblems: Record<string, string> = job
+    ? fieldProblems(job.family, job.config)
+    : {};
+  // Review errors about a field show beside it, unless the check while typing already says so.
+  const problems: Record<string, string> = {};
+  // Review reports size as one error, so the check while typing says which dimension it means.
+  const reviewField = (message: string) => {
+    const key = errorField(message);
+    return key === 'width' && !liveProblems.width && liveProblems.height
+      ? 'height'
+      : key;
+  };
+  for (const message of review?.errors ?? []) {
+    const key = reviewField(message);
+    if (key && !liveProblems[key] && !componentError(message))
+      problems[key] = message.slice(message.indexOf(':') + 2);
+  }
+  Object.assign(problems, liveProblems);
+  const problemProps = (key: string) =>
+    problems[key]
+      ? {
+          'aria-invalid': true,
+          'aria-describedby': `${fieldId(key)}-problem`,
+        }
+      : {};
+  function problemText(key: string) {
+    return problems[key] ? (
+      <small className="field-problem" id={`${fieldId(key)}-problem`}>
+        {problems[key]}
+      </small>
+    ) : null;
+  }
+  function focusField(key: string) {
+    const field = document.getElementById(fieldId(key));
+    const section = field?.closest('details');
+    if (section) section.open = true;
+    field?.focus();
+  }
   function number(label: string, key: keyof JobConfig, help?: string) {
     return (
-      <label className="field">
-        {label}
+      <div className="field number-field">
+        <label htmlFor={fieldId(key)}>{label}</label>
         <input
+          id={fieldId(key)}
           type="number"
           step="any"
           value={String(job?.config[key] ?? '')}
           disabled={busy}
           onChange={(event) => config(key, Number(event.target.value))}
+          {...problemProps(key)}
         />
+        {problemText(key)}
         {help && <small>{help}</small>}
-      </label>
+      </div>
     );
   }
   function toggle(label: string, key: keyof JobConfig, help?: string) {
     return (
-      <label className="job-toggle">
+      <div className="job-toggle">
         <input
+          id={fieldId(key)}
           type="checkbox"
           checked={Boolean(job?.config[key])}
           disabled={busy}
           onChange={(event) => config(key, event.target.checked)}
+          {...problemProps(key)}
         />
-        <span>
+        <label htmlFor={fieldId(key)}>
           {label}
           {help && <small>{help}</small>}
-        </span>
-      </label>
+          {problemText(key)}
+        </label>
+      </div>
     );
   }
   async function create(family: 'wan' | 'h3') {
@@ -649,7 +764,11 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
                 <button disabled={busy} onClick={() => void restore(item.id)}>
                   Restore {item.name}
                 </button>{' '}
-                <button disabled={busy} onClick={() => void deleteJob(item)}>
+                <button
+                  className="danger"
+                  disabled={busy}
+                  onClick={() => void deleteJob(item)}
+                >
                   Delete {item.name}
                 </button>
               </li>
@@ -657,19 +776,23 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
           </ul>
         </details>
       )}
-      <div className="job-action-bar">
+      <div className="job-action-bar" ref={actionBar}>
         <div className="actions">
           <span role="status">{status}</span>
           {job && (
             <>
               <button
-                className="primary"
+                className={dirty ? 'primary' : ''}
                 disabled={busy}
                 onClick={() => void save()}
               >
                 Save draft
               </button>
-              <button disabled={busy} onClick={() => void inspect()}>
+              <button
+                className={!dirty && !review?.valid ? 'primary' : ''}
+                disabled={busy}
+                onClick={() => void inspect()}
+              >
                 Review configuration
               </button>
               <button
@@ -681,6 +804,7 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
                 Prepare run
               </button>
               <button
+                className={prepareReason ? '' : 'primary'}
                 disabled={busy || !!prepareReason}
                 title={prepareReason || undefined}
                 aria-describedby={prepareReason ? 'prepare-reason' : undefined}
@@ -718,6 +842,7 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
               },
               {
                 label: 'Delete job',
+                danger: true,
                 disabled: !job || dirty,
                 onSelect: () => job && void deleteJob(job),
               },
@@ -732,6 +857,20 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
           <p id="prepare-reason" className="hint">
             {prepareReason}
           </p>
+        )}
+        {job && (
+          <nav className="job-sections" aria-label="Job sections">
+            {sections.map(({ id, label }) => (
+              <button
+                key={id}
+                className="quiet"
+                aria-current={section === id ? 'true' : undefined}
+                onClick={() => goToSection(id)}
+              >
+                {label}
+              </button>
+            ))}
+          </nav>
         )}
         {error && (
           <div role="alert" className="error">
@@ -807,20 +946,25 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
       )}
       {job && (
         <>
-          <section className="panel">
+          <section className="panel" id="job-section-job" tabIndex={-1}>
             <h2>Job & dataset</h2>
             <label className="field">
               Job name
               <input
+                id={fieldId('name')}
                 ref={nameField}
                 disabled={busy}
                 value={job.name}
                 onChange={(event) => edit({ ...job, name: event.target.value })}
+                {...problemProps('name')}
               />
+              {problemText('name')}
             </label>
             <label className="field">
               Dataset
               <select
+                id={fieldId('dataset_id')}
+                {...problemProps('dataset_id')}
                 disabled={busy}
                 value={job.dataset_id}
                 onChange={(event) =>
@@ -834,10 +978,13 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
                   </option>
                 ))}
               </select>
+              {problemText('dataset_id')}
             </label>
             <label className="field">
               Recipe
               <select
+                id={fieldId('recipe')}
+                {...problemProps('recipe')}
                 disabled={busy}
                 value={job.config.recipe}
                 onChange={(event) => config('recipe', event.target.value)}
@@ -850,6 +997,7 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
                   <option value="guidance-loss">H3 guidance loss · T2VA</option>
                 )}
               </select>
+              {problemText('recipe')}
               <small>
                 {job.family === 'wan' ? (
                   <>
@@ -878,6 +1026,7 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
                 <PathField
                   key={key}
                   label={componentLabels[key]}
+                  inputId={fieldId(key)}
                   kind="file"
                   roots={modelRoots}
                   disabled={busy}
@@ -960,35 +1109,27 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
               </p>
             )}
           </section>
-          <section className="panel">
+          <section className="panel" id="job-section-dataset" tabIndex={-1}>
             <h2>Dataset preparation</h2>
-            <div className="columns">
-              {number(
-                'Width',
-                'width',
-                job.family === 'wan'
-                  ? 'Wan requires multiples of 16.'
-                  : 'H3 requires multiples of 32.',
-              )}
+            <div className="number-row">
+              {number('Width', 'width')}
               {number('Height', 'height')}
-              {number(
-                'Frames',
-                'frames',
-                job.family === 'wan'
-                  ? '4*n+1 frames; 33 is measured on the target PC.'
-                  : '17*n+5 frames between 124 and 345; 124 is measured on the target PC.',
-              )}
+              {number('Frames', 'frames')}
               {number('Repeats', 'repeats')}
-              {number(
-                'Dataset batch size',
-                'batch_size',
-                'Keep at one for the target-PC recipe.',
-              )}
+              {number('Dataset batch size', 'batch_size')}
             </div>
+            <p className="hint">
+              {job.family === 'wan'
+                ? 'Wan requires multiples of 16 and 4*n+1 frames; 33 frames is measured on the target PC.'
+                : 'H3 requires multiples of 32 and 17*n+5 frames between 124 and 345; 124 frames is measured on the target PC.'}{' '}
+              Keep the batch size at one for the target-PC recipe.
+            </p>
             <div className="columns">
               <label className="field">
                 Frame extraction
                 <select
+                  id={fieldId('frame_extraction')}
+                  {...problemProps('frame_extraction')}
                   value={job.config.frame_extraction}
                   disabled={busy}
                   onChange={(event) =>
@@ -1008,6 +1149,7 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
                     </option>
                   ))}
                 </select>
+                {problemText('frame_extraction')}
               </label>
               {job.config.frame_extraction === 'slide' &&
                 number('Slide stride', 'frame_stride')}
@@ -1054,9 +1196,9 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
               </label>
             )}
           </section>
-          <section className="panel">
+          <section className="panel" id="job-section-training" tabIndex={-1}>
             <h2>LoRA & training</h2>
-            <div className="columns">
+            <div className="number-row">
               {number('LoRA rank', 'rank')}
               {number('LoRA alpha', 'alpha')}
               {number('Learning rate', 'learning_rate')}
@@ -1065,7 +1207,7 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
               {number('Seed', 'seed')}
             </div>
           </section>
-          <section className="panel">
+          <section className="panel" id="job-section-memory" tabIndex={-1}>
             <h2>Memory</h2>
             {number(
               'Blocks to swap',
@@ -1087,18 +1229,28 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
                   'offload_inactive_dit',
                   'Not supported by this single-expert recipe; review will explain conflicts.',
                 )}
+                {job.config.block_swap_h2d_only &&
+                  toggle('H2D-only block swapping', 'block_swap_h2d_only')}
               </>
             ) : (
-              toggle(
-                'H2D-only block swapping',
-                'block_swap_h2d_only',
-                'Required for the guidance-loss restart forward; classic swapping failed in the reference scenario.',
-              )
+              <>
+                {toggle(
+                  'H2D-only block swapping',
+                  'block_swap_h2d_only',
+                  'Required for the guidance-loss restart forward; classic swapping failed in the reference scenario.',
+                )}
+                {job.config.fp8_scaled &&
+                  toggle('Runtime FP8 scaling', 'fp8_scaled')}
+                {job.config.offload_inactive_dit &&
+                  toggle('Offload inactive DiT', 'offload_inactive_dit')}
+              </>
             )}
           </section>
-          <section className="panel">
+          <section className="panel" id="job-section-checkpoints" tabIndex={-1}>
             <h2>Checkpoints & final sample</h2>
-            {number('Save every N steps', 'save_every')}
+            <div className="number-row">
+              {number('Save every N steps', 'save_every')}
+            </div>
             {toggle(
               'Save optimizer/training state',
               'save_state',
@@ -1110,29 +1262,46 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
                 <label className="field">
                   Sample prompt
                   <textarea
+                    id={fieldId('sample_prompt')}
+                    {...problemProps('sample_prompt')}
                     disabled={busy}
                     value={job.config.sample_prompt}
                     onChange={(event) =>
                       config('sample_prompt', event.target.value)
                     }
                   />
+                  {problemText('sample_prompt')}
                 </label>
                 {number('Sample inference steps', 'sample_steps')}
               </>
             )}
+            {!job.config.sample_enabled &&
+              problems.sample_steps &&
+              number('Sample inference steps', 'sample_steps')}
           </section>
           {review && existingRun && (
             <p>
-              This revision already has a {existingRun.status} run with the same
-              inputs, so no new run was created.{' '}
+              This revision already has a Run with the same inputs (
+              {runStatus(existingRun.status).label}), so no new Run was created.{' '}
               <button onClick={() => onRun?.(existingRun.id)}>
                 Open existing run
               </button>
             </p>
           )}
+          {!review && (
+            <section className="panel" id="job-section-review" tabIndex={-1}>
+              <h2>Review</h2>
+              <p>
+                Choose Review configuration to check these settings before
+                preparing a Run.
+              </p>
+            </section>
+          )}
           {review && (
             <section
               ref={reviewPanel}
+              id="job-section-review"
+              tabIndex={-1}
               className="panel job-review"
               aria-label="Configuration review"
             >
@@ -1152,9 +1321,23 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
               </div>
               {review.errors.length > 0 && (
                 <ul className="error">
-                  {review.errors.map((message, index) => (
-                    <li key={index}>{message}</li>
-                  ))}
+                  {review.errors.map((message, index) => {
+                    const key = reviewField(message);
+                    return (
+                      <li key={index}>
+                        {key ? (
+                          <button
+                            className="error-link"
+                            onClick={() => focusField(key)}
+                          >
+                            {message}
+                          </button>
+                        ) : (
+                          message
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
               <ul>

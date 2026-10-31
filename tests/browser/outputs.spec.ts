@@ -50,7 +50,7 @@ test('Wan and H3 output playback comparison download and missing states retain r
     ).toBeVisible();
     await page
       .getByRole('button', {
-        name: 'samples/sample.mp4 · available',
+        name: 'sample.mp4 · available',
         exact: true,
       })
       .click();
@@ -67,13 +67,13 @@ test('Wan and H3 output playback comparison download and missing states retain r
       .toBeGreaterThan(0);
     await expect(
       page.getByLabel('Selected output', { exact: true }),
-    ).toContainText(h3.id);
+    ).toContainText(h3.id.slice(0, 8));
     await expect(
       page.getByLabel('Selected output', { exact: true }),
     ).toContainText('"audio"');
     await page
       .getByRole('button', {
-        name: 'samples/tone.wav · available',
+        name: 'tone.wav · available',
         exact: true,
       })
       .click();
@@ -88,9 +88,10 @@ test('Wan and H3 output playback comparison download and missing states retain r
         audio.evaluate((element) => (element as HTMLAudioElement).currentTime),
       )
       .toBeGreaterThan(0);
+    await page.getByText(/^LoRA checkpoints/).click();
     await page
       .getByRole('button', {
-        name: 'checkpoints/fixture.safetensors · available',
+        name: 'fixture.safetensors · available',
         exact: true,
       })
       .click();
@@ -128,7 +129,7 @@ test('Wan and H3 output playback comparison download and missing states retain r
       .click();
     await expect(
       page.getByRole('button', {
-        name: 'checkpoints/fixture.safetensors · missing',
+        name: 'fixture.safetensors · missing',
         exact: true,
       }),
     ).toBeVisible();
@@ -138,7 +139,7 @@ test('Wan and H3 output playback comparison download and missing states retain r
       .click();
     await page
       .getByRole('button', {
-        name: 'samples/still.png · available',
+        name: 'still.png · available',
         exact: true,
       })
       .click();
@@ -151,7 +152,7 @@ test('Wan and H3 output playback comparison download and missing states retain r
       .toBe(256);
     await page
       .getByRole('button', {
-        name: 'samples/sample.mp4 · available',
+        name: 'sample.mp4 · available',
         exact: true,
       })
       .click();
@@ -176,9 +177,10 @@ test('Wan and H3 output playback comparison download and missing states retain r
     await page
       .getByRole('button', { name: 'h3-revision-1 · H3 · r1', exact: true })
       .click();
+    await page.getByText(/^LoRA checkpoints/).click();
     await expect(
       page.getByRole('button', {
-        name: 'checkpoints/fixture.safetensors · missing',
+        name: 'fixture.safetensors · missing',
         exact: true,
       }),
     ).toBeVisible();

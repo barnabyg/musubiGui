@@ -142,3 +142,53 @@ test('caption autosave flushes navigation, preserves failed drafts, rejects exte
     await app.cleanup();
   }
 });
+
+test('search stays visible, states read as badges and the caption count filters to missing ones', async ({
+  page,
+}) => {
+  const app = await datasetHarness();
+  try {
+    await page.goto(app.url);
+    await page.getByRole('button', { name: 'Datasets', exact: true }).click();
+    await page.getByRole('button', { name: 'New dataset' }).click();
+    await page.getByLabel('Dataset name', { exact: true }).fill('Badges');
+    await page.getByLabel('Dataset folder', { exact: true }).fill(app.media);
+    await page.getByRole('button', { name: 'Use existing folder' }).click();
+    await expect(page.getByText('Scan: complete 4/4')).toBeVisible({
+      timeout: 240_000,
+    });
+    await expect(page.getByLabel('Search media and captions')).toBeVisible();
+    await expect(page.getByLabel('Filter media')).toBeVisible();
+
+    const tile = (name: string) =>
+      page.getByRole('button', { name: new RegExp(`^${name}`) });
+    await expect(tile('blue.png').locator('.status-badge')).toHaveText(
+      'Missing caption',
+    );
+    await expect(tile('invalid.mp4').locator('.status-badge')).toHaveText([
+      'Missing caption',
+      'Invalid',
+    ]);
+    await expect(tile('red.png').locator('.status-badge')).toHaveCount(0);
+
+    const count = page.getByRole('button', { name: '2 of 4 captioned' });
+    await count.click();
+    await expect(count).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByLabel('Filter media')).toHaveValue('missing');
+    await expect(page.locator('.media-tile')).toHaveCount(2);
+    await expect(tile('red.png')).toHaveCount(0);
+    await count.click();
+    await expect(page.locator('.media-tile')).toHaveCount(4);
+
+    // Excluding adds its badge, and selection still works from the bulk panel.
+    await page.getByLabel('Select red.png', { exact: true }).check();
+    await page.getByRole('button', { name: 'Bulk actions · 1' }).click();
+    await page.getByText('Selection and bulk caption actions').click();
+    await page.getByRole('button', { name: 'Exclude selection' }).click();
+    await expect(tile('red.png').locator('.status-badge')).toHaveText(
+      'Excluded',
+    );
+  } finally {
+    await app.cleanup();
+  }
+});

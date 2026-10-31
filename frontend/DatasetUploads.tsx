@@ -283,7 +283,11 @@ export function DatasetUploads({ datasetId, beforeAction, onChanged }: Props) {
             .map((value) => (
               <p key={value.id}>
                 {value.filename} · {value.received}/{value.size} bytes{' '}
-                <button disabled={busy} onClick={() => void cancel(value.id)}>
+                <button
+                  className="danger"
+                  disabled={busy}
+                  onClick={() => void cancel(value.id)}
+                >
                   Cancel partial {value.filename}
                 </button>
               </p>

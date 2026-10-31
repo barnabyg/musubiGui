@@ -1,17 +1,62 @@
+.runs-layout {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-7);
+}
+.runs-layout .panel {
+  margin: 0 0 var(--space-7);
+  padding: var(--space-7) var(--space-8);
+}
+.run-history {
+  max-height: 60vh;
+  overflow: auto;
+}
+.run-history > div {
+  margin: var(--space-4) 0;
+}
+.run-history button {
+  width: 100%;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.run-history [aria-pressed='true'] {
+  border-color: var(--color-accent);
+  background: var(--color-accent-surface);
+}
+.run-history small {
+  margin-left: var(--space-2);
+}
+.state-files {
+  margin: var(--space-4) 0 0;
+  padding: 0;
+  list-style: none;
+}
+.state-files li {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 1100px) {
+  .runs-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .run-history {
+    max-height: 30vh;
+  }
+}
 .run-stepper {
   display: grid;
   grid-auto-flow: column;
   grid-auto-columns: minmax(0, 1fr);
-  gap: 6px;
+  gap: var(--space-3);
   list-style: none;
-  margin: 16px 0;
+  margin: var(--space-7) 0;
   padding: 0;
 }
 .run-stepper li {
-  border-top: 3px solid #373d49;
-  padding-top: 8px;
-  font-size: 13px;
-  color: #a1a7b5;
+  border-top: 3px solid var(--color-border-input);
+  padding-top: var(--space-4);
+  font-size: var(--text-base);
+  color: var(--color-text-muted);
 }
 .run-stepper strong {
   display: block;
@@ -19,33 +64,33 @@
 }
 .run-stepper small {
   display: block;
-  margin-top: 2px;
+  margin-top: var(--space-1);
   overflow-wrap: anywhere;
 }
 .run-stepper .completed {
-  border-color: #6dbb8d;
-  color: #d9f3e3;
+  border-color: var(--color-success);
+  color: var(--color-success-strong);
 }
 .run-stepper .current {
-  border-color: #c1a4ef;
-  color: #f3f1fa;
+  border-color: var(--color-accent);
+  color: var(--color-text-strong);
 }
 .run-stepper .failed {
-  border-color: #ef8d8d;
-  color: #ffc9c9;
+  border-color: var(--color-danger);
+  color: var(--color-danger-text);
 }
 .run-stepper .stopped {
-  border-color: #d9b56b;
-  color: #f2dfb5;
+  border-color: var(--color-warning);
+  color: var(--color-warning-strong);
 }
 .run-progress progress {
   display: block;
   width: 100%;
   height: 10px;
-  margin: 8px 0;
-  accent-color: #c1a4ef;
+  margin: var(--space-4) 0;
+  accent-color: var(--color-accent);
 }
 .run-progress p {
-  margin: 4px 0;
-  font-size: 13px;
+  margin: var(--space-2) 0;
+  font-size: var(--text-base);
 }

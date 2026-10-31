@@ -1,3 +1,4 @@
+import { ArrowUp, Folder } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import { apiClient } from './api';
 
@@ -105,7 +106,9 @@ function PathBrowser({
       <ul aria-label="Folder contents">
         {listing && listing.parent !== null && (
           <li>
-            <button onClick={() => go(listing.parent ?? '')}>↑ Up</button>
+            <button onClick={() => go(listing.parent ?? '')}>
+              <ArrowUp /> Up
+            </button>
           </li>
         )}
         {listing?.entries.map((entry) => (
@@ -115,9 +118,7 @@ function PathBrowser({
                 entry.kind === 'folder' ? go(entry.path) : onChoose(entry.path)
               }
             >
-              <span aria-hidden="true">
-                {entry.kind === 'folder' ? '▸ ' : ''}
-              </span>
+              {entry.kind === 'folder' && <Folder />}
               {entry.name}
             </button>
           </li>
@@ -207,6 +208,7 @@ export function PathField({
   label,
   value,
   kind,
+  inputId,
   roots = [],
   help,
   className,
@@ -218,6 +220,7 @@ export function PathField({
   label: string;
   value: string;
   kind: Kind;
+  inputId?: string;
   roots?: string[];
   help?: string;
   className?: string;
@@ -227,7 +230,8 @@ export function PathField({
   disabled?: boolean;
   onChange: (value: string) => void;
 }) {
-  const id = useId();
+  const generatedId = useId();
+  const id = inputId ?? generatedId;
   const [focused, setFocused] = useState(false);
   const result = usePathCheck(value, kind, roots);
   const check =

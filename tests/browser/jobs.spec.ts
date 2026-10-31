@@ -787,3 +787,255 @@ test('job actions wait for the initial load so it cannot replace new drafts', as
     await app.close();
   }
 });
+
+test('the job form uses short fields for short values and shares rows between related ones', async ({
+  page,
+}) => {
+  const app = await workspace();
+  try {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openJobs(page, app.url);
+    await page
+      .getByRole('button', { name: 'New Wan job', exact: true })
+      .click();
+    const box = async (label: string) =>
+      (await page
+        .getByRole('spinbutton', { name: new RegExp(`^${label}`) })
+        .boundingBox())!;
+    for (const label of ['Blocks to swap', 'Width', 'Training steps'])
+      expect((await box(label)).width).toBeLessThan(200);
+    const width = await box('Width');
+    expect((await box('Height')).y).toBe(width.y);
+    expect((await box('Frames')).y).toBe(width.y);
+    // The header and its repeated title are gone.
+    await expect(page.locator('main header')).toHaveCount(0);
+    // It was 3381 px with the header, full-width number fields and larger gaps.
+    expect(
+      await page.evaluate(() => document.documentElement.scrollHeight),
+    ).toBeLessThan(3200);
+  } finally {
+    await app.close();
+  }
+});
+
+test('the section menu reaches every section, marks the current one and keeps unsaved edits', async ({
+  page,
+}) => {
+  const app = await workspace();
+  try {
+    await page.setViewportSize({ width: 1000, height: 800 });
+    await openJobs(page, app.url);
+    await page
+      .getByRole('button', { name: 'New Wan job', exact: true })
+      .click();
+    const menu = page.getByRole('navigation', { name: 'Job sections' });
+    const go = (name: string) =>
+      menu.getByRole('button', { name, exact: true }).click();
+    const current = menu.locator('[aria-current="true"]');
+    const headings: [string, string][] = [
+      ['Dataset preparation', 'Dataset preparation'],
+      ['LoRA & training', 'LoRA & training'],
+      ['Memory', 'Memory'],
+      ['Checkpoints & sample', 'Checkpoints & final sample'],
+      ['Review', 'Review'],
+      ['Job & dataset', 'Job & dataset'],
+    ];
+    const bar = page.locator('.job-action-bar');
+    for (const [item, heading] of headings) {
+      await go(item);
+      await expect(current).toHaveText(item);
+      const title = page.getByRole('heading', { name: heading, exact: true });
+      await expect(title).toBeInViewport();
+      const [top, barBox] = [
+        await title.boundingBox(),
+        await bar.boundingBox(),
+      ];
+      expect(top!.y).toBeGreaterThanOrEqual(barBox!.y + barBox!.height);
+      expect(barBox!.height).toBeLessThan(220);
+    }
+
+    // Scrolling by hand moves the mark too.
+    await page
+      .getByRole('heading', { name: 'Memory', exact: true })
+      .evaluate((element) => {
+        const bottom = document
+          .querySelector('.job-action-bar')!
+          .getBoundingClientRect().bottom;
+        window.scrollBy(0, element.getBoundingClientRect().top - bottom - 4);
+      });
+    await expect(current).toHaveText('Memory');
+
+    await go('Memory');
+    const blocks = page.getByRole('spinbutton', { name: /^Blocks to swap/ });
+    await blocks.fill('12');
+    await go('LoRA & training');
+    await go('Memory');
+    await expect(blocks).toHaveValue('12');
+    await expect(page.getByRole('status')).toHaveText('Unsaved draft');
+
+    expect(
+      await page.evaluate(
+        () =>
+          document.documentElement.scrollWidth <=
+          document.documentElement.clientWidth,
+      ),
+    ).toBe(true);
+  } finally {
+    await app.close();
+  }
+});
+
+test('invalid fields are flagged while typing and review errors lead to their field', async ({
+  page,
+}) => {
+  const app = await workspace();
+  try {
+    await openJobs(page, app.url);
+    await page
+      .getByRole('button', { name: 'New Wan job', exact: true })
+      .click();
+    const width = page.getByLabel('Width', { exact: true });
+    await expect(width).not.toHaveAttribute('aria-invalid', 'true');
+    await width.fill('250');
+    await expect(width).toHaveAttribute('aria-invalid', 'true');
+    await expect(width).toHaveAccessibleDescription(
+      'Enter at least 64, in multiples of 16.',
+    );
+    await width.fill('256');
+    await expect(width).not.toHaveAttribute('aria-invalid', 'true');
+
+    const frames = page.getByLabel('Frames', { exact: true });
+    await frames.fill('32');
+    await expect(frames).toHaveAccessibleDescription(/4\*n\+1/);
+    await frames.fill('33');
+    const blocks = page.getByRole('spinbutton', { name: 'Blocks to swap' });
+    await blocks.fill('39');
+    await expect(blocks).toHaveAccessibleDescription('Enter 0 to 38.');
+    await blocks.fill('1.5');
+    await expect(blocks).toHaveAccessibleDescription('Enter a whole number.');
+    await blocks.fill('36');
+
+    // Nothing is blocked: an invalid draft can still be saved.
+    await width.fill('250');
+    await page.getByRole('button', { name: 'Save draft', exact: true }).click();
+    await expect(page.getByRole('status')).toContainText('Draft saved');
+    await width.fill('256');
+
+    // A new draft has no dataset yet, so Review names it, beside the field and as a link.
+    await page
+      .getByRole('button', { name: 'Review configuration', exact: true })
+      .click();
+    const review = page.getByRole('region', { name: 'Configuration review' });
+    await expect(page.locator('#job-field-dataset_id')).toHaveAttribute(
+      'aria-invalid',
+      'true',
+    );
+    await review
+      .getByRole('button', { name: /^Dataset: select a registered/ })
+      .click();
+    await expect(page.locator('#job-field-dataset_id')).toBeFocused();
+    await expect(page.locator('#job-field-dataset_id')).toBeInViewport();
+  } finally {
+    await app.close();
+  }
+});
+
+test('a review error about a model component opens and focuses its field', async ({
+  page,
+}) => {
+  const app = await workspace();
+  try {
+    await openJobs(page, app.url);
+    await page
+      .getByRole('button', { name: 'New Wan job', exact: true })
+      .click();
+    const message =
+      'Missing wan_low; select compatible model files in Settings.';
+    await page.route('**/api/jobs/*/review', async (route) => {
+      const response = await route.fetch();
+      const review = (await response.json()) as { errors: string[] };
+      await route.fulfill({
+        response,
+        json: { ...review, valid: false, errors: [...review.errors, message] },
+      });
+    });
+    await page
+      .getByRole('button', { name: 'Review configuration', exact: true })
+      .click();
+    // The fixture's own review can report this too, so it may be listed twice.
+    await page.getByRole('button', { name: message }).first().click();
+    await expect(
+      page.getByRole('textbox', { name: 'Wan low-noise DiT' }),
+    ).toBeFocused();
+  } finally {
+    await app.close();
+  }
+});
+
+test('a review size error leads to the dimension that is wrong', async ({
+  page,
+}) => {
+  const app = await workspace();
+  try {
+    await openJobs(page, app.url);
+    await page
+      .getByRole('button', { name: 'New Wan job', exact: true })
+      .click();
+    await page.getByLabel('Height', { exact: true }).fill('250');
+    await page
+      .getByRole('button', { name: 'Review configuration', exact: true })
+      .click();
+    await page.getByRole('button', { name: /^Geometry:/ }).click();
+    await expect(page.getByLabel('Height', { exact: true })).toBeFocused();
+    await expect(page.getByLabel('Width', { exact: true })).not.toHaveAttribute(
+      'aria-invalid',
+      'true',
+    );
+  } finally {
+    await app.close();
+  }
+});
+
+test('a saved value Review rejects has a control to fix it, even where the form usually hides it', async ({
+  page,
+}) => {
+  const app = await workspace();
+  try {
+    await openJobs(page, app.url);
+    await page.getByRole('button', { name: 'New H3 job', exact: true }).click();
+    await expect(page).toHaveURL(/#\/jobs\/\w+/);
+    const h3 = { id: page.url().split('/').at(-1)! };
+    const saved = (await (
+      await page.request.get(`${app.url}/api/jobs/${h3.id}`)
+    ).json()) as {
+      revision: number;
+      name: string;
+      family: string;
+      dataset_id: string;
+      config: Record<string, unknown>;
+    };
+    const updated = await page.request.put(`${app.url}/api/jobs/${h3.id}`, {
+      data: {
+        name: saved.name,
+        family: saved.family,
+        dataset_id: saved.dataset_id,
+        revision: saved.revision,
+        config: { ...saved.config, fp8_scaled: true },
+      },
+    });
+    expect(updated.ok()).toBe(true);
+    await page.reload();
+    await page
+      .getByRole('button', { name: 'Review configuration', exact: true })
+      .click();
+    await page
+      .getByRole('button', { name: /^Memory: H3 does not support FP8/ })
+      .click();
+    const toggle = page.getByRole('checkbox', { name: /^Runtime FP8 scaling/ });
+    await expect(toggle).toBeFocused();
+    await toggle.click();
+    await expect(toggle).toHaveCount(0);
+  } finally {
+    await app.close();
+  }
+});

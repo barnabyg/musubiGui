@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { Ellipsis } from 'lucide-react';
 
 type Item = {
   label: string;
   onSelect: () => void;
   disabled?: boolean;
+  danger?: boolean;
 };
 
 // A menu button following the WAI-ARIA menu pattern: arrows move, Escape closes and returns focus.
@@ -72,7 +74,7 @@ export function ActionMenu({
           }
         }}
       >
-        ⋯
+        <Ellipsis />
       </button>
       {open && (
         <div role="menu" aria-label={label} onKeyDown={move}>
@@ -80,6 +82,7 @@ export function ActionMenu({
             <button
               key={item.label}
               role="menuitem"
+              className={item.danger ? 'danger' : ''}
               disabled={item.disabled}
               onClick={() => {
                 close();

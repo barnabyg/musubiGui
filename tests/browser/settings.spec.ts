@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Route } from '@playwright/test';
 import {
   mkdtemp,
   mkdir,
@@ -130,6 +130,11 @@ test('diagnostics persist, drive the sidebar and go out of date when settings ch
     await page.goto(url);
     const health = page.getByRole('button', { name: /^Setup:/ });
     await expect(health).toContainText('Setup: Not checked');
+    // Sections aren't numbered, because they aren't a sequence.
+    await expect(
+      page.getByRole('heading', { name: 'Training environment' }),
+    ).toBeVisible();
+    await expect(page.getByText(/^0[12]$/)).toHaveCount(0);
     await page.getByRole('button', { name: 'Run diagnostics' }).click();
     await expect(health).toContainText('Setup: Problems found');
     const report = page.locator('#diagnostics-report');
@@ -174,6 +179,194 @@ test('diagnostics persist, drive the sidebar and go out of date when settings ch
     await page.reload();
     await expect(health).toContainText('Setup: 1 to check');
     await page.unroute('**/api/diagnostics');
+  } finally {
+    await stop();
+    await rm(root, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 100,
+    });
+  }
+});
+
+test('diagnostic rows share one layout and state their status in a badge', async ({
+  page,
+}) => {
+  const root = await realpath(
+    await mkdtemp(path.join(tmpdir(), 'musubi-checks-')),
+  );
+  const { url, start, stop } = await settingsBackend(root);
+  try {
+    await start();
+    await page.route('**/api/diagnostics', async (route) => {
+      await route.fulfill({
+        json: {
+          ran_at: '2026-10-31T00:00:00+00:00',
+          current: true,
+          environment: {},
+          checks: [
+            { name: 'Python', status: 'ok', message: 'Found.' },
+            { name: 'Roots', status: 'warning', message: 'None set.' },
+            { name: 'PyTorch', status: 'error', message: 'Not installed.' },
+          ],
+        },
+      });
+    });
+    await page.goto(url);
+    const rows = page.locator('.check');
+    await expect(rows).toHaveCount(3);
+    await expect(rows.locator('.status-badge')).toHaveText([
+      'Passed',
+      'Warning',
+      'Failed',
+    ]);
+    const layout = await rows.evaluateAll((elements) =>
+      elements.map((element) => {
+        const style = getComputedStyle(element);
+        return {
+          left: element.getBoundingClientRect().left,
+          textLeft: element.querySelector('strong')!.getBoundingClientRect()
+            .left,
+          badgeRight: element
+            .querySelector('.status-badge')!
+            .getBoundingClientRect().right,
+          background: style.backgroundColor,
+          padding: style.paddingLeft,
+        };
+      }),
+    );
+    expect(layout[1]).toEqual(layout[0]);
+    expect(layout[2]).toEqual(layout[0]);
+  } finally {
+    await stop();
+    await rm(root, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 100,
+    });
+  }
+});
+
+test('an unconfigured app opens on Settings with a checklist of real progress', async ({
+  page,
+}) => {
+  const root = await realpath(
+    await mkdtemp(path.join(tmpdir(), 'musubi-checklist-')),
+  );
+  const { url, start, stop } = await settingsBackend(root);
+  try {
+    await start();
+    await page.goto(url);
+    await expect(
+      page.getByRole('heading', { name: 'Settings', exact: true }),
+    ).toBeVisible();
+    const checklist = page.getByRole('region', { name: 'Setup checklist' });
+    const items = checklist.getByRole('listitem');
+    await expect(items).toHaveCount(5);
+    await expect(items.locator('small')).toHaveText(Array(5).fill('To do'));
+    const dismiss = checklist.getByRole('button', {
+      name: 'Dismiss checklist',
+    });
+    await expect(dismiss).toHaveCount(0);
+
+    // Items link to the screen that completes them.
+    await checklist.getByRole('link', { name: 'Create a job' }).click();
+    await expect(
+      page.getByRole('heading', { name: 'Jobs', exact: true }),
+    ).toBeVisible();
+    await page.goto(`${url}/#/settings`);
+
+    // Completed work from the backend ticks items, and only then can it be dismissed.
+    await page.route('**/api/settings', (route) =>
+      route.fulfill({
+        json: {
+          version: 1,
+          checkout: 'C:\\checkout',
+          python: 'C:\\python.exe',
+          model_roots: [],
+          dataset_roots: ['C:\\datasets'],
+          models: {},
+          output_root: 'C:\\output',
+          cache_root: 'C:\\cache',
+        },
+      }),
+    );
+    await page.route('**/api/diagnostics', (route) =>
+      route.fulfill({
+        json: {
+          ran_at: '2026-10-31T00:00:00+00:00',
+          current: true,
+          environment: {},
+          checks: [],
+        },
+      }),
+    );
+    await page.route('**/api/datasets', (route) =>
+      route.fulfill({
+        json: [
+          {
+            id: 'd',
+            name: 'Mocked',
+            path: 'C:\\mocked',
+            managed: false,
+            missing: false,
+            counts: {
+              total: 0,
+              valid: 0,
+              included: 0,
+              captioned: 0,
+              excluded: 0,
+            },
+            scan: { state: 'complete', completed: 0, total: 0 },
+          },
+        ],
+      }),
+    );
+    await page.route('**/api/jobs', (route) =>
+      route.fulfill({ json: [{ id: 'j' }] }),
+    );
+    await page.route('**/api/runs', (route) =>
+      route.fulfill({
+        json: [
+          {
+            id: 'r',
+            status: 'completed',
+            stages: [{ name: 'train', status: 'completed' }],
+          },
+        ],
+      }),
+    );
+    await page.reload();
+    await expect(items.locator('small')).toHaveText(Array(5).fill('Done'));
+
+    const failing = (route: Route) =>
+      route.fulfill({
+        json: {
+          ran_at: '2026-10-31T00:00:00+00:00',
+          current: true,
+          environment: {},
+          checks: [{ name: 'GPU', status: 'error', message: 'None.' }],
+        },
+      });
+    await page.route('**/api/diagnostics', failing);
+    await page.reload();
+    await expect(items.nth(1).locator('small')).toHaveText('Problems found');
+    await page.unroute('**/api/diagnostics', failing);
+    await page.reload();
+    await dismiss.click();
+    await expect(checklist).toHaveCount(0);
+    await page.reload();
+    await expect(
+      page.getByRole('heading', { name: 'Settings', exact: true }),
+    ).toBeVisible();
+    await expect(checklist).toHaveCount(0);
+
+    // The dismissal is per browser, and setup can go away: a new state folder, for one.
+    await page.unroute('**/api/settings');
+    await page.reload();
+    await expect(checklist).toBeVisible();
   } finally {
     await stop();
     await rm(root, {
@@ -268,7 +461,7 @@ test('path fields warn before saving, browse local folders and show the full pat
     await expect(browser.getByText('plain.txt')).toHaveCount(0);
     await browser.getByRole('button', { name: /chosen folder/ }).click();
     await expect(browser.locator('.path-location')).toHaveText(chosen);
-    await browser.getByRole('button', { name: '↑ Up' }).click();
+    await browser.getByRole('button', { name: 'Up', exact: true }).click();
     await expect(browser.locator('.path-location')).toHaveText(root);
     await browser.getByRole('button', { name: /chosen folder/ }).click();
     await browser.getByRole('button', { name: 'Choose this folder' }).click();
@@ -381,13 +574,52 @@ test('typed Enter separates model and dataset roots and diagnostics name missing
     await expect(datasetRoots).toHaveValue(`${datasets}\n${sampleVids}`);
     await page.getByRole('button', { name: 'Run diagnostics' }).click();
     const warning = page
-      .locator('.check.warning')
+      .locator('.check-warning')
       .filter({ hasText: 'Dataset roots' });
     await expect(warning).toContainText(
       `Not an existing folder: ${sampleVids}.`,
     );
     await expect(warning).not.toContainText(datasets);
     await expect(page.getByText('Model roots', { exact: true })).toHaveCount(0);
+  } finally {
+    await stop();
+    await rm(root, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 100,
+    });
+  }
+});
+
+test('an installation with no storage folders still opens on Settings', async ({
+  page,
+}) => {
+  const root = await realpath(
+    await mkdtemp(path.join(tmpdir(), 'musubi-storage-')),
+  );
+  const { url, start, stop } = await settingsBackend(root);
+  try {
+    await start();
+    await page.route('**/api/settings', (route) =>
+      route.fulfill({
+        json: {
+          version: 1,
+          checkout: 'C:\\checkout',
+          python: 'C:\\python.exe',
+          model_roots: [],
+          dataset_roots: ['C:\\datasets'],
+          models: {},
+          output_root: '',
+          cache_root: '',
+        },
+      }),
+    );
+    await page.goto(url);
+    await expect(
+      page.getByRole('heading', { name: 'Settings', exact: true }),
+    ).toBeVisible();
+    await expect(page).toHaveURL(/#\/settings$/);
   } finally {
     await stop();
     await rm(root, {

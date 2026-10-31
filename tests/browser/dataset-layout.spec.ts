@@ -73,9 +73,6 @@ test('large galleries scroll, resize and filter without losing access to media',
     await gallery.focus();
     await page.keyboard.press('End');
     await expect(last).toBeVisible();
-    await page
-      .getByRole('button', { name: 'Search & edit', exact: true })
-      .click();
     await page.getByLabel('Search media and captions').fill('blue.png');
     await expect(
       page.getByRole('button', { name: 'blue.png image' }),
@@ -84,9 +81,6 @@ test('large galleries scroll, resize and filter without losing access to media',
     await expect(
       page.getByText('No matching media', { exact: true }),
     ).toBeVisible();
-    await page
-      .getByRole('button', { name: 'Close tools', exact: true })
-      .click();
     await page
       .getByRole('button', { name: 'Clear search and filters' })
       .click();
@@ -138,14 +132,16 @@ test('the active tile stays in view and panels keep the column count', async ({
     await expect(tile).toBeInViewport();
     const before = await position();
     const panel = page.getByRole('button', {
-      name: 'Search & edit',
+      name: 'Bulk actions',
       exact: true,
     });
     await panel.click();
-    await expect(page.getByLabel('Search media and captions')).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: 'Select visible matches' }),
+    ).toBeVisible();
     await expect.poll(position).toEqual(before);
     await expect(tile).toBeInViewport();
-    await page.getByRole('button', { name: 'Close tools' }).click();
+    await page.getByRole('button', { name: 'Close bulk actions' }).click();
     await expect.poll(position).toEqual(before);
 
     // The preview changes the column count, but the active tile stays in view both ways.
@@ -158,10 +154,12 @@ test('the active tile stays in view and panels keep the column count', async ({
       await expect(tile).toBeInViewport();
       const withPreview = await position();
       await panel.click();
-      await expect(page.getByLabel('Search media and captions')).toBeVisible();
+      await expect(
+        page.getByRole('button', { name: 'Select visible matches' }),
+      ).toBeVisible();
       await expect.poll(position).toEqual(withPreview);
       await expect(tile).toBeInViewport();
-      await page.getByRole('button', { name: 'Close tools' }).click();
+      await page.getByRole('button', { name: 'Close bulk actions' }).click();
     }
     await page.setViewportSize({ width: 1440, height: 800 });
     await page.getByRole('button', { name: 'Close preview' }).click();
@@ -242,12 +240,12 @@ test('separate library and editor create, populate, rename, reopen and delete wi
     await page.getByRole('button', { name: 'Add media', exact: true }).click();
     await expect(page.getByLabel('Upload files')).toBeHidden();
     const tools = page.getByRole('button', {
-      name: 'Search & edit',
+      name: 'Bulk actions',
       exact: true,
     });
     await tools.focus();
     await page.keyboard.press('Enter');
-    await page.getByLabel('Search media and captions').focus();
+    await page.getByRole('button', { name: 'Select visible matches' }).focus();
     await page.keyboard.press('Escape');
     await expect(tools).toBeFocused();
     await expect
@@ -255,7 +253,9 @@ test('separate library and editor create, populate, rename, reopen and delete wi
         tile.evaluate((element) => element.getBoundingClientRect().top),
       )
       .toBeLessThan(80);
-    await expect(page.getByLabel('Search media and captions')).toBeHidden();
+    await expect(
+      page.getByRole('button', { name: 'Select visible matches' }),
+    ).toBeHidden();
     const image = tile.locator('img');
     expect((await image.boundingBox())?.height).toBeGreaterThan(180);
     await tile.focus();
@@ -298,9 +298,15 @@ test('separate library and editor create, populate, rename, reopen and delete wi
       await expect(tile).toBeVisible();
       await expect
         .poll(() =>
-          tile.evaluate((element) => element.getBoundingClientRect().top),
+          // The top bar wraps on narrow windows; tiles still start right below it.
+          tile.evaluate(
+            (element) =>
+              element.getBoundingClientRect().top -
+              document.querySelector('.dataset-topbar')!.getBoundingClientRect()
+                .bottom,
+          ),
         )
-        .toBeLessThan(width < 550 ? 160 : 80);
+        .toBeLessThan(24);
       await tile.click();
       await expect(page.getByLabel('Caption', { exact: true })).toBeVisible();
       expect(
