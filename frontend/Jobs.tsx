@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActionMenu } from './ActionMenu';
 import { apiClient } from './api';
+import { JobTable, type JobSummary } from './JobTable';
 import './jobs.css';
 
 type JobConfig = {
@@ -143,6 +144,9 @@ const request = apiClient('Check the entered values and retry.');
 export function Jobs({ onRun, onDirtyChange }: Props) {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [archived, setArchived] = useState<Job[]>([]);
+  const [summaries, setSummaries] = useState<JobSummary[]>([]);
+  const nameField = useRef<HTMLInputElement>(null);
+  const focusName = useRef(false);
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [models, setModels] = useState<Record<string, string>>({});
   const [job, setJob] = useState<Job | null>(null);
@@ -167,9 +171,11 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
       request<{ models: Record<string, string> }>('/api/settings'),
       request<Preset[]>('/api/jobs/presets'),
       request<Job[]>('/api/jobs/archived'),
+      request<JobSummary[]>('/api/jobs/summaries'),
     ])
-      .then(([items, library, settings, savedPresets, hidden]) => {
+      .then(([items, library, settings, savedPresets, hidden, info]) => {
         setJobs(items);
+        setSummaries(info);
         setArchived(hidden);
         setDatasets(library);
         setModels(settings.models);
@@ -179,6 +185,14 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
       .catch((reason: Error) => setError(reason.message))
       .finally(() => setBusy(false));
   }, []);
+  // A new draft's name is the first thing worth changing; the field is disabled until the request lands.
+  useEffect(() => {
+    if (focusName.current && !busy && nameField.current) {
+      focusName.current = false;
+      nameField.current.focus();
+      nameField.current.select();
+    }
+  }, [busy, job?.id]);
   useEffect(() => {
     onDirtyChange?.(dirty);
   }, [dirty, onDirtyChange]);
@@ -190,6 +204,15 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
     return () => window.removeEventListener('beforeunload', protect);
   }, [dirty]);
 
+  async function reloadJobs() {
+    const [items, info] = await Promise.all([
+      request<Job[]>('/api/jobs'),
+      request<JobSummary[]>('/api/jobs/summaries'),
+    ]);
+    setJobs(items);
+    setSummaries(info);
+    return items;
+  }
   async function perform(action: () => Promise<void>) {
     setBusy(true);
     setError('');
@@ -262,16 +285,24 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
     )
       return;
     await perform(async () => {
+      const taken = new Set(
+        [...(await reloadJobs()), ...archived].map((item) => item.name),
+      );
+      const base = family === 'wan' ? 'New Wan job' : 'New H3 job';
+      let name = base;
+      for (let number = 2; taken.has(name); number += 1)
+        name = `${base} ${number}`;
       const created = await request<Job>('/api/jobs', 'POST', {
-        name: family === 'wan' ? 'New Wan job' : 'New H3 job',
+        name,
         family,
         config: await request<JobConfig>(`/api/jobs/defaults/${family}`),
       });
-      setJobs(await request<Job[]>('/api/jobs'));
+      await reloadJobs();
       setJob(created);
       setDirty(false);
       setReview(null);
       setStatus('Draft created');
+      focusName.current = true;
     });
   }
   async function save() {
@@ -285,7 +316,7 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
         revision: job.revision,
       });
       setJob(saved);
-      setJobs(await request<Job[]>('/api/jobs'));
+      await reloadJobs();
       setDirty(false);
       setReview(null);
       setStatus(`Draft saved — revision ${saved.revision}`);
@@ -325,13 +356,13 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
         'POST',
         {},
       );
-      setJobs(await request<Job[]>('/api/jobs'));
+      await reloadJobs();
       select(copied);
       setStatus('Independent copy created');
     });
   }
   async function refreshLibrary() {
-    setJobs(await request<Job[]>('/api/jobs'));
+    await reloadJobs();
     setArchived(await request<Job[]>('/api/jobs/archived'));
   }
   async function archive() {
@@ -395,7 +426,7 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
         'POST',
         { preset_id: presetId, revision: job.revision },
       );
-      setJobs(await request<Job[]>('/api/jobs'));
+      await reloadJobs();
       select(updated);
       setStatus('Preset applied as a new revision');
     });
@@ -413,7 +444,7 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
         },
       );
       if ('id' in result) {
-        setJobs(await request<Job[]>('/api/jobs'));
+        await reloadJobs();
         select(result);
         setStatus('Model conversion saved as a new revision');
       } else setConversion(result);
@@ -452,7 +483,7 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
         'POST',
         JSON.parse(transfer),
       );
-      setJobs(await request<Job[]>('/api/jobs'));
+      await reloadJobs();
       setJob(imported);
       setDirty(false);
       setReview(null);
@@ -476,18 +507,16 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
           New H3 job
         </button>
       </section>
-      <div className="job-library" aria-label="Saved jobs">
-        {jobs.map((item) => (
-          <button
-            key={item.id}
-            aria-pressed={job?.id === item.id}
-            disabled={busy}
-            onClick={() => select(item)}
-          >
-            {item.name} · {item.family.toUpperCase()} · r{item.revision}
-          </button>
-        ))}
-      </div>
+      {jobs.length > 0 && (
+        <JobTable
+          jobs={jobs}
+          summaries={summaries}
+          datasets={datasets}
+          selectedId={job?.id}
+          disabled={busy}
+          onSelect={select}
+        />
+      )}
       {archived.length > 0 && (
         <details className="panel">
           <summary>Archived jobs ({archived.length})</summary>
@@ -661,6 +690,7 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
             <label className="field">
               Job name
               <input
+                ref={nameField}
                 disabled={busy}
                 value={job.name}
                 onChange={(event) => edit({ ...job, name: event.target.value })}

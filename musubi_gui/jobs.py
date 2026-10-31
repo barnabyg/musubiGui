@@ -8,6 +8,7 @@ import sqlite3
 import threading
 import uuid
 from contextlib import closing, contextmanager
+from datetime import UTC, datetime
 from importlib import import_module
 from pathlib import Path
 from typing import Any, Iterator, Literal
@@ -361,6 +362,23 @@ class JobStore:
 
     def list(self) -> list[Job]:
         return [job for job in self._stored() if not self.is_archived(job.id)]
+
+    def summaries(self) -> builtins.list[dict[str, Any]]:
+        """What the job list shows beyond the revision: when it was last saved and how its last Run went."""
+        latest: dict[str, dict[str, Any]] = {}
+        for run in sorted(RunStore(self.root.parent).list(), key=lambda run: run["created"]):
+            latest[run["job"]["id"]] = {"id": run["id"], "status": run["status"]}
+        return [
+            {
+                "id": job.id,
+                # The revision file's time: revision files stay as version 1 wrote them, with no time field.
+                "edited": datetime.fromtimestamp(
+                    (self.root / job.id / f"{job.revision}.json").stat().st_mtime, UTC
+                ).isoformat(),
+                "last_run": latest.get(job.id),
+            }
+            for job in self.list()
+        ]
 
     def _stored(self) -> builtins.list[Job]:
         jobs = []

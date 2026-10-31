@@ -139,6 +139,58 @@ test('the action bar stays visible, identity comes first and rare actions are in
   }
 });
 
+test('the job table sorts, marks the selected job and keeps new draft names apart', async ({
+  page,
+}) => {
+  const app = await workspace();
+  try {
+    await openJobs(page, app.url);
+    const create = page.getByRole('button', {
+      name: 'New Wan job',
+      exact: true,
+    });
+    await create.click();
+    const name = page.getByLabel('Job name', { exact: true });
+    await expect(name).toHaveValue('New Wan job');
+    await expect(name).toBeFocused();
+    await create.click();
+    await expect(name).toHaveValue('New Wan job 2');
+    await page.getByRole('button', { name: 'New H3 job', exact: true }).click();
+    await expect(name).toHaveValue('New H3 job');
+
+    const table = page.getByRole('table', { name: 'Saved jobs' });
+    const rows = table.locator('tbody tr');
+    await expect(rows).toHaveCount(3);
+    await expect(rows.first()).toContainText('New H3 job');
+    await expect(rows.first()).toContainText('None selected');
+    await expect(rows.first()).toContainText('r1');
+    await expect(rows.first()).toContainText('No Runs');
+    await expect(table.getByRole('columnheader')).toHaveText([
+      'Name',
+      'Model',
+      'Dataset',
+      'Revision',
+      'Last Run',
+      /^Last edited/,
+    ]);
+    await expect(
+      table.getByRole('columnheader', { name: 'Last edited' }),
+    ).toHaveAttribute('aria-sort', 'descending');
+    await expect(rows.first()).toHaveClass('selected');
+    await expect(
+      rows.first().getByRole('button', { name: /^New H3 job/ }),
+    ).toHaveAttribute('aria-pressed', 'true');
+
+    await table.getByRole('button', { name: 'Name', exact: true }).click();
+    await expect(rows.first()).toContainText('New H3 job');
+    await expect(rows.last()).toContainText('New Wan job 2');
+    await table.getByRole('button', { name: 'Name', exact: true }).click();
+    await expect(rows.first()).toContainText('New Wan job 2');
+  } finally {
+    await app.close();
+  }
+});
+
 test('Wan draft controls, validation and reviewed native configuration survive service restart', async ({
   page,
 }) => {

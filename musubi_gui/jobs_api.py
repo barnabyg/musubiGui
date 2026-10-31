@@ -64,6 +64,11 @@ def jobs_router(root: Path, *, fixture_mode: bool = False) -> APIRouter:
         with job_errors():
             return store.archived()
 
+    @router.get("/summaries")
+    def get_summaries() -> list[dict[str, Any]]:
+        with job_errors():
+            return store.summaries()
+
     @router.get("/defaults/{family}")
     def get_defaults(family: Literal["wan", "h3"]) -> JobConfig:
         return default_config(family)

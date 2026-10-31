@@ -2,8 +2,10 @@
 
 ## Drafts and revisions
 
-Launch with `launch.cmd`, register a dataset, and open Jobs. New Wan job creates an
-incomplete saveable draft. Select its dataset and edit the grouped preparation,
+Launch with `launch.cmd`, register a dataset, and open Jobs. Jobs are listed in a table
+of name, model, dataset, revision, last Run and last edited time, most recently edited
+first; choose a heading to sort by it. New Wan job creates an incomplete saveable draft
+with a name no other job is using, ready to retype. Select its dataset and edit the grouped preparation,
 LoRA, memory, checkpoint and sample controls. Save draft, Review configuration, Prepare
 run and the status stay visible in a bar as you scroll. Duplicate job, Change model,
 Archive job, Delete job and Import / export configuration are in the bar's ⋯ menu.

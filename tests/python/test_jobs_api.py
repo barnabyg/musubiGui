@@ -1,4 +1,5 @@
 import json
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -6,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from musubi_gui.jobs_api import jobs_router
+from musubi_gui.run_store import RunStore
 from musubi_gui.settings import Settings, save_settings
 
 
@@ -322,6 +324,33 @@ def test_review_warns_about_low_steps_and_unqualified_h3_size(tmp_path: Path) ->
     h3 = client.post("/api/jobs", json={"name": "Big", "family": "h3", "config": {"width": 832, "height": 480}}).json()
     warnings = client.post(f"/api/jobs/{h3['id']}/review", json={}).json()["warnings"]
     assert any(warning.startswith("Geometry: H3 is qualified") for warning in warnings)
+
+
+def test_summaries_report_last_edit_and_latest_run_without_touching_revision_files(tmp_path: Path) -> None:
+    client = client_for(tmp_path)
+    job = client.post("/api/jobs", json={"name": "Listed", "family": "wan"}).json()
+    other = client.post("/api/jobs", json={"name": "Hidden", "family": "wan"}).json()
+    client.post(f"/api/jobs/{other['id']}/archive", json={})
+    before = (tmp_path / "jobs" / job["id"] / "1.json").read_text(encoding="utf-8")
+    [summary] = client.get("/api/jobs/summaries").json()
+    assert summary["id"] == job["id"]
+    assert summary["last_run"] is None
+    assert datetime.fromisoformat(summary["edited"]).tzinfo is not None
+    store = RunStore(tmp_path)
+    for created, run_id, status in [("2026-01-01", "older", "failed"), ("2026-02-01", "newer", "completed")]:
+        store.create(
+            {
+                "version": 1,
+                "id": run_id,
+                "created": created,
+                "job": {"id": job["id"]},
+                "status": status,
+                "order": 1,
+                "fingerprint": run_id,
+            }
+        )
+    assert client.get("/api/jobs/summaries").json()[0]["last_run"] == {"id": "newer", "status": "completed"}
+    assert (tmp_path / "jobs" / job["id"] / "1.json").read_text(encoding="utf-8") == before
 
 
 def test_versioned_export_roundtrip_and_unknown_fields_are_not_silently_discarded(tmp_path: Path) -> None:

@@ -1,3 +1,50 @@
+.job-table {
+  overflow-x: auto;
+  border: 1px solid #30343e;
+  border-radius: 10px;
+}
+.job-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.job-table th,
+.job-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid #30343e;
+  text-align: left;
+  font-weight: 400;
+  white-space: nowrap;
+}
+.job-table tbody th {
+  white-space: normal;
+  min-width: 180px;
+}
+.job-table tbody tr:last-child > * {
+  border-bottom: none;
+}
+.job-table button {
+  padding: 4px 0;
+  border: none;
+  background: none;
+  text-align: left;
+}
+.job-table thead button {
+  color: #a1a7b5;
+}
+.job-table [aria-sort='ascending'] button::after {
+  content: ' ▲' / '';
+}
+.job-table [aria-sort='descending'] button::after {
+  content: ' ▼' / '';
+}
+.job-table tbody tr.selected {
+  background: #302941;
+  box-shadow: inset 3px 0 0 #c1a4ef;
+}
+.job-table tbody tr.selected button {
+  font-weight: 650;
+}
 .job-library {
   display: flex;
   gap: 8px;
