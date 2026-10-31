@@ -374,6 +374,35 @@ test('Jobs names components as Settings does and leaves out internal wording', a
   }
 });
 
+test('job actions explain themselves with no job open, and conversion names fields readably', async ({
+  page,
+}) => {
+  const app = await workspace();
+  try {
+    await openJobs(page, app.url);
+    await page.getByRole('button', { name: 'More job actions' }).click();
+    await expect(page.getByRole('menu')).toContainText(
+      'Open a job to use the job actions.',
+    );
+    await page.getByRole('menuitem', { name: /^Import/ }).click();
+    await expect(page.getByText('Open a job to export it.')).toBeVisible();
+    await expect(
+      page.getByText('Choose a file or paste JSON to import it.'),
+    ).toBeVisible();
+    await page
+      .getByRole('button', { name: 'New Wan job', exact: true })
+      .click();
+    await jobAction(page, 'Change model to H3 T2VA');
+    const dialog = page.getByRole('dialog', {
+      name: 'Confirm model conversion',
+    });
+    await expect(dialog).toContainText('blocks to swap');
+    await expect(dialog).not.toContainText('blocks_to_swap');
+  } finally {
+    await app.close();
+  }
+});
+
 test('Wan draft controls, validation and reviewed native configuration survive service restart', async ({
   page,
 }) => {

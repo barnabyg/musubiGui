@@ -303,7 +303,7 @@ export function Datasets({
       setPanel(managed ? 'uploads' : null);
       setStatus(
         managed
-          ? 'Managed dataset created. Add media and matching captions to get started.'
+          ? 'Upload folder created. Add media and matching captions to get started.'
           : 'Dataset registered. Source media stays in its original folder.',
       );
     } catch (reason) {
@@ -694,7 +694,7 @@ export function Datasets({
             <p className="dataset-path">{dataset.path}</p>
             <p>
               {dataset.managed
-                ? 'Managed dataset · uploads are stored in this folder.'
+                ? 'Upload folder · uploads are stored in this folder.'
                 : 'Registered local folder · add media in this folder, then re-scan.'}
             </p>
             <H3Coverage key={dataset.id} datasetId={dataset.id} />

@@ -537,7 +537,8 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
             <ul>
               {preview.changes.map((change) => (
                 <li key={change.field}>
-                  {change.field}: {JSON.stringify(change.before)} →{' '}
+                  {change.field.replace(/_/g, ' ')}:{' '}
+                  {JSON.stringify(change.before)} →{' '}
                   {JSON.stringify(change.after)}
                 </li>
               ))}
@@ -692,7 +693,13 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
           <ActionMenu
             label="More job actions"
             disabled={busy}
-            note={dirty ? 'Save your edits to use the job actions.' : undefined}
+            note={
+              dirty
+                ? 'Save your edits to use the job actions.'
+                : !job
+                  ? 'Open a job to use the job actions.'
+                  : undefined
+            }
             items={[
               {
                 label: 'Duplicate job',
@@ -782,6 +789,16 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
                 Export configuration
               </button>
             </div>
+            {!transfer && (
+              <p className="hint">Choose a file or paste JSON to import it.</p>
+            )}
+            {(dirty || !job) && (
+              <p className="hint">
+                {dirty
+                  ? 'Save your edits to export them.'
+                  : 'Open a job to export it.'}
+              </p>
+            )}
             <div className="actions">
               <button onClick={() => setTransferOpen(false)}>Close</button>
             </div>
@@ -1236,9 +1253,8 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
                 <h3>Native dataset TOML</h3>
                 <pre data-testid="dataset-toml">{review.dataset_toml}</pre>
                 <p>
-                  Paths below preview a frozen revision. Preparation allocates
-                  its own immutable run directory and records the exact executed
-                  arguments.
+                  These paths are a preview. Preparing creates the Run's own
+                  folder and records the exact arguments it runs with.
                 </p>
                 {review.stages.map((stage) => (
                   <details key={stage.name}>
