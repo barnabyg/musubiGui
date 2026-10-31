@@ -1,4 +1,3 @@
-import os
 import signal
 from typing import Any
 
@@ -30,14 +29,12 @@ def owned(monkeypatch: pytest.MonkeyPatch, alive: set[int]) -> tuple[list[dict[s
     return identities, calls
 
 
-@pytest.mark.skipif(os.name != "nt", reason="console process groups are Windows-specific")
 def test_graceful_stop_breaks_only_the_launcher_process_group(monkeypatch: pytest.MonkeyPatch) -> None:
     identities, calls = owned(monkeypatch, {10, 11, 12})
     processes.terminate_owned(identities, force=False)
     assert calls == [(10, "break")]
 
 
-@pytest.mark.skipif(os.name != "nt", reason="console process groups are Windows-specific")
 def test_graceful_stop_never_breaks_descendants_after_the_launcher_exits(monkeypatch: pytest.MonkeyPatch) -> None:
     identities, calls = owned(monkeypatch, {11, 12})
     processes.terminate_owned(identities, force=False)

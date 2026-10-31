@@ -1,5 +1,4 @@
 import json
-import os
 import struct
 import subprocess
 import wave
@@ -179,23 +178,20 @@ def test_output_folder_junction_cannot_deliver_files_outside_the_run(tmp_path: P
     outside = tmp_path / "outside"
     checkpoint(outside / "private.safetensors")
     link = tmp_path / "output" / "first" / "samples"
-    if os.name == "nt":
 
-        def quote(value: Path) -> str:
-            return str(value).replace("'", "''")
+    def quote(value: Path) -> str:
+        return str(value).replace("'", "''")
 
-        subprocess.run(
-            [
-                "powershell.exe",
-                "-NoProfile",
-                "-Command",
-                f"$null = New-Item -ItemType Junction -Path '{quote(link)}' -Target '{quote(outside)}'",
-            ],
-            check=True,
-            capture_output=True,
-        )
-    else:
-        link.symlink_to(outside, target_is_directory=True)
+    subprocess.run(
+        [
+            "powershell.exe",
+            "-NoProfile",
+            "-Command",
+            f"$null = New-Item -ItemType Junction -Path '{quote(link)}' -Target '{quote(outside)}'",
+        ],
+        check=True,
+        capture_output=True,
+    )
     outputs = client.get(f"/api/runs/{run['id']}/outputs").json()["outputs"]
     assert len(outputs) == 1
     assert outputs[0]["status"] == "blocked"

@@ -1,5 +1,4 @@
 import json
-import os
 import sqlite3
 import subprocess
 import threading
@@ -77,9 +76,6 @@ def size(*paths: str | Path) -> int:
 
 
 def junction(link: Path, target: Path) -> None:
-    if os.name != "nt":
-        link.symlink_to(target, target_is_directory=True)
-        return
     subprocess.run(
         [
             "powershell.exe",
@@ -242,7 +238,6 @@ def test_deleting_a_finished_segment_keeps_the_cache_it_shares_with_its_source(
     assert service.get(source["id"])["status"] == "completed"
 
 
-@pytest.mark.skipif(os.name != "nt", reason="Only Windows refuses to delete an open file")
 def test_a_locked_file_leaves_the_run_visible_and_it_can_be_deleted_again(
     state: Path, service: RunService, tmp_path: Path
 ) -> None:
@@ -282,7 +277,6 @@ def test_a_locked_file_leaves_the_run_visible_and_it_can_be_deleted_again(
         restarted.close()
 
 
-@pytest.mark.skipif(os.name != "nt", reason="Only Windows refuses to delete an open file")
 def test_a_briefly_held_file_does_not_fail_the_delete(state: Path, service: RunService) -> None:
     client = client_for(state, service)
     run = add_run(service, "first")

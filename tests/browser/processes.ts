@@ -14,24 +14,22 @@ export async function stopBackendTree(pid: number): Promise<void> {
     }
   };
   if (!alive()) return;
-  if (process.platform === 'win32') {
-    const executable = path.join(
-      process.env.SystemRoot ?? 'C:\\Windows',
-      'System32',
-      'taskkill.exe',
-    );
-    await new Promise<void>((resolve, reject) =>
-      execFile(
-        executable,
-        ['/PID', String(pid), '/T', '/F'],
-        { windowsHide: true },
-        (error) => {
-          if (error && alive()) reject(error);
-          else resolve();
-        },
-      ),
-    );
-  } else process.kill(pid, 'SIGTERM');
+  const executable = path.join(
+    process.env.SystemRoot ?? 'C:\\Windows',
+    'System32',
+    'taskkill.exe',
+  );
+  await new Promise<void>((resolve, reject) =>
+    execFile(
+      executable,
+      ['/PID', String(pid), '/T', '/F'],
+      { windowsHide: true },
+      (error) => {
+        if (error && alive()) reject(error);
+        else resolve();
+      },
+    ),
+  );
   for (let attempt = 0; attempt < 50; attempt++) {
     if (!alive()) return;
     await new Promise<void>((resolve) => setTimeout(resolve, 100));

@@ -11,7 +11,6 @@ from musubi_gui.runs import RunService
 from musubi_gui.windows_job import ProcessJob
 
 
-@pytest.mark.skipif(os.name != "nt", reason="Windows native process-creation boundary")
 @pytest.mark.parametrize("fast_launcher", [False, True])
 def test_controller_crash_before_pid_persistence_leaves_child_discoverable_by_job(
     tmp_path: Path, fast_launcher: bool
@@ -80,7 +79,6 @@ def test_controller_crash_before_pid_persistence_leaves_child_discoverable_by_jo
         terminate_owned(owned, force=True)
 
 
-@pytest.mark.skipif(os.name != "nt", reason="Windows native process-creation boundary")
 def test_native_launch_preserves_arguments_environment_stdio_and_exit_259(tmp_path: Path) -> None:
     folder = tmp_path / "工作 with spaces"
     folder.mkdir()
@@ -114,7 +112,6 @@ def test_native_launch_preserves_arguments_environment_stdio_and_exit_259(tmp_pa
         job.close()
 
 
-@pytest.mark.skipif(os.name != "nt", reason="Windows native process-creation boundary")
 def test_failed_native_creation_preserves_the_creators_log_and_has_no_job_members(tmp_path: Path) -> None:
     output = tmp_path / "failed-launch.log"
     job = ProcessJob("Local\\MusubiGui-creation-failure-" + tmp_path.name)

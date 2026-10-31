@@ -214,7 +214,6 @@ def test_rescan_retries_unchanged_invalid_media_after_decoder_recovers(
     assert not any(str(media / "red.png") in command for command in called)
 
 
-@pytest.mark.skipif(os.name != "nt", reason="Native Windows junction containment contract")
 def test_caption_editor_rejects_inside_root_junction_retarget_without_touching_either_sidecar(tmp_path: Path) -> None:
     client, media, _ = fixture(tmp_path)
     routed, target = media / "source folder", media / "other folder"
@@ -278,7 +277,6 @@ def test_caption_editor_rejects_a_dataset_root_replaced_by_a_junction(tmp_path: 
         media.rmdir()
 
 
-@pytest.mark.skipif(os.name != "nt", reason="Native Windows sidecar reparse-point contract")
 def test_caption_editor_rejects_a_sidecar_reparse_point_without_deleting_the_target(tmp_path: Path) -> None:
     client, media, _ = fixture(tmp_path)
     dataset_id = client.post("/api/datasets", json={"name": "Sidecar boundary", "path": str(media)}).json()["id"]

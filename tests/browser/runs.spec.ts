@@ -13,7 +13,6 @@ const exists = (file: string) =>
 test('deleting a Run and its Job goes from the UI to the disk and survives a backend restart', async ({
   page,
 }) => {
-  test.skip(process.platform !== 'win32', 'Windows file locking boundary');
   const app = await runWorkspace();
   const dialogs: string[] = [];
   let releaseLock = () => {};
