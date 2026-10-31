@@ -1,4 +1,10 @@
 import { useState } from 'react';
+import { apiClient } from './api';
+
+const readCoverage = apiClient('Coverage inspection failed.');
+const requestInspection = apiClient(
+  'Media inspection failed. Source files are unchanged.',
+);
 
 type Inspection = {
   source: string;
@@ -26,14 +32,9 @@ export function H3Coverage({ datasetId }: { datasetId: string }) {
     setBusy(true);
     setError('');
     try {
-      const response = await fetch(`/api/datasets/${datasetId}/h3`);
-      const value = await response.json();
-      if (!response.ok)
-        throw new Error(
-          (value as { detail?: string }).detail ??
-            'Coverage inspection failed.',
-        );
-      setReport(value as typeof report);
+      setReport(
+        await readCoverage<typeof report>(`/api/datasets/${datasetId}/h3`),
+      );
     } catch (reason) {
       setError((reason as Error).message);
     } finally {
@@ -82,22 +83,10 @@ export function H3Inspector({
     setBusy(true);
     setError('');
     try {
-      const response = await fetch(
-        `/api/datasets/${datasetId}/items/${itemId}/${save ? 'audio' : 'h3'}`,
-        save
-          ? {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ path }),
-            }
-          : undefined,
-      );
-      const value = (await response.json()) as Inspection & { detail?: string };
-      if (!response.ok)
-        throw new Error(
-          value.detail ??
-            'Media inspection failed. Source files are unchanged.',
-        );
+      const item = `/api/datasets/${datasetId}/items/${itemId}`;
+      const value = await (save
+        ? requestInspection<Inspection>(`${item}/audio`, 'PUT', { path })
+        : requestInspection<Inspection>(`${item}/h3`));
       setInspection(value);
       setPath(value.source === 'explicit' ? (value.audio_path ?? '') : '');
     } catch (reason) {

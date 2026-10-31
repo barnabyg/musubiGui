@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
+import { apiClient } from './api';
 import type { DatasetItem } from './Datasets';
+
+const saveCaption = apiClient(
+  'Caption save failed. Retry when access is restored.',
+);
 
 export type Caption = DatasetItem['caption'];
 type Snapshot = {
@@ -161,24 +166,13 @@ export class CaptionSession {
     // Review current sidecar can finish its pointer/focus event sequence.
     this.publish(entry, { status: 'Saving…', saving: true });
     try {
-      const response = await fetch(
-        `/api/datasets/${this.datasetId}/items/${entry.item.id}/caption${historyId ? '/restore' : ''}`,
-        {
-          method: historyId ? 'POST' : 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(
-            historyId
-              ? { history_id: historyId, revision }
-              : { text: requested, revision },
-          ),
-        },
-      );
-      const caption = (await response.json()) as Caption & { detail?: string };
-      if (!response.ok)
-        throw new Error(
-          caption.detail ??
-            'Caption save failed. Retry when access is restored.',
-        );
+      const url = `/api/datasets/${this.datasetId}/items/${entry.item.id}/caption`;
+      const caption = await (historyId
+        ? saveCaption<Caption>(`${url}/restore`, 'POST', {
+            history_id: historyId,
+            revision,
+          })
+        : saveCaption<Caption>(url, 'PUT', { text: requested, revision }));
       const text =
         historyId && entry.snapshot.text === requested
           ? caption.text

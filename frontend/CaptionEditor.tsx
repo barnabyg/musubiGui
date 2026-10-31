@@ -1,10 +1,14 @@
 import { useState } from 'react';
+import { apiClient } from './api';
 import type { DatasetItem } from './Datasets';
 import {
   type Caption,
   type CaptionSession,
   useCaption,
 } from './captionSession';
+
+const readCurrent = apiClient('Could not reload the current sidecar.');
+const readHistory = apiClient('Caption history could not be read.');
 
 type Revision = {
   id: string;
@@ -32,25 +36,16 @@ export function CaptionEditor({
   const flush = () => session.flush(item.id);
   async function loadCurrent() {
     try {
-      const response = await fetch(url);
-      if (!response.ok)
-        throw new Error(
-          'Could not reload the current sidecar. Your text is retained.',
-        );
-      setCurrent((await response.json()) as Caption);
+      setCurrent(await readCurrent<Caption>(url));
     } catch (reason) {
-      setError((reason as Error).message);
+      setError(`${(reason as Error).message} Your text is retained.`);
     }
   }
   async function loadHistory() {
     if (!(await flush())) return;
     try {
-      const response = await fetch(`${url}/history`);
-      if (!response.ok) throw new Error('Caption history could not be read.');
-      setHistory({
-        revision: session.get(item).caption.revision,
-        entries: (await response.json()) as Revision[],
-      });
+      const entries = await readHistory<Revision[]>(`${url}/history`);
+      setHistory({ revision: session.get(item).caption.revision, entries });
     } catch (reason) {
       setError((reason as Error).message);
     }

@@ -1,9 +1,7 @@
 # Windows release acceptance
 
-Target: native Windows 11, RTX 3090 with 24 GB VRAM, the existing nominal **96 GB**
-RAM machine (95.6 GiB usable) and at least 400 GB available disk. The previous
-64 GB requirement was corrected by the user. Scope is LoRA for Wan 2.2 A14B T2V
-and MiniMax H3 T2VA, with manually edited `.txt` captions.
+Target: the [target hardware](../README.md#target-hardware). Scope is LoRA for Wan 2.2
+A14B T2V and MiniMax H3 T2VA, with manually edited `.txt` captions.
 
 ## Start the isolated acceptance workspace
 
@@ -68,20 +66,17 @@ normal application launch; the explicit fixture opt-in is required.
    deliberate `checkout\fail-latent_cache` marker. A `fail-train` marker exercises
    training failure without modifying Python source.
 7. With saved state enabled, restore a complete saved state as a **new segment**.
-   Incomplete state must be rejected. The pinned upstream restores optimizer
-   state but resets its reported training-step counter and does not restore the
-   data position; this is not seamless step/data continuation. Initializing a new
-   Run from LoRA weights is distinct from restoring optimizer state.
+   Incomplete state must be rejected. [Saved state](runs.md#saved-state) gives what
+   restoration does and does not continue.
 8. Browse outputs from both model families, play video/audio, compare Run
    revisions and then remove a fixture sample on disk to inspect the missing
    output state. File delivery must remain within the originating output root.
 
 ## Real GPU acceptance
 
-An existing musubi-tuner checkout at revision
-`f8a1b03794a49239a3539015075f5123d6c07d66`, its existing Python/environment and the
-compatible model components documented in [reference workflows](reference/README.md)
-are required. No training dependencies or models are installed by the app.
+An existing musubi-tuner checkout at the pinned revision, its existing Python/environment
+and the compatible model components, all documented in
+[reference workflows](reference/README.md), are required. No training dependencies or models are installed by the app.
 The tested environment is Python 3.12.10, PyTorch 2.13.0+cu130, CUDA 13.0 and
 musubi-tuner 0.3.6. Select exact existing component paths in Settings; Wan may use
 the separately validated [offline weight conversion](reference/wan-conversion.md).
@@ -106,7 +101,7 @@ decode/playback evidence. Synthetic worker results cannot fill this evidence gap
 
 The committed [GUI acceptance evidence](reference/evidence/gui-acceptance.json)
 records the earlier converted-Wan/native-H3 preparation, training, checkpoint saving, Edge sample playback and
-optimizer-state restoration for both models on the corrected target machine.
+optimizer-state restoration for both models on the target machine.
 Both optimizers advanced from step 2 to 3 after restoration as new segments. The
 additional [native Wan evidence](reference/evidence/wan-native.json) records fresh
 native-file results separately. The earlier converted-weight Wan run
@@ -151,7 +146,4 @@ Verify `launch.cmd --no-browser` and the acceptance command from a clean checkou
 using declared prerequisites, then inspect packaged file lists. Distributables
 contain application source and built UI, not local model weights, datasets,
 credentials, logs, environments or runtime state. Generated assets remain ignored.
-AI Toolkit supplies interaction inspiration; no source/assets are copied.
-musubi-tuner remains a separate installation and retains its own licence.
-Model weights retain their model-card licences, including the MiniMax H3
-Community License. Original synthetic fixture media/captions are CC0 1.0.
+The [README](../README.md#licences-and-credits) gives the licences and credits.

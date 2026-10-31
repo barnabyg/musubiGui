@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import { spawn } from 'node:child_process';
 import { access, writeFile, readFile } from 'node:fs/promises';
 import path from 'node:path';
+import { helper, python } from './backend';
 import { runWorkspace } from './runHarness';
 
 const exists = (file: string) =>
@@ -44,14 +45,8 @@ test('deleting a Run and its Job goes from the UI to the disk and survives a bac
     ).toBeVisible({ timeout: 240_000 });
     const [run] = await app.records();
 
-    const lockScript =
-      "import sys;f=open(sys.argv[1],'rb');print('ready',flush=True);sys.stdin.read()";
     const locked = path.join(run.directory, 'inputs.json');
-    const lock = spawn(path.resolve('.venv/Scripts/python.exe'), [
-      '-c',
-      lockScript,
-      locked,
-    ]);
+    const lock = spawn(python, [helper, 'hold-file', locked]);
     releaseLock = () => lock.kill();
     await new Promise((resolve) => lock.stdout.once('data', resolve));
 

@@ -20,7 +20,8 @@ import psutil
 from musubi_gui.checkpoint_dedup import remove_final_duplicates
 from musubi_gui.media_probe import inspect as inspect_media
 from musubi_gui.processes import identity_status, observed_tree, process_identity, terminate_owned
-from musubi_gui.reference import Stage, redact, reference_environment
+from musubi_gui.recipe import Stage, reference_environment
+from musubi_gui.redaction import redact
 from musubi_gui.run_deletion import failure_message, folder_bytes, output_index_file, plan_deletion, remove_folder
 from musubi_gui.run_progress import parse_progress
 from musubi_gui.run_store import DeviceLease, RunStore, blocks_revision, preparation_transaction

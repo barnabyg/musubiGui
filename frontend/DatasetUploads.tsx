@@ -1,4 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
+import { apiClient } from './api';
+
+const request = apiClient(
+  (status) => `Upload failed (${status}). Completed files are preserved.`,
+);
+const readSessions = apiClient('Incomplete uploads could not be read.');
 
 type Session = {
   id: string;
@@ -26,41 +32,12 @@ export function DatasetUploads({ datasetId, beforeAction, onChanged }: Props) {
   const url = `/api/datasets/${datasetId}/uploads`;
   useEffect(() => () => abort.current?.abort(), []);
   useEffect(() => {
-    void fetch(url)
-      .then(async (response) => {
-        if (!response.ok)
-          throw new Error('Incomplete uploads could not be read.');
-        setSessions((await response.json()) as Session[]);
-      })
+    void readSessions<Session[]>(url)
+      .then(setSessions)
       .catch((reason: Error) => setError(reason.message));
   }, [url]);
-  async function request<T>(
-    path: string,
-    data?: object,
-    method = 'POST',
-    signal?: AbortSignal,
-  ): Promise<T> {
-    const response = await fetch(
-      url + path,
-      data
-        ? {
-            method,
-            signal,
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data),
-          }
-        : { signal },
-    );
-    const value = (await response.json()) as T & { detail?: string };
-    if (!response.ok)
-      throw new Error(
-        value.detail ??
-          `Upload failed (${response.status}). Completed files are preserved.`,
-      );
-    return value;
-  }
   async function refresh() {
-    setSessions(await request<Session[]>(''));
+    setSessions(await request<Session[]>(url));
   }
   function selectFiles(files: FileList | null) {
     if (uploading.current || !files?.length) return;
@@ -102,9 +79,9 @@ export function DatasetUploads({ datasetId, beforeAction, onChanged }: Props) {
         update(file, { status: 'Uploading', error: undefined });
         try {
           const existing = await request<Session[]>(
-            '',
-            undefined,
+            url,
             'GET',
+            undefined,
             controller.signal,
           );
           let session = existing.find(
@@ -114,9 +91,9 @@ export function DatasetUploads({ datasetId, beforeAction, onChanged }: Props) {
               value.status === 'uploading',
           );
           session ??= await request<Session>(
-            '',
-            { filename: file.name, size: file.size },
+            url,
             'POST',
+            { filename: file.name, size: file.size },
             controller.signal,
           );
           for (let offset = 0; offset < file.size; offset += 512 * 1024) {
@@ -129,9 +106,9 @@ export function DatasetUploads({ datasetId, beforeAction, onChanged }: Props) {
                 String.fromCharCode(...bytes.subarray(index, index + 8192)),
               );
             session = await request<Session>(
-              `/${session.id}`,
-              { offset, data: btoa(parts.join('')) },
+              `${url}/${session.id}`,
               'PUT',
+              { offset, data: btoa(parts.join('')) },
               controller.signal,
             );
             update(file, {
@@ -142,9 +119,9 @@ export function DatasetUploads({ datasetId, beforeAction, onChanged }: Props) {
           }
           update(file, { status: 'Validating media', progress: 100 });
           await request(
-            `/${session.id}/complete`,
-            {},
+            `${url}/${session.id}/complete`,
             'POST',
+            {},
             controller.signal,
           );
           update(file, { status: 'Uploaded', progress: 100 });
@@ -173,7 +150,7 @@ export function DatasetUploads({ datasetId, beforeAction, onChanged }: Props) {
   }
   async function cancel(id: string) {
     try {
-      await request(`/${id}/cancel`, {});
+      await request(`${url}/${id}/cancel`, 'POST', {});
       await refresh();
     } catch (reason) {
       setError((reason as Error).message);

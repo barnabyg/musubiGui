@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { localBackend } from './backend';
+import { helper, localBackend, python } from './backend';
 
 async function workspace() {
   const root = await mkdtemp(path.join(tmpdir(), 'musubi-jobs-'));
@@ -528,12 +528,8 @@ test('Wan frame extraction controls persist and review counts cached windows aft
   try {
     const clips = path.join(app.root, 'clips');
     const creator = spawn(
-      path.resolve('.venv/Scripts/python.exe'),
-      [
-        '-c',
-        'import sys; from fractions import Fraction; from pathlib import Path; from musubi_gui.acceptance import synthetic_video; synthetic_video(Path(sys.argv[1]) / "thirty.mp4", 90, rate=Fraction(30))',
-        clips,
-      ],
+      python,
+      [helper, 'video', path.join(clips, 'thirty.mp4'), '90', '30'],
       { stdio: 'pipe' },
     );
     expect(

@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from helpers import acceptance_workspace, wait_for
 
-from musubi_gui.reference import Stage
+from musubi_gui.recipe import Stage
 from musubi_gui.run_store import DeviceLease
 from musubi_gui.runs import ExecutionPlan, RunService
 from musubi_gui.settings import Settings

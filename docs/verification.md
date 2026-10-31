@@ -12,6 +12,7 @@ current `frontend/` source before testing, through its `pretest:browser` script,
 it is given a single spec file. Running `playwright test` directly skips that build.
 `tests/browser/api.spec.ts` is the exception to real browser testing: it runs the shared
 request helper in Node with a stubbed `fetch`, to reach error responses the backend doesn't produce.
+Python that browser tests run lives in `tests/browser/helper.py`, under the same format, lint and type checks.
 CI uses the same command. When it fails, CI keeps Playwright's `test-results`
 (page snapshots and failure screenshots of synthetic fixtures) as the
 `playwright-results` artifact for 14 days. Registry access is required by vulnerability and lock checks.
@@ -61,7 +62,7 @@ The `B404` import exception permits those same controlled subprocess operations.
 Revisit these if command sources change. Missing Torch in the application environment is expected;
 the probe imports Torch only through the selected existing training Python.
 
-The detect-secrets allowlist marks the public upstream Git revision in `reference.py`, and
+The detect-secrets allowlist marks the public upstream Git revision in `recipe.py`, and
 the public Hub commit and tokenizer file hashes in `wan_tokenizer.py`.
 An exact JSON-field regex also exempts 40/64-character hexadecimal `expected_upstream` / `upstream_revision`,
 `application_revision` and `header_sha256` values in reference evidence: these are public Git revisions/content hashes,

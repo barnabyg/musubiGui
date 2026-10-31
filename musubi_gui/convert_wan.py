@@ -18,7 +18,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, BinaryIO
 
-from musubi_gui.reference import safetensors_header
+from musubi_gui.safetensors_file import safetensors_header
 from musubi_gui.settings import atomic_json
 
 CHUNK = 32 * 1024**2

@@ -1,10 +1,10 @@
-import { execFile, spawn, type ChildProcess } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { expect } from '@playwright/test';
-import { reservePort } from './backend';
+import { helper, localBackend, python } from './backend';
 
 const execute = promisify(execFile);
 
@@ -22,7 +22,6 @@ export type RunRecord = {
 export async function runWorkspace(options: { freeBytes?: number } = {}) {
   const parent = await mkdtemp(path.join(tmpdir(), 'musubi-runs-'));
   const fixture = path.join(parent, 'fixture');
-  const python = path.resolve('.venv/Scripts/python.exe');
   await execute(python, [
     '-m',
     'musubi_gui.acceptance',
@@ -38,63 +37,20 @@ export async function runWorkspace(options: { freeBytes?: number } = {}) {
     jobs: { id: string; name: string; family: string; dataset_id: string }[];
   };
   const identityFile = path.join(parent, 'backend.json');
-  const port = await reservePort();
-  const url = `http://127.0.0.1:${port}`;
-  let backend: ChildProcess | undefined;
-  let output = '';
-  const start = async () => {
-    backend = spawn(
-      python,
-      [
-        '-c',
-        "import os,json,psutil;from pathlib import Path;import uvicorn;from musubi_gui.app import create_app;p=psutil.Process();Path(os.environ['MUSUBI_TEST_IDENTITY']).write_text(json.dumps({'pid':p.pid,'created':p.create_time(),'exe':p.exe()}));uvicorn.run(create_app(Path(os.environ['MUSUBI_GUI_STATE']),fixture_mode=True,device_path=Path(os.environ['MUSUBI_TEST_DEVICE'])),host='127.0.0.1',port=int(os.environ['MUSUBI_TEST_PORT']),access_log=False)",
-      ],
-      {
-        env: {
-          ...process.env,
-          MUSUBI_GUI_STATE: manifest.state,
-          MUSUBI_TEST_DEVICE: path.join(parent, 'device.sqlite'),
-          MUSUBI_TEST_PORT: String(port),
-          MUSUBI_TEST_IDENTITY: identityFile,
-          ...(options.freeBytes === undefined
-            ? {}
-            : { MUSUBI_TEST_FREE_BYTES: String(options.freeBytes) }),
-        },
-        stdio: 'pipe',
-      },
-    );
-    backend.stdout?.on('data', (chunk: Buffer) => {
-      output += chunk.toString();
-    });
-    backend.stderr?.on('data', (chunk: Buffer) => {
-      output += chunk.toString();
-    });
-    await expect
-      .poll(
-        async () => {
-          try {
-            return (await fetch(`${url}/api/runs`)).status;
-          } catch {
-            return output.includes('Traceback') ? output : 0;
-          }
-        },
-        { timeout: 240_000 },
-      )
-      .toBe(200);
-  };
+  const device = path.join(parent, 'device.sqlite');
+  const backend = await localBackend({
+    state: manifest.state,
+    readyRoute: '/api/runs',
+    entry: [helper, 'serve', '--identity', identityFile, '--device', device],
+    env:
+      options.freeBytes === undefined
+        ? undefined
+        : { MUSUBI_TEST_FREE_BYTES: String(options.freeBytes) },
+    readyTimeout: 240_000,
+  });
+  const { url, start } = backend;
   const crash = async () => {
-    if (backend && backend.exitCode === null) {
-      const exited = new Promise<void>((resolve) =>
-        backend!.once('exit', () => resolve()),
-      );
-      // Kill the recorded service, preserving its training children for recovery.
-      await execute(python, [
-        '-c',
-        "import json,sys,psutil;from pathlib import Path;i=json.loads(Path(sys.argv[1]).read_text());p=psutil.Process(i['pid']);assert p.create_time()==i['created'] and p.exe()==i['exe'];p.kill()",
-        identityFile,
-      ]);
-      await exited;
-    }
+    await backend.end(() => execute(python, [helper, 'kill', identityFile]));
   };
   const post = async (route: string, body: object = {}) => {
     const result = await fetch(url + route, {
@@ -110,7 +66,7 @@ export async function runWorkspace(options: { freeBytes?: number } = {}) {
     (await (await fetch(`${url}/api/runs`)).json()) as RunRecord[];
   const close = async () => {
     try {
-      if (!backend || backend.exitCode !== null) await start();
+      if (!backend.running()) await start();
       for (const run of await records()) {
         if (['training', 'generating', 'stopping'].includes(run.status))
           await post(`/api/runs/${run.id}/stop`, {
@@ -155,15 +111,12 @@ export async function runWorkspace(options: { freeBytes?: number } = {}) {
   };
   // Another instance owning the GPU leaves new work pending, whatever the fixture's speed.
   const leaseGpu = async (action: 'acquire' | 'release') => {
-    const call =
-      action === 'acquire'
-        ? "acquire('other-work',{})"
-        : "release('other-work')";
     await execute(python, [
-      '-c',
-      `import sys;from pathlib import Path;from musubi_gui.run_store import DeviceLease;DeviceLease(Path(sys.argv[1]),Path(sys.argv[2])).${call}`,
+      helper,
+      'lease',
+      action,
       path.join(parent, 'other-instance'),
-      path.join(parent, 'device.sqlite'),
+      device,
     ]);
   };
   await start();

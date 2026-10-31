@@ -8,7 +8,7 @@ from pathlib import Path
 from helpers import wait_for
 
 from musubi_gui.processes import identity_status, process_identity
-from musubi_gui.reference import Stage
+from musubi_gui.recipe import Stage
 from musubi_gui.runs import ExecutionPlan, RunService
 from musubi_gui.settings import Settings
 from musubi_gui.windows_job import ProcessJob

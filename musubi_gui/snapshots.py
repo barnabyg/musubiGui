@@ -12,7 +12,7 @@ from typing import Any
 
 from musubi_gui.diagnostics import training_environment, upstream_revision
 from musubi_gui.jobs import Job, JobStore, build_stages, dataset_toml, effective_settings, load_job, review_job
-from musubi_gui.reference import safetensors_header
+from musubi_gui.safetensors_file import safetensors_header
 from musubi_gui.settings import Settings, atomic_json, load_settings, within_root
 from musubi_gui.video_sampling import WAN_FPS, source_rate, source_rates, video_directory
 

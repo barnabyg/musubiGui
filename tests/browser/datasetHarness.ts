@@ -2,12 +2,11 @@ import { spawn } from 'node:child_process';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { localBackend } from './backend';
+import { localBackend, python } from './backend';
 
 export async function datasetHarness(options: { h3Audio?: boolean } = {}) {
   const root = await mkdtemp(path.join(tmpdir(), 'musubi-dataset-'));
   const fixture = path.join(root, 'fixture');
-  const python = path.resolve('.venv/Scripts/python.exe');
   const creator = spawn(
     python,
     [

@@ -1,6 +1,8 @@
 import { useEffect, useState, type MouseEvent } from 'react';
 import { Circle, CircleCheck, TriangleAlert } from 'lucide-react';
+import { apiClient } from './api';
 
+const read = apiClient('Setup progress could not be read.');
 const dismissedKey = 'musubi.setupChecklistDismissed';
 
 function readDismissed() {
@@ -48,25 +50,20 @@ export function SetupChecklist({
   const [dismissed, setDismissed] = useState(readDismissed);
   useEffect(() => {
     let current = true;
-    const list = <T,>(url: string) =>
-      fetch(url).then((response) =>
-        response.ok ? (response.json() as Promise<T[]>) : [],
-      );
+    // The checklist is a guide; with no answer an item just stays to do.
+    const list = <T,>(url: string) => read<T[]>(url).catch((): T[] => []);
     void Promise.all([
       list('/api/datasets'),
       list('/api/jobs'),
       list<RunRecord>('/api/runs'),
-    ])
-      .then(([datasets, jobs, runs]) => {
-        if (current)
-          setProgress({
-            datasets: datasets.length > 0,
-            jobs: jobs.length > 0,
-            runs: runs.some(startedTraining),
-          });
-      })
-      // The checklist is a guide; with no answer its items just stay to do.
-      .catch(() => undefined);
+    ]).then(([datasets, jobs, runs]) => {
+      if (current)
+        setProgress({
+          datasets: datasets.length > 0,
+          jobs: jobs.length > 0,
+          runs: runs.some(startedTraining),
+        });
+    });
     return () => {
       current = false;
     };

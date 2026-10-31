@@ -1,7 +1,7 @@
 # Dataset acceptance
 
 Dataset roots default to the `datasets` folder under the application project root
-(the working directory selected by `launch.cmd` / `run.bat`). The Dataset folder
+(the working directory selected by `launch.cmd`). The Dataset folder
 field starts with the first configured root. Creating a managed dataset creates
 the root folder when needed. Saved custom roots, including an explicitly empty
 list, are preserved; change them in Settings to use a different location.
