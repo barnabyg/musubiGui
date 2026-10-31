@@ -233,6 +233,27 @@ test('drop feedback handles child boundaries and non-file drags, and busy upload
   }
 });
 
+test('a non-JSON upload error shows the upload fallback message', async ({
+  page,
+}) => {
+  const app = await datasetHarness();
+  try {
+    await createDataset(page, app.url, app.media);
+    await page.route('**/uploads', async (route) => {
+      if (route.request().method() !== 'POST') return route.continue();
+      await route.fulfill({ status: 502, body: 'Bad Gateway' });
+    });
+    await page.getByLabel('Dataset file drop area').dispatchEvent('drop', {
+      dataTransfer: await fileTransfer(page, app.media, ['blue.png']),
+    });
+    await expect(
+      page.getByLabel('Upload result blue.png', { exact: true }),
+    ).toContainText('Upload failed (502). Completed files are preserved.');
+  } finally {
+    await app.cleanup();
+  }
+});
+
 test('rapid drops keep the first batch while caption saving is pending', async ({
   page,
 }) => {

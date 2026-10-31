@@ -1,4 +1,9 @@
 import { useState } from 'react';
+import { apiClient } from './api';
+
+const post = apiClient(
+  'Batch action failed. No unreported changes should be assumed; inspect the per-item results and caption history.',
+);
 
 type Preview = {
   id: string;
@@ -32,20 +37,8 @@ export function DatasetBulkActions({
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const url = `/api/datasets/${datasetId}`;
-  async function request<T>(path: string, data: object): Promise<T> {
-    const response = await fetch(url + path, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    const value = (await response.json()) as T & { detail?: string };
-    if (!response.ok)
-      throw new Error(
-        value.detail ??
-          'Batch action failed. No unreported changes should be assumed; inspect the per-item results and caption history.',
-      );
-    return value;
-  }
+  const request = <T,>(path: string, data: object) =>
+    post<T>(url + path, 'POST', data);
   async function action(work: () => Promise<void>) {
     if (!(await beforeAction())) return;
     setBusy(true);

@@ -40,6 +40,13 @@ test('a body is sent as JSON with the given method', async () => {
   });
 });
 
+test('an abort signal reaches the request', async () => {
+  respondWith(jsonResponse({}));
+  const { signal } = new AbortController();
+  await apiClient('Fallback.')('/api/thing', 'GET', undefined, signal);
+  expect(calls[0].init?.signal).toBe(signal);
+});
+
 test('a failed request reports the server detail', async () => {
   respondWith(jsonResponse({ detail: 'Name is taken.' }, 409));
   await expect(apiClient('Fallback.')('/api/thing')).rejects.toThrow(
