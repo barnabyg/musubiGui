@@ -3,7 +3,7 @@
 The initial validated smoke recipe trains the low-noise expert alone. It uses rank/alpha 8, batch one,
 256×256, 17 frames at 16 fps, two optimizer steps, FP16 training, FP8 conversion from native
 FP16 source, 36 swapped blocks, gradient checkpointing, AdamW and SDPA.
-`wan.py` is the reusable command/config generator; each run saves resolved arguments
+`wan.py` generates the commands and `reference.py` the config; each run saves resolved arguments
 and dataset TOML. The expected final outputs are `checkpoints/wan-reference.safetensors`
 and an MP4 under `samples/` in the unique configured output directory.
 
@@ -66,7 +66,7 @@ totalled approximately 2.02 GB, including unrelated activity; this excludes
 results establish short-scenario execution with these particular lossy-derived
 weights. They do not establish visual quality, useful learning or production
 capacity. The raw measurement text in the evidence retains the earlier 64 GB
-wording; its measured values are unchanged and the target is now 96 GB.
+wording, which no longer applies; its measured values are unchanged.
 
 Compatible public sources are [Comfy-Org/Wan-2.2](https://huggingface.co/Comfy-Org/Wan-2.2/tree/main/split_files/diffusion_models)
 (`wan2.2_t2v_low_noise_14B_fp16.safetensors` and `wan2.2_t2v_high_noise_14B_fp16.safetensors`),
@@ -194,7 +194,7 @@ and optimizer-state saving, sample generation and Edge playback passed using
 application revision `ae0b598` and its final atomic Windows launcher (protocol 3).
 Restoring optimizer state as a new segment advanced the optimizer from step 2 to
 3 and produced another playable sample. The original inputs and states remain
-preserved. Upstream still resets its displayed counter and data position.
+preserved. [Saved state](../runs.md#saved-state) gives the limits of restoring.
 
 | Native scenario                | Latent cache (s) | Text cache (s) | Training (s) | Generation (s) |
 | ------------------------------ | ---------------: | -------------: | -----------: | -------------: |

@@ -21,7 +21,7 @@ From a clean checkout, run this command in PowerShell, or double-click `run.bat`
 
 It installs only the application's locked dependencies into `.venv` and `node_modules`,
 builds the UI, starts the backend on **127.0.0.1:8765** and opens the browser.
-Use `launch.cmd --port 8766 --no-browser` for a second local instance. Stop with Ctrl+C.
+Use `.\launch.cmd --port 8766 --no-browser` for a second local instance. Stop with Ctrl+C.
 Registry access is required on first launch. No model download or training upgrade occurs.
 The Wan reference can use the separately qualified [offline conversion](docs/reference/wan-conversion.md)
 of existing scaled-FP8 files; originals remain untouched and lost precision is not recovered.
