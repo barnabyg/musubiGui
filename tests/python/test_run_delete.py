@@ -13,7 +13,8 @@ from fastapi.testclient import TestClient
 
 from musubi_gui import runs as runs_module
 from musubi_gui.acceptance import prepare as prepare_acceptance
-from musubi_gui.jobs import JobStore, jobs_router
+from musubi_gui.jobs import JobStore
+from musubi_gui.jobs_api import jobs_router
 from musubi_gui.outputs import output_router
 from musubi_gui.processes import process_identity
 from musubi_gui.run_store import ACTIVE_STATUSES

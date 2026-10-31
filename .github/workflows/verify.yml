@@ -3,6 +3,8 @@ on: [push, pull_request]
 jobs:
   windows:
     runs-on: windows-latest
+    # Upper bound with deliberate margin; see docs/verification.md.
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-python@v7.1.0

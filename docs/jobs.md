@@ -1,5 +1,7 @@
 # Job drafts and configuration review
 
+## Drafts and revisions
+
 Launch with `launch.cmd`, register a dataset, and open Jobs. New Wan job creates an
 incomplete saveable draft. Select its dataset and edit the grouped preparation,
 LoRA, memory, checkpoint and sample controls. Save draft creates a new immutable
@@ -11,6 +13,8 @@ The version-one revision JSON files remain unchanged.
 Interrupted writes retain their temporary files; only published revisions appear
 in the library. Unknown storage remains blocked and preserved for repair.
 
+## Configuration review
+
 Review configuration shows effective included videos, resolved component/output
 paths, native dataset TOML and each upstream argument array. Errors block preparation
 while the draft remains editable. Component overrides must stay inside the configured
@@ -19,6 +23,8 @@ model roots. The GUI's Wan recipe trains the low-noise expert. A separate
 also passed high-noise-only training; that recipe is not exposed by the GUI.
 Combined training remains unqualified. Runtime FP8 scaling requires native FP16 sources,
 not saved scaled-FP8 weights. Inactive-DiT offload is not supported by this recipe.
+
+## Disk estimates
 
 Review also estimates the disk a Run will use: the media snapshot, caches, LoRA
 checkpoints, optimizer states and samples, plus the free space on each target volume.
@@ -61,11 +67,15 @@ every 100 with state), the estimate gives 83 MB of caches against 83 MB measured
 of checkpoints against 921 MB, and 2.76 GB of states against 2.76 GB. The sample is
 estimated at 3.3 MB against 0.9 MB measured.
 
+## Supported media
+
 Gallery preview support is broader than the pinned training loader. GIF, TIF and TIFF
 images remain browsable, but Job review names each incompatible included item and
 requires conversion to PNG/JPEG/WebP/BMP or explicit exclusion before preparation.
 Original media is preserved. The native dataset builder uses the same pinned media
 extension lists as preflight, so supported PNG images remain image datasets.
+
+## Default configuration
 
 The small default is 256×256, 17 frames, batch one, rank/alpha eight and two steps.
 It remains the quick execution check. Changing capacity controls requires capacity
@@ -74,15 +84,7 @@ the configurations validated so far. Draft validation is not proof of successful
 execution. Sampling runs after training and can be disabled; no checkpoint-on-stop
 guarantee is made. Saving optimizer/training state is distinct from saving LoRA weights.
 
-Focused checks: `npm.cmd run typecheck` and
-`.venv\Scripts\python.exe -m pytest tests/python/test_jobs_api.py -q`. Browser checks
-cover the editor through the API and persistent storage. For manual review, save an
-incomplete draft, restart, change frame count to 18 and enable inactive-DiT offload.
-Review must explain both errors and disable Prepare run. Correct the fields, compare
-the reviewed TOML and arguments with the controls, and verify reopening retains them.
-Real preparation/training requires the compatible model files and environment described
-in [reference workflows](reference/README.md); fake acceptance fixtures do not prove
-model support.
+## H3 jobs
 
 New H3 job uses the proven T2VA guidance-loss recipe: 124 frames, rank/alpha four,
 BF16, 48 H2D-only swapped blocks, unconditional text caching and both video/audio
@@ -90,6 +92,8 @@ losses. Geometry must be a multiple of 32; the released frame lengths are `17*n+
 between 124 and 345. Unsupported CFG, negative prompts, Ref2VA, FL2VA training and
 full fine-tuning are not offered. H3 drafts require video items; Wan may use images
 and videos, emitted as separate native dataset sections.
+
+## Wan frame rates
 
 Wan trains and samples at 16 fps. Each Wan video section sets `source_fps` to the
 probed frame rate, so the pinned loader drops frames to 16 fps instead of training
@@ -102,6 +106,8 @@ unknown frame rate, are blocked because the loader cannot add frames; re-encode 
 exclude them. H3 always resamples to 24 fps by frame timestamps and ignores
 `source_fps`, so its TOML is unchanged. Wan latent and text caches prepared before
 resampling are not reused.
+
+## Frame extraction
 
 Frame extraction chooses which windows of each clip are cached and trained. Head
 (the default, and what earlier version 1 jobs keep) uses only each clip's first
@@ -119,42 +125,19 @@ Counts are predicted from each clip's probed average frame rate and frame count;
 variable-frame-rate or mislabelled clips can decode to a different count, so
 re-encode them at a constant frame rate when the exact count matters.
 
+## H3 audio
+
 H3's audio policy defaults to requiring supervised audio for every included video.
 Review shows item-specific source/alignment diagnostics and supervision totals.
 Explicitly allowing missing audio produces an audio-less item excluded from audio
 supervision; malformed supplied audio still blocks preparation. No original audio
 is repaired or silently discarded. The selected audio VAE remains mandatory.
 
+## Duplicates and presets
+
 Duplicate job creates an independent identity and output destination. Save as preset
 records named model-specific controls; Apply preset creates a new job revision while
 retaining that job's name and dataset selection.
-
-Archive job hides a job you no longer need, even while it has Runs, because each Run's
-frozen snapshot records the job's identity and revision. Nothing is
-removed from disk, and version-one revision files are not rewritten: the archive is a
-separate marker file in `archived-jobs` in the state directory. An older application
-version ignores the marker and lists the job again.
-
-An archived job leaves the job list and can't be edited, converted, used as a preset
-source or prepared. Presets already saved from it stay, since they are independent
-copies. Its Runs, outputs and saved states stay browsable from Runs. Those Runs also keep
-working, because each uses its own frozen snapshot: you can still start a prepared Run,
-retry a failed one or restore a saved state, even though that makes the archived job's
-Run active again. Archived jobs lists these jobs with a Restore button, which brings a
-job back unchanged.
-
-A job can't be archived while it has an active Run: queued, preparing, training,
-sampling or stopping, or still holding processes to reconcile. The refusal says why, and
-the job stays in the list. Stop or cancel the Run first.
-
-Delete job permanently removes a job and all its revisions, and works for listed and
-archived jobs alike. It is refused while any Run of that job remains, whatever the Run's
-state, including a Run with an unfinished delete. The refusal points to
-[Delete run](runs.md#deleting-a-run) for each Run, or Archive job to hide the job instead.
-Deleting a job and its Runs in one action was rejected, because it would remove far more
-than the action suggests. Datasets, presets saved from the job and other jobs are left
-alone. An interrupted delete leaves the job listed at its latest revision, to delete again.
-Unknown job storage or an unknown Run database version blocks the delete.
 
 Two built-in **Measured** presets carry the largest configurations that trained on
 the target PC during the production trial
@@ -174,10 +157,45 @@ jobs. Step times depend on cooling and the GPU power limit: the same Wan job ran
 79–95 s/step on this PC as fan and power settings changed. H3 at 832×480 × 124 frames
 ran out of VRAM at the first training step, so larger H3 sizes are not qualified.
 
+## Archiving a job
+
+Archive job hides a job you no longer need, even while it has Runs, because each Run's
+frozen snapshot records the job's identity and revision. Nothing is
+removed from disk, and version-one revision files are not rewritten: the archive is a
+separate marker file in `archived-jobs` in the state directory. An older application
+version ignores the marker and lists the job again.
+
+An archived job leaves the job list and can't be edited, converted, used as a preset
+source or prepared. Presets already saved from it stay, since they are independent
+copies. Its Runs, outputs and saved states stay browsable from Runs. Those Runs also keep
+working, because each uses its own frozen snapshot: you can still start a prepared Run,
+retry a failed one or restore a saved state, even though that makes the archived job's
+Run active again. Archived jobs lists these jobs with a Restore button, which brings a
+job back unchanged.
+
+A job can't be archived while it has an active Run: queued, preparing, training,
+sampling or stopping, or still holding processes to reconcile. The refusal says why, and
+the job stays in the list. Stop or cancel the Run first.
+
+## Deleting a job
+
+Delete job permanently removes a job and all its revisions, and works for listed and
+archived jobs alike. It is refused while any Run of that job remains, whatever the Run's
+state, including a Run with an unfinished delete. The refusal points to
+[Delete run](runs.md#deleting-a-run) for each Run, or Archive job to hide the job instead.
+Deleting a job and its Runs in one action was rejected, because it would remove far more
+than the action suggests. Datasets, presets saved from the job and other jobs are left
+alone. An interrupted delete leaves the job listed at its latest revision, to delete again.
+Unknown job storage or an unknown Run database version blocks the delete.
+
+## Model conversion
+
 Model conversion first previews every changed model/task-specific field. Cancel
 leaves the previous draft intact; Accept creates a revision while retaining the old
 revision for comparison. Incompatible components and memory/recipe/frame defaults
 reset, and shared controls remain.
+
+## Import and export
 
 Import / export configuration downloads or accepts strict `musubi-gui-job` version 1
 JSON. Reimport creates an independent job. Unknown versions, formats and fields are
@@ -185,6 +203,18 @@ rejected; missing optional controls in earlier version 1 exports receive documen
 family defaults. Recognised credential strings are redacted on export/import and in
 presets. Review local filesystem paths before sharing a configuration. No model,
 dataset or training-state payload is embedded in the export.
+
+## Checks
+
+Focused checks: `npm.cmd run typecheck` and
+`.venv\Scripts\python.exe -m pytest tests/python/test_jobs_api.py -q`. Browser checks
+cover the editor through the API and persistent storage. For manual review, save an
+incomplete draft, restart, change frame count to 18 and enable inactive-DiT offload.
+Review must explain both errors and disable Prepare run. Correct the fields, compare
+the reviewed TOML and arguments with the controls, and verify reopening retains them.
+Real preparation/training requires the compatible model files and environment described
+in [reference workflows](reference/README.md); fake acceptance fixtures do not prove
+model support.
 
 Browser checks: `npm.cmd run test:browser -- tests/browser/jobs.spec.ts`. The scenarios
 cover restart persistence and generated configuration for both models, frame

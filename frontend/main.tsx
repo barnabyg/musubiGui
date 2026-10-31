@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { apiClient } from './api';
 import './style.css';
 import { Jobs } from './Jobs';
 import { Runs } from './Runs';
@@ -39,18 +40,9 @@ function rootLines(text: string) {
     .filter(Boolean);
 }
 
-async function api<T>(url: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(url, options);
-  if (!response.ok) {
-    const body = (await response.json()) as { detail?: unknown };
-    throw new Error(
-      typeof body.detail === 'string'
-        ? body.detail
-        : `Request failed (${response.status}). Check the field values.`,
-    );
-  }
-  return response.json() as Promise<T>;
-}
+const api = apiClient(
+  (status) => `Request failed (${status}). Check the field values.`,
+);
 
 function App() {
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -116,14 +108,10 @@ function App() {
     setError('');
     try {
       load(
-        await api<Settings>('/api/settings', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ...settings,
-            model_roots: rootLines(rootText.model_roots),
-            dataset_roots: rootLines(rootText.dataset_roots),
-          }),
+        await api<Settings>('/api/settings', 'PUT', {
+          ...settings,
+          model_roots: rootLines(rootText.model_roots),
+          dataset_roots: rootLines(rootText.dataset_roots),
         }),
       );
       setDirty(false);
@@ -140,13 +128,7 @@ function App() {
     setError('');
     setReport(null);
     try {
-      setReport(
-        await api<Report>('/api/diagnostics', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: '{}',
-        }),
-      );
+      setReport(await api<Report>('/api/diagnostics', 'POST', {}));
     } catch (reason) {
       setError((reason as Error).message);
     } finally {

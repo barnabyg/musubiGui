@@ -1,4 +1,6 @@
-# Preparation and immutable inputs
+# Runs
+
+## Preparation
 
 Preparation reserves snapshot creation through a separate state-scoped SQLite gate.
 Duplicate requests from tabs or backend processes return the existing Run before
@@ -6,6 +8,8 @@ allocating another media/cache directory. Content hashes, effective settings, so
 digest and stable runtime versions identify the snapshot; changing media bytes creates
 a new identity even before an index re-scan. A request waiting over 30 seconds reports
 that another snapshot is being created and can be retried safely.
+
+## Preparing an unchanged revision
 
 Preparing an unchanged revision returns its existing Run, and the Jobs screen says
 so and links to it. A Run that ended without completing (failed, cancelled,
@@ -15,6 +19,8 @@ stop to change machine settings. Its caches are
 reused through the stage fingerprints below, and the earlier Run keeps its logs,
 outputs and saved states until you delete it. After Delete run, Prepare creates a
 new Run of the same revision.
+
+## Immutable inputs
 
 Before copying media, each new snapshot writes a versioned `snapshot.json` containing
 its source manifest, settings and provenance. A directory with no published Run remains
@@ -27,6 +33,8 @@ effective included media, caption text, generated dataset TOML, model identities
 upstream revision and selected Python/package environment. Source media and captions
 are copied into a separate per-run directory under the configured output root.
 Source captions remain editable while caching runs against the frozen copies.
+
+## Caches
 
 Preparation executes the pinned latent/text cache commands in the selected existing
 training environment. Stage logs, exit codes, failures and cancellation survive
@@ -45,20 +53,28 @@ launching each stage, a version-only selected-Python probe checks the recorded p
 identity without importing Torch or initializing CUDA. Environment changes require a
 new preparation; volatile GPU availability/free-space readings do not invalidate caches.
 
+## Hugging Face Hub access
+
 Wan text caching and generation need the UMT5 tokenizer from the Hugging Face Hub. The
 first Wan Run downloads it and needs Hub access. Later Wan Runs use a verified shared
 copy under the cache root and run with Hub access off, as
 [Wan network access](reference/wan.md#network-access) describes. H3 still downloads its
 processor, config and tokenizer into each Run's cache, so every H3 Run needs Hub access.
 
+## GPU lease
+
 A transactional host-wide GPU lease serializes execution, including instances with
 different application state directories. Pending work and history live in versioned
 SQLite storage. Unknown storage versions are preserved and blocked.
+
+## Launching and target hardware
 
 Run `launch.cmd` to open the local application. The release acceptance command and
 synthetic media scenarios are documented with the complete release workflow.
 Synthetic subprocess tests exercise orchestration, never model-support evidence.
 The target hardware requirement is Windows 11, RTX 3090, 96 GB RAM and 400+ GB disk.
+
+## Training
 
 Choose Start training on a prepared Wan Run. Its process runs independently of the
 browser. The job can be edited while the Run retains its original revision. Repeated
@@ -66,10 +82,14 @@ Start requests select the same Run. Logs display upstream progress without guess
 missing step counts; nonzero exits and missing checkpoints are explicit failures.
 Checkpoint/sample locations stay associated with the originating Run.
 
+## Queueing
+
 Add prepared runs to the pending queue while another operation owns the GPU. Move
 entries earlier or cancel pending entries without changing active work. Ordering
 and the exact enqueued revision survive service restarts. Preparation shares this
 same GPU lease, so it cannot overlap training. Failures remain visible in history.
+
+## Stopping
 
 Request graceful stop first. Windows console signalling can be unavailable for
 some launch environments; inspect the reported result and use the separately
@@ -82,6 +102,8 @@ When the launcher exits, its descendants, such as the Python child behind a
 virtual-environment launcher, get up to 30 seconds to finish exiting. The Run then
 becomes stopped and its active stage shows stopped. A descendant still alive after
 that grace period makes the Run orphaned instead.
+
+## Saved state
 
 Enable saved optimizer state in the Job before training. After completion or a
 fully observed stop, Inspect saved states checks model/optimizer/scheduler/RNG
@@ -105,6 +127,8 @@ the requested additional steps. The pinned upstream restores optimizer state
 but resets its displayed step counter and data position; seamless continuation
 is unsupported. Loading a LoRA checkpoint alone is not optimizer restoration.
 
+## Windows Job Objects
+
 On Windows each stage is assigned to a named Windows Job Object atomically during
 process creation, before its first instruction. A separate acknowledged observer
 holds a query-only job handle before stage creation and survives both controller
@@ -113,6 +137,8 @@ job and every stage descendant has exited. Closing the application never enables
 kill-on-close. The job name plus process creation time and executable identity
 allow safe reconciliation after restart, including a crash before PID persistence.
 Browser-independent logs can still be inspected.
+
+## Recovery
 
 If a process survives, the Run is orphaned and the GPU remains owned. Reconcile
 processes refreshes observed state; Terminate recovered work requires confirmation

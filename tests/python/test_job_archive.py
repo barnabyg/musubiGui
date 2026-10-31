@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from musubi_gui.acceptance import prepare
-from musubi_gui.jobs import jobs_router
+from musubi_gui.jobs_api import jobs_router
 from musubi_gui.run_store import RunStore
 from musubi_gui.runs import RunService
 from musubi_gui.runs_api import runs_router

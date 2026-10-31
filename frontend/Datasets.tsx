@@ -6,6 +6,7 @@ import {
   useSyncExternalStore,
 } from 'react';
 import './datasets.css';
+import { apiClient } from './api';
 import { CaptionEditor } from './CaptionEditor';
 import { InlineCaption } from './InlineCaption';
 import { type Caption, useCaptionSession } from './captionSession';
@@ -40,27 +41,7 @@ export type DatasetItem = {
   caption: { text: string; revision: string; exists: boolean; error?: string };
 };
 
-async function api<T>(url: string, data?: object, method = 'POST'): Promise<T> {
-  const response = await fetch(
-    url,
-    data
-      ? {
-          method,
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data),
-        }
-      : undefined,
-  );
-  if (!response.ok) {
-    const body = (await response.json()) as { detail?: unknown };
-    throw new Error(
-      typeof body.detail === 'string'
-        ? body.detail
-        : `Request failed (${response.status}).`,
-    );
-  }
-  return response.json() as Promise<T>;
-}
+const api = apiClient((status) => `Request failed (${status}).`);
 
 export function Datasets({
   visible = true,
@@ -250,7 +231,7 @@ export function Datasets({
     setBusy(true);
     setError('');
     try {
-      await api(`/api/datasets/${value.id}`, {}, 'DELETE');
+      await api(`/api/datasets/${value.id}`, 'DELETE', {});
       await refresh();
       setStatus(
         `Deleted "${value.name}" from the library. Files are preserved.`,
@@ -268,6 +249,7 @@ export function Datasets({
     try {
       const created = await api<Dataset>(
         managed ? '/api/datasets/managed' : '/api/datasets',
+        'POST',
         managed ? { name, root: folder } : { name, path: folder },
       );
       await open(created.id);
@@ -289,7 +271,7 @@ export function Datasets({
     setError('');
     try {
       setDataset(
-        await api<Dataset>(`/api/datasets/${dataset.id}`, { name }, 'PUT'),
+        await api<Dataset>(`/api/datasets/${dataset.id}`, 'PUT', { name }),
       );
       setStatus('Dataset name saved.');
     } catch (reason) {
@@ -303,7 +285,7 @@ export function Datasets({
     if (!(await captions.flushAll())) return;
     setBusy(true);
     try {
-      await api(`/api/datasets/${dataset.id}/scan`, {});
+      await api(`/api/datasets/${dataset.id}/scan`, 'POST', {});
       await refresh(dataset.id);
     } catch (reason) {
       setError((reason as Error).message);

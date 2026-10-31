@@ -31,9 +31,9 @@ def main() -> None:
     run(python, "-m", "mypy")
     run(npm, "run", "typecheck")
     run(python, "-m", "bandit", "-r", "musubi_gui", "tools", "-c", "pyproject.toml", "-q")
-    # Browser tests exercise the bundled build; packaging is validated again below.
-    run(npm, "run", "build")
-    run(python, "-m", "pytest", "-q")
+    # CI stops at the first failure; local runs report every failure.
+    run(python, "-m", "pytest", "-q", *(["--maxfail=1"] if os.environ.get("CI") else []))
+    # Builds the UI first through pretest:browser; packaging below ships that same bundle.
     run(npm, "run", "test:browser")
     run("uv", "lock", "--check")
     run(npm, "ls", "--all")

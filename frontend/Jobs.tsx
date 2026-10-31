@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { apiClient } from './api';
 import './jobs.css';
 
 type JobConfig = {
@@ -136,28 +137,7 @@ type Props = {
   onDirtyChange?: (dirty: boolean) => void;
 };
 
-async function request<T>(
-  url: string,
-  method = 'GET',
-  value?: unknown,
-): Promise<T> {
-  const response = await fetch(url, {
-    method,
-    headers:
-      value === undefined ? undefined : { 'Content-Type': 'application/json' },
-    body: value === undefined ? undefined : JSON.stringify(value),
-  });
-  const body: unknown = await response.json();
-  if (!response.ok) {
-    const detail = (body as { detail?: unknown }).detail;
-    throw new Error(
-      typeof detail === 'string'
-        ? detail
-        : 'Check the entered values and retry.',
-    );
-  }
-  return body as T;
-}
+const request = apiClient('Check the entered values and retry.');
 
 export function Jobs({ onRun, onDirtyChange }: Props) {
   const [jobs, setJobs] = useState<Job[]>([]);

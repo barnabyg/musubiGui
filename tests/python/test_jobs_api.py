@@ -5,7 +5,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from musubi_gui.jobs import jobs_router
+from musubi_gui.jobs_api import jobs_router
 from musubi_gui.settings import Settings, save_settings
 
 

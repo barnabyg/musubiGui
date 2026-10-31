@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { apiClient } from './api';
 import './outputs.css';
 
 type Output = {
@@ -34,19 +35,7 @@ type Comparison = {
   note: string;
 };
 
-async function read<T>(url: string): Promise<T> {
-  const response = await fetch(url);
-  const body: unknown = await response.json();
-  if (!response.ok) {
-    const detail = (body as { detail?: unknown }).detail;
-    throw new Error(
-      typeof detail === 'string'
-        ? detail
-        : 'Output records could not be read. Refresh and retry.',
-    );
-  }
-  return body as T;
-}
+const read = apiClient('Output records could not be read. Refresh and retry.');
 
 export function Outputs({ runId }: { runId: string }) {
   const [result, setResult] = useState<OutputList | null>(null);

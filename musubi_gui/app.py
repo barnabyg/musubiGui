@@ -15,7 +15,7 @@ from starlette.responses import Response
 
 from musubi_gui.datasets_api import dataset_router
 from musubi_gui.diagnostics import diagnostics
-from musubi_gui.jobs import jobs_router
+from musubi_gui.jobs_api import jobs_router
 from musubi_gui.outputs import output_router
 from musubi_gui.runs import RunService
 from musubi_gui.runs_api import runs_router

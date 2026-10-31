@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { apiClient } from './api';
 import { Outputs } from './Outputs';
 
 type Run = {
@@ -55,26 +56,7 @@ function deleteQuestion(run: Run, preview: DeletePreview) {
   return lines.join('\n\n');
 }
 
-async function request<T>(url: string, body?: object): Promise<T> {
-  const response = await fetch(
-    url,
-    body
-      ? {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        }
-      : undefined,
-  );
-  const value: unknown = await response.json();
-  if (!response.ok)
-    throw new Error(
-      typeof value === 'object' && value && 'detail' in value
-        ? String(value.detail)
-        : 'Run request failed.',
-    );
-  return value as T;
-}
+const request = apiClient('Run request failed.');
 
 function SavedStates({
   runId,
@@ -205,7 +187,11 @@ export function Runs({ selectedId }: { selectedId?: string }) {
     setBusy(true);
     setError('');
     try {
-      const result = await request<Run>(`/api/runs/${run.id}/${name}`, body);
+      const result = await request<Run>(
+        `/api/runs/${run.id}/${name}`,
+        'POST',
+        body,
+      );
       setSelected(result.id);
       setRuns(await request<Run[]>('/api/runs'));
     } catch (reason) {
@@ -228,9 +214,11 @@ export function Runs({ selectedId }: { selectedId?: string }) {
       setNotice('Deleting run…');
       // Unmounting the outputs closes any preview stream holding one of the files open.
       setDeleting(run.id);
-      const result = await request<DeleteResult>(`/api/runs/${run.id}/delete`, {
-        confirmed: true,
-      });
+      const result = await request<DeleteResult>(
+        `/api/runs/${run.id}/delete`,
+        'POST',
+        { confirmed: true },
+      );
       setNotice(
         result.deleted
           ? `Run deleted. Freed ${sizeLabel(result.freed_bytes ?? 0)}.`
@@ -259,7 +247,7 @@ export function Runs({ selectedId }: { selectedId?: string }) {
     if (index < 1) return;
     [pending[index - 1], pending[index]] = [pending[index], pending[index - 1]];
     try {
-      await request('/api/runs/queue/order', {
+      await request('/api/runs/queue/order', 'POST', {
         run_ids: pending.map((record) => record.id),
       });
       setRuns(await request<Run[]>('/api/runs'));
