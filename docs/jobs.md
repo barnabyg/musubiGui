@@ -20,9 +20,11 @@ in the library. Unknown storage remains blocked and preserved for repair.
 
 ## Configuration review
 
-Review configuration shows effective included videos, resolved component/output
-paths, native dataset TOML and each upstream argument array. Errors block preparation
-while the draft remains editable. Component overrides must stay inside the configured
+Review configuration scrolls to its result, which opens with pass or fail, the error
+count, the included item count and whether the disk has room. Errors and warnings
+follow. The disk breakdown is collapsed, and Advanced holds the resolved component/output
+paths, model provenance, native dataset TOML and each upstream argument array. Errors
+block preparation while the draft remains editable. Component overrides must stay inside the configured
 model roots. The GUI's Wan recipe trains the low-noise expert. A separate
 [native-weight CLI acceptance scenario](reference/wan.md#native-weight-qualification)
 also passed high-noise-only training; that recipe is not exposed by the GUI.

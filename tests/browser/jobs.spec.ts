@@ -191,6 +191,38 @@ test('the job table sorts, marks the selected job and keeps new draft names apar
   }
 });
 
+test('review leads with the verdict, comes into view and collapses technical detail', async ({
+  page,
+}) => {
+  const app = await workspace();
+  try {
+    await openJobs(page, app.url);
+    await page
+      .getByRole('button', { name: 'New Wan job', exact: true })
+      .click();
+    await page
+      .getByRole('button', { name: 'Review configuration', exact: true })
+      .click();
+    const review = page.getByRole('region', { name: 'Configuration review' });
+    const verdict = review.locator('.review-verdict');
+    await expect(verdict).toHaveClass(/failed/);
+    await expect(verdict).toContainText(/^Review failed: resolve \d+ errors/);
+    await expect(verdict).toContainText('0 included items');
+    await expect(verdict).toContainText('Disk:');
+    await expect(page.getByRole('status')).toContainText(
+      /^Review failed for revision 1: \d+ errors/,
+    );
+    await expect(review).toBeInViewport();
+    await expect(page.getByTestId('dataset-toml')).toBeHidden();
+    await expect(page.getByText('Resolved paths')).toBeHidden();
+    await expect(page.getByText('latent_cache arguments')).toBeHidden();
+    await page.getByText('Advanced', { exact: true }).click();
+    await expect(page.getByTestId('dataset-toml')).toBeVisible();
+  } finally {
+    await app.close();
+  }
+});
+
 test('Wan draft controls, validation and reviewed native configuration survive service restart', async ({
   page,
 }) => {
@@ -227,10 +259,11 @@ test('Wan draft controls, validation and reviewed native configuration survive s
     await expect(page.getByTestId('dataset-toml')).toContainText(
       'target_frames = [33]',
     );
+    await page.getByText('Advanced', { exact: true }).click();
     await page.getByText('train arguments', { exact: true }).click();
     await expect(
       page
-        .locator('details')
+        .locator('details details')
         .filter({ has: page.getByText('train arguments', { exact: true }) })
         .locator('pre'),
     ).toContainText('"--network_dim",\n  "16"');
@@ -427,9 +460,10 @@ test('H3 editor keeps T2VA guidance stages and identifies invalid geometry', asy
         { exact: true },
       ),
     ).toBeVisible();
+    await page.getByText('Advanced', { exact: true }).click();
     await page.getByText('text_cache arguments', { exact: true }).click();
     const args = page
-      .locator('details')
+      .locator('details details')
       .filter({ has: page.getByText('text_cache arguments', { exact: true }) })
       .locator('pre');
     await expect(args).toContainText('"--task",\n  "t2va"');

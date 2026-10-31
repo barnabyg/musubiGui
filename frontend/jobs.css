@@ -134,3 +134,29 @@
 .action-menu .hint {
   margin: 6px 16px;
 }
+.review-verdict {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 12px 0;
+  padding: 14px 16px;
+  border: 1px solid;
+  border-radius: 7px;
+  font-size: 13px;
+}
+.review-verdict strong {
+  font-size: 15px;
+}
+.review-verdict.passed {
+  border-color: #4f8a68;
+  background: #1c2e25;
+  color: #d9f3e3;
+}
+.review-verdict.failed {
+  border-color: #925764;
+  background: #3b2329;
+  color: #ffd7dc;
+}
+.job-review {
+  scroll-margin-top: 130px;
+}

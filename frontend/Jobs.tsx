@@ -141,12 +141,30 @@ type Props = {
 
 const request = apiClient('Check the entered values and retry.');
 
+function plural(count: number, noun: string) {
+  return `${count} ${noun}${count === 1 ? '' : 's'}`;
+}
+
+function diskVerdict(disk: Review['disk']) {
+  const short = disk.volumes.filter((volume) => volume.shortfall > 0);
+  if (short.length)
+    return `Disk: ${short
+      .map(
+        (volume) => `${sizeLabel(volume.shortfall)} short on ${volume.volume}`,
+      )
+      .join(', ')}`;
+  return disk.volumes.some((volume) => volume.free === null)
+    ? 'Disk: free space unknown'
+    : 'Disk: enough free space';
+}
+
 export function Jobs({ onRun, onDirtyChange }: Props) {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [archived, setArchived] = useState<Job[]>([]);
   const [summaries, setSummaries] = useState<JobSummary[]>([]);
   const nameField = useRef<HTMLInputElement>(null);
   const focusName = useRef(false);
+  const reviewPanel = useRef<HTMLElement>(null);
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [models, setModels] = useState<Record<string, string>>({});
   const [job, setJob] = useState<Job | null>(null);
@@ -193,6 +211,9 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
       nameField.current.select();
     }
   }, [busy, job?.id]);
+  useEffect(() => {
+    if (review) reviewPanel.current?.scrollIntoView({ block: 'start' });
+  }, [review]);
   useEffect(() => {
     onDirtyChange?.(dirty);
   }, [dirty, onDirtyChange]);
@@ -325,10 +346,17 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
   async function inspect() {
     if (!job) return;
     await perform(async () => {
-      setReview(
-        await request<Review>(`/api/jobs/${job.id}/review`, 'POST', {}),
+      const result = await request<Review>(
+        `/api/jobs/${job.id}/review`,
+        'POST',
+        {},
       );
-      setStatus(`Reviewed revision ${job.revision}`);
+      setReview(result);
+      setStatus(
+        result.valid
+          ? `Review passed for revision ${job.revision}`
+          : `Review failed for revision ${job.revision}: ${plural(result.errors.length, 'error')}`,
+      );
     });
   }
   async function prepare(start = false) {
@@ -992,14 +1020,25 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
             </p>
           )}
           {review && (
-            <section className="panel" aria-label="Configuration review">
+            <section
+              ref={reviewPanel}
+              className="panel job-review"
+              aria-label="Configuration review"
+            >
               <h2>Configuration review</h2>
-              <p>
-                {review.valid
-                  ? 'Ready for preparation'
-                  : 'Resolve the following errors before preparation'}{' '}
-                · {review.effective_count} included items
-              </p>
+              <div
+                className={`review-verdict ${review.valid ? 'passed' : 'failed'}`}
+              >
+                <strong>
+                  {review.valid
+                    ? 'Review passed. Ready for preparation.'
+                    : `Review failed: resolve ${plural(review.errors.length, 'error')} before preparation.`}
+                </strong>
+                <span>
+                  {plural(review.effective_count, 'included item')} ·{' '}
+                  {diskVerdict(review.disk)}
+                </span>
+              </div>
               {review.errors.length > 0 && (
                 <ul className="error">
                   {review.errors.map((message, index) => (
@@ -1012,8 +1051,8 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
                   <li key={index}>{message}</li>
                 ))}
               </ul>
-              <div data-testid="disk-estimate">
-                <h3>Estimated disk use</h3>
+              <details data-testid="disk-estimate">
+                <summary>Estimated disk use</summary>
                 <ul>
                   <li>
                     Media snapshot:{' '}
@@ -1044,7 +1083,7 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
                     </li>
                   ))}
                 </ul>
-              </div>
+              </details>
               {review.video_windows.items.length > 0 && (
                 <div data-testid="video-windows">
                   <h3>Cached video windows</h3>
@@ -1082,33 +1121,38 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
                   </details>
                 </>
               )}
-              <h3>Resolved paths</h3>
-              <pre>
-                {JSON.stringify(
-                  { ...review.paths, models: review.models },
-                  null,
-                  2,
+              <details>
+                <summary>Advanced</summary>
+                <h3>Resolved paths</h3>
+                <pre>
+                  {JSON.stringify(
+                    { ...review.paths, models: review.models },
+                    null,
+                    2,
+                  )}
+                </pre>
+                {Object.keys(review.model_provenance).length > 0 && (
+                  <details>
+                    <summary>Model precision and conversion provenance</summary>
+                    <pre>
+                      {JSON.stringify(review.model_provenance, null, 2)}
+                    </pre>
+                  </details>
                 )}
-              </pre>
-              {Object.keys(review.model_provenance).length > 0 && (
-                <details>
-                  <summary>Model precision and conversion provenance</summary>
-                  <pre>{JSON.stringify(review.model_provenance, null, 2)}</pre>
-                </details>
-              )}
-              <h3>Native dataset TOML</h3>
-              <pre data-testid="dataset-toml">{review.dataset_toml}</pre>
-              <p>
-                Paths below preview a frozen revision. Preparation allocates its
-                own immutable run directory and records the exact executed
-                arguments.
-              </p>
-              {review.stages.map((stage) => (
-                <details key={stage.name}>
-                  <summary>{stage.name} arguments</summary>
-                  <pre>{JSON.stringify(stage.args, null, 2)}</pre>
-                </details>
-              ))}
+                <h3>Native dataset TOML</h3>
+                <pre data-testid="dataset-toml">{review.dataset_toml}</pre>
+                <p>
+                  Paths below preview a frozen revision. Preparation allocates
+                  its own immutable run directory and records the exact executed
+                  arguments.
+                </p>
+                {review.stages.map((stage) => (
+                  <details key={stage.name}>
+                    <summary>{stage.name} arguments</summary>
+                    <pre>{JSON.stringify(stage.args, null, 2)}</pre>
+                  </details>
+                ))}
+              </details>
             </section>
           )}
         </>
