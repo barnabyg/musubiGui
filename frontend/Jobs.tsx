@@ -1,4 +1,10 @@
-import { useEffect, useEffectEvent, useRef, useState } from 'react';
+import {
+  useEffect,
+  useEffectEvent,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import { ActionMenu } from './ActionMenu';
 import { confirmDialog } from './ConfirmDialog';
 import { apiClient } from './api';
@@ -137,6 +143,15 @@ function sizeLabel(bytes: number) {
 }
 type PreparedRun = { id: string; status: string; existing: boolean };
 
+const sections = [
+  { id: 'job-section-job', label: 'Job & dataset' },
+  { id: 'job-section-dataset', label: 'Dataset preparation' },
+  { id: 'job-section-training', label: 'LoRA & training' },
+  { id: 'job-section-memory', label: 'Memory' },
+  { id: 'job-section-checkpoints', label: 'Checkpoints & sample' },
+  { id: 'job-section-review', label: 'Review' },
+];
+
 type Props = {
   selectedId?: string;
   onSelect?: (id?: string, replace?: boolean) => void;
@@ -170,6 +185,11 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
   const nameField = useRef<HTMLInputElement>(null);
   const focusName = useRef(false);
   const reviewPanel = useRef<HTMLElement>(null);
+  const actionBar = useRef<HTMLDivElement>(null);
+  const [section, setSection] = useState(sections[0].id);
+  // A chosen section stays current until the page scrolls away from where it landed: a short last
+  // section can't reach the top of the window.
+  const chosen = useRef<{ id: string; at: number } | null>(null);
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [models, setModels] = useState<Record<string, string>>({});
   const [modelRoots, setModelRoots] = useState<string[]>([]);
@@ -254,6 +274,55 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
   useEffect(() => {
     onDirtyChange?.(dirty);
   }, [dirty, onDirtyChange]);
+  // Keeps focused and scrolled-to content clear of the sticky bar, however far it has wrapped.
+  useLayoutEffect(() => {
+    const bar = actionBar.current;
+    if (!bar) return;
+    const root = document.documentElement;
+    const observer = new ResizeObserver(() => {
+      root.style.scrollPaddingTop = `${bar.offsetHeight + 12}px`;
+    });
+    observer.observe(bar);
+    return () => {
+      observer.disconnect();
+      root.style.scrollPaddingTop = '';
+    };
+  }, []);
+  const hasJob = !!job;
+  useEffect(() => {
+    if (!hasJob) return;
+    const follow = () => {
+      if (chosen.current) {
+        if (Math.abs(window.scrollY - chosen.current.at) < 2) return;
+        chosen.current = null;
+      }
+      const line =
+        (actionBar.current?.getBoundingClientRect().bottom ?? 0) + 16;
+      const root = document.documentElement;
+      const atEnd =
+        window.scrollY + window.innerHeight >= root.scrollHeight - 2 &&
+        window.scrollY > 0;
+      let current = sections[0].id;
+      for (const { id } of sections)
+        if (
+          (document.getElementById(id)?.getBoundingClientRect().top ?? 0) <=
+          line
+        )
+          current = id;
+      setSection(atEnd ? sections[sections.length - 1].id : current);
+    };
+    follow();
+    window.addEventListener('scroll', follow, { passive: true });
+    return () => window.removeEventListener('scroll', follow);
+  }, [hasJob]);
+  function goToSection(id: string) {
+    const target = document.getElementById(id);
+    if (!target) return;
+    target.scrollIntoView({ block: 'start' });
+    target.focus({ preventScroll: true });
+    chosen.current = { id, at: window.scrollY };
+    setSection(id);
+  }
   useEffect(() => {
     const protect = (event: BeforeUnloadEvent) => {
       if (dirty) event.preventDefault();
@@ -661,7 +730,7 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
           </ul>
         </details>
       )}
-      <div className="job-action-bar">
+      <div className="job-action-bar" ref={actionBar}>
         <div className="actions">
           <span role="status">{status}</span>
           {job && (
@@ -743,6 +812,20 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
             {prepareReason}
           </p>
         )}
+        {job && (
+          <nav className="job-sections" aria-label="Job sections">
+            {sections.map(({ id, label }) => (
+              <button
+                key={id}
+                className="quiet"
+                aria-current={section === id ? 'true' : undefined}
+                onClick={() => goToSection(id)}
+              >
+                {label}
+              </button>
+            ))}
+          </nav>
+        )}
         {error && (
           <div role="alert" className="error">
             {error}
@@ -817,7 +900,7 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
       )}
       {job && (
         <>
-          <section className="panel">
+          <section className="panel" id="job-section-job" tabIndex={-1}>
             <h2>Job & dataset</h2>
             <label className="field">
               Job name
@@ -970,7 +1053,7 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
               </p>
             )}
           </section>
-          <section className="panel">
+          <section className="panel" id="job-section-dataset" tabIndex={-1}>
             <h2>Dataset preparation</h2>
             <div className="number-row">
               {number('Width', 'width')}
@@ -1054,7 +1137,7 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
               </label>
             )}
           </section>
-          <section className="panel">
+          <section className="panel" id="job-section-training" tabIndex={-1}>
             <h2>LoRA & training</h2>
             <div className="number-row">
               {number('LoRA rank', 'rank')}
@@ -1065,7 +1148,7 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
               {number('Seed', 'seed')}
             </div>
           </section>
-          <section className="panel">
+          <section className="panel" id="job-section-memory" tabIndex={-1}>
             <h2>Memory</h2>
             {number(
               'Blocks to swap',
@@ -1096,7 +1179,7 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
               )
             )}
           </section>
-          <section className="panel">
+          <section className="panel" id="job-section-checkpoints" tabIndex={-1}>
             <h2>Checkpoints & final sample</h2>
             <div className="number-row">
               {number('Save every N steps', 'save_every')}
@@ -1132,9 +1215,20 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
               </button>
             </p>
           )}
+          {!review && (
+            <section className="panel" id="job-section-review" tabIndex={-1}>
+              <h2>Review</h2>
+              <p>
+                Choose Review configuration to check these settings before
+                preparing a Run.
+              </p>
+            </section>
+          )}
           {review && (
             <section
               ref={reviewPanel}
+              id="job-section-review"
+              tabIndex={-1}
               className="panel job-review"
               aria-label="Configuration review"
             >

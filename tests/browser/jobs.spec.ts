@@ -817,3 +817,69 @@ test('the job form uses short fields for short values and shares rows between re
     await app.close();
   }
 });
+
+test('the section menu reaches every section, marks the current one and keeps unsaved edits', async ({
+  page,
+}) => {
+  const app = await workspace();
+  try {
+    await page.setViewportSize({ width: 1000, height: 800 });
+    await openJobs(page, app.url);
+    await page
+      .getByRole('button', { name: 'New Wan job', exact: true })
+      .click();
+    const menu = page.getByRole('navigation', { name: 'Job sections' });
+    const go = (name: string) =>
+      menu.getByRole('button', { name, exact: true }).click();
+    const current = menu.locator('[aria-current="true"]');
+    const headings: [string, string][] = [
+      ['Dataset preparation', 'Dataset preparation'],
+      ['LoRA & training', 'LoRA & training'],
+      ['Memory', 'Memory'],
+      ['Checkpoints & sample', 'Checkpoints & final sample'],
+      ['Review', 'Review'],
+      ['Job & dataset', 'Job & dataset'],
+    ];
+    const bar = page.locator('.job-action-bar');
+    for (const [item, heading] of headings) {
+      await go(item);
+      await expect(current).toHaveText(item);
+      const title = page.getByRole('heading', { name: heading, exact: true });
+      await expect(title).toBeInViewport();
+      const [top, barBox] = [
+        await title.boundingBox(),
+        await bar.boundingBox(),
+      ];
+      expect(top!.y).toBeGreaterThanOrEqual(barBox!.y + barBox!.height);
+    }
+
+    // Scrolling by hand moves the mark too.
+    await page
+      .getByRole('heading', { name: 'Memory', exact: true })
+      .evaluate((element) => {
+        const bottom = document
+          .querySelector('.job-action-bar')!
+          .getBoundingClientRect().bottom;
+        window.scrollBy(0, element.getBoundingClientRect().top - bottom - 4);
+      });
+    await expect(current).toHaveText('Memory');
+
+    await go('Memory');
+    const blocks = page.getByRole('spinbutton', { name: /^Blocks to swap/ });
+    await blocks.fill('12');
+    await go('LoRA & training');
+    await go('Memory');
+    await expect(blocks).toHaveValue('12');
+    await expect(page.getByRole('status')).toHaveText('Unsaved draft');
+
+    expect(
+      await page.evaluate(
+        () =>
+          document.documentElement.scrollWidth <=
+          document.documentElement.clientWidth,
+      ),
+    ).toBe(true);
+  } finally {
+    await app.close();
+  }
+});

@@ -98,9 +98,22 @@
   max-height: 30vh;
   overflow: auto;
 }
-/* Keeps keyboard focus and scrolled-to content clear of the sticky bar, which can wrap on narrow windows. */
-:root:has(.job-action-bar) {
-  scroll-padding-top: 130px;
+.job-sections {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-top: var(--space-3);
+}
+.job-sections button {
+  padding: var(--space-2) var(--space-5);
+  color: var(--color-text-muted);
+}
+.job-sections [aria-current='true'] {
+  color: var(--color-accent-strong);
+  background: var(--color-accent-surface);
+}
+.jobs-workspace .panel[tabindex='-1']:focus {
+  outline: none;
 }
 .action-menu {
   position: relative;
@@ -156,7 +169,4 @@
   border-color: var(--color-danger-border);
   background: var(--color-danger-surface);
   color: var(--color-danger-strong);
-}
-.job-review {
-  scroll-margin-top: 130px;
 }
