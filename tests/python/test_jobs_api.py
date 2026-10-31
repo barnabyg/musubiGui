@@ -313,6 +313,22 @@ def test_smoke_presets_restore_the_quick_check_and_keep_components(tmp_path: Pat
     assert (config["components"], config["seed"]) == ({"wan_low": "kept"}, 7)
 
 
+def test_conversion_moves_default_capacity_to_the_target_model_and_keeps_chosen_values(tmp_path: Path) -> None:
+    client = client_for(tmp_path)
+    wan = client.get("/api/jobs/defaults/wan").json()
+    job = client.post("/api/jobs", json={"name": "New", "family": "wan", "config": wan}).json()
+    route = f"/api/jobs/{job['id']}/convert"
+    config = client.post(route, json={"family": "h3", "revision": 1, "confirmed": True}).json()["config"]
+    assert (config["width"], config["height"], config["rank"], config["alpha"]) == (640, 352, 8, 8)
+    chosen = client.post(
+        "/api/jobs",
+        json={"name": "Chosen", "family": "wan", "config": {**wan, "width": 320, "height": 256, "rank": 4, "alpha": 2}},
+    ).json()
+    route = f"/api/jobs/{chosen['id']}/convert"
+    config = client.post(route, json={"family": "h3", "revision": 1, "confirmed": True}).json()["config"]
+    assert (config["width"], config["height"], config["rank"], config["alpha"]) == (320, 256, 4, 2)
+
+
 def test_review_warns_about_low_steps_and_unqualified_h3_size(tmp_path: Path) -> None:
     client = client_for(tmp_path)
     low = client.post("/api/jobs", json={"name": "Low", "family": "wan", "config": {"steps": 599}}).json()

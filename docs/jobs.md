@@ -229,7 +229,8 @@ Unknown job storage or an unknown Run database version blocks the delete.
 Model conversion first previews every changed model/task-specific field. Cancel
 leaves the previous draft intact; Accept creates a revision while retaining the old
 revision for comparison. Incompatible components and memory/recipe/frame defaults
-reset, and shared controls remain.
+reset, and shared controls remain. Size, rank and alpha still at the source model's
+new-draft default move to the target model's, and values you chose are kept.
 
 ## Import and export
 

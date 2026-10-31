@@ -35,6 +35,7 @@ WAN_MAX_BLOCKS_TO_SWAP = 38
 H3_MAX_BLOCKS_TO_SWAP = 48
 # Below this a LoRA has made no visible change to samples in the owner's experience on the target PC.
 LOW_STEPS_WARNING = 600
+NEW_DRAFT_STEPS = 600
 
 
 class JobConfig(BaseModel):
@@ -99,7 +100,7 @@ def default_config(family: str) -> JobConfig:
         else {"width": 832, "height": 480, "frames": 33, "rank": 16, "alpha": 16, "sample_steps": 20}
     )
     return smoke_config(family).model_copy(
-        update={**size, "steps": LOW_STEPS_WARNING, "save_every": 100, "save_state": True, "sample_prompt": ""}
+        update={**size, "steps": NEW_DRAFT_STEPS, "save_every": 100, "save_state": True, "sample_prompt": ""}
     )
 
 
@@ -244,8 +245,6 @@ def conversion_draft(job: Job, family: Literal["wan", "h3"]) -> JobDraft:
             "repeats",
             "enable_bucket",
             "bucket_no_upscale",
-            "rank",
-            "alpha",
             "learning_rate",
             "steps",
             "gradient_accumulation",
@@ -258,10 +257,17 @@ def conversion_draft(job: Job, family: Literal["wan", "h3"]) -> JobDraft:
             "seed",
         }
     }
-    for key in ["width", "height"]:
-        value = getattr(job.config, key)
-        if value >= 64 and value % (32 if family == "h3" else 16) == 0:
-            shared[key] = value
+    # Values still at the source model's new-draft default move to the target's: one model's measured
+    # capacity is not the other's, and Wan's 832×480 runs H3 out of VRAM. Values the user chose are kept.
+    source = default_config(job.family)
+    for key in ["rank", "alpha"]:
+        if getattr(job.config, key) != getattr(source, key):
+            shared[key] = getattr(job.config, key)
+    if (job.config.width, job.config.height) != (source.width, source.height):
+        for key in ["width", "height"]:
+            value = getattr(job.config, key)
+            if value >= 64 and value % (32 if family == "h3" else 16) == 0:
+                shared[key] = value
     config = default_config(family).model_copy(update=shared)
     return JobDraft(name=job.name, family=family, dataset_id=job.dataset_id, config=config)
 

@@ -112,7 +112,12 @@ def test_an_archived_job_cannot_be_changed_or_used_as_a_preset_source(tmp_path: 
     assert client.post(f"{route}/convert", json={"family": "h3", "revision": 1}).status_code == 422
     selection = {"preset_id": "measured-wan-832x480x33-r16", "revision": 1}
     assert client.post(f"{route}/apply-preset", json=selection).status_code == 422
-    assert all(preset["id"].startswith(("measured-", "smoke-")) for preset in client.get("/api/jobs/presets").json())
+    assert {preset["id"] for preset in client.get("/api/jobs/presets").json()} == {
+        "measured-wan-832x480x33-r16",
+        "measured-h3-640x352x124-r8",
+        "smoke-wan",
+        "smoke-h3",
+    }
     assert sorted(file.name for file in (tmp_path / "jobs" / job["id"]).iterdir()) == ["1.json"]
 
 
