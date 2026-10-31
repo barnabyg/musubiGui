@@ -38,7 +38,11 @@ export type Job = {
   dataset_id: string;
   config: JobConfig;
 };
-export type Dataset = { id: string; name: string };
+export type SetConfig = <K extends keyof JobConfig>(
+  key: K,
+  value: JobConfig[K],
+) => void;
+export type DatasetOption = { id: string; name: string };
 export type Preset = { id: string; name: string; family: Job['family'] };
 export type ConversionPreview = {
   draft: unknown;

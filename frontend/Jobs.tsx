@@ -1,5 +1,5 @@
 import { JobActionBar } from './JobActionBar';
-import { useJobEditor, type Props } from './jobEditor';
+import { useJobEditor, type JobsProps } from './jobEditor';
 import { JobPresets } from './JobPresets';
 import { JobReview } from './JobReview';
 import { useJobSections } from './jobSections';
@@ -9,7 +9,7 @@ import { JobTransfer } from './JobTransfer';
 import { runStatus } from './runStatus';
 import './jobs.css';
 
-export function Jobs(props: Props) {
+export function Jobs(props: JobsProps) {
   const { onRun } = props;
   const {
     jobs,

@@ -4,7 +4,7 @@ import { apiClient } from './api';
 import { jobFields } from './jobFields';
 import type {
   ConversionPreview,
-  Dataset,
+  DatasetOption,
   Job,
   JobConfig,
   PreparedRun,
@@ -14,7 +14,7 @@ import type {
 import type { JobSummary } from './JobTable';
 import { plural } from './labels';
 
-export type Props = {
+export type JobsProps = {
   selectedId?: string;
   onSelect?: (id?: string, replace?: boolean) => void;
   onRun?: (id: string) => void;
@@ -29,13 +29,13 @@ export function useJobEditor({
   onSelect,
   onRun,
   onDirtyChange,
-}: Props) {
+}: JobsProps) {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [archived, setArchived] = useState<Job[]>([]);
   const [summaries, setSummaries] = useState<JobSummary[]>([]);
   const nameField = useRef<HTMLInputElement>(null);
   const focusName = useRef(false);
-  const [datasets, setDatasets] = useState<Dataset[]>([]);
+  const [datasets, setDatasets] = useState<DatasetOption[]>([]);
   const [models, setModels] = useState<Record<string, string>>({});
   const [modelRoots, setModelRoots] = useState<string[]>([]);
   const [job, setJob] = useState<Job | null>(null);
@@ -55,7 +55,7 @@ export function useJobEditor({
   useEffect(() => {
     void Promise.all([
       request<Job[]>('/api/jobs'),
-      request<Dataset[]>('/api/datasets'),
+      request<DatasetOption[]>('/api/datasets'),
       request<{ models: Record<string, string>; model_roots: string[] }>(
         '/api/settings',
       ),

@@ -2,7 +2,7 @@ import type { RefObject } from 'react';
 import { componentLabels } from './labels';
 import type { JobFields } from './jobFields';
 import { fieldId } from './jobRules';
-import type { Dataset, Job, JobConfig } from './jobTypes';
+import type { DatasetOption, Job, JobConfig, SetConfig } from './jobTypes';
 import { PathField } from './PathField';
 
 const extractionModes: {
@@ -32,11 +32,6 @@ const extractionModes: {
   },
 ];
 
-type SetConfig = <K extends keyof JobConfig>(
-  key: K,
-  value: JobConfig[K],
-) => void;
-
 export function JobIdentity({
   job,
   busy,
@@ -54,7 +49,7 @@ export function JobIdentity({
   edit: (next: Job) => void;
   config: SetConfig;
   nameField: RefObject<HTMLInputElement | null>;
-  datasets: Dataset[];
+  datasets: DatasetOption[];
   models: Record<string, string>;
   modelRoots: string[];
 }) {

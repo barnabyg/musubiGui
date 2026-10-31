@@ -1,5 +1,5 @@
 import { errorField, componentError, fieldId, fieldProblems } from './jobRules';
-import type { Job, JobConfig, Review } from './jobTypes';
+import type { Job, JobConfig, Review, SetConfig } from './jobTypes';
 
 export type JobFields = ReturnType<typeof jobFields>;
 
@@ -8,7 +8,7 @@ export function jobFields(
   job: Job | null,
   busy: boolean,
   review: Review | null,
-  config: <K extends keyof JobConfig>(key: K, value: JobConfig[K]) => void,
+  config: SetConfig,
 ) {
   const liveProblems: Record<string, string> = job
     ? fieldProblems(job.family, job.config)

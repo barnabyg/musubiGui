@@ -52,7 +52,7 @@ Focused commands: `npm.cmd run typecheck`, `.venv\Scripts\python.exe -m mypy`,
 `npm.cmd run test:browser -- tests/browser/settings.spec.ts`.
 
 To run one test case:
-`.venv\Scripts\python.exe -m pytest tests/python/test_settings_api.py::test_saved_dataset_roots_are_preserved -q` and
+`.venv\Scripts\python.exe -m pytest tests/python/test_settings_api.py::test_browser_cannot_change_settings_from_another_origin -q` and
 `npm.cmd run test:browser -- tests/browser/settings.spec.ts -g "diagnostic rows share one layout"`.
 
 Exceptions: subprocess calls have narrow Bandit `B603` annotations beside their fixed
