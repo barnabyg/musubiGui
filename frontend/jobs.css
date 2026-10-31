@@ -60,6 +60,26 @@
   background: var(--color-sunken);
   color: var(--color-text);
 }
+.field-problem {
+  display: block;
+  margin-top: var(--space-1);
+  color: var(--color-danger-text);
+}
+.number-field .field-problem {
+  max-width: 130px;
+}
+.error-link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  text-align: left;
+  text-decoration: underline;
+}
+.error-link:hover:not(:disabled) {
+  background: none;
+  text-decoration-thickness: 2px;
+}
 .job-toggle {
   display: flex;
   align-items: center;

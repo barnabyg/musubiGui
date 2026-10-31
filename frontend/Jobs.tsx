@@ -10,6 +10,7 @@ import { confirmDialog } from './ConfirmDialog';
 import { apiClient } from './api';
 import { JobTable, type JobSummary } from './JobTable';
 import { componentLabels } from './labels';
+import { errorField, fieldId, fieldProblems } from './jobRules';
 import { PathField } from './PathField';
 import './jobs.css';
 
@@ -384,35 +385,69 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
   function config<K extends keyof JobConfig>(key: K, value: JobConfig[K]) {
     if (job) edit({ ...job, config: { ...job.config, [key]: value } });
   }
+  const liveProblems: Record<string, string> = job
+    ? fieldProblems(job.family, job.config)
+    : {};
+  // Review errors about a field show beside it, unless the check while typing already says so.
+  const problems: Record<string, string> = {};
+  for (const message of review?.errors ?? []) {
+    const key = errorField(message);
+    if (key && !liveProblems[key])
+      problems[key] = message.slice(message.indexOf(':') + 2);
+  }
+  Object.assign(problems, liveProblems);
+  const problemProps = (key: string) =>
+    problems[key]
+      ? {
+          'aria-invalid': true,
+          'aria-describedby': `${fieldId(key)}-problem`,
+        }
+      : {};
+  function problemText(key: string) {
+    return problems[key] ? (
+      <small className="field-problem" id={`${fieldId(key)}-problem`}>
+        {problems[key]}
+      </small>
+    ) : null;
+  }
+  function focusField(key: string) {
+    document.getElementById(fieldId(key))?.focus();
+  }
   function number(label: string, key: keyof JobConfig, help?: string) {
     return (
-      <label className="field number-field">
-        {label}
+      <div className="field number-field">
+        <label htmlFor={fieldId(key)}>{label}</label>
         <input
+          id={fieldId(key)}
           type="number"
           step="any"
           value={String(job?.config[key] ?? '')}
           disabled={busy}
           onChange={(event) => config(key, Number(event.target.value))}
+          {...problemProps(key)}
         />
+        {problemText(key)}
         {help && <small>{help}</small>}
-      </label>
+      </div>
     );
   }
   function toggle(label: string, key: keyof JobConfig, help?: string) {
     return (
-      <label className="job-toggle">
+      <div className="job-toggle">
         <input
+          id={fieldId(key)}
           type="checkbox"
           checked={Boolean(job?.config[key])}
           disabled={busy}
           onChange={(event) => config(key, event.target.checked)}
+          {...problemProps(key)}
         />
-        <span>
+        <label htmlFor={fieldId(key)}>
           {label}
           {help && <small>{help}</small>}
-        </span>
-      </label>
+          {problemText(key)}
+        </label>
+      </div>
     );
   }
   async function create(family: 'wan' | 'h3') {
@@ -905,15 +940,20 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
             <label className="field">
               Job name
               <input
+                id={fieldId('name')}
                 ref={nameField}
                 disabled={busy}
                 value={job.name}
                 onChange={(event) => edit({ ...job, name: event.target.value })}
+                {...problemProps('name')}
               />
+              {problemText('name')}
             </label>
             <label className="field">
               Dataset
               <select
+                id={fieldId('dataset_id')}
+                {...problemProps('dataset_id')}
                 disabled={busy}
                 value={job.dataset_id}
                 onChange={(event) =>
@@ -927,10 +967,13 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
                   </option>
                 ))}
               </select>
+              {problemText('dataset_id')}
             </label>
             <label className="field">
               Recipe
               <select
+                id={fieldId('recipe')}
+                {...problemProps('recipe')}
                 disabled={busy}
                 value={job.config.recipe}
                 onChange={(event) => config('recipe', event.target.value)}
@@ -943,6 +986,7 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
                   <option value="guidance-loss">H3 guidance loss · T2VA</option>
                 )}
               </select>
+              {problemText('recipe')}
               <small>
                 {job.family === 'wan' ? (
                   <>
@@ -1072,6 +1116,8 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
               <label className="field">
                 Frame extraction
                 <select
+                  id={fieldId('frame_extraction')}
+                  {...problemProps('frame_extraction')}
                   value={job.config.frame_extraction}
                   disabled={busy}
                   onChange={(event) =>
@@ -1091,6 +1137,7 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
                     </option>
                   ))}
                 </select>
+                {problemText('frame_extraction')}
               </label>
               {job.config.frame_extraction === 'slide' &&
                 number('Slide stride', 'frame_stride')}
@@ -1195,12 +1242,15 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
                 <label className="field">
                   Sample prompt
                   <textarea
+                    id={fieldId('sample_prompt')}
+                    {...problemProps('sample_prompt')}
                     disabled={busy}
                     value={job.config.sample_prompt}
                     onChange={(event) =>
                       config('sample_prompt', event.target.value)
                     }
                   />
+                  {problemText('sample_prompt')}
                 </label>
                 {number('Sample inference steps', 'sample_steps')}
               </>
@@ -1248,9 +1298,23 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
               </div>
               {review.errors.length > 0 && (
                 <ul className="error">
-                  {review.errors.map((message, index) => (
-                    <li key={index}>{message}</li>
-                  ))}
+                  {review.errors.map((message, index) => {
+                    const key = errorField(message);
+                    return (
+                      <li key={index}>
+                        {key ? (
+                          <button
+                            className="error-link"
+                            onClick={() => focusField(key)}
+                          >
+                            {message}
+                          </button>
+                        ) : (
+                          message
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
               <ul>

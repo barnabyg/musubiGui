@@ -258,6 +258,9 @@ textarea {
   color: var(--color-text);
   font-size: var(--text-base);
 }
+[aria-invalid='true'] {
+  border-color: var(--color-danger);
+}
 input:focus,
 textarea:focus {
   outline: 2px solid var(--color-accent);

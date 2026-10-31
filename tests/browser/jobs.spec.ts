@@ -851,6 +851,7 @@ test('the section menu reaches every section, marks the current one and keeps un
         await bar.boundingBox(),
       ];
       expect(top!.y).toBeGreaterThanOrEqual(barBox!.y + barBox!.height);
+      expect(barBox!.height).toBeLessThan(220);
     }
 
     // Scrolling by hand moves the mark too.
@@ -879,6 +880,59 @@ test('the section menu reaches every section, marks the current one and keeps un
           document.documentElement.clientWidth,
       ),
     ).toBe(true);
+  } finally {
+    await app.close();
+  }
+});
+
+test('invalid fields are flagged while typing and review errors lead to their field', async ({
+  page,
+}) => {
+  const app = await workspace();
+  try {
+    await openJobs(page, app.url);
+    await page
+      .getByRole('button', { name: 'New Wan job', exact: true })
+      .click();
+    const width = page.getByLabel('Width', { exact: true });
+    await expect(width).not.toHaveAttribute('aria-invalid', 'true');
+    await width.fill('250');
+    await expect(width).toHaveAttribute('aria-invalid', 'true');
+    await expect(width).toHaveAccessibleDescription(
+      'Enter at least 64, in multiples of 16.',
+    );
+    await width.fill('256');
+    await expect(width).not.toHaveAttribute('aria-invalid', 'true');
+
+    const frames = page.getByLabel('Frames', { exact: true });
+    await frames.fill('32');
+    await expect(frames).toHaveAccessibleDescription(/4\*n\+1/);
+    await frames.fill('33');
+    const blocks = page.getByRole('spinbutton', { name: 'Blocks to swap' });
+    await blocks.fill('39');
+    await expect(blocks).toHaveAccessibleDescription('Enter 0 to 38.');
+    await blocks.fill('36');
+
+    // Nothing is blocked: an invalid draft can still be saved.
+    await width.fill('250');
+    await page.getByRole('button', { name: 'Save draft', exact: true }).click();
+    await expect(page.getByRole('status')).toContainText('Draft saved');
+    await width.fill('256');
+
+    // A new draft has no dataset yet, so Review names it, beside the field and as a link.
+    await page
+      .getByRole('button', { name: 'Review configuration', exact: true })
+      .click();
+    const review = page.getByRole('region', { name: 'Configuration review' });
+    await expect(page.locator('#job-field-dataset_id')).toHaveAttribute(
+      'aria-invalid',
+      'true',
+    );
+    await review
+      .getByRole('button', { name: /^Dataset: select a registered/ })
+      .click();
+    await expect(page.locator('#job-field-dataset_id')).toBeFocused();
+    await expect(page.locator('#job-field-dataset_id')).toBeInViewport();
   } finally {
     await app.close();
   }
