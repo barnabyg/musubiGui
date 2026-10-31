@@ -90,30 +90,57 @@ function App() {
   );
   // Set before the browser reports the change, so only history moves look external.
   const currentHash = useRef(formatRoute(initialRoute));
+  const currentScreen = useRef(initialRoute.screen);
+  const leaving = useRef(false);
+  // Where this page sits in the tab's history, stored on each entry so that a move back or
+  // forward can be undone exactly. It survives a reload along with the entry.
+  const [initialPosition] = useState(() => {
+    const stored = (window.history.state as { position?: number } | null)
+      ?.position;
+    window.history.replaceState({ position: stored ?? 0 }, '');
+    return stored ?? 0;
+  });
+  const position = useRef(initialPosition);
   const [jobDirty, setJobDirty] = useState(false);
   const [datasetEditor, setDatasetEditor] = useState(false);
   useRunSignals(screen);
   const go = useCallback((target: Screen, id?: string, replace = false) => {
+    currentScreen.current = target;
     setScreen(target);
     setSelection((value) => ({ ...value, [target]: id }));
     const hash = formatRoute({ screen: target, id });
     if (hash === currentHash.current) return;
     currentHash.current = hash;
-    if (replace) window.history.replaceState(null, '', hash);
-    else window.location.hash = hash;
+    if (replace) {
+      window.history.replaceState({ position: position.current }, '', hash);
+    } else {
+      window.location.hash = hash;
+      position.current += 1;
+      window.history.replaceState({ position: position.current }, '');
+    }
   }, []);
-  const selectDataset = useCallback(
-    (id?: string, replace?: boolean) => go('Datasets', id, replace),
+  // A screen's work can finish after the user has moved on: it updates that screen's selection
+  // without taking them back there.
+  const selectOn = useCallback(
+    (target: Screen, id?: string, replace?: boolean) => {
+      if (currentScreen.current === target) go(target, id, replace);
+      else setSelection((value) => ({ ...value, [target]: id }));
+    },
     [go],
+  );
+  const selectDataset = useCallback(
+    (id?: string, replace?: boolean) => selectOn('Datasets', id, replace),
+    [selectOn],
   );
   const selectJob = useCallback(
-    (id?: string, replace?: boolean) => go('Jobs', id, replace),
-    [go],
+    (id?: string, replace?: boolean) => selectOn('Jobs', id, replace),
+    [selectOn],
   );
   const selectRun = useCallback(
-    (id?: string, replace?: boolean) => go('Runs', id, replace),
-    [go],
+    (id?: string, replace?: boolean) => selectOn('Runs', id, replace),
+    [selectOn],
   );
+  const openRun = useCallback((id: string) => go('Runs', id), [go]);
   async function navigate(name: Screen) {
     if (screen === 'Jobs' && jobDirty && !(await confirmLeaveJob())) return;
     go(name, selection[name]);
@@ -121,13 +148,28 @@ function App() {
   const followHistory = useEffectEvent(async () => {
     if (window.location.hash === currentHash.current) return;
     const next = parseRoute(window.location.hash);
-    if (screen === 'Jobs' && jobDirty) {
-      // The browser has already moved. Put this job's URL back while the question is open.
-      window.history.pushState(null, '', currentHash.current);
+    const state = window.history.state as { position?: number } | null;
+    // An address typed by hand is a new entry, with no position recorded yet.
+    const arrival = state?.position ?? position.current + 1;
+    const moved = arrival - position.current;
+    if (state?.position === undefined)
+      window.history.replaceState({ position: arrival }, '');
+    if (screen === 'Jobs' && jobDirty && !leaving.current) {
+      // The browser has already moved. Step back to this job while the question is open, which
+      // leaves the rest of the history as it was.
+      window.history.go(-moved);
       if (!(await confirmLeaveJob())) return;
+      leaving.current = true;
       setJobDirty(false);
+      window.history.go(moved);
+      return;
     }
-    go(next.screen, next.id);
+    leaving.current = false;
+    position.current = arrival;
+    currentHash.current = window.location.hash;
+    currentScreen.current = next.screen;
+    setScreen(next.screen);
+    setSelection((value) => ({ ...value, [next.screen]: next.id }));
   });
   useEffect(() => {
     const listener = () => void followHistory();
@@ -309,7 +351,7 @@ function App() {
             selectedId={selection.Jobs}
             onSelect={selectJob}
             onDirtyChange={setJobDirty}
-            onRun={selectRun}
+            onRun={openRun}
           />
         ) : screen === 'Runs' ? (
           <Runs selectedId={selection.Runs} onSelect={selectRun} />

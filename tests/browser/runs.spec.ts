@@ -414,8 +414,22 @@ test('the URL keeps the screen and selection across navigation, refresh and brow
       page.getByLabel('Training steps', { exact: true }),
     ).toHaveValue('33');
     expect(new URL(page.url()).hash).toBe(`#/jobs/${job.id}`);
+    // Keeping the edits leaves history as it was, including what lay ahead.
+    await page.goBack();
+    await leave.getByRole('button', { name: 'Keep editing' }).click();
+    await expect(
+      page.getByLabel('Training steps', { exact: true }),
+    ).toHaveValue('33');
     await page.goBack();
     await leave.getByRole('button', { name: 'Discard changes' }).click();
+    await expect(jobName).toHaveCount(0);
+    // Discarding really leaves: the next step back doesn't return to the discarded job.
+    await page.goForward();
+    await expect(jobName).toHaveValue(job.name);
+    await expect(
+      page.getByLabel('Training steps', { exact: true }),
+    ).not.toHaveValue('33');
+    await page.goBack();
     await expect(
       page.getByLabel('Training steps', { exact: true }),
     ).toHaveCount(0);
@@ -451,6 +465,41 @@ test('the URL keeps the screen and selection across navigation, refresh and brow
     await expect(
       page.getByRole('button', { name: /^WAN acceptance/ }),
     ).toBeVisible();
+  } finally {
+    await app.close();
+  }
+});
+
+test('work finishing on one screen does not pull the user back to it', async ({
+  page,
+}) => {
+  const app = await runWorkspace();
+  try {
+    const job = app.manifest.jobs.find((item) => item.family === 'wan')!;
+    const run = (await app.post('/api/runs/prepare', { job_id: job.id })) as {
+      id: string;
+    };
+    await expect
+      .poll(async () => (await app.records())[0]?.status, { timeout: 240_000 })
+      .toBe('prepared');
+    let release = () => {};
+    const held = new Promise<void>((resolve) => (release = resolve));
+    await page.route(`**/api/runs/${run.id}/delete`, async (route) => {
+      await held;
+      await route.continue();
+    });
+    await page.goto(`${app.url}/#/runs/${run.id}`);
+    await page.getByRole('button', { name: 'Delete run', exact: true }).click();
+    await page
+      .getByRole('dialog')
+      .getByRole('button', { name: 'Delete run' })
+      .click();
+    await page.getByRole('button', { name: 'Jobs', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Jobs' })).toBeVisible();
+    release();
+    await expect.poll(async () => (await app.records()).length).toBe(0);
+    await expect(page.getByRole('heading', { name: 'Jobs' })).toBeVisible();
+    expect(new URL(page.url()).hash).toBe('#/jobs');
   } finally {
     await app.close();
   }
