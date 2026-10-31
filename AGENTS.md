@@ -12,4 +12,8 @@ Before triaging or changing triage labels, read `docs/agents/triage-labels.md`. 
 
 ### Domain docs
 
-Before exploring the codebase, read `docs/agents/domain.md`. Use the single-context layout: root `GLOSSARY.md` and `docs/adr/`.
+Before exploring the codebase, read `docs/agents/domain.md`. Use the single-context layout: root `GLOSSARY.md` and `docs/adr/`, when present.
+
+## Verification
+
+The canonical check is `npm.cmd run verify`. Before checking a change, read `docs/verification.md`, which also gives the focused commands for one file or one test case.

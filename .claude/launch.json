@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "musubi-gui",
-      "runtimeExecutable": "C:/docs/git/musubiGui/.venv/Scripts/python.exe",
-      "runtimeArgs": ["-m", "musubi_gui", "--no-browser"],
+      "runtimeExecutable": ".\\launch.cmd",
+      "runtimeArgs": ["--no-browser"],
       "port": 8765
     }
   ]
