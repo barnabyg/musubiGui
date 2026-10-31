@@ -447,67 +447,6 @@ test('backend interruption retains GPU ownership and offers explicit recovery wi
   }
 });
 
-test('a stopped training run shows the final status of its stopped stage', async ({
-  page,
-}) => {
-  const app = await runWorkspace();
-  try {
-    const job = app.manifest.jobs[0];
-    const saved = (await (
-      await fetch(`${app.url}/api/jobs/${job.id}`)
-    ).json()) as {
-      name: string;
-      family: string;
-      dataset_id: string;
-      revision: number;
-      config: Record<string, unknown>;
-    };
-    await fetch(`${app.url}/api/jobs/${job.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ...saved,
-        version: undefined,
-        id: undefined,
-        config: { ...saved.config, steps: 50 },
-      }),
-    });
-    await page.goto(app.url);
-    await page.getByRole('button', { name: 'Jobs', exact: true }).click();
-    await page
-      .getByRole('button', { name: `${job.name} · WAN · r2`, exact: true })
-      .click();
-    await page
-      .getByRole('button', { name: 'Review configuration', exact: true })
-      .click();
-    await page
-      .getByRole('button', { name: 'Prepare run', exact: true })
-      .click();
-    await expect(
-      page.getByText('State: prepared', { exact: true }),
-    ).toBeVisible({ timeout: 240_000 });
-    await page
-      .getByRole('button', { name: 'Start training', exact: true })
-      .click();
-    await expect(page.getByLabel('Run logs')).toContainText(
-      'SYNTHETIC ACCEPTANCE FIXTURE: train',
-    );
-    page.once('dialog', (dialog) => void dialog.accept());
-    await page
-      .getByRole('button', { name: 'Force terminate', exact: true })
-      .click();
-    await expect(
-      page.getByText('State: stopped', { exact: true }),
-    ).toBeVisible();
-    await expect(
-      page.locator('p', { hasText: /^train: stopped/ }),
-    ).toBeVisible();
-    await expect(page.getByRole('status')).toHaveText('GPU available');
-  } finally {
-    await app.close();
-  }
-});
-
 test('a gracefully stopped revision can be prepared and started again', async ({
   page,
 }) => {
@@ -604,6 +543,10 @@ test('a gracefully stopped revision can be prepared and started again', async ({
     await expect(
       page.getByText('State: stopped', { exact: true }),
     ).toBeVisible();
+    await expect(
+      page.locator('p', { hasText: /^train: stopped/ }),
+    ).toBeVisible();
+    await expect(page.getByRole('status')).toHaveText('GPU available');
   } finally {
     await app.close();
   }
