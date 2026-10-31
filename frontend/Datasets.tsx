@@ -7,6 +7,13 @@ import {
   useState,
   useSyncExternalStore,
 } from 'react';
+import {
+  ArrowLeft,
+  ArrowRight,
+  Images,
+  Settings as SettingsIcon,
+  X,
+} from 'lucide-react';
 import './datasets.css';
 import { apiClient } from './api';
 import { confirmDialog } from './ConfirmDialog';
@@ -430,7 +437,7 @@ export function Datasets({
               disabled={busy}
               onClick={() => void back()}
             >
-              ← Back to datasets
+              <ArrowLeft /> Back to datasets
             </button>
           )}
           <section className="title dataset-heading">
@@ -471,7 +478,7 @@ export function Datasets({
             disabled={busy}
             onClick={() => void back()}
           >
-            ←
+            <ArrowLeft />
           </button>
           <div className="dataset-identity">
             <h1 ref={heading} tabIndex={-1} title={dataset.name}>
@@ -543,7 +550,7 @@ export function Datasets({
               aria-controls="dataset-settings-panel"
               onClick={() => setPanel(panel === 'settings' ? null : 'settings')}
             >
-              ⚙
+              <SettingsIcon />
             </button>
           </div>
         </div>
@@ -567,7 +574,7 @@ export function Datasets({
           {!loaded && <p role="status">Loading datasets…</p>}
           {loaded && !datasets.length && (
             <div className="dataset-empty">
-              <span aria-hidden="true">▧</span>
+              <Images />
               <h2>Your library starts here</h2>
               <p>
                 Choose New dataset to register a local folder or start uploading
@@ -588,7 +595,9 @@ export function Datasets({
                   captioned · {value.counts.included} included
                 </small>
                 <span className="dataset-path">{value.path}</span>
-                <span className="dataset-edit-label">Edit dataset →</span>
+                <span className="dataset-edit-label">
+                  Edit dataset <ArrowRight />
+                </span>
               </button>
               <div className="dataset-row-actions">
                 <span
@@ -681,7 +690,7 @@ export function Datasets({
             <div className="dataset-panel-heading">
               <h2>Dataset settings</h2>
               <button aria-label="Close settings" onClick={closePanel}>
-                ×
+                <X />
               </button>
             </div>
             <label className="field">
@@ -723,7 +732,7 @@ export function Datasets({
               <div className="dataset-panel-heading">
                 <h2>Add media</h2>
                 <button aria-label="Close uploads" onClick={closePanel}>
-                  ×
+                  <X />
                 </button>
               </div>
               <DatasetUploads
@@ -746,7 +755,7 @@ export function Datasets({
             <div className="dataset-panel-heading">
               <h2>Search and selection</h2>
               <button aria-label="Close tools" onClick={closePanel}>
-                ×
+                <X />
               </button>
             </div>
             <div className="columns dataset-filters">
@@ -838,7 +847,7 @@ export function Datasets({
             <div className="dataset-gallery-area">
               {!visibleItems.length && (
                 <div className="dataset-empty">
-                  <span aria-hidden="true">▧</span>
+                  <Images />
                   <h2>
                     {items.length
                       ? 'No matching media'

@@ -114,11 +114,12 @@
   text-align: center;
   margin: var(--space-6) 0 var(--space-9);
 }
-.dataset-empty > span {
+.dataset-empty > .lucide {
   display: block;
-  font-size: var(--text-display);
+  width: 36px;
+  height: 36px;
+  margin: 0 auto var(--space-7);
   color: var(--color-accent);
-  margin-bottom: var(--space-7);
 }
 .dataset-create .actions,
 .dataset-content .actions {
@@ -162,7 +163,6 @@ main.dataset-editor-shell {
 .dataset-back-icon {
   border-color: transparent;
   background: transparent;
-  font-size: var(--text-icon);
   padding: var(--space-2) var(--space-3);
 }
 .dataset-identity {
@@ -241,8 +241,7 @@ main.dataset-editor-shell {
   margin: 0;
 }
 .dataset-panel-heading button {
-  padding: var(--space-1) var(--space-4);
-  font-size: var(--text-icon);
+  padding: var(--space-2);
 }
 .dataset-panel .columns {
   grid-template-columns: minmax(0, 1fr);

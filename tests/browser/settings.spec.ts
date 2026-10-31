@@ -268,7 +268,7 @@ test('path fields warn before saving, browse local folders and show the full pat
     await expect(browser.getByText('plain.txt')).toHaveCount(0);
     await browser.getByRole('button', { name: /chosen folder/ }).click();
     await expect(browser.locator('.path-location')).toHaveText(chosen);
-    await browser.getByRole('button', { name: '↑ Up' }).click();
+    await browser.getByRole('button', { name: 'Up', exact: true }).click();
     await expect(browser.locator('.path-location')).toHaveText(root);
     await browser.getByRole('button', { name: /chosen folder/ }).click();
     await browser.getByRole('button', { name: 'Choose this folder' }).click();

@@ -6,6 +6,14 @@ import {
   useState,
 } from 'react';
 import { createRoot } from 'react-dom/client';
+import {
+  ClipboardList,
+  Hexagon,
+  Images,
+  Play,
+  Settings as SettingsIcon,
+  type LucideIcon,
+} from 'lucide-react';
 import { apiClient } from './api';
 import './style.css';
 import { ConfirmDialogHost, confirmDialog } from './ConfirmDialog';
@@ -33,6 +41,13 @@ type Report = {
   current: boolean;
   checks: { name: string; status: string; message: string }[];
   environment: Record<string, unknown>;
+};
+
+const screenIcons: Record<Screen, LucideIcon> = {
+  Datasets: Images,
+  Jobs: ClipboardList,
+  Runs: Play,
+  Settings: SettingsIcon,
 };
 
 function setupHealth(report: Report | null, dirty: boolean) {
@@ -302,23 +317,24 @@ function App() {
     >
       <aside>
         <a className="brand" href="/">
-          ◈{' '}
+          <Hexagon />
           <span>musubi</span>
         </a>
         <div className="workspace">WORKSPACE</div>
         <nav>
-          {screens.map((name) => (
-            <button
-              key={name}
-              className={screen === name ? 'active' : ''}
-              onClick={() => void navigate(name)}
-            >
-              <span aria-hidden="true">
-                {name === 'Datasets' ? '▦' : name === 'Jobs' ? '▷' : '⚙'}
-              </span>
-              {name}
-            </button>
-          ))}
+          {screens.map((name) => {
+            const Icon = screenIcons[name];
+            return (
+              <button
+                key={name}
+                className={screen === name ? 'active' : ''}
+                onClick={() => void navigate(name)}
+              >
+                <Icon />
+                {name}
+              </button>
+            );
+          })}
         </nav>
         <button
           className={`local ${health.state}`}

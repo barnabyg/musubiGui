@@ -1,3 +1,4 @@
+import { ArrowUp } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import { apiClient } from './api';
 
@@ -105,7 +106,9 @@ function PathBrowser({
       <ul aria-label="Folder contents">
         {listing && listing.parent !== null && (
           <li>
-            <button onClick={() => go(listing.parent ?? '')}>↑ Up</button>
+            <button onClick={() => go(listing.parent ?? '')}>
+              <ArrowUp /> Up
+            </button>
           </li>
         )}
         {listing?.entries.map((entry) => (

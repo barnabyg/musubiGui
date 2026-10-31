@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ArrowDown, ArrowUp } from 'lucide-react';
 
 export type JobSummary = {
   id: string;
@@ -86,6 +87,8 @@ export function JobTable<T extends Row>({
                   }
                 >
                   {label}
+                  {sort.key === key &&
+                    (sort.descending ? <ArrowDown /> : <ArrowUp />)}
                 </button>
               </th>
             ))}

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { Ellipsis } from 'lucide-react';
 
 type Item = {
   label: string;
@@ -72,7 +73,7 @@ export function ActionMenu({
           }
         }}
       >
-        ⋯
+        <Ellipsis />
       </button>
       {open && (
         <div role="menu" aria-label={label} onKeyDown={move}>
