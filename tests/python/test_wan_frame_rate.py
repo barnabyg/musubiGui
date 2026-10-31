@@ -88,16 +88,3 @@ def test_mixed_wan_frame_rates_prepare_one_resampled_section_per_rate(tmp_path: 
         assert {Path(path).parent.name for path in cached} == {"dataset-rate-1", "dataset-rate-2"}
     finally:
         service.close()
-
-
-def test_h3_preparation_still_ignores_source_fps(tmp_path: Path) -> None:
-    fixture = acceptance_workspace(tmp_path)
-    job = next(job for job in fixture["jobs"] if job["family"] == "h3")
-    service = RunService(Path(fixture["state"]), fixture_mode=True, device_path=tmp_path / "device.sqlite")
-    try:
-        run = prepared(service, service.prepare(job["id"])["id"])
-        assert run["status"] == "prepared", run.get("error")
-        native = (Path(run["directory"]) / "dataset.toml").read_text(encoding="utf-8")
-        assert "video_jsonl_file = " in native and "source_fps" not in native
-    finally:
-        service.close()

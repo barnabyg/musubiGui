@@ -38,6 +38,8 @@ def test_h3_preparation_freezes_audio_and_keeps_guidance_stages(tmp_path: Path) 
         assert Path(prepared["cache"], "uncond.safetensors").is_file()
         frozen = json.loads(Path(prepared["directory"], "inputs.json").read_text(encoding="utf-8"))
         assert frozen["manifest"]["items"][0]["caption"]["text"].endswith("tone plays.")
+        native = Path(prepared["directory"], "dataset.toml").read_text(encoding="utf-8")
+        assert "video_jsonl_file = " in native and "source_fps" not in native
     finally:
         service.close()
 
