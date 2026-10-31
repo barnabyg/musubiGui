@@ -5,7 +5,9 @@ delete process.env.NO_COLOR;
 
 export default defineConfig({
   testDir: './tests/browser',
-  workers: 1,
+  // Each test owns its backend, port and temporary state. Hosted runners get fewer workers.
+  fullyParallel: true,
+  workers: process.env.CI ? 2 : 4,
   // CI stops at the first failure; local runs report every failure.
   maxFailures: process.env.CI ? 1 : 0,
   // Upper bounds with deliberate margin; see docs/verification.md. A passing test never waits them out.

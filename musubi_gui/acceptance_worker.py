@@ -83,7 +83,6 @@ def main(stage: str | None = None) -> None:
             tensor(args.uncond_output)
         if stage == "latent_cache":
             print("supervised_audio_fraction=1.000000 (synthetic orchestration fixture)", flush=True)
-        time.sleep(0.3)
     elif stage == "train":
         if args.output_dir is None:
             parser.error("--output_dir is required for training fixtures")
@@ -115,8 +114,10 @@ def main(stage: str | None = None) -> None:
             tensor(state / "random_states_0.pkl")
             (state / "scheduler.bin").write_text("synthetic scheduler", encoding="utf-8")
 
+        # Longer runs stay slow enough to be observed and stopped; the two-step default needn't wait.
+        step_seconds = 0.5 if args.max_train_steps > 2 else 0
         for step in range(1, args.max_train_steps + 1):
-            time.sleep(0.5)
+            time.sleep(step_seconds)
             print(
                 f"steps: {step}/{args.max_train_steps} loss=0.0 (synthetic optimizer_step={previous + step})",
                 flush=True,

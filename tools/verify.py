@@ -31,8 +31,8 @@ def main() -> None:
     run(python, "-m", "mypy")
     run(npm, "run", "typecheck")
     run(python, "-m", "bandit", "-r", "musubi_gui", "tools", "-c", "pyproject.toml", "-q")
-    # CI stops at the first failure; local runs report every failure.
-    run(python, "-m", "pytest", "-q", *(["--maxfail=1"] if os.environ.get("CI") else []))
+    # CI stops at the first failure; local runs report every failure. Hosted runners get fewer workers.
+    run(python, "-m", "pytest", "-q", *(["--maxfail=1", "-n", "2"] if os.environ.get("CI") else ["-n", "4"]))
     # Builds the UI first through pretest:browser; packaging below ships that same bundle.
     run(npm, "run", "test:browser")
     run("uv", "lock", "--check")

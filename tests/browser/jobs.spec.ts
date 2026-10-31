@@ -1,51 +1,16 @@
 import { test, expect, type Page } from '@playwright/test';
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { createServer } from 'node:net';
-import { stopBackendTree } from './processes';
+import { localBackend } from './backend';
 
 async function workspace() {
   const root = await mkdtemp(path.join(tmpdir(), 'musubi-jobs-'));
-  const reservation = createServer();
-  await new Promise<void>((resolve) =>
-    reservation.listen(0, '127.0.0.1', resolve),
-  );
-  const address = reservation.address();
-  if (typeof address !== 'object' || !address) throw new Error('No test port');
-  const port = address.port;
-  await new Promise<void>((resolve) => reservation.close(() => resolve()));
-  const url = `http://127.0.0.1:${port}`;
-  let backend: ChildProcess | undefined;
-  const start = async () => {
-    backend = spawn(
-      path.resolve('.venv/Scripts/python.exe'),
-      ['-m', 'musubi_gui', '--port', String(port), '--no-browser'],
-      {
-        env: { ...process.env, MUSUBI_GUI_STATE: path.join(root, 'state') },
-        stdio: 'pipe',
-      },
-    );
-    await expect
-      .poll(async () => {
-        try {
-          return (await fetch(`${url}/api/jobs`)).status;
-        } catch {
-          return 0;
-        }
-      })
-      .toBe(200);
-  };
-  const stop = async () => {
-    if (backend && backend.exitCode === null) {
-      const exited = new Promise<void>((resolve) =>
-        backend!.once('exit', () => resolve()),
-      );
-      await stopBackendTree(backend.pid!);
-      await exited;
-    }
-  };
+  const { url, start, stop } = await localBackend({
+    state: path.join(root, 'state'),
+    readyRoute: '/api/jobs',
+  });
   await mkdir(path.join(root, 'models'));
   await start();
   const settings = (await (

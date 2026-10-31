@@ -13,7 +13,6 @@ const exists = (file: string) =>
 test('deleting a Run and its Job goes from the UI to the disk and survives a backend restart', async ({
   page,
 }) => {
-  test.skip(process.platform !== 'win32', 'Windows file locking boundary');
   const app = await runWorkspace();
   const dialogs: string[] = [];
   let releaseLock = () => {};
@@ -197,33 +196,6 @@ test('a Run that reused a deleted Run cache still shows it and can be used', asy
       page.getByText('State: completed', { exact: true }),
     ).toBeVisible({ timeout: 240_000 });
     expect(await exists(first.directory)).toBe(false);
-  } finally {
-    await app.close();
-  }
-});
-
-test('Delete run on an active Run is refused with the reason', async ({
-  page,
-}) => {
-  const app = await runWorkspace();
-  try {
-    const job = app.manifest.jobs.find((item) => item.family === 'wan')!;
-    await app.leaseGpu('acquire');
-    await app.post('/api/runs/prepare', { job_id: job.id });
-    await page.goto(app.url);
-    await page.getByRole('button', { name: 'Runs', exact: true }).click();
-    await page
-      .getByRole('button', { name: `${job.name} · WAN · r1`, exact: true })
-      .click();
-    await expect(
-      page.getByText('State: pending_preparation', { exact: true }),
-    ).toBeVisible();
-    await page.getByRole('button', { name: 'Delete run', exact: true }).click();
-    await expect(page.getByRole('alert')).toContainText('active');
-    const [run] = await app.records();
-    expect(run.status).toBe('pending_preparation');
-    expect(await exists(run.directory)).toBe(true);
-    await app.leaseGpu('release');
   } finally {
     await app.close();
   }
@@ -447,67 +419,6 @@ test('backend interruption retains GPU ownership and offers explicit recovery wi
   }
 });
 
-test('a stopped training run shows the final status of its stopped stage', async ({
-  page,
-}) => {
-  const app = await runWorkspace();
-  try {
-    const job = app.manifest.jobs[0];
-    const saved = (await (
-      await fetch(`${app.url}/api/jobs/${job.id}`)
-    ).json()) as {
-      name: string;
-      family: string;
-      dataset_id: string;
-      revision: number;
-      config: Record<string, unknown>;
-    };
-    await fetch(`${app.url}/api/jobs/${job.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ...saved,
-        version: undefined,
-        id: undefined,
-        config: { ...saved.config, steps: 50 },
-      }),
-    });
-    await page.goto(app.url);
-    await page.getByRole('button', { name: 'Jobs', exact: true }).click();
-    await page
-      .getByRole('button', { name: `${job.name} · WAN · r2`, exact: true })
-      .click();
-    await page
-      .getByRole('button', { name: 'Review configuration', exact: true })
-      .click();
-    await page
-      .getByRole('button', { name: 'Prepare run', exact: true })
-      .click();
-    await expect(
-      page.getByText('State: prepared', { exact: true }),
-    ).toBeVisible({ timeout: 240_000 });
-    await page
-      .getByRole('button', { name: 'Start training', exact: true })
-      .click();
-    await expect(page.getByLabel('Run logs')).toContainText(
-      'SYNTHETIC ACCEPTANCE FIXTURE: train',
-    );
-    page.once('dialog', (dialog) => void dialog.accept());
-    await page
-      .getByRole('button', { name: 'Force terminate', exact: true })
-      .click();
-    await expect(
-      page.getByText('State: stopped', { exact: true }),
-    ).toBeVisible();
-    await expect(
-      page.locator('p', { hasText: /^train: stopped/ }),
-    ).toBeVisible();
-    await expect(page.getByRole('status')).toHaveText('GPU available');
-  } finally {
-    await app.close();
-  }
-});
-
 test('a gracefully stopped revision can be prepared and started again', async ({
   page,
 }) => {
@@ -604,6 +515,10 @@ test('a gracefully stopped revision can be prepared and started again', async ({
     await expect(
       page.getByText('State: stopped', { exact: true }),
     ).toBeVisible();
+    await expect(
+      page.locator('p', { hasText: /^train: stopped/ }),
+    ).toBeVisible();
+    await expect(page.getByRole('status')).toHaveText('GPU available');
   } finally {
     await app.close();
   }
@@ -645,7 +560,7 @@ test('low disk space warns in review and preparation still goes ahead', async ({
   }
 });
 
-test('archiving hides a job, keeps its Runs browsable and restores it', async ({
+test('a queued Run refuses delete and archive; archiving hides a job, keeps its Runs browsable and restores it', async ({
   page,
 }) => {
   const app = await runWorkspace();
@@ -673,6 +588,18 @@ test('archiving hides a job, keeps its Runs browsable and restores it', async ({
     await expect
       .poll(async () => (await app.records())[0]?.status, { timeout: 240_000 })
       .toBe('pending_preparation');
+
+    // Deleting a queued Run is refused with the reason.
+    await page.getByRole('button', { name: 'Runs', exact: true }).click();
+    await library.click();
+    await expect(
+      page.getByText('State: pending_preparation', { exact: true }),
+    ).toBeVisible();
+    await page.getByRole('button', { name: 'Delete run', exact: true }).click();
+    await expect(page.getByRole('alert')).toContainText('active');
+    const [queued] = await app.records();
+    expect(queued.status).toBe('pending_preparation');
+    expect(await exists(queued.directory)).toBe(true);
 
     // A queued Run keeps its job in the list, and the refusal says why.
     await jobsTab.click();

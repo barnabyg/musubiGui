@@ -1,16 +1,15 @@
 import json
-import time
 from pathlib import Path
 
 import pytest
+from helpers import acceptance_workspace, wait_for
 
-from musubi_gui.acceptance import prepare
 from musubi_gui.runs import RunService
 
 
 @pytest.mark.parametrize("family", ["wan", "h3"])
 def test_retry_seals_its_executed_native_inputs_and_rejects_edits_before_launch(tmp_path: Path, family: str) -> None:
-    fixture = prepare(tmp_path / "acceptance", "fixture", None)
+    fixture = acceptance_workspace(tmp_path)
     service = RunService(
         Path(fixture["state"]), fixture_mode=True, device_path=tmp_path / "device.sqlite", autostart=False
     )
@@ -34,11 +33,7 @@ def test_retry_seals_its_executed_native_inputs_and_rejects_edits_before_launch(
         else:
             executed_toml.write_text("invalid edited native configuration", encoding="utf-8")
         service.start_worker()
-        deadline = time.monotonic() + 180
-        while service.get(retried["id"])["status"] != "failed" and time.monotonic() < deadline:
-            time.sleep(0.02)
-        rejected = service.get(retried["id"])
-        assert rejected["status"] == "failed"
+        rejected = wait_for(service, retried["id"], "failed")
         assert "Frozen dataset inputs changed" in rejected["error"]
         assert rejected["processes"] == []
         assert all(stage["status"] == "pending" for stage in rejected["stages"])

@@ -1,5 +1,10 @@
 name: Verify
-on: [push, pull_request]
+on:
+  # Pull requests cover branches; a branch without one can run this by hand.
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
 jobs:
   windows:
     runs-on: windows-latest
@@ -13,9 +18,11 @@ jobs:
       - uses: actions/setup-node@v7.1.0
         with:
           node-version: '24'
+          cache: npm
       - uses: astral-sh/setup-uv@v10.3.2
         with:
           version: '0.11.7'
+          enable-cache: true
       - run: uv sync --locked
       - run: npm.cmd ci
       - run: npm.cmd run verify

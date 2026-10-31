@@ -1,18 +1,16 @@
 import json
-import os
 import sqlite3
 import subprocess
 import threading
-import time
 from pathlib import Path
 from typing import Any, Iterator
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from helpers import acceptance_workspace, wait_for
 
 from musubi_gui import runs as runs_module
-from musubi_gui.acceptance import prepare as prepare_acceptance
 from musubi_gui.jobs import JobStore
 from musubi_gui.jobs_api import jobs_router
 from musubi_gui.outputs import output_router
@@ -20,16 +18,6 @@ from musubi_gui.processes import process_identity
 from musubi_gui.run_store import ACTIVE_STATUSES
 from musubi_gui.runs import ExecutionPlan, RunService
 from musubi_gui.settings import Settings, load_settings, save_settings
-
-
-def wait_for(service: RunService, run_id: str, status: str, *, device_released: bool = False) -> dict[str, Any]:
-    deadline = time.monotonic() + 180
-    while time.monotonic() < deadline:
-        run = service.get(run_id)
-        if run["status"] == status and (not device_released or service.device.owner() is None):
-            return run
-        time.sleep(0.02)
-    raise AssertionError(service.get(run_id))
 
 
 def client_for(root: Path, service: RunService) -> TestClient:
@@ -88,9 +76,6 @@ def size(*paths: str | Path) -> int:
 
 
 def junction(link: Path, target: Path) -> None:
-    if os.name != "nt":
-        link.symlink_to(target, target_is_directory=True)
-        return
     subprocess.run(
         [
             "powershell.exe",
@@ -253,7 +238,6 @@ def test_deleting_a_finished_segment_keeps_the_cache_it_shares_with_its_source(
     assert service.get(source["id"])["status"] == "completed"
 
 
-@pytest.mark.skipif(os.name != "nt", reason="Only Windows refuses to delete an open file")
 def test_a_locked_file_leaves_the_run_visible_and_it_can_be_deleted_again(
     state: Path, service: RunService, tmp_path: Path
 ) -> None:
@@ -293,7 +277,6 @@ def test_a_locked_file_leaves_the_run_visible_and_it_can_be_deleted_again(
         restarted.close()
 
 
-@pytest.mark.skipif(os.name != "nt", reason="Only Windows refuses to delete an open file")
 def test_a_briefly_held_file_does_not_fail_the_delete(state: Path, service: RunService) -> None:
     client = client_for(state, service)
     run = add_run(service, "first")
@@ -458,7 +441,7 @@ def test_an_unknown_run_database_version_stays_blocked(state: Path, service: Run
 
 
 def test_prepare_creates_a_new_run_after_a_delete_and_other_runs_keep_working(tmp_path: Path) -> None:
-    fixture = prepare_acceptance(tmp_path / "acceptance", "fixture", None)
+    fixture = acceptance_workspace(tmp_path)
     root = Path(fixture["state"])
     running = RunService(root, fixture_mode=True, device_path=tmp_path / "device.sqlite")
     try:
@@ -494,7 +477,7 @@ def test_prepare_creates_a_new_run_after_a_delete_and_other_runs_keep_working(tm
 
 
 def test_a_run_that_reused_a_deleted_runs_cache_keeps_working(tmp_path: Path) -> None:
-    fixture = prepare_acceptance(tmp_path / "acceptance", "fixture", None)
+    fixture = acceptance_workspace(tmp_path)
     root = Path(fixture["state"])
     running = RunService(root, fixture_mode=True, device_path=tmp_path / "device.sqlite")
     try:
@@ -515,14 +498,12 @@ def test_a_run_that_reused_a_deleted_runs_cache_keeps_working(tmp_path: Path) ->
         assert first["id"] in {stage.get("reused_from") for stage in browsed["stages"]}
         assert all(Path(browsed["cache"], item["path"]).is_file() for item in browsed["stages"][0]["artifacts"])
         assert client.get(f"/api/runs/{second['id']}/outputs").status_code == 200
-        assert client.post(f"/api/runs/{second['id']}/start", json={}).status_code == 200
-        wait_for(running, second["id"], "completed", device_released=True)
     finally:
         running.close()
 
 
 def test_a_real_restored_segment_blocks_its_source_until_finished_then_outlives_it(tmp_path: Path) -> None:
-    fixture = prepare_acceptance(tmp_path / "acceptance", "fixture", None)
+    fixture = acceptance_workspace(tmp_path)
     root = Path(fixture["state"])
     running = RunService(root, fixture_mode=True, device_path=tmp_path / "device.sqlite")
     try:

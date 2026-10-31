@@ -2,10 +2,10 @@ import hashlib
 import json
 import os
 import sys
-import time
 from pathlib import Path
 
 import pytest
+from helpers import wait_for
 
 from musubi_gui import wan_tokenizer
 from musubi_gui.reference import Stage
@@ -109,10 +109,7 @@ def stage_plan(root: Path, name: str, family: str = "wan") -> ExecutionPlan:
 
 def observed(service: RunService, plan: ExecutionPlan) -> dict:
     run = service.submit(plan)
-    deadline = time.monotonic() + 180
-    while service.get(run["id"])["status"] not in {"prepared", "failed"} and time.monotonic() < deadline:
-        time.sleep(0.02)
-    assert service.get(run["id"])["status"] == "prepared", service.get(run["id"])
+    wait_for(service, run["id"], "prepared")
     return json.loads((plan.directory / "observed.json").read_text(encoding="utf-8"))
 
 

@@ -1,4 +1,5 @@
 import json
+import shutil
 import wave
 from pathlib import Path
 from typing import Any
@@ -38,8 +39,9 @@ def test_h3_inspector_resolves_sources_and_distinguishes_missing_ambiguous_malfo
 ) -> None:
     media = tmp_path / "media"
     media.mkdir()
-    for name in ["missing", "sidecar", "explicit", "ambiguous", "malformed", "short"]:
-        video(media / f"{name}.mp4")
+    video(media / "missing.mp4")
+    for name in ["sidecar", "explicit", "ambiguous", "malformed", "short"]:
+        shutil.copyfile(media / "missing.mp4", media / f"{name}.mp4")
     video(media / "bad-geometry.mp4", width=258)
     audio(media / "sidecar.wav")
     audio(media / "explicit.wav", seconds=0.5)
@@ -62,18 +64,21 @@ def test_h3_inspector_resolves_sources_and_distinguishes_missing_ambiguous_malfo
         assert response.status_code == 200, response.text
         return dict(response.json())
 
-    assert inspect("missing.mp4")["source"] == "missing"
-    assert inspect("missing.mp4")["errors"] == []
-    assert inspect("sidecar.mp4")["source"] == "sidecar"
-    assert inspect("sidecar.mp4")["coverage"] == 1
+    missing = inspect("missing.mp4")
+    assert missing["source"] == "missing"
+    assert missing["errors"] == []
+    sidecar = inspect("sidecar.mp4")
+    assert sidecar["source"] == "sidecar"
+    assert sidecar["coverage"] == 1
     assert "Multiple same-stem" in " ".join(inspect("ambiguous.mp4")["errors"])
     assert "decode" in " ".join(inspect("malformed.mp4")["errors"])
     assert "materially short" in " ".join(inspect("short.mp4")["errors"])
     assert "multiples of 32" in " ".join(inspect("bad-geometry.mp4")["errors"])
     explicit_url = f"/api/datasets/{dataset_id}/items/{items['explicit.mp4']['id']}/audio"
     assert client.put(explicit_url, json={"path": str(media / "chosen.wav")}).status_code == 200
-    assert inspect("explicit.mp4")["source"] == "explicit"
-    assert inspect("explicit.mp4")["errors"] == []
+    explicit = inspect("explicit.mp4")
+    assert explicit["source"] == "explicit"
+    assert explicit["errors"] == []
     assert client.put(explicit_url, json={"path": str(tmp_path / "outside.wav")}).status_code == 422
 
 

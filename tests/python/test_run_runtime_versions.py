@@ -6,9 +6,9 @@ import time
 from pathlib import Path
 
 import pytest
+from helpers import acceptance_workspace
 
 from musubi_gui import snapshots
-from musubi_gui.acceptance import prepare
 from musubi_gui.runs import RunService
 
 
@@ -39,7 +39,7 @@ def test_version_only_probe_reports_optional_preprocessors_without_initializing_
 def test_preprocessor_versions_invalidate_cache_and_changed_queued_environment_blocks_launch(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    fixture = prepare(tmp_path / "acceptance", "fixture", None)
+    fixture = acceptance_workspace(tmp_path)
     environment = {
         "python": "3.12.10",
         "platform": "Windows-11",

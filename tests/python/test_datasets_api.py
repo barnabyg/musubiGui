@@ -1,5 +1,3 @@
-import base64
-import json
 import os
 import subprocess
 import threading
@@ -10,10 +8,9 @@ from typing import Any
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from helpers import PNG, fixture
 
 from musubi_gui import datasets
-
-PNG = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=")
 
 
 def test_rename_and_delete_library_entry_preserve_files_and_recovery_history(tmp_path: Path) -> None:
@@ -73,25 +70,6 @@ def test_delete_waits_for_pending_scan_and_preserves_managed_folder(tmp_path: Pa
     assert client.delete(f"/api/datasets/{managed['id']}").status_code == 200
     assert (folder / "uploaded.png").read_bytes() == PNG
     assert (folder / "uploaded.txt").read_text(encoding="utf-8") == "Uploaded caption"
-
-
-def fixture(tmp_path: Path) -> tuple[TestClient, Path, Path]:
-    from musubi_gui.datasets_api import dataset_router
-
-    state = tmp_path / "state"
-    state.mkdir()
-    media = tmp_path / "资料 with spaces"
-    media.mkdir()
-    (media / "red.png").write_bytes(PNG)
-    (media / "broken.mp4").write_bytes(b"not a video")
-    (media / "red.txt").write_text("A red square", encoding="utf-8")
-    (state / "settings.json").write_text(
-        json.dumps({"version": 1, "dataset_roots": [str(media)]}),
-        encoding="utf-8",
-    )
-    app = FastAPI()
-    app.include_router(dataset_router(state))
-    return TestClient(app), media, state
 
 
 def test_register_preview_rescan_and_restart_preserve_dataset(tmp_path: Path) -> None:
@@ -236,7 +214,6 @@ def test_rescan_retries_unchanged_invalid_media_after_decoder_recovers(
     assert not any(str(media / "red.png") in command for command in called)
 
 
-@pytest.mark.skipif(os.name != "nt", reason="Native Windows junction containment contract")
 def test_caption_editor_rejects_inside_root_junction_retarget_without_touching_either_sidecar(tmp_path: Path) -> None:
     client, media, _ = fixture(tmp_path)
     routed, target = media / "source folder", media / "other folder"
@@ -272,7 +249,34 @@ def test_caption_editor_rejects_inside_root_junction_retarget_without_touching_e
         routed.rmdir()
 
 
-@pytest.mark.skipif(os.name != "nt", reason="Native Windows sidecar reparse-point contract")
+def test_caption_editor_rejects_a_dataset_root_replaced_by_a_junction(tmp_path: Path) -> None:
+    client, media, _ = fixture(tmp_path)
+    url = caption_url(client, media)
+    revision = client.get(url).json()["revision"]
+    target = tmp_path / "unrelated media"
+    target.mkdir()
+    (target / "red.png").write_bytes(PNG)
+    (target / "red.txt").write_text("Do not change this target", encoding="utf-8")
+    original = tmp_path / "original media"
+    media.rename(original)
+    cmd = Path(os.environ.get("SystemRoot", "C:/Windows")) / "System32/cmd.exe"
+    subprocess.run(
+        [str(cmd), "/d", "/c", "mklink", "/J", str(media), str(target)],
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
+        check=True,
+    )
+    try:
+        response = client.put(url, json={"text": "Wrong destination", "revision": revision})
+        assert response.status_code == 422
+        assert "Linked or redirected" in response.json()["detail"]
+        assert (target / "red.txt").read_text(encoding="utf-8") == "Do not change this target"
+        assert (original / "red.txt").read_text(encoding="utf-8") == "A red square"
+    finally:
+        media.rmdir()
+
+
 def test_caption_editor_rejects_a_sidecar_reparse_point_without_deleting_the_target(tmp_path: Path) -> None:
     client, media, _ = fixture(tmp_path)
     dataset_id = client.post("/api/datasets", json={"name": "Sidecar boundary", "path": str(media)}).json()["id"]
