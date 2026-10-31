@@ -246,8 +246,82 @@ def test_measured_presets_replace_only_capacity_controls(tmp_path: Path) -> None
         wan_applied["config"]["frames"],
         wan_applied["config"]["blocks_to_swap"],
     ) == (832, 33, 36)
-    assert client.get("/api/jobs/defaults/wan").json()["width"] == 256
+    assert client.get("/api/jobs/defaults/wan").json()["width"] == 832
     assert not (tmp_path / "presets").exists()
+
+
+def test_new_draft_defaults_are_realistic_and_leave_the_prompt_empty(tmp_path: Path) -> None:
+    client = client_for(tmp_path)
+    wan = client.get("/api/jobs/defaults/wan").json()
+    h3 = client.get("/api/jobs/defaults/h3").json()
+    assert (wan["width"], wan["height"], wan["frames"], wan["rank"], wan["alpha"]) == (832, 480, 33, 16, 16)
+    assert (h3["width"], h3["height"], h3["frames"], h3["rank"], h3["alpha"]) == (640, 352, 124, 8, 8)
+    for config in [wan, h3]:
+        assert (config["steps"], config["save_every"], config["save_state"]) == (600, 100, True)
+        assert config["sample_prompt"] == ""
+    assert (h3["recipe"], h3["block_swap_h2d_only"], h3["fp8_scaled"]) == ("guidance-loss", True, False)
+    job = client.post("/api/jobs", json={"name": "New", "family": "h3", "config": h3}).json()
+    review = client.post(f"/api/jobs/{job['id']}/review", json={}).json()
+    assert any(error.startswith("Sampling:") for error in review["errors"])
+    assert not any(warning.startswith("Training steps:") for warning in review["warnings"])
+
+
+def test_existing_data_keeps_its_values_when_fields_are_missing(tmp_path: Path) -> None:
+    # Saved revisions and version 1 exports fill missing fields from fixed values, never from new-draft defaults.
+    client = client_for(tmp_path)
+    for family, width, rank in [("wan", 256, 8), ("h3", 256, 4)]:
+        imported = client.post(
+            "/api/jobs/import",
+            json={"version": 1, "format": "musubi-gui-job", "draft": {"name": "Old", "family": family, "config": {}}},
+        ).json()
+        config = imported["config"]
+        assert (config["width"], config["rank"], config["steps"], config["save_every"]) == (width, rank, 2, 1)
+        assert config["save_state"] is False
+        assert config["sample_prompt"].startswith("A red square")
+        job_id = imported["id"]
+        file = tmp_path / "jobs" / job_id / "1.json"
+        stored = json.loads(file.read_text(encoding="utf-8"))
+        del stored["config"]["steps"]
+        del stored["config"]["sample_prompt"]
+        file.write_text(json.dumps(stored), encoding="utf-8")
+        reopened = client.get(f"/api/jobs/{job_id}").json()["config"]
+        assert reopened["steps"] == 2
+        assert reopened["sample_prompt"].startswith("A red square")
+
+
+def test_smoke_presets_restore_the_quick_check_and_keep_components(tmp_path: Path) -> None:
+    client = client_for(tmp_path)
+    presets = {preset["id"]: preset for preset in client.get("/api/jobs/presets").json()}
+    assert presets["smoke-wan"]["name"] == "Smoke test · Wan · 2 steps"
+    assert presets["smoke-h3"]["family"] == "h3"
+    job = client.post(
+        "/api/jobs",
+        json={
+            "name": "Check",
+            "family": "wan",
+            "config": {**client.get("/api/jobs/defaults/wan").json(), "components": {"wan_low": "kept"}, "seed": 7},
+        },
+    ).json()
+    config = client.post(f"/api/jobs/{job['id']}/apply-preset", json={"preset_id": "smoke-wan", "revision": 1}).json()[
+        "config"
+    ]
+    assert (config["width"], config["frames"], config["steps"], config["save_every"]) == (256, 17, 2, 1)
+    assert (config["sample_steps"], config["save_state"]) == (4, False)
+    assert config["sample_prompt"].startswith("A red square")
+    assert (config["components"], config["seed"]) == ({"wan_low": "kept"}, 7)
+
+
+def test_review_warns_about_low_steps_and_unqualified_h3_size(tmp_path: Path) -> None:
+    client = client_for(tmp_path)
+    low = client.post("/api/jobs", json={"name": "Low", "family": "wan", "config": {"steps": 599}}).json()
+    warnings = client.post(f"/api/jobs/{low['id']}/review", json={}).json()["warnings"]
+    assert any(warning.startswith("Training steps: 599 steps") for warning in warnings)
+    enough = client.post("/api/jobs", json={"name": "Enough", "family": "wan", "config": {"steps": 600}}).json()
+    warnings = client.post(f"/api/jobs/{enough['id']}/review", json={}).json()["warnings"]
+    assert not any(warning.startswith("Training steps:") for warning in warnings)
+    h3 = client.post("/api/jobs", json={"name": "Big", "family": "h3", "config": {"width": 832, "height": 480}}).json()
+    warnings = client.post(f"/api/jobs/{h3['id']}/review", json={}).json()["warnings"]
+    assert any(warning.startswith("Geometry: H3 is qualified") for warning in warnings)
 
 
 def test_versioned_export_roundtrip_and_unknown_fields_are_not_silently_discarded(tmp_path: Path) -> None:

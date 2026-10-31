@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from musubi_gui.disk_estimate import check_volumes, estimate_disk
-from musubi_gui.jobs import JobConfig, default_config
+from musubi_gui.jobs import JobConfig, smoke_config
 from musubi_gui.settings import Settings
 
 GB = 1000**3
@@ -24,7 +24,7 @@ def wan_trial_config(**changes: object) -> JobConfig:
         "save_every": 100,
         "save_state": True,
     }
-    return default_config("wan").model_copy(update={**values, **changes})
+    return smoke_config("wan").model_copy(update={**values, **changes})
 
 
 def test_wan_estimate_matches_the_measured_production_trial() -> None:
@@ -42,7 +42,7 @@ def test_wan_estimate_matches_the_measured_production_trial() -> None:
 
 
 def test_h3_estimate_matches_measured_rank_eight_and_both_measured_geometries() -> None:
-    config = default_config("h3").model_copy(
+    config = smoke_config("h3").model_copy(
         update={"width": 640, "height": 352, "rank": 8, "steps": 20, "save_every": 10, "save_state": True}
     )
     estimate = estimate_disk("h3", config, [clip()] * 20, media_bytes=16_723_061)

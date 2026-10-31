@@ -95,7 +95,7 @@ test('Wan draft controls, validation and reviewed native configuration survive s
       .getByRole('button', { name: 'Review configuration', exact: true })
       .click();
     await expect(page.getByTestId('dataset-toml')).toContainText(
-      'resolution = [320, 256]',
+      'resolution = [320, 480]',
     );
     await expect(page.getByTestId('dataset-toml')).toContainText(
       'target_frames = [33]',
@@ -133,6 +133,49 @@ test('Wan draft controls, validation and reviewed native configuration survive s
     await expect(page.getByLabel('LoRA rank', { exact: true })).toHaveValue(
       '16',
     );
+  } finally {
+    await app.close();
+  }
+});
+
+test('a new draft starts realistic, warns about low steps and offers the smoke-test preset', async ({
+  page,
+}) => {
+  const app = await workspace();
+  try {
+    await openJobs(page, app.url);
+    await page
+      .getByRole('button', { name: 'New Wan job', exact: true })
+      .click();
+    await expect(
+      page.getByRole('spinbutton', { name: /^Width\b/ }),
+    ).toHaveValue('832');
+    await expect(
+      page.getByLabel('Training steps', { exact: true }),
+    ).toHaveValue('600');
+    await expect(
+      page.getByRole('textbox', { name: 'Sample prompt' }),
+    ).toHaveValue('');
+    await page.getByLabel('Training steps', { exact: true }).fill('2');
+    await page.getByRole('button', { name: 'Save draft', exact: true }).click();
+    await expect(page.getByRole('status')).toContainText('Draft saved');
+    await page
+      .getByRole('button', { name: 'Review configuration', exact: true })
+      .click();
+    await expect(page.getByText(/^Training steps: 2 steps/)).toBeVisible();
+    await expect(page.getByText(/^Sampling: enter a prompt/)).toBeVisible();
+    await page
+      .getByRole('combobox', { name: 'Compatible preset', exact: true })
+      .selectOption({ label: 'Smoke test · Wan · 2 steps' });
+    await page
+      .getByRole('button', { name: 'Apply preset', exact: true })
+      .click();
+    await expect(
+      page.getByRole('spinbutton', { name: /^Width\b/ }),
+    ).toHaveValue('256');
+    await expect(
+      page.getByRole('textbox', { name: 'Sample prompt' }),
+    ).toHaveValue(/red square/);
   } finally {
     await app.close();
   }

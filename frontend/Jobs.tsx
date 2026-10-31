@@ -263,6 +263,7 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
       const created = await request<Job>('/api/jobs', 'POST', {
         name: family === 'wan' ? 'New Wan job' : 'New H3 job',
         family,
+        config: await request<JobConfig>(`/api/jobs/defaults/${family}`),
       });
       setJobs(await request<Job[]>('/api/jobs'));
       setJob(created);
@@ -631,7 +632,9 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
             </div>
             <p className="hint">
               Measured presets set only size, frames, rank and memory controls
-              qualified on the target PC; saved presets replace all settings.
+              qualified on the target PC. Smoke tests also set steps,
+              checkpoints and the sample, to check that training runs. Saved
+              presets replace all settings.
             </p>
             <div className="actions">
               <button
@@ -747,8 +750,8 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
                 'Frames',
                 'frames',
                 job.family === 'wan'
-                  ? '4*n+1 frames; 17 is the smoke default.'
-                  : '17*n+5 frames between 124 and 345; smoke default 124.',
+                  ? '4*n+1 frames; 33 is measured on the target PC.'
+                  : '17*n+5 frames between 124 and 345; 124 is measured on the target PC.',
               )}
               {number('Repeats', 'repeats')}
               {number(

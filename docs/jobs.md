@@ -77,17 +77,43 @@ extension lists as preflight, so supported PNG images remain image datasets.
 
 ## Default configuration
 
-The small default is 256×256, 17 frames, batch one, rank/alpha eight and two steps.
-It remains the quick execution check. Changing capacity controls requires capacity
-validation on Windows 11 / RTX 3090 / 96 GB RAM; the two measured presets below are
-the configurations validated so far. Draft validation is not proof of successful GPU
-execution. Sampling runs after training and can be disabled; no checkpoint-on-stop
-guarantee is made. Saving optimizer/training state is distinct from saving LoRA weights.
+New Wan job and New H3 job start from a recipe that can produce a useful LoRA:
+
+| Control                   | Wan     | H3      |
+| ------------------------- | ------- | ------- |
+| Size                      | 832×480 | 640×352 |
+| Frames                    | 33      | 124     |
+| Rank/alpha                | 16/16   | 8/8     |
+| Training steps            | 600     | 600     |
+| Save every N steps, state | 100, on | 100, on |
+| Sample inference steps    | 20      | 10      |
+
+Size, frames, rank and sample steps are the largest configurations measured in the
+production trial (see [measured presets](#duplicates-and-presets)). 600 steps is the
+owner's experience of where samples first change visibly, and is not a measured
+learning result: the trial's human review of learning is still open. At the measured
+step times 600 steps takes about 12–16 hours. The sample prompt starts empty, so
+review asks for one.
+
+Review warns when steps are below 600, because a shorter Run can check that training
+works but is not expected to change samples. It also warns when H3 is larger than
+640×352, the largest size that trained.
+
+The earlier small recipe remains as the **Smoke test** built-in presets: 256×256, 17
+frames for Wan or 124 for H3, batch one, rank/alpha eight for Wan or four for H3, two
+steps saved every step, no state and a four-step sample with a synthetic prompt. These
+values are also the fixed fallbacks for fields missing from saved revisions and
+version 1 exports, so existing jobs keep their meaning. Acceptance fixtures use them
+and stay quick.
+
+Changing capacity controls requires capacity validation on Windows 11 / RTX 3090 /
+96 GB RAM. Draft validation is not proof of successful GPU execution. Sampling runs
+after training and can be disabled; no checkpoint-on-stop guarantee is made. Saving
+optimizer/training state is distinct from saving LoRA weights.
 
 ## H3 jobs
 
-New H3 job uses the proven T2VA guidance-loss recipe: 124 frames, rank/alpha four,
-BF16, 48 H2D-only swapped blocks, unconditional text caching and both video/audio
+New H3 job uses the proven T2VA guidance-loss recipe: 124 frames, BF16, 48 H2D-only swapped blocks, unconditional text caching and both video/audio
 losses. Geometry must be a multiple of 32; the released frame lengths are `17*n+5`
 between 124 and 345. Unsupported CFG, negative prompts, Ref2VA, FL2VA training and
 full fine-tuning are not offered. H3 drafts require video items; Wan may use images
@@ -151,9 +177,10 @@ the target PC during the production trial
 Applying a measured preset replaces only width, height, frames, batch size, rank,
 alpha and the memory controls. Model components, prompt, steps, learning rate, seed
 and checkpoint/state cadence keep the job's values, so set the step count yourself.
-Saved presets still replace every setting. Measured presets are part of the
-application, are never written to the presets folder and do not change existing
-jobs. Step times depend on cooling and the GPU power limit: the same Wan job ran at
+Saved presets still replace every setting. Applying a Smoke test preset also replaces
+steps, checkpoint and state cadence, and the sample settings, and keeps components,
+learning rate and seed. Built-in presets are part of the application, are never written
+to the presets folder and do not change existing jobs. Step times depend on cooling and the GPU power limit: the same Wan job ran at
 79–95 s/step on this PC as fan and power settings changed. H3 at 832×480 × 124 frames
 ran out of VRAM at the first training step, so larger H3 sizes are not qualified.
 
