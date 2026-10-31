@@ -937,3 +937,34 @@ test('invalid fields are flagged while typing and review errors lead to their fi
     await app.close();
   }
 });
+
+test('a review error about a model component opens and focuses its field', async ({
+  page,
+}) => {
+  const app = await workspace();
+  try {
+    await openJobs(page, app.url);
+    await page
+      .getByRole('button', { name: 'New Wan job', exact: true })
+      .click();
+    const message =
+      'Missing wan_low; select compatible model files in Settings.';
+    await page.route('**/api/jobs/*/review', async (route) => {
+      const response = await route.fetch();
+      const review = (await response.json()) as { errors: string[] };
+      await route.fulfill({
+        response,
+        json: { ...review, valid: false, errors: [...review.errors, message] },
+      });
+    });
+    await page
+      .getByRole('button', { name: 'Review configuration', exact: true })
+      .click();
+    await page.getByRole('button', { name: message }).click();
+    await expect(
+      page.getByRole('textbox', { name: 'Wan low-noise DiT' }),
+    ).toBeFocused();
+  } finally {
+    await app.close();
+  }
+});

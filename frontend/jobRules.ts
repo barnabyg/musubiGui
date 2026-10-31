@@ -83,8 +83,18 @@ const errorFields: [RegExp, string][] = [
   [/^Sampling:/, 'sample_prompt'],
 ];
 
+const component =
+  /\b(wan_low|wan_high|wan_vae|wan_t5|h3_dit|h3_video_vae|h3_audio_vae|h3_text)\b/;
+
+export function componentError(message: string) {
+  return component.exec(message)?.[1];
+}
+
 export function errorField(message: string) {
-  return errorFields.find(([pattern]) => pattern.test(message))?.[1];
+  return (
+    componentError(message) ??
+    errorFields.find(([pattern]) => pattern.test(message))?.[1]
+  );
 }
 
 export const fieldId = (key: string) => `job-field-${key}`;

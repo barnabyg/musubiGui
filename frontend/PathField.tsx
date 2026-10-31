@@ -208,6 +208,7 @@ export function PathField({
   label,
   value,
   kind,
+  inputId,
   roots = [],
   help,
   className,
@@ -219,6 +220,7 @@ export function PathField({
   label: string;
   value: string;
   kind: Kind;
+  inputId?: string;
   roots?: string[];
   help?: string;
   className?: string;
@@ -228,7 +230,8 @@ export function PathField({
   disabled?: boolean;
   onChange: (value: string) => void;
 }) {
-  const id = useId();
+  const generatedId = useId();
+  const id = inputId ?? generatedId;
   const [focused, setFocused] = useState(false);
   const result = usePathCheck(value, kind, roots);
   const check =

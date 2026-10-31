@@ -11,7 +11,7 @@ import { apiClient } from './api';
 import { JobTable, type JobSummary } from './JobTable';
 import { runStatus } from './runStatus';
 import { componentLabels } from './labels';
-import { errorField, fieldId, fieldProblems } from './jobRules';
+import { componentError, errorField, fieldId, fieldProblems } from './jobRules';
 import { PathField } from './PathField';
 import './jobs.css';
 
@@ -393,7 +393,7 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
   const problems: Record<string, string> = {};
   for (const message of review?.errors ?? []) {
     const key = errorField(message);
-    if (key && !liveProblems[key])
+    if (key && !liveProblems[key] && !componentError(message))
       problems[key] = message.slice(message.indexOf(':') + 2);
   }
   Object.assign(problems, liveProblems);
@@ -412,7 +412,10 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
     ) : null;
   }
   function focusField(key: string) {
-    document.getElementById(fieldId(key))?.focus();
+    const field = document.getElementById(fieldId(key));
+    const section = field?.closest('details');
+    if (section) section.open = true;
+    field?.focus();
   }
   function number(label: string, key: keyof JobConfig, help?: string) {
     return (
@@ -1016,6 +1019,7 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
                 <PathField
                   key={key}
                   label={componentLabels[key]}
+                  inputId={fieldId(key)}
                   kind="file"
                   roots={modelRoots}
                   disabled={busy}
