@@ -970,3 +970,27 @@ test('a review error about a model component opens and focuses its field', async
     await app.close();
   }
 });
+
+test('a review size error leads to the dimension that is wrong', async ({
+  page,
+}) => {
+  const app = await workspace();
+  try {
+    await openJobs(page, app.url);
+    await page
+      .getByRole('button', { name: 'New Wan job', exact: true })
+      .click();
+    await page.getByLabel('Height', { exact: true }).fill('250');
+    await page
+      .getByRole('button', { name: 'Review configuration', exact: true })
+      .click();
+    await page.getByRole('button', { name: /^Geometry:/ }).click();
+    await expect(page.getByLabel('Height', { exact: true })).toBeFocused();
+    await expect(page.getByLabel('Width', { exact: true })).not.toHaveAttribute(
+      'aria-invalid',
+      'true',
+    );
+  } finally {
+    await app.close();
+  }
+});

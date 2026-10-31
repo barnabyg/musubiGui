@@ -391,8 +391,15 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
     : {};
   // Review errors about a field show beside it, unless the check while typing already says so.
   const problems: Record<string, string> = {};
-  for (const message of review?.errors ?? []) {
+  // Review reports size as one error, so the check while typing says which dimension it means.
+  const reviewField = (message: string) => {
     const key = errorField(message);
+    return key === 'width' && !liveProblems.width && liveProblems.height
+      ? 'height'
+      : key;
+  };
+  for (const message of review?.errors ?? []) {
+    const key = reviewField(message);
     if (key && !liveProblems[key] && !componentError(message))
       problems[key] = message.slice(message.indexOf(':') + 2);
   }
@@ -1304,7 +1311,7 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
               {review.errors.length > 0 && (
                 <ul className="error">
                   {review.errors.map((message, index) => {
-                    const key = errorField(message);
+                    const key = reviewField(message);
                     return (
                       <li key={index}>
                         {key ? (
