@@ -3,6 +3,7 @@ import {
   useEffect,
   useRef,
   useEffectEvent,
+  useLayoutEffect,
   useState,
   useSyncExternalStore,
 } from 'react';
@@ -147,11 +148,26 @@ export function Datasets({
   }, []);
   useEffect(() => {
     if (!gallery.current) return;
+    const element = gallery.current;
     const observer = new ResizeObserver((entries) => {
-      setColumns(Math.max(1, Math.floor(entries[0].contentRect.width / 230)));
+      // A panel beside the gallery narrows the tiles but leaves the column count alone, so they
+      // keep their rows and columns. On narrow windows the panel overlays and takes no width.
+      const panel = element
+        .closest('.editor-screen')
+        ?.querySelector<HTMLElement>('.dataset-panel:not([hidden])');
+      const panelWidth =
+        panel && getComputedStyle(panel).position !== 'absolute'
+          ? panel.offsetWidth
+          : 0;
+      setColumns(
+        Math.max(
+          1,
+          Math.floor((entries[0].contentRect.width + panelWidth) / 230),
+        ),
+      );
       setGalleryHeight(entries[0].contentRect.height);
     });
-    observer.observe(gallery.current);
+    observer.observe(element);
     return () => observer.disconnect();
   }, [dataset?.id, visible, screen]);
   useEffect(() => {
@@ -362,6 +378,32 @@ export function Datasets({
     start + columns * (Math.ceil(galleryHeight / rowHeight) + 2),
   );
   const renderedItems = visibleItems.slice(start, end);
+  // The preview takes width and changes the column count, which moves every tile. The tile being
+  // worked on stays where it was on screen if possible, and in view whatever happens.
+  const keptTile = useRef<{ id?: string; columns: number }>({ columns });
+  const keepActiveTile = useEffectEvent(() => {
+    const element = gallery.current;
+    const previous = keptTile.current;
+    const id = active?.id ?? previous.id;
+    // A closed preview's tile is only kept through the reflow its closing causes.
+    keptTile.current = {
+      id: previous.columns !== columns && !active ? undefined : id,
+      columns,
+    };
+    const index = visibleItems.findIndex((item) => item.id === id);
+    if (!element || index < 0) return;
+    const top = Math.floor(index / columns) * rowHeight;
+    let target = element.scrollTop;
+    if (previous.columns !== columns && previous.id === id)
+      target =
+        top -
+        (Math.floor(index / previous.columns) * rowHeight - element.scrollTop);
+    if (target + element.clientHeight < top + rowHeight)
+      target = top + rowHeight - element.clientHeight;
+    if (target > top) target = top;
+    if (target !== element.scrollTop) element.scrollTop = target;
+  });
+  useLayoutEffect(() => keepActiveTile(), [columns, active?.id]);
   const focusedItem = visibleItems.find((item) => item.id === editing?.id);
   if (focusedItem && !renderedItems.includes(focusedItem))
     renderedItems.push(focusedItem);

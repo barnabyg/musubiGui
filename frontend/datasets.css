@@ -487,14 +487,13 @@ main.dataset-editor-shell {
     width: min(390px, 100%);
     box-shadow: -12px 0 30px #0008;
   }
+  /* The preview sits above the gallery, which stays on screen to choose the next item from. */
   .dataset-workspace.has-viewer {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 3fr) minmax(200px, 2fr);
   }
   .dataset-workspace.has-viewer .media-viewer {
-    position: absolute;
-    inset: 8px;
-    height: auto;
-    z-index: 2;
+    order: -1;
   }
 }
 @media (max-width: 550px) {

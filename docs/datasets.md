@@ -24,7 +24,10 @@ pending captions and returns to the full gallery. **Search & edit** opens a side
 search, filters, sorting, selection counts and bulk caption actions. **Dataset settings**
 opens a side panel holding the editable display
 name, storage path and H3 coverage. Renaming changes the library name without moving
-the folder. **Add media** opens the managed upload panel; it starts open for a new
+the folder. Opening a panel keeps the gallery's rows and columns and narrows the tiles. The preview
+changes the column count, but the active tile stays in view when it opens or closes. Below
+1000 px the preview sits above the gallery, so another item can be chosen without closing it.
+**Add media** opens the managed upload panel; it starts open for a new
 managed dataset and stays open while files upload. Closing or switching panels keeps
 uploads and tool state intact. Panels and the preview overlay the gallery on narrow
 windows, each with its own close control. A registered folder is populated by adding
