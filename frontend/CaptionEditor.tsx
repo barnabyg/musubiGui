@@ -7,9 +7,7 @@ import {
   useCaption,
 } from './captionSession';
 
-const readCurrent = apiClient(
-  'Could not reload the current sidecar. Your text is retained.',
-);
+const readCurrent = apiClient('Could not reload the current sidecar.');
 const readHistory = apiClient('Caption history could not be read.');
 
 type Revision = {
@@ -40,7 +38,7 @@ export function CaptionEditor({
     try {
       setCurrent(await readCurrent<Caption>(url));
     } catch (reason) {
-      setError((reason as Error).message);
+      setError(`${(reason as Error).message} Your text is retained.`);
     }
   }
   async function loadHistory() {
