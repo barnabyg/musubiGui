@@ -356,10 +356,6 @@ function App() {
           screen === 'Datasets' && datasetEditor ? 'dataset-editor-shell' : ''
         }
       >
-        <header>
-          <span>WORKSPACE / {screen.toUpperCase()}</span>
-          <span className="badge">LoRA · Windows</span>
-        </header>
         <div hidden={screen !== 'Datasets'}>
           <Datasets
             onEditorChange={setDatasetEditor}
@@ -397,14 +393,11 @@ function App() {
               <>
                 <section className="panel">
                   <div className="section-heading">
-                    <span className="number">01</span>
-                    <div>
-                      <h2>Training environment</h2>
-                      <p>
-                        The selected environment runs training. Setup never
-                        installs or upgrades it.
-                      </p>
-                    </div>
+                    <h2>Training environment</h2>
+                    <p>
+                      The selected environment runs training. Setup never
+                      installs or upgrades it.
+                    </p>
                   </div>
                   {field(
                     'musubi-tuner checkout',
@@ -420,14 +413,11 @@ function App() {
                 </section>
                 <section className="panel">
                   <div className="section-heading">
-                    <span className="number">02</span>
-                    <div>
-                      <h2>Storage & model components</h2>
-                      <p>
-                        Use absolute local paths. Keep generated files outside
-                        the training checkout and model roots.
-                      </p>
-                    </div>
+                    <h2>Storage & model components</h2>
+                    <p>
+                      Use absolute local paths. Keep generated files outside the
+                      training checkout and model roots.
+                    </p>
                   </div>
                   <div className="columns">
                     {field(

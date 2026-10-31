@@ -787,3 +787,33 @@ test('job actions wait for the initial load so it cannot replace new drafts', as
     await app.close();
   }
 });
+
+test('the job form uses short fields for short values and shares rows between related ones', async ({
+  page,
+}) => {
+  const app = await workspace();
+  try {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openJobs(page, app.url);
+    await page
+      .getByRole('button', { name: 'New Wan job', exact: true })
+      .click();
+    const box = async (label: string) =>
+      (await page
+        .getByRole('spinbutton', { name: new RegExp(`^${label}`) })
+        .boundingBox())!;
+    for (const label of ['Blocks to swap', 'Width', 'Training steps'])
+      expect((await box(label)).width).toBeLessThan(200);
+    const width = await box('Width');
+    expect((await box('Height')).y).toBe(width.y);
+    expect((await box('Frames')).y).toBe(width.y);
+    // The header and its repeated title are gone.
+    await expect(page.locator('main header')).toHaveCount(0);
+    // It was 3381 px with the header, full-width number fields and larger gaps.
+    expect(
+      await page.evaluate(() => document.documentElement.scrollHeight),
+    ).toBeLessThan(3200);
+  } finally {
+    await app.close();
+  }
+});

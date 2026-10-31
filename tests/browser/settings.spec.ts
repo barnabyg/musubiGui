@@ -130,6 +130,11 @@ test('diagnostics persist, drive the sidebar and go out of date when settings ch
     await page.goto(url);
     const health = page.getByRole('button', { name: /^Setup:/ });
     await expect(health).toContainText('Setup: Not checked');
+    // Sections aren't numbered, because they aren't a sequence.
+    await expect(
+      page.getByRole('heading', { name: 'Training environment' }),
+    ).toBeVisible();
+    await expect(page.getByText(/^0[12]$/)).toHaveCount(0);
     await page.getByRole('button', { name: 'Run diagnostics' }).click();
     await expect(health).toContainText('Setup: Problems found');
     const report = page.locator('#diagnostics-report');

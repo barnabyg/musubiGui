@@ -317,7 +317,7 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
   }
   function number(label: string, key: keyof JobConfig, help?: string) {
     return (
-      <label className="field">
+      <label className="field number-field">
         {label}
         <input
           type="number"
@@ -972,29 +972,19 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
           </section>
           <section className="panel">
             <h2>Dataset preparation</h2>
-            <div className="columns">
-              {number(
-                'Width',
-                'width',
-                job.family === 'wan'
-                  ? 'Wan requires multiples of 16.'
-                  : 'H3 requires multiples of 32.',
-              )}
+            <div className="number-row">
+              {number('Width', 'width')}
               {number('Height', 'height')}
-              {number(
-                'Frames',
-                'frames',
-                job.family === 'wan'
-                  ? '4*n+1 frames; 33 is measured on the target PC.'
-                  : '17*n+5 frames between 124 and 345; 124 is measured on the target PC.',
-              )}
+              {number('Frames', 'frames')}
               {number('Repeats', 'repeats')}
-              {number(
-                'Dataset batch size',
-                'batch_size',
-                'Keep at one for the target-PC recipe.',
-              )}
+              {number('Dataset batch size', 'batch_size')}
             </div>
+            <p className="hint">
+              {job.family === 'wan'
+                ? 'Wan requires multiples of 16 and 4*n+1 frames; 33 frames is measured on the target PC.'
+                : 'H3 requires multiples of 32 and 17*n+5 frames between 124 and 345; 124 frames is measured on the target PC.'}{' '}
+              Keep the batch size at one for the target-PC recipe.
+            </p>
             <div className="columns">
               <label className="field">
                 Frame extraction
@@ -1066,7 +1056,7 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
           </section>
           <section className="panel">
             <h2>LoRA & training</h2>
-            <div className="columns">
+            <div className="number-row">
               {number('LoRA rank', 'rank')}
               {number('LoRA alpha', 'alpha')}
               {number('Learning rate', 'learning_rate')}
@@ -1108,7 +1098,9 @@ export function Jobs({ selectedId, onSelect, onRun, onDirtyChange }: Props) {
           </section>
           <section className="panel">
             <h2>Checkpoints & final sample</h2>
-            {number('Save every N steps', 'save_every')}
+            <div className="number-row">
+              {number('Save every N steps', 'save_every')}
+            </div>
             {toggle(
               'Save optimizer/training state',
               'save_state',

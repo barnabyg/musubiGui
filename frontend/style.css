@@ -206,24 +206,8 @@ main {
   padding: 0 var(--space-12) var(--space-13);
   max-width: 1260px;
 }
-header {
-  height: 80px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border-bottom: 1px solid var(--color-border);
-  font-size: var(--text-small);
-  letter-spacing: 1px;
-  color: var(--color-text-subtle);
-}
-.badge {
-  border: 1px solid var(--color-border);
-  padding: var(--space-3) var(--space-5);
-  border-radius: var(--radius-pill);
-  letter-spacing: 0.3px;
-}
 .title {
-  margin: var(--space-11) 0 var(--space-9);
+  margin: var(--space-9) 0 var(--space-7);
 }
 h1 {
   font-size: var(--text-display);
@@ -249,22 +233,11 @@ p {
   margin: var(--space-8) 0;
 }
 .section-heading {
-  display: flex;
-  gap: var(--space-7);
   margin-bottom: var(--space-9);
 }
 .section-heading p {
   margin: 0;
   font-size: var(--text-base);
-}
-.number {
-  background: var(--color-accent-surface-soft);
-  color: var(--color-accent);
-  border: 1px solid var(--color-border-control);
-  border-radius: var(--radius-sm);
-  padding: var(--space-3);
-  height: 30px;
-  font-size: var(--text-small);
 }
 .field {
   display: block;
@@ -378,6 +351,19 @@ small {
 }
 .path-browser li.hint {
   padding: var(--space-4) var(--space-5);
+}
+/* Short values in short fields; related ones share a row and wrap when the window is narrow. */
+.number-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-9);
+}
+.number-field input {
+  width: 130px;
+}
+.number-field small {
+  display: block;
+  max-width: 60ch;
 }
 .columns {
   display: grid;
