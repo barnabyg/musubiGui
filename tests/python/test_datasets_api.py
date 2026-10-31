@@ -1,5 +1,3 @@
-import base64
-import json
 import os
 import subprocess
 import threading
@@ -10,10 +8,9 @@ from typing import Any
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from helpers import PNG, fixture
 
 from musubi_gui import datasets
-
-PNG = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=")
 
 
 def test_rename_and_delete_library_entry_preserve_files_and_recovery_history(tmp_path: Path) -> None:
@@ -73,25 +70,6 @@ def test_delete_waits_for_pending_scan_and_preserves_managed_folder(tmp_path: Pa
     assert client.delete(f"/api/datasets/{managed['id']}").status_code == 200
     assert (folder / "uploaded.png").read_bytes() == PNG
     assert (folder / "uploaded.txt").read_text(encoding="utf-8") == "Uploaded caption"
-
-
-def fixture(tmp_path: Path) -> tuple[TestClient, Path, Path]:
-    from musubi_gui.datasets_api import dataset_router
-
-    state = tmp_path / "state"
-    state.mkdir()
-    media = tmp_path / "资料 with spaces"
-    media.mkdir()
-    (media / "red.png").write_bytes(PNG)
-    (media / "broken.mp4").write_bytes(b"not a video")
-    (media / "red.txt").write_text("A red square", encoding="utf-8")
-    (state / "settings.json").write_text(
-        json.dumps({"version": 1, "dataset_roots": [str(media)]}),
-        encoding="utf-8",
-    )
-    app = FastAPI()
-    app.include_router(dataset_router(state))
-    return TestClient(app), media, state
 
 
 def test_register_preview_rescan_and_restart_preserve_dataset(tmp_path: Path) -> None:

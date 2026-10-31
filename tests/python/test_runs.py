@@ -1,11 +1,10 @@
 import shutil
 import subprocess
 import sys
-import time
 from pathlib import Path
 
 import pytest
-from helpers import acceptance_workspace
+from helpers import acceptance_workspace, wait_for
 
 from musubi_gui.reference import Stage
 from musubi_gui.runs import ExecutionPlan, RunService
@@ -36,16 +35,6 @@ def plan(root: Path, name: str = "one", delay: float = 0.05) -> ExecutionPlan:
         stages=[Stage("latent_cache", [sys.executable, str(script)])],
         fingerprint=name,
     )
-
-
-def wait_for(service: RunService, run_id: str, status: str, *, device_released: bool = False) -> dict:
-    deadline = time.monotonic() + 180
-    while time.monotonic() < deadline:
-        run = service.get(run_id)
-        if run["status"] == status and (not device_released or service.device.owner() is None):
-            return run
-        time.sleep(0.02)
-    raise AssertionError(service.get(run_id))
 
 
 def test_preparation_persists_logs_and_deduplicates_requests(tmp_path: Path) -> None:

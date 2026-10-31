@@ -5,23 +5,13 @@ import sys
 import time
 from pathlib import Path
 
+from helpers import wait_for
+
 from musubi_gui.processes import identity_status, process_identity
 from musubi_gui.reference import Stage
 from musubi_gui.runs import ExecutionPlan, RunService
 from musubi_gui.settings import Settings
 from musubi_gui.windows_job import ProcessJob
-
-
-def wait_status(service: RunService, run_id: str, expected: str) -> dict:
-    deadline = time.monotonic() + 180
-    while time.monotonic() < deadline:
-        run = service.get(run_id)
-        if run["status"] == expected:
-            return run
-        if run["status"] in {"prepared", "completed", "failed"}:
-            raise AssertionError(run)
-        time.sleep(0.05)
-    raise AssertionError(service.get(run_id))
 
 
 def test_descendant_surviving_the_grace_period_retains_gpu_ownership_after_its_launcher_exits(
@@ -47,13 +37,13 @@ def test_descendant_surviving_the_grace_period_retains_gpu_ownership_after_its_l
         )
     )
     try:
-        orphaned = wait_status(service, run["id"], "orphaned")
+        orphaned = wait_for(service, run["id"], "orphaned")
         assert orphaned["processes"]
         assert service.device.owner()["run_id"] == run["id"]
         service.reconcile(run["id"])
         assert service.get(run["id"])["status"] == "orphaned"
         service.terminate_orphan(run["id"], confirmed=True)
-        interrupted = wait_status(service, run["id"], "interrupted")
+        interrupted = wait_for(service, run["id"], "interrupted")
         assert interrupted["processes"] == []
         assert service.device.owner() is None
     finally:

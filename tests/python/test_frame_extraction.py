@@ -4,8 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi.testclient import TestClient
-from helpers import acceptance_workspace
-from test_wan_frame_rate import wan_review
+from helpers import acceptance_workspace, wan_review
 
 from musubi_gui.app import create_app
 from musubi_gui.runs import RunService

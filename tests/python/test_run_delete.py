@@ -3,14 +3,13 @@ import os
 import sqlite3
 import subprocess
 import threading
-import time
 from pathlib import Path
 from typing import Any, Iterator
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from helpers import acceptance_workspace
+from helpers import acceptance_workspace, wait_for
 
 from musubi_gui import runs as runs_module
 from musubi_gui.jobs import JobStore
@@ -20,16 +19,6 @@ from musubi_gui.processes import process_identity
 from musubi_gui.run_store import ACTIVE_STATUSES
 from musubi_gui.runs import ExecutionPlan, RunService
 from musubi_gui.settings import Settings, load_settings, save_settings
-
-
-def wait_for(service: RunService, run_id: str, status: str, *, device_released: bool = False) -> dict[str, Any]:
-    deadline = time.monotonic() + 180
-    while time.monotonic() < deadline:
-        run = service.get(run_id)
-        if run["status"] == status and (not device_released or service.device.owner() is None):
-            return run
-        time.sleep(0.02)
-    raise AssertionError(service.get(run_id))
 
 
 def client_for(root: Path, service: RunService) -> TestClient:

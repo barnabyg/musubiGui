@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from test_datasets_api import PNG, fixture
+from helpers import PNG, fixture
 
 
 def test_bulk_preview_selection_conflicts_exclusions_and_restore_are_scoped(tmp_path: Path) -> None:
