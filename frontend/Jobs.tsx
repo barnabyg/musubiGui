@@ -298,14 +298,15 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
       setStatus(`Reviewed revision ${job.revision}`);
     });
   }
-  async function prepare() {
+  async function prepare(start = false) {
     if (!job || !review?.valid || dirty) return;
     await perform(async () => {
       const run = await request<PreparedRun>('/api/runs/prepare', 'POST', {
         job_id: job.id,
+        start,
       });
       // Prepare returns the matching unfinished or completed run instead of duplicating it.
-      if (run.existing) {
+      if (run.existing && !(start && run.status !== 'completed')) {
         setExistingRun(run);
         setStatus('Existing run returned');
         return;
@@ -913,6 +914,12 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
               onClick={() => void prepare()}
             >
               Prepare run
+            </button>
+            <button
+              disabled={busy || dirty || !review?.valid}
+              onClick={() => void prepare(true)}
+            >
+              Prepare and start
             </button>
           </div>
           {dirty && <p>Save the draft before reviewing or preparing it.</p>}

@@ -288,6 +288,81 @@ test('live progress steps through stages, reports steps and loss, and shows a fa
   }
 });
 
+test('Prepare and start keeps going with the tab closed, and the tab title signals a ready Run', async ({
+  page,
+}) => {
+  const app = await runWorkspace();
+  try {
+    const [first, second] = app.manifest.jobs.filter(
+      (item) => item.family === 'wan',
+    );
+    const openJob = async (name: string, target = page) => {
+      await target.goto(app.url);
+      await target.getByRole('button', { name: 'Jobs', exact: true }).click();
+      await target
+        .getByRole('button', { name: `${name} · WAN · r1`, exact: true })
+        .click();
+      await target
+        .getByRole('button', { name: 'Review configuration', exact: true })
+        .click();
+    };
+
+    // Prepare alone stops at prepared, and says so in the title from any screen.
+    await openJob(first.name);
+    await page
+      .getByRole('button', { name: 'Prepare run', exact: true })
+      .click();
+    await expect(page).toHaveTitle(`Ready: ${first.name} — Musubi`, {
+      timeout: 240_000,
+    });
+    await expect(
+      page.getByText('State: prepared', { exact: true }),
+    ).toBeVisible();
+    await page.getByRole('button', { name: 'Jobs', exact: true }).click();
+    await expect(page).not.toHaveTitle(/Ready/);
+
+    await openJob(second.name);
+    await page
+      .getByRole('button', { name: 'Prepare and start', exact: true })
+      .click();
+    await expect(
+      page.getByText('State: pending_preparation', { exact: true }),
+    ).toBeVisible();
+    await page.close();
+    await expect
+      .poll(
+        async () =>
+          (await app.records()).find((run) => run.job.id === second.id)?.status,
+        { timeout: 240_000 },
+      )
+      .toBe('completed');
+
+    // Failed preparation never reaches training.
+    await writeFile(
+      path.join(app.fixture, 'checkout', 'fail-latent_cache'),
+      '',
+    );
+    const h3 = app.manifest.jobs.find((item) => item.family === 'h3')!;
+    const failed = (await app.post('/api/runs/prepare', {
+      job_id: h3.id,
+      start: true,
+    })) as { id: string };
+    await expect
+      .poll(
+        async () =>
+          (await app.records()).find((run) => run.id === failed.id)?.status,
+        { timeout: 240_000 },
+      )
+      .toBe('failed');
+    const record = (await app.records()).find((run) => run.id === failed.id)!;
+    expect(record.stages.find((stage) => stage.name === 'train')?.status).toBe(
+      'pending',
+    );
+  } finally {
+    await app.close();
+  }
+});
+
 test('a Run that reused a deleted Run cache still shows it and can be used', async ({
   page,
 }) => {

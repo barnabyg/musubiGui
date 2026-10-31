@@ -7,6 +7,7 @@ import pytest
 from helpers import acceptance_workspace, wait_for
 
 from musubi_gui.reference import Stage
+from musubi_gui.run_store import DeviceLease
 from musubi_gui.runs import ExecutionPlan, RunService
 from musubi_gui.settings import Settings
 from musubi_gui.snapshots import checkout_identity
@@ -92,6 +93,89 @@ def test_start_runs_training_once_and_keeps_the_prepared_job_revision(tmp_path: 
         assert completed["job"]["revision"] == 1
         assert completed["exit_code"] == 0
         assert "step 1/2" in service.logs(run["id"])
+    finally:
+        service.close()
+
+
+def training_plan(root: Path, name: str = "one", *, fail_cache: bool = False) -> ExecutionPlan:
+    execution = plan(root, name)
+    train = execution.directory / "train.py"
+    train.write_text(
+        "import pathlib\npathlib.Path('checkpoints').mkdir(exist_ok=True)\n"
+        "pathlib.Path('checkpoints/test.safetensors').write_bytes(b'checkpoint')\n",
+        encoding="utf-8",
+    )
+    execution.stages.append(Stage("train", [sys.executable, str(train)]))
+    if fail_cache:
+        execution.stages.insert(0, Stage("text_cache", [sys.executable, "-c", "raise SystemExit(3)"]))
+    return execution
+
+
+def test_prepare_and_start_trains_without_another_request(tmp_path: Path) -> None:
+    service = RunService(tmp_path / "state", device_path=tmp_path / "gpu.sqlite")
+    try:
+        run = service.submit(training_plan(tmp_path), start_after_prepare=True)
+        completed = wait_for(service, run["id"], "completed")
+        assert [stage["status"] for stage in completed["stages"]] == ["completed", "completed"]
+    finally:
+        service.close()
+
+
+def test_failed_preparation_does_not_start_training(tmp_path: Path) -> None:
+    service = RunService(tmp_path / "state", device_path=tmp_path / "gpu.sqlite")
+    try:
+        run = service.submit(training_plan(tmp_path, fail_cache=True), start_after_prepare=True)
+        failed = wait_for(service, run["id"], "failed")
+        assert next(stage for stage in failed["stages"] if stage["name"] == "train")["status"] == "pending"
+    finally:
+        service.close()
+
+
+def test_prepare_alone_stays_prepared(tmp_path: Path) -> None:
+    service = RunService(tmp_path / "state", device_path=tmp_path / "gpu.sqlite")
+    try:
+        run = service.submit(training_plan(tmp_path))
+        prepared = wait_for(service, run["id"], "prepared", device_released=True)
+        assert prepared["start_after_prepare"] is False
+        assert next(stage for stage in prepared["stages"] if stage["name"] == "train")["status"] == "pending"
+    finally:
+        service.close()
+
+
+def test_prepare_and_start_queues_behind_work_holding_the_gpu_and_survives_restart(tmp_path: Path) -> None:
+    device = tmp_path / "gpu.sqlite"
+    service = RunService(tmp_path / "state", device_path=device, autostart=False)
+    run = service.submit(training_plan(tmp_path), start_after_prepare=True)
+    service.close()
+    other = DeviceLease(tmp_path / "other", device)
+    assert other.acquire("other-work", {})
+    restarted = RunService(tmp_path / "state", device_path=device)
+    try:
+        assert restarted.get(run["id"])["status"] == "pending_preparation"
+        other.release("other-work")
+        wait_for(restarted, run["id"], "completed")
+    finally:
+        restarted.close()
+
+
+def test_repeated_prepare_and_start_asks_the_unfinished_run_to_continue(tmp_path: Path) -> None:
+    device = tmp_path / "gpu.sqlite"
+    service = RunService(tmp_path / "state", device_path=device, autostart=False)
+    run = service.submit(training_plan(tmp_path))
+    assert service._start_when_prepared(run["id"])["start_after_prepare"] is True
+    service.close()
+    restarted = RunService(tmp_path / "state", device_path=device)
+    try:
+        wait_for(restarted, run["id"], "completed")
+    finally:
+        restarted.close()
+    # Already prepared: it joins the queue straight away, whatever has happened since.
+    service = RunService(tmp_path / "second", device_path=device)
+    try:
+        prepared = service.submit(training_plan(tmp_path, "two"))
+        wait_for(service, prepared["id"], "prepared", device_released=True)
+        assert service._start_when_prepared(prepared["id"])["status"] in {"pending_training", "training", "completed"}
+        wait_for(service, prepared["id"], "completed")
     finally:
         service.close()
 

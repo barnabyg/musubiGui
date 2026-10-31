@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { apiClient } from './api';
 import { Outputs } from './Outputs';
+import { notificationsWanted, setNotificationsWanted } from './runSignals';
 import './runs.css';
 
 type Run = {
@@ -23,6 +24,7 @@ type Run = {
   }[];
   directory: string;
   order: number;
+  start_after_prepare?: boolean;
   deletion?: {
     error: string | null;
     remaining: { path: string; bytes?: number }[];
@@ -258,6 +260,7 @@ export function Runs({ selectedId }: { selectedId?: string }) {
   const [busy, setBusy] = useState(false);
   const [owner, setOwner] = useState<{ run_id: string } | null>(null);
   const [fixture, setFixture] = useState(false);
+  const [notify, setNotify] = useState(notificationsWanted);
   const [progress, setProgress] = useState<{
     runId: string;
     value: Progress | null;
@@ -401,6 +404,16 @@ export function Runs({ selectedId }: { selectedId?: string }) {
         {owner ? `GPU owned by run ${owner.run_id}` : 'GPU available'}
       </p>
       {notice && <p role="status">{notice}</p>}
+      <label className="job-toggle">
+        <input
+          type="checkbox"
+          checked={notify}
+          onChange={(event) =>
+            void setNotificationsWanted(event.target.checked).then(setNotify)
+          }
+        />
+        <span>Send a browser notification when a Run is ready or finished</span>
+      </label>
       <div className="columns">
         <section className="panel">
           <h2>Pending queue</h2>
@@ -452,6 +465,10 @@ export function Runs({ selectedId }: { selectedId?: string }) {
               <strong>State: {run.status}</strong>
             </p>
             {run.error && <p className="error">{run.error}</p>}
+            {run.start_after_prepare &&
+              ['pending_preparation', 'preparing'].includes(run.status) && (
+                <p>Training starts by itself when preparation succeeds.</p>
+              )}
             {run.status === 'deleting' && (
               <div aria-label="Unfinished delete">
                 <p className="error">

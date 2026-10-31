@@ -5,6 +5,7 @@ import './style.css';
 import { Jobs } from './Jobs';
 import { Runs } from './Runs';
 import { Datasets } from './Datasets';
+import { useRunSignals } from './runSignals';
 
 type Settings = {
   version: number;
@@ -59,6 +60,7 @@ function App() {
   const [jobDirty, setJobDirty] = useState(false);
   const [datasetEditor, setDatasetEditor] = useState(false);
   const [runId, setRunId] = useState<string>();
+  useRunSignals(screen);
   function navigate(name: string) {
     if (
       screen === 'Jobs' &&

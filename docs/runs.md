@@ -89,6 +89,20 @@ stage's own start and finish times. A restored segment counts its own steps, bec
 upstream resets the displayed counter. Stage logs are collapsed below that, and open by
 themselves when a Run has failed.
 
+## Prepare and start
+
+Prepare and start on a reviewed Job prepares a Run and then trains it with no further
+click. The request is stored with the Run, so it continues with the browser closed and
+across a backend restart. It joins the same queue as Add to queue, so it waits its turn
+if the GPU is busy. If preparation fails or is cancelled, training doesn't start. Used
+on a revision that already has an unfinished Run, it asks that Run to continue instead
+of creating another.
+
+While the app is open on any screen, the tab title announces when a Run is ready,
+finished, stopped or failed, until you return to the tab or change screen. The Runs
+screen also offers an opt-in browser notification for the same events; the choice is
+kept in that browser only.
+
 ## Queueing
 
 Add prepared runs to the pending queue while another operation owns the GPU. Move
