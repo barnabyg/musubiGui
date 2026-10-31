@@ -286,9 +286,15 @@ main.dataset-editor-shell {
   gap: var(--space-6);
   padding: var(--space-4);
   overflow: hidden;
+  /* galleryColumns reads these, the gap and the padding from the computed style. */
+  --preview-min: 280px;
+  --preview-share: 36%;
 }
 .dataset-workspace.has-viewer {
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 36%);
+  grid-template-columns: minmax(0, 1fr) minmax(
+      var(--preview-min),
+      var(--preview-share)
+    );
 }
 .dataset-gallery-area {
   position: relative;

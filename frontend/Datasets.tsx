@@ -61,8 +61,8 @@ function hasCaption(item: DatasetItem) {
 
 // A panel beside the gallery narrows the tiles but leaves the column count alone, so they keep
 // their rows and columns. It takes width from the preview too, so with both open the count comes
-// from the width the gallery would have without the panel: these numbers mirror
-// `.dataset-workspace.has-viewer` in datasets.css. On narrow windows the panel overlays.
+// from the width the gallery would have without the panel, using the layout values
+// `.dataset-workspace` sets in datasets.css. On narrow windows the panel overlays.
 function galleryColumns(gallery: HTMLElement, width: number) {
   const screen = gallery.closest('.editor-screen');
   const panel = screen?.querySelector<HTMLElement>(
@@ -71,9 +71,18 @@ function galleryColumns(gallery: HTMLElement, width: number) {
   let available = width;
   if (panel && getComputedStyle(panel).position !== 'absolute') {
     const workspace = gallery.closest('.dataset-workspace') as HTMLElement;
-    const inner = workspace.clientWidth - 16 + panel.offsetWidth;
+    const style = getComputedStyle(workspace);
+    const inner =
+      workspace.clientWidth -
+      parseFloat(style.paddingLeft) -
+      parseFloat(style.paddingRight) +
+      panel.offsetWidth;
     const viewer = workspace.querySelector('.media-viewer');
-    available = viewer ? inner - Math.max(280, inner * 0.36) - 12 : inner;
+    const preview = Math.max(
+      parseFloat(style.getPropertyValue('--preview-min')),
+      (inner * parseFloat(style.getPropertyValue('--preview-share'))) / 100,
+    );
+    available = viewer ? inner - preview - parseFloat(style.columnGap) : inner;
   }
   return Math.max(1, Math.floor(available / 230));
 }
