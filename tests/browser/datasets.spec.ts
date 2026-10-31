@@ -1,14 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { datasetHarness } from './datasetHarness';
-import {
-  copyFile,
-  mkdir,
-  readFile,
-  rename,
-  rmdir,
-  writeFile,
-} from 'node:fs/promises';
-import { execFile } from 'node:child_process';
+import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 test('register mixed media, preview, and recover library after service restart', async ({
@@ -150,75 +142,6 @@ test('caption autosave flushes navigation, preserves failed drafts, rejects exte
       '红色\nupdated immediately',
     );
   } finally {
-    await app.cleanup();
-  }
-});
-
-test('caption autosave rejects an inside-root Windows junction redirect and retains the intended draft', async ({
-  page,
-}) => {
-  test.skip(process.platform !== 'win32', 'Native Windows junction boundary');
-  const app = await datasetHarness();
-  const original = path.join(app.fixture, 'original media');
-  const target = path.join(app.fixture, 'unrelated media');
-  let moved = false;
-  let linked = false;
-  try {
-    await page.goto(app.url);
-    await page.getByRole('button', { name: 'Datasets', exact: true }).click();
-    await page.getByRole('button', { name: 'New dataset' }).click();
-    await page
-      .getByLabel('Dataset name', { exact: true })
-      .fill('Junction library');
-    await page.getByLabel('Dataset folder', { exact: true }).fill(app.media);
-    await page.getByRole('button', { name: 'Register folder' }).click();
-    await expect(page.getByText('Scan: complete 4/4')).toBeVisible({
-      timeout: 240_000,
-    });
-    await page.getByRole('button', { name: 'red.png image' }).click();
-    const caption = await readFile(path.join(app.media, 'red.txt'), 'utf8');
-    await mkdir(target);
-    await copyFile(
-      path.join(app.media, 'red.png'),
-      path.join(target, 'red.png'),
-    );
-    await writeFile(
-      path.join(target, 'red.txt'),
-      'Unrelated sidecar remains intact',
-      'utf8',
-    );
-    await rename(app.media, original);
-    moved = true;
-    const command = path.join(
-      process.env.SystemRoot ?? 'C:\\Windows',
-      'System32',
-      'cmd.exe',
-    );
-    await new Promise<void>((resolve, reject) =>
-      execFile(
-        command,
-        ['/d', '/c', 'mklink', '/J', app.media, target],
-        { windowsHide: true },
-        (error) => (error ? reject(error) : resolve()),
-      ),
-    );
-    linked = true;
-    await page
-      .getByLabel('Caption', { exact: true })
-      .fill('Draft must not follow the redirect');
-    await expect(page.getByRole('alert')).toContainText('Linked or redirected');
-    await expect(page.getByLabel('Caption', { exact: true })).toHaveValue(
-      'Draft must not follow the redirect',
-    );
-    expect(await readFile(path.join(target, 'red.txt'), 'utf8')).toBe(
-      'Unrelated sidecar remains intact',
-    );
-    expect(await readFile(path.join(original, 'red.txt'), 'utf8')).toBe(
-      caption,
-    );
-  } finally {
-    if (linked) await rmdir(app.media);
-    if (moved) await rename(original, app.media);
     await app.cleanup();
   }
 });

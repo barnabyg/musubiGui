@@ -272,6 +272,34 @@ def test_caption_editor_rejects_inside_root_junction_retarget_without_touching_e
         routed.rmdir()
 
 
+def test_caption_editor_rejects_a_dataset_root_replaced_by_a_junction(tmp_path: Path) -> None:
+    client, media, _ = fixture(tmp_path)
+    url = caption_url(client, media)
+    revision = client.get(url).json()["revision"]
+    target = tmp_path / "unrelated media"
+    target.mkdir()
+    (target / "red.png").write_bytes(PNG)
+    (target / "red.txt").write_text("Do not change this target", encoding="utf-8")
+    original = tmp_path / "original media"
+    media.rename(original)
+    cmd = Path(os.environ.get("SystemRoot", "C:/Windows")) / "System32/cmd.exe"
+    subprocess.run(
+        [str(cmd), "/d", "/c", "mklink", "/J", str(media), str(target)],
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
+        check=True,
+    )
+    try:
+        response = client.put(url, json={"text": "Wrong destination", "revision": revision})
+        assert response.status_code == 422
+        assert "Linked or redirected" in response.json()["detail"]
+        assert (target / "red.txt").read_text(encoding="utf-8") == "Do not change this target"
+        assert (original / "red.txt").read_text(encoding="utf-8") == "A red square"
+    finally:
+        media.rmdir()
+
+
 @pytest.mark.skipif(os.name != "nt", reason="Native Windows sidecar reparse-point contract")
 def test_caption_editor_rejects_a_sidecar_reparse_point_without_deleting_the_target(tmp_path: Path) -> None:
     client, media, _ = fixture(tmp_path)
