@@ -177,8 +177,8 @@ treated as uncertain when their ownership cannot be established safely.
 ## Deleting a Run
 
 Delete run permanently removes a Run you no longer need and gives back its disk space.
-The confirmation names the Run, shows how much space is freed and says the delete can't
-be undone. It removes the Run record, its folder under the output root, its folder under
+The confirmation dialog names the Run, shows how much space is freed and says the delete
+can't be undone; Cancel has focus and Escape cancels. It removes the Run record, its folder under the output root, its folder under
 the cache root and its output index. There is no partial delete: to keep a LoRA, download
 it first. Source datasets, other Runs, presets, model files, the Job and the shared
 tokenizer under `<cache root>/shared` are left alone.

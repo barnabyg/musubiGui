@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ActionMenu } from './ActionMenu';
+import { confirmDialog } from './ConfirmDialog';
 import { apiClient } from './api';
 import { JobTable, type JobSummary } from './JobTable';
 import './jobs.css';
@@ -179,7 +180,6 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
   const [presetId, setPresetId] = useState('');
   const [transfer, setTransfer] = useState('');
   const [transferOpen, setTransferOpen] = useState(false);
-  const [conversion, setConversion] = useState<ConversionPreview | null>(null);
   const [existingRun, setExistingRun] = useState<PreparedRun | null>(null);
 
   useEffect(() => {
@@ -246,23 +246,29 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
       setBusy(false);
     }
   }
+  function confirmDiscard(next: string) {
+    return confirmDialog({
+      title: 'Discard unsaved job edits?',
+      body: <p>Your unsaved changes to this job are lost if you {next}.</p>,
+      confirmLabel: 'Discard edits',
+      cancelLabel: 'Keep editing',
+      danger: true,
+    });
+  }
+  async function choose(value: Job) {
+    if (dirty && !(await confirmDiscard('open another job'))) return;
+    select(value);
+  }
   function select(value: Job) {
-    if (
-      dirty &&
-      !window.confirm('Discard unsaved job edits and open another draft?')
-    )
-      return;
     setJob(value);
     setDirty(false);
     setReview(null);
-    setConversion(null);
     setStatus(`Opened revision ${value.revision}`);
   }
   function edit(next: Job) {
     setJob(next);
     setDirty(true);
     setReview(null);
-    setConversion(null);
     setStatus('Unsaved draft');
   }
   function config<K extends keyof JobConfig>(key: K, value: JobConfig[K]) {
@@ -300,11 +306,7 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
     );
   }
   async function create(family: 'wan' | 'h3') {
-    if (
-      dirty &&
-      !window.confirm('Discard unsaved job edits and create a new draft?')
-    )
-      return;
+    if (dirty && !(await confirmDiscard('create a new draft'))) return;
     await perform(async () => {
       const taken = new Set(
         [...(await reloadJobs()), ...archived].map((item) => item.name),
@@ -412,7 +414,6 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
       await refreshLibrary();
       setJob(null);
       setReview(null);
-      setConversion(null);
       setStatus('Job archived');
     });
   }
@@ -429,12 +430,18 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
         `/api/jobs/${target.id}/delete-preview`,
       );
       if (preview.refusal) throw new Error(preview.refusal);
-      if (
-        !window.confirm(
-          `Permanently delete job ${target.name} and its revision history? This can't be undone. Datasets and presets are not affected.`,
-        )
-      )
-        return;
+      const confirmed = await confirmDialog({
+        title: `Permanently delete job ${target.name}?`,
+        body: (
+          <p>
+            This removes the job and its revision history, and can't be undone.
+            Datasets and presets are not affected.
+          </p>
+        ),
+        confirmLabel: 'Delete job',
+        danger: true,
+      });
+      if (!confirmed) return;
       await request(`/api/jobs/${target.id}/delete`, 'POST', {
         confirmed: true,
       });
@@ -442,7 +449,6 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
       if (job?.id === target.id) {
         setJob(null);
         setReview(null);
-        setConversion(null);
       }
       setStatus('Job deleted');
     });
@@ -471,23 +477,42 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
       setStatus('Preset applied as a new revision');
     });
   }
-  async function convert(confirmed: boolean) {
+  async function convert() {
     if (!job || dirty) return;
+    const send = (confirmed: boolean) =>
+      request<Job | ConversionPreview>(`/api/jobs/${job.id}/convert`, 'POST', {
+        family: job.family === 'wan' ? 'h3' : 'wan',
+        revision: job.revision,
+        confirmed,
+      });
     await perform(async () => {
-      const result = await request<Job | ConversionPreview>(
-        `/api/jobs/${job.id}/convert`,
-        'POST',
-        {
-          family: job.family === 'wan' ? 'h3' : 'wan',
-          revision: job.revision,
-          confirmed,
-        },
-      );
+      const preview = await send(false);
+      if ('id' in preview) return;
+      const accepted = await confirmDialog({
+        title: 'Confirm model conversion',
+        body: (
+          <>
+            <p>{preview.message}</p>
+            <ul>
+              {preview.changes.map((change) => (
+                <li key={change.field}>
+                  {change.field}: {JSON.stringify(change.before)} →{' '}
+                  {JSON.stringify(change.after)}
+                </li>
+              ))}
+            </ul>
+          </>
+        ),
+        confirmLabel: 'Accept conversion',
+        cancelLabel: 'Cancel conversion',
+      });
+      if (!accepted) return;
+      const result = await send(true);
       if ('id' in result) {
         await reloadJobs();
         select(result);
         setStatus('Model conversion saved as a new revision');
-      } else setConversion(result);
+      }
     });
   }
   async function exportConfiguration() {
@@ -512,11 +537,7 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
     });
   }
   async function importConfiguration() {
-    if (
-      dirty &&
-      !window.confirm('Discard unsaved edits and import an independent draft?')
-    )
-      return;
+    if (dirty && !(await confirmDiscard('import a configuration'))) return;
     await perform(async () => {
       const imported = await request<Job>(
         '/api/jobs/import',
@@ -527,7 +548,6 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
       setJob(imported);
       setDirty(false);
       setReview(null);
-      setConversion(null);
       setStatus('Configuration imported as an independent draft');
     });
   }
@@ -571,7 +591,7 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
           datasets={datasets}
           selectedId={job?.id}
           disabled={busy}
-          onSelect={select}
+          onSelect={(value) => void choose(value)}
         />
       )}
       {archived.length > 0 && (
@@ -642,7 +662,7 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
               {
                 label: `Change model to ${job?.family === 'h3' ? 'Wan T2V' : 'H3 T2VA'}`,
                 disabled: !job || dirty,
-                onSelect: () => void convert(false),
+                onSelect: () => void convert(),
               },
               {
                 label: 'Archive job',
@@ -730,27 +750,6 @@ export function Jobs({ onRun, onDirtyChange }: Props) {
       )}
       {job && (
         <>
-          {conversion && (
-            <div role="dialog" aria-label="Confirm model conversion">
-              <p>{conversion.message}</p>
-              <ul>
-                {conversion.changes.map((change) => (
-                  <li key={change.field}>
-                    {change.field}: {JSON.stringify(change.before)} →{' '}
-                    {JSON.stringify(change.after)}
-                  </li>
-                ))}
-              </ul>
-              <div className="actions">
-                <button disabled={busy} onClick={() => setConversion(null)}>
-                  Cancel conversion
-                </button>
-                <button disabled={busy} onClick={() => void convert(true)}>
-                  Accept conversion
-                </button>
-              </div>
-            </div>
-          )}
           <section className="panel">
             <h2>Job & dataset</h2>
             <label className="field">

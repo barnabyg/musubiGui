@@ -252,6 +252,35 @@ button.primary {
   border-color: #c1a4ef;
   font-weight: 650;
 }
+button.danger {
+  background: #a8434f;
+  color: #fff;
+  border-color: #c9606c;
+  font-weight: 650;
+}
+.confirm-dialog {
+  width: min(520px, calc(100vw - 32px));
+  padding: 24px;
+  color: #e5e7ec;
+  background: #191c22;
+  border: 1px solid #484555;
+  border-radius: 10px;
+}
+.confirm-dialog::backdrop {
+  background: #0009;
+}
+.confirm-dialog li {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.confirm-body {
+  max-height: 50vh;
+  overflow: auto;
+}
+.confirm-dialog .actions {
+  justify-content: flex-end;
+  margin-top: 16px;
+}
 .error {
   background: #3b2329;
   border: 1px solid #925764;

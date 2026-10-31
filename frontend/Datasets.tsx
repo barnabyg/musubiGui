@@ -7,6 +7,7 @@ import {
 } from 'react';
 import './datasets.css';
 import { apiClient } from './api';
+import { confirmDialog } from './ConfirmDialog';
 import { CaptionEditor } from './CaptionEditor';
 import { InlineCaption } from './InlineCaption';
 import { type Caption, useCaptionSession } from './captionSession';
@@ -222,12 +223,19 @@ export function Datasets({
     }
   }
   async function remove(value: Dataset) {
-    if (
-      !window.confirm(
-        `Delete "${value.name}" from the dataset library?\n\nOnly the library entry is removed. Media files, captions and recovery history stay on disk, including uploaded files. Jobs using this dataset will need a dataset selected again.`,
-      )
-    )
-      return;
+    const confirmed = await confirmDialog({
+      title: `Delete "${value.name}" from the dataset library?`,
+      body: (
+        <p>
+          Only the library entry is removed. Media files, captions and recovery
+          history stay on disk, including uploaded files. Jobs using this
+          dataset will need a dataset selected again.
+        </p>
+      ),
+      confirmLabel: 'Delete from library',
+      danger: true,
+    });
+    if (!confirmed) return;
     setBusy(true);
     setError('');
     try {

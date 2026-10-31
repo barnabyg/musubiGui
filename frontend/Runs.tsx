@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { apiClient } from './api';
+import { confirmDialog } from './ConfirmDialog';
 import { Outputs } from './Outputs';
 import { notificationsWanted, setNotificationsWanted } from './runSignals';
 import './runs.css';
@@ -155,9 +156,8 @@ function sizeLabel(bytes: number) {
     : `${Math.ceil(bytes / 1_000)} KB`;
 }
 
-function deleteQuestion(run: Run, preview: DeletePreview) {
+function confirmDelete(run: Run, preview: DeletePreview) {
   const lines = [
-    `Permanently delete run ${run.id.slice(0, 8)} of ${run.job.name} (r${run.job.revision})?`,
     `This frees ${sizeLabel(preview.bytes ?? 0)} and can't be undone. Its checkpoints, samples, saved states, logs and frozen inputs are removed, so download any LoRA you want to keep first.`,
   ];
   if (preview.shared_cache)
@@ -168,7 +168,12 @@ function deleteQuestion(run: Run, preview: DeletePreview) {
     lines.push(
       `${preview.dependents.length} later run(s) came from this one. They stay browsable, but can no longer be retried or restored from.`,
     );
-  return lines.join('\n\n');
+  return confirmDialog({
+    title: `Permanently delete run ${run.id.slice(0, 8)} of ${run.job.name} (r${run.job.revision})?`,
+    body: lines.map((line) => <p key={line}>{line}</p>),
+    confirmLabel: 'Delete run',
+    danger: true,
+  });
 }
 
 const request = apiClient('Run request failed.');
@@ -233,14 +238,20 @@ function SavedStates({
           {state.valid ? `optimizer step ${state.optimizer_step}` : state.error}
           <button
             disabled={!state.valid || !Number.isInteger(steps) || steps < 1}
-            onClick={() => {
-              if (
-                window.confirm(
-                  'Restore this optimizer state as a new segment? The displayed step counter and data position restart. Original run inputs are preserved.',
-                )
-              )
-                void onRestore(state.id, steps);
-            }}
+            onClick={() =>
+              void confirmDialog({
+                title: 'Restore this optimizer state as a new segment?',
+                body: (
+                  <p>
+                    The displayed step counter and data position restart.
+                    Original run inputs are preserved.
+                  </p>
+                ),
+                confirmLabel: 'Restore as new segment',
+              }).then((confirmed) => {
+                if (confirmed) void onRestore(state.id, steps);
+              })
+            }
           >
             Restore as new segment
           </button>
@@ -334,7 +345,7 @@ export function Runs({ selectedId }: { selectedId?: string }) {
         `/api/runs/${run.id}/delete-preview`,
       );
       if (preview.refusal) throw new Error(preview.refusal);
-      if (!window.confirm(deleteQuestion(run, preview))) return;
+      if (!(await confirmDelete(run, preview))) return;
       setNotice('Deleting run…');
       // Unmounting the outputs closes any preview stream holding one of the files open.
       setDeleting(run.id);
@@ -505,14 +516,24 @@ export function Runs({ selectedId }: { selectedId?: string }) {
                   {run.status !== 'interrupted' && (
                     <button
                       disabled={busy}
-                      onClick={() => {
-                        if (
-                          window.confirm(
-                            'Terminate the recovered processes belonging to this run? Unsaved work may be lost.',
-                          )
-                        )
-                          void action('terminate-orphan', { confirmed: true });
-                      }}
+                      onClick={() =>
+                        void confirmDialog({
+                          title: 'Terminate recovered work?',
+                          body: (
+                            <p>
+                              This ends the recovered processes belonging to
+                              this run. Unsaved work may be lost.
+                            </p>
+                          ),
+                          confirmLabel: 'Terminate recovered work',
+                          danger: true,
+                        }).then((confirmed) => {
+                          if (confirmed)
+                            void action('terminate-orphan', {
+                              confirmed: true,
+                            });
+                        })
+                      }
                     >
                       Terminate recovered work
                     </button>
@@ -529,14 +550,22 @@ export function Runs({ selectedId }: { selectedId?: string }) {
                   </button>
                   <button
                     disabled={busy}
-                    onClick={() => {
-                      if (
-                        window.confirm(
-                          'Force terminate this run process tree? Unsaved checkpoints and optimizer state may be lost.',
-                        )
-                      )
-                        void action('stop', { force: true, confirmed: true });
-                    }}
+                    onClick={() =>
+                      void confirmDialog({
+                        title: 'Force terminate this Run?',
+                        body: (
+                          <p>
+                            This ends the Run's whole process tree. Unsaved
+                            checkpoints and optimizer state may be lost.
+                          </p>
+                        ),
+                        confirmLabel: 'Force terminate',
+                        danger: true,
+                      }).then((confirmed) => {
+                        if (confirmed)
+                          void action('stop', { force: true, confirmed: true });
+                      })
+                    }
                   >
                     Force terminate
                   </button>

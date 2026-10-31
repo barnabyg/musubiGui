@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { apiClient } from './api';
 import './style.css';
+import { ConfirmDialogHost, confirmDialog } from './ConfirmDialog';
 import { Jobs } from './Jobs';
 import { Runs } from './Runs';
 import { Datasets } from './Datasets';
@@ -41,6 +42,16 @@ function rootLines(text: string) {
     .filter(Boolean);
 }
 
+function confirmLeaveJob() {
+  return confirmDialog({
+    title: 'Leave this job?',
+    body: <p>Your unsaved changes to this job will be discarded.</p>,
+    confirmLabel: 'Discard changes',
+    cancelLabel: 'Keep editing',
+    danger: true,
+  });
+}
+
 const api = apiClient(
   (status) => `Request failed (${status}). Check the field values.`,
 );
@@ -61,13 +72,8 @@ function App() {
   const [datasetEditor, setDatasetEditor] = useState(false);
   const [runId, setRunId] = useState<string>();
   useRunSignals(screen);
-  function navigate(name: string) {
-    if (
-      screen === 'Jobs' &&
-      jobDirty &&
-      !window.confirm('Leave this job and discard unsaved changes?')
-    )
-      return;
+  async function navigate(name: string) {
+    if (screen === 'Jobs' && jobDirty && !(await confirmLeaveJob())) return;
     setScreen(name);
   }
   function load(value: Settings) {
@@ -196,7 +202,7 @@ function App() {
             <button
               key={name}
               className={screen === name ? 'active' : ''}
-              onClick={() => navigate(name)}
+              onClick={() => void navigate(name)}
             >
               <span aria-hidden="true">
                 {name === 'Datasets' ? '▦' : name === 'Jobs' ? '▷' : '⚙'}
@@ -389,6 +395,7 @@ function App() {
           </>
         )}
       </main>
+      <ConfirmDialogHost />
     </div>
   );
 }

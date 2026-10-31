@@ -14,12 +14,7 @@ test('deleting a Run and its Job goes from the UI to the disk and survives a bac
   page,
 }) => {
   const app = await runWorkspace();
-  const dialogs: string[] = [];
   let releaseLock = () => {};
-  page.on('dialog', (dialog) => {
-    dialogs.push(dialog.message());
-    void dialog.accept();
-  });
   try {
     const job = app.manifest.jobs.find((item) => item.family === 'wan')!;
     const label = `${job.name} · WAN · r1`;
@@ -40,7 +35,7 @@ test('deleting a Run and its Job goes from the UI to the disk and survives a bac
     await app.post('/api/runs/prepare', { job_id: job.id });
     await jobAction('Delete job');
     await expect(page.getByRole('alert')).toContainText('Archive job');
-    expect(dialogs).toEqual([]);
+    await expect(page.getByRole('dialog')).toHaveCount(0);
 
     await navigate('Runs');
     await jobButton.click();
@@ -62,15 +57,16 @@ test('deleting a Run and its Job goes from the UI to the disk and survives a bac
 
     // A locked file leaves the Run visible, saying what remains.
     await button('Delete run').click();
+    const question = page.getByRole('dialog');
+    await expect(question).toContainText(run.id.slice(0, 8));
+    await expect(question).toContainText(/This frees \d+ (KB|MB|GB)/);
+    await expect(question).toContainText("can't be undone");
+    await expect(question).toContainText('download any LoRA');
+    await question.getByRole('button', { name: 'Delete run' }).click();
     await expect(page.getByLabel('Unfinished delete')).toContainText(
       'inputs.json',
       { timeout: 240_000 },
     );
-    expect(dialogs).toHaveLength(1);
-    expect(dialogs[0]).toContain(run.id.slice(0, 8));
-    expect(dialogs[0]).toMatch(/This frees \d+ (KB|MB|GB)/);
-    expect(dialogs[0]).toContain("can't be undone");
-    expect(dialogs[0]).toContain('download any LoRA');
     await expect(page.getByLabel('Unfinished delete')).toContainText(
       'Still on disk:',
     );
@@ -92,6 +88,7 @@ test('deleting a Run and its Job goes from the UI to the disk and survives a bac
       page.getByText('State: deleting', { exact: true }),
     ).toBeVisible();
     await button('Delete again').click();
+    await question.getByRole('button', { name: 'Delete run' }).click();
     await expect(page.getByText(/^Run deleted\. Freed/)).toBeVisible({
       timeout: 240_000,
     });
@@ -109,10 +106,10 @@ test('deleting a Run and its Job goes from the UI to the disk and survives a bac
     await expect(jobButton).toHaveCount(0);
     await navigate('Jobs');
     await jobButton.click();
-    dialogs.length = 0;
     await jobAction('Delete job');
+    await expect(question).toContainText(job.name);
+    await question.getByRole('button', { name: 'Delete job' }).click();
     await expect(jobButton).toHaveCount(0);
-    expect(dialogs[0]).toContain(job.name);
     expect(await exists(path.join(app.manifest.state, 'jobs', job.id))).toBe(
       false,
     );
@@ -137,6 +134,7 @@ test('deleting a Run and its Job goes from the UI to the disk and survives a bac
     await navigate('Jobs');
     await page.getByText('Archived jobs (1)', { exact: true }).click();
     await button(`Delete ${other.name}`).click();
+    await question.getByRole('button', { name: 'Delete job' }).click();
     await expect(button(`Delete ${other.name}`)).toHaveCount(0);
     expect(await exists(path.join(app.manifest.state, 'jobs', other.id))).toBe(
       false,
@@ -371,7 +369,6 @@ test('a Run that reused a deleted Run cache still shows it and can be used', asy
   page,
 }) => {
   const app = await runWorkspace();
-  page.on('dialog', (dialog) => void dialog.accept());
   try {
     const job = app.manifest.jobs.find((item) => item.family === 'wan')!;
     const prepared = async (count: number) =>
@@ -405,6 +402,10 @@ test('a Run that reused a deleted Run cache still shows it and can be used', asy
       page.getByText(`Run ${first.id}`, { exact: true }),
     ).toBeVisible();
     await page.getByRole('button', { name: 'Delete run', exact: true }).click();
+    await page
+      .getByRole('dialog')
+      .getByRole('button', { name: 'Delete run' })
+      .click();
     await expect(page.getByText(/^Run deleted\. Freed/)).toBeVisible({
       timeout: 240_000,
     });
@@ -627,9 +628,12 @@ test('backend interruption retains GPU ownership and offers explicit recovery wi
     ).toBeVisible();
     await expect(page.getByRole('status')).toContainText(run.id);
     expect(await app.records()).toHaveLength(1);
-    page.once('dialog', (dialog) => void dialog.accept());
     await page
       .getByRole('button', { name: 'Terminate recovered work', exact: true })
+      .click();
+    await page
+      .getByRole('dialog')
+      .getByRole('button', { name: 'Terminate recovered work' })
       .click();
     await expect(
       page.getByText('State: interrupted', { exact: true }),
@@ -729,9 +733,12 @@ test('a gracefully stopped revision can be prepared and started again', async ({
     await expect(page.getByLabel('Run logs')).toContainText(
       'SYNTHETIC ACCEPTANCE FIXTURE: train',
     );
-    page.once('dialog', (dialog) => void dialog.accept());
     await page
       .getByRole('button', { name: 'Force terminate', exact: true })
+      .click();
+    await page
+      .getByRole('dialog')
+      .getByRole('button', { name: 'Force terminate' })
       .click();
     await expect(
       page.getByText('State: stopped', { exact: true }),
