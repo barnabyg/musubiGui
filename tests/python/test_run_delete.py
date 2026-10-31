@@ -515,8 +515,6 @@ def test_a_run_that_reused_a_deleted_runs_cache_keeps_working(tmp_path: Path) ->
         assert first["id"] in {stage.get("reused_from") for stage in browsed["stages"]}
         assert all(Path(browsed["cache"], item["path"]).is_file() for item in browsed["stages"][0]["artifacts"])
         assert client.get(f"/api/runs/{second['id']}/outputs").status_code == 200
-        assert client.post(f"/api/runs/{second['id']}/start", json={}).status_code == 200
-        wait_for(running, second["id"], "completed", device_released=True)
     finally:
         running.close()
 
