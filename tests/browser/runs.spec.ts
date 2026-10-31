@@ -143,6 +143,62 @@ test('deleting a Run and its Job goes from the UI to the disk and survives a bac
   }
 });
 
+test('outputs appear when a Run completes and a playing preview survives a refresh', async ({
+  page,
+}) => {
+  const app = await runWorkspace();
+  try {
+    const job = app.manifest.jobs.find((item) => item.family === 'wan')!;
+    await app.post('/api/runs/prepare', { job_id: job.id });
+    await page.goto(app.url);
+    await page.getByRole('button', { name: 'Runs', exact: true }).click();
+    await page
+      .getByRole('button', { name: `${job.name} · WAN · r1`, exact: true })
+      .click();
+    await expect(
+      page.getByText('State: prepared', { exact: true }),
+    ).toBeVisible({ timeout: 240_000 });
+    await expect(
+      page.getByText(/^No supported outputs found yet/),
+    ).toBeVisible();
+    await page
+      .getByRole('button', { name: 'Start training', exact: true })
+      .click();
+    const sample = page.getByRole('button', {
+      name: 'samples/sample.mp4 · available',
+      exact: true,
+    });
+    await expect(sample).toBeVisible({ timeout: 240_000 });
+    await expect(page.getByText(/^No supported outputs found yet/)).toHaveCount(
+      0,
+    );
+    await sample.click();
+    const video = page.getByLabel('Output video', { exact: true });
+    await video.evaluate(async (element) => {
+      const media = element as HTMLVideoElement;
+      element.setAttribute('data-kept', 'yes');
+      media.muted = true;
+      media.loop = true;
+      await media.play();
+    });
+    await page
+      .getByRole('button', { name: 'Refresh outputs', exact: true })
+      .click();
+    await expect(
+      page.getByRole('button', { name: 'Refresh outputs', exact: true }),
+    ).toBeEnabled();
+    await expect(sample).toHaveAttribute('aria-pressed', 'true');
+    await expect(video).toHaveAttribute('data-kept', 'yes');
+    await expect
+      .poll(() =>
+        video.evaluate((element) => !(element as HTMLVideoElement).paused),
+      )
+      .toBe(true);
+  } finally {
+    await app.close();
+  }
+});
+
 test('a Run that reused a deleted Run cache still shows it and can be used', async ({
   page,
 }) => {
@@ -279,9 +335,6 @@ test('Wan and H3 prepare and train through the GUI with frozen captions cache re
       await expect(
         page.getByText('State: completed', { exact: true }),
       ).toBeVisible({ timeout: 240_000 });
-      await page
-        .getByRole('button', { name: 'Refresh outputs', exact: true })
-        .click();
       await page
         .getByRole('button', {
           name: 'samples/sample.mp4 · available',

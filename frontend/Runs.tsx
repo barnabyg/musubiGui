@@ -466,7 +466,16 @@ export function Runs({ selectedId }: { selectedId?: string }) {
           }
         />
       )}
-      {showFiles && <Outputs key={`outputs-${run.id}`} runId={run.id} />}
+      {showFiles && (
+        <Outputs
+          key={`outputs-${run.id}`}
+          runId={run.id}
+          runState={[
+            run.status,
+            ...run.stages.map((stage) => stage.status),
+          ].join()}
+        />
+      )}
       {run && (
         <section className="panel">
           <h2>Live stage logs</h2>
