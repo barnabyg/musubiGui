@@ -1182,3 +1182,49 @@ test('a damaged final LoRA is called out rather than offered as the result', asy
     await app.close();
   }
 });
+
+test('a partial Run shows the outputs it has, with their problems', async ({
+  page,
+}) => {
+  const app = await runWorkspace();
+  try {
+    const run = await preparedRun(app);
+    await page.route('**/api/runs/*/outputs', (route) =>
+      route.fulfill({
+        json: outputList(run, 'failed', [
+          {
+            id: 'early',
+            name: 'wan-step00000002.safetensors',
+            path: 'checkpoints/wan-step00000002.safetensors',
+            kind: 'checkpoint',
+            status: 'available',
+          },
+          {
+            id: 'later',
+            name: 'wan-step00000010.safetensors',
+            path: 'checkpoints/wan-step00000010.safetensors',
+            kind: 'checkpoint',
+            status: 'available',
+          },
+          {
+            id: 'sample',
+            name: 'sample.mp4',
+            path: 'samples/sample.mp4',
+            kind: 'video',
+            status: 'incomplete',
+            error: 'Sample has no audio.',
+          },
+        ]),
+      }),
+    );
+    await page.goto(`${app.url}/#/runs/${run.id}`);
+    const result = page.getByRole('region', { name: 'Run result' });
+    await expect(result).toContainText('sample.mp4: Sample has no audio.');
+    await expect(result).toContainText('Latest checkpoint step 10');
+    await expect(
+      result.getByRole('link', { name: 'Download latest checkpoint' }),
+    ).toHaveAttribute('href', '/nowhere?download=true');
+  } finally {
+    await app.close();
+  }
+});

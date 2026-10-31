@@ -153,8 +153,30 @@ export type RunOutputs = ReturnType<typeof useRunOutputs>;
 export function RunResult({ outputs }: { outputs: RunOutputs }) {
   const { result } = outputs;
   if (!result) return null;
-  const { final, preview } = grouped(result.outputs);
-  if (!final && !preview && !result.warnings.length) return null;
+  const { samples, checkpoints, final, preview } = grouped(result.outputs);
+  // While a Run is working its files can legitimately be half-written.
+  const settled = [
+    'completed',
+    'failed',
+    'stopped',
+    'cancelled',
+    'interrupted',
+  ].includes(result.status);
+  const problems = settled ? samples.filter((item) => item.error) : [];
+  const latest =
+    settled && !final
+      ? checkpoints
+          .filter(({ item }) => item.status === 'available')
+          .sort((a, b) => (b.step ?? 0) - (a.step ?? 0))[0]
+      : undefined;
+  if (
+    !final &&
+    !preview &&
+    !latest &&
+    !problems.length &&
+    !result.warnings.length
+  )
+    return null;
   return (
     <section className="panel run-result" aria-label="Run result">
       <h2>Result</h2>
@@ -163,7 +185,27 @@ export function RunResult({ outputs }: { outputs: RunOutputs }) {
           {warning}
         </p>
       ))}
+      {problems.map((item) => (
+        <p className="error" key={item.id}>
+          {item.name}: {item.error}
+        </p>
+      ))}
       {preview && <MediaPreview output={preview} />}
+      {latest?.item.file_url && (
+        <div className="run-result-lora">
+          <span>
+            <strong>Latest checkpoint</strong> step {latest.step} ·{' '}
+            {byteLabel(latest.item)}
+          </span>
+          <a
+            className="button-link"
+            href={`${latest.item.file_url}?download=true`}
+            download
+          >
+            <Download /> Download latest checkpoint
+          </a>
+        </div>
+      )}
       {final && (
         <div className="run-result-lora">
           <span>
