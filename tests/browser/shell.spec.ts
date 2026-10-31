@@ -162,6 +162,25 @@ test('a configured app opens on Datasets, or on a Run in progress', async ({
     await expect(page).toHaveURL(new RegExp(`#/runs/${run.id}$`));
     await expect(page.getByLabel('Run stages')).toBeVisible();
     await app.leaseGpu('release');
+
+    // Newest first in the list, but the Run that is working comes first on opening.
+    await page.route('**/api/runs', (route) =>
+      route.fulfill({
+        json: [
+          {
+            ...run,
+            id: 'waiting',
+            status: 'pending_training',
+            order: 2,
+          },
+          { ...run, status: 'training', order: 1 },
+        ],
+      }),
+    );
+    await page.goto('about:blank');
+    await page.goto(app.url);
+    await expect(page).toHaveURL(new RegExp(`#/runs/${run.id}$`));
+    await page.unroute('**/api/runs');
   } finally {
     await app.close();
   }

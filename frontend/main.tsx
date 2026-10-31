@@ -64,14 +64,9 @@ const screenIcons: Record<Screen, LucideIcon> = {
   Settings: SettingsIcon,
 };
 
-const activeStatuses = [
-  'pending_preparation',
-  'preparing',
-  'pending_training',
-  'training',
-  'generating',
-  'stopping',
-];
+// What the opening screen should show first: work in progress, then the front of the queue.
+const workingStatuses = ['training', 'generating', 'stopping', 'preparing'];
+const waitingStatuses = ['pending_preparation', 'pending_training'];
 
 function setupComplete(value: Settings) {
   return !!(
@@ -253,11 +248,15 @@ function App() {
         setReport(latest);
         setStatus('Settings loaded');
         if (!landingPending.current) return;
-        const runs = await api<{ id: string; status: string }[]>(
+        const runs = await api<{ id: string; status: string; order: number }[]>(
           '/api/runs',
         ).catch(() => []);
         if (!landingPending.current) return;
-        const active = runs.find((run) => activeStatuses.includes(run.status));
+        const active =
+          runs.find((run) => workingStatuses.includes(run.status)) ??
+          runs
+            .filter((run) => waitingStatuses.includes(run.status))
+            .sort((a, b) => a.order - b.order)[0];
         if (!setupComplete(value)) go('Settings', undefined, true);
         else if (active) go('Runs', active.id, true);
         else go('Datasets', undefined, true);
