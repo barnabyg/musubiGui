@@ -7,7 +7,9 @@ The training environment is independent and is never installed or upgraded by th
 The canonical command is `npm.cmd run verify`. It checks Python/TypeScript formatting,
 lint, strict types, Bandit static security analysis, pytest and real Edge browser tests,
 lockfile consistency, installed npm dependency integrity, Python/npm vulnerabilities,
-detect-secrets, and sdist/wheel packaging. The browser suite builds the UI before testing.
+detect-secrets, and sdist/wheel packaging. `npm.cmd run test:browser` builds the UI from the
+current `frontend/` source before testing, through its `pretest:browser` script, including when
+it is given a single spec file. Running `playwright test` directly skips that build.
 CI uses the same command. When it fails, CI keeps Playwright's `test-results`
 (page snapshots and failure screenshots of synthetic fixtures) as the
 `playwright-results` artifact for 14 days. Registry access is required by vulnerability and lock checks.
@@ -35,7 +37,7 @@ failure includes its last reported progress or error. Retries remain disabled.
 
 Focused commands: `npm.cmd run typecheck`, `.venv\Scripts\python.exe -m mypy`,
 `.venv\Scripts\python.exe -m pytest tests/python/test_settings_api.py -q`, and
-`npm.cmd run build && npm.cmd run test:browser` (in cmd.exe).
+`npm.cmd run test:browser -- tests/browser/settings.spec.ts`.
 
 Exceptions: subprocess calls have narrow Bandit `B603` annotations beside their fixed
 argument arrays or explicitly selected training executable. They never use a shell.
