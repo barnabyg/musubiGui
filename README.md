@@ -13,15 +13,15 @@ imports/exports. Runs keep immutable media/caption snapshots, tracked cache vali
 logs, a single-GPU queue, output playback and revision comparisons.
 
 Install Python 3.12, [uv](https://docs.astral.sh/uv/), Node.js 24 LTS and Git for Windows.
-From a clean checkout, double-click `run.bat` or run this command in PowerShell:
+From a clean checkout, run this command in PowerShell, or double-click `run.bat`, which calls it:
 
 ```powershell
-.\run.bat
+.\launch.cmd
 ```
 
 It installs only the application's locked dependencies into `.venv` and `node_modules`,
 builds the UI, starts the backend on **127.0.0.1:8765** and opens the browser.
-Use `run.bat --port 8766 --no-browser` for a second local instance. Stop with Ctrl+C.
+Use `launch.cmd --port 8766 --no-browser` for a second local instance. Stop with Ctrl+C.
 Registry access is required on first launch. No model download or training upgrade occurs.
 The Wan reference can use the separately qualified [offline conversion](docs/reference/wan-conversion.md)
 of existing scaled-FP8 files; originals remain untouched and lost precision is not recovered.

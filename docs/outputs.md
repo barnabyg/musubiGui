@@ -30,8 +30,9 @@ so download a LoRA you want to keep first. While a delete is unfinished, the Run
 outputs. Comparison lists neither deleted Runs nor Runs being deleted; comparing with a Run
 deleted from another tab since the list loaded reports that it was not found.
 
-Compare frozen run inputs displays changed Job controls/revisions, Settings,
-dataset/caption manifests, model identities and upstream/environment provenance.
+Under Compare with another Run, Compare inputs displays the changed Job
+controls/revisions, Settings, dataset/caption manifests, model identities and
+upstream/environment provenance of the two Runs' frozen inputs.
 It compares recorded facts and offers no quality ranking. Comparing changes no Job or
 Run.
 

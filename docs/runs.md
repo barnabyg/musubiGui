@@ -80,7 +80,7 @@ The README lists the [target hardware](../README.md#target-hardware).
 
 ## Training
 
-Choose Start training on a prepared Wan Run. Its process runs independently of the
+Choose Start training on a prepared Run. Its process runs independently of the
 browser. The job can be edited while the Run retains its original revision. Repeated
 Start requests select the same Run. Nonzero exits and missing checkpoints are explicit
 failures. Checkpoint/sample locations stay associated with the originating Run.
