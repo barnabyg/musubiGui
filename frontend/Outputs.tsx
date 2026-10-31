@@ -105,7 +105,7 @@ function MediaPreview({ output }: { output: Output }) {
 export function useRunOutputs(runId: string | undefined, runState: string) {
   const [result, setResult] = useState<OutputList | null>(null);
   const [runs, setRuns] = useState<RunChoice[]>([]);
-  const [error, setError] = useState('');
+  const [failure, setFailure] = useState<{ runId?: string; message: string }>();
   const [busy, setBusy] = useState(false);
   const [refresh, setRefresh] = useState(0);
   useEffect(() => {
@@ -119,10 +119,10 @@ export function useRunOutputs(runId: string | undefined, runState: string) {
         if (!current) return;
         setResult(outputs);
         setRuns(records);
-        setError('');
+        setFailure(undefined);
       })
       .catch((reason: Error) => {
-        if (current) setError(reason.message);
+        if (current) setFailure({ runId, message: reason.message });
       })
       .finally(() => {
         if (current) setBusy(false);
@@ -134,7 +134,7 @@ export function useRunOutputs(runId: string | undefined, runState: string) {
   return {
     result: result?.run_id === runId ? result : null,
     runs,
-    error,
+    error: failure?.runId === runId ? failure?.message : '',
     busy,
     reload() {
       setBusy(true);
