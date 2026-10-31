@@ -249,6 +249,115 @@ test('diagnostic rows share one layout and state their status in a badge', async
   }
 });
 
+test('an unconfigured app opens on Settings with a checklist of real progress', async ({
+  page,
+}) => {
+  const root = await realpath(
+    await mkdtemp(path.join(tmpdir(), 'musubi-checklist-')),
+  );
+  const { url, start, stop } = await settingsBackend(root);
+  try {
+    await start();
+    await page.goto(url);
+    await expect(
+      page.getByRole('heading', { name: 'Settings', exact: true }),
+    ).toBeVisible();
+    const checklist = page.getByRole('region', { name: 'Setup checklist' });
+    const items = checklist.getByRole('listitem');
+    await expect(items).toHaveCount(5);
+    await expect(items.locator('small')).toHaveText(Array(5).fill('To do'));
+    const dismiss = checklist.getByRole('button', {
+      name: 'Dismiss checklist',
+    });
+    await expect(dismiss).toHaveCount(0);
+
+    // Items link to the screen that completes them.
+    await checklist.getByRole('link', { name: 'Create a job' }).click();
+    await expect(
+      page.getByRole('heading', { name: 'Jobs', exact: true }),
+    ).toBeVisible();
+    await page.goto(`${url}/#/settings`);
+
+    // Completed work from the backend ticks items, and only then can it be dismissed.
+    await page.route('**/api/settings', (route) =>
+      route.fulfill({
+        json: {
+          version: 1,
+          checkout: 'C:\\checkout',
+          python: 'C:\\python.exe',
+          model_roots: [],
+          dataset_roots: [],
+          models: {},
+          output_root: '',
+          cache_root: '',
+        },
+      }),
+    );
+    await page.route('**/api/diagnostics', (route) =>
+      route.fulfill({
+        json: {
+          ran_at: '2026-10-31T00:00:00+00:00',
+          current: true,
+          environment: {},
+          checks: [],
+        },
+      }),
+    );
+    await page.route('**/api/datasets', (route) =>
+      route.fulfill({
+        json: [
+          {
+            id: 'd',
+            name: 'Mocked',
+            path: 'C:\\mocked',
+            managed: false,
+            missing: false,
+            counts: {
+              total: 0,
+              valid: 0,
+              included: 0,
+              captioned: 0,
+              excluded: 0,
+            },
+            scan: { state: 'complete', completed: 0, total: 0 },
+          },
+        ],
+      }),
+    );
+    await page.route('**/api/jobs', (route) =>
+      route.fulfill({ json: [{ id: 'j' }] }),
+    );
+    await page.route('**/api/runs', (route) =>
+      route.fulfill({
+        json: [
+          {
+            id: 'r',
+            status: 'completed',
+            stages: [{ name: 'train', status: 'completed' }],
+          },
+        ],
+      }),
+    );
+    await page.reload();
+    await expect(items.locator('small')).toHaveText(Array(5).fill('Done'));
+    await dismiss.click();
+    await expect(checklist).toHaveCount(0);
+    await page.reload();
+    await expect(
+      page.getByRole('heading', { name: 'Settings', exact: true }),
+    ).toBeVisible();
+    await expect(checklist).toHaveCount(0);
+  } finally {
+    await stop();
+    await rm(root, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 100,
+    });
+  }
+});
+
 test('path fields warn before saving, browse local folders and show the full path', async ({
   page,
 }) => {

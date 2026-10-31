@@ -10,6 +10,12 @@ export function parseRoute(hash: string): Route {
   return id && screen !== 'Settings' ? { screen, id } : { screen };
 }
 
+// False for a bare address, which opens wherever is useful instead of a fixed screen.
+export function namesScreen(hash: string) {
+  const [, name] = /^#\/([a-z]+)/.exec(hash) ?? [];
+  return screens.some((value) => value.toLowerCase() === name);
+}
+
 export function formatRoute({ screen, id }: Route) {
   return `#/${screen.toLowerCase()}${id ? `/${id}` : ''}`;
 }

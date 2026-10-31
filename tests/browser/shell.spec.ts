@@ -131,3 +131,38 @@ test('each view has one primary action, destructive actions look dangerous and f
     await app.close();
   }
 });
+
+test('a configured app opens on Datasets, or on a Run in progress', async ({
+  page,
+}) => {
+  const app = await runWorkspace();
+  try {
+    await page.goto(app.url);
+    await expect(
+      page.getByRole('heading', { name: 'Datasets', exact: true }),
+    ).toBeVisible();
+    await expect(page).toHaveURL(/#\/datasets$/);
+    await expect(
+      page.getByRole('button', { name: 'Datasets', exact: true }),
+    ).toHaveClass('active');
+
+    // A link still opens what it names.
+    await page.goto(`${app.url}/#/settings`);
+    await expect(
+      page.getByRole('heading', { name: 'Settings', exact: true }),
+    ).toBeVisible();
+
+    // Waiting for the GPU keeps a Run active for as long as this takes.
+    await app.leaseGpu('acquire');
+    const job = app.manifest.jobs.find((item) => item.family === 'wan')!;
+    await app.post('/api/runs/prepare', { job_id: job.id });
+    const [run] = await app.records();
+    await page.goto(app.url);
+    await page.reload();
+    await expect(page).toHaveURL(new RegExp(`#/runs/${run.id}$`));
+    await expect(page.getByLabel('Run stages')).toBeVisible();
+    await app.leaseGpu('release');
+  } finally {
+    await app.close();
+  }
+});

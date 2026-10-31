@@ -253,7 +253,7 @@ function SavedStates({
       </button>
       {inspecting && <p role="status">Checking saved states…</p>}
       {error && <p role="alert">{error}</p>}
-      <label className="field">
+      <label className="field number-field">
         Additional segment steps
         <input
           type="number"

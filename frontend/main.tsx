@@ -22,8 +22,15 @@ import { Runs } from './Runs';
 import { Datasets } from './Datasets';
 import { componentLabels } from './labels';
 import { PathField, RootsField } from './PathField';
-import { formatRoute, parseRoute, screens, type Screen } from './route';
+import {
+  formatRoute,
+  namesScreen,
+  parseRoute,
+  screens,
+  type Screen,
+} from './route';
 import { useRunSignals } from './runSignals';
+import { SetupChecklist } from './SetupChecklist';
 import { StatusBadge, type Tone } from './StatusBadge';
 
 type Settings = {
@@ -56,6 +63,15 @@ const screenIcons: Record<Screen, LucideIcon> = {
   Runs: Play,
   Settings: SettingsIcon,
 };
+
+const activeStatuses = [
+  'pending_preparation',
+  'preparing',
+  'pending_training',
+  'training',
+  'generating',
+  'stopping',
+];
 
 function setupHealth(report: Report | null, dirty: boolean) {
   if (!report) return { state: 'unknown', label: 'Not checked' };
@@ -108,13 +124,18 @@ function App() {
   const [dirty, setDirty] = useState(false);
   const [report, setReport] = useState<Report | null>(null);
   const [initialRoute] = useState(() => parseRoute(window.location.hash));
+  // A bare address waits for the settings to choose its screen, rather than flashing the wrong one.
+  const [landing, setLanding] = useState(
+    () => !namesScreen(window.location.hash),
+  );
+  const landingPending = useRef(landing);
   const [screen, setScreen] = useState<Screen>(initialRoute.screen);
   // Each screen's selection, kept while elsewhere so that returning reopens it.
   const [selection, setSelection] = useState<Partial<Record<Screen, string>>>(
     initialRoute.id ? { [initialRoute.screen]: initialRoute.id } : {},
   );
   // Set before the browser reports the change, so only history moves look external.
-  const currentHash = useRef(formatRoute(initialRoute));
+  const currentHash = useRef(landing ? '' : formatRoute(initialRoute));
   const currentScreen = useRef(initialRoute.screen);
   const leaving = useRef(false);
   // Where this page sits in the tab's history, stored on each entry so that a move back or
@@ -167,11 +188,15 @@ function App() {
   );
   const openRun = useCallback((id: string) => go('Runs', id), [go]);
   async function navigate(name: Screen) {
+    landingPending.current = false;
+    setLanding(false);
     if (screen === 'Jobs' && jobDirty && !(await confirmLeaveJob())) return;
     go(name, selection[name]);
   }
   const followHistory = useEffectEvent(async () => {
     if (window.location.hash === currentHash.current) return;
+    landingPending.current = false;
+    setLanding(false);
     const next = parseRoute(window.location.hash);
     const state = window.history.state as { position?: number } | null;
     // An address typed by hand is a new entry, with no position recorded yet.
@@ -212,17 +237,27 @@ function App() {
     void Promise.all([
       api<Settings>('/api/settings'),
       api<Report | null>('/api/diagnostics'),
+      api<{ id: string; status: string; order: number }[]>('/api/runs'),
     ])
-      .then(([value, latest]) => {
+      .then(([value, latest, runs]) => {
         load(value);
         setReport(latest);
         setStatus('Settings loaded');
+        if (!landingPending.current) return;
+        const active = runs.find((run) => activeStatuses.includes(run.status));
+        if (!value.checkout || !value.python) go('Settings', undefined, true);
+        else if (active) go('Runs', active.id, true);
+        else go('Datasets', undefined, true);
       })
       .catch((reason: Error) => {
         setError(reason.message);
         setStatus('Settings could not be loaded');
+      })
+      .finally(() => {
+        landingPending.current = false;
+        setLanding(false);
       });
-  }, []);
+  }, [go]);
   useEffect(() => {
     const protect = (event: BeforeUnloadEvent) => {
       if (dirty) event.preventDefault();
@@ -334,7 +369,7 @@ function App() {
             return (
               <button
                 key={name}
-                className={screen === name ? 'active' : ''}
+                className={!landing && screen === name ? 'active' : ''}
                 onClick={() => void navigate(name)}
               >
                 <Icon />
@@ -356,17 +391,17 @@ function App() {
           screen === 'Datasets' && datasetEditor ? 'dataset-editor-shell' : ''
         }
       >
-        <div hidden={screen !== 'Datasets'}>
+        <div hidden={landing || screen !== 'Datasets'}>
           <Datasets
             onEditorChange={setDatasetEditor}
-            visible={screen === 'Datasets'}
+            visible={!landing && screen === 'Datasets'}
             selectedId={selection.Datasets}
             onSelect={selectDataset}
             defaultFolder={settings?.dataset_roots[0] ?? ''}
             datasetRoots={settings?.dataset_roots}
           />
         </div>
-        {screen === 'Jobs' ? (
+        {landing ? null : screen === 'Jobs' ? (
           <Jobs
             selectedId={selection.Jobs}
             onSelect={selectJob}
@@ -391,7 +426,11 @@ function App() {
             )}
             {settings && (
               <>
-                <section className="panel">
+                <SetupChecklist
+                  connected={!dirty && !!settings.checkout && !!settings.python}
+                  diagnosed={!!report && report.current && !dirty}
+                />
+                <section className="panel" id="settings-environment">
                   <div className="section-heading">
                     <h2>Training environment</h2>
                     <p>
@@ -469,7 +508,7 @@ function App() {
                     </div>
                   </details>
                 </section>
-                <div className="actions">
+                <div className="actions" id="settings-actions">
                   <span role="status">{status}</span>
                   <button
                     disabled={busy || dirty}
