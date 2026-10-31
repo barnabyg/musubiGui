@@ -10,6 +10,8 @@ lockfile consistency, installed npm dependency integrity, Python/npm vulnerabili
 detect-secrets, and sdist/wheel packaging. `npm.cmd run test:browser` builds the UI from the
 current `frontend/` source before testing, through its `pretest:browser` script, including when
 it is given a single spec file. Running `playwright test` directly skips that build.
+`tests/browser/api.spec.ts` is the exception to real browser testing: it runs the shared
+request helper in Node with a stubbed `fetch`, to reach error responses the backend doesn't produce.
 CI uses the same command. When it fails, CI keeps Playwright's `test-results`
 (page snapshots and failure screenshots of synthetic fixtures) as the
 `playwright-results` artifact for 14 days. Registry access is required by vulnerability and lock checks.
