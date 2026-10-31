@@ -39,8 +39,8 @@ different application state directory. Unknown persisted versions are preserved 
 Credentials are not a settings field. Use local filesystem paths, never credential-bearing URLs.
 
 Run diagnostics keeps its latest result, with its time and the settings it checked, in a
-versioned `diagnostics.json` beside `settings.json`. The sidebar shows it as Ready, Problems
-found or Not checked and links to the report, which stays until the next run and is marked out
+versioned `diagnostics.json` beside `settings.json`. The sidebar shows it as Ready, the number of warnings to
+check, Problems found or Not checked and links to the report, which stays until the next run and is marked out
 of date once settings change. These checks do not establish model support.
 
 Path fields can be typed, pasted or filled with Browse, and warn before saving when a path

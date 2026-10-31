@@ -44,8 +44,11 @@ function setupHealth(report: Report | null, dirty: boolean) {
       state: 'problems',
       label: `Problems found${outdated ? ' · out of date' : ''}`,
     };
-  return outdated
-    ? { state: 'unknown', label: 'Out of date' }
+  if (outdated) return { state: 'unknown', label: 'Out of date' };
+  // A warning can mean training can't run yet, such as no model paths, so it isn't Ready.
+  const warnings = report.checks.filter((check) => check.status !== 'ok');
+  return warnings.length
+    ? { state: 'warnings', label: `${warnings.length} to check` }
     : { state: 'ready', label: 'Ready' };
 }
 

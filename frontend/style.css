@@ -101,6 +101,12 @@ nav button span {
 .local.problems i {
   background: #ef8d8d;
 }
+.local.warnings {
+  color: #f0b87c;
+}
+.local.warnings i {
+  background: #f0b87c;
+}
 .local.ready i {
   background: #8ed4aa;
 }
