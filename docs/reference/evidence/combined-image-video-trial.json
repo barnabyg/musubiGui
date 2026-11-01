@@ -23,7 +23,7 @@
   },
   "power_limit_w": 280,
   "dataset": "6 owner-provided images of varied shapes, centre-cropped with bucketing off, plus 4 owner-provided clips per model: 16 fps without audio for Wan, 30 fps with embedded speech audio for H3.",
-  "measurement_limits": "Short runs prove mechanics and say nothing about learning. VRAM is whole-device and includes about 0.8 GiB of desktop baseline. The Wan run's resources were sampled every 2 s and the H3 runs' every 0.5 s or more, so brief peaks can be missed. Step times come from upstream's progress bar in whole seconds; image and video batches are told apart by their duration. Samples were decoded but not watched or listened to.",
+  "measurement_limits": "Short runs prove mechanics and say nothing about learning. VRAM is whole-device and includes about 0.8 GiB of desktop baseline. The Wan run's resources were sampled every 2 s and the H3 runs' every 0.5 s or more, so brief peaks can be missed. Step times come from upstream's progress bar in whole seconds, which reads zero until the first step ends, so the first steps are not timed; image and video batches are told apart by their duration. Samples were decoded but not watched or listened to.",
   "runs": [
     {
       "name": "wan-combined",
@@ -66,19 +66,35 @@
         }
       ],
       "step_times": {
-        "steps_timed": 20,
+        "steps_timed": 19,
         "image_steps": 12,
         "image_step_seconds_median": 5.0,
-        "video_steps": 8,
-        "video_step_seconds_median": 88.0
+        "video_steps": 7,
+        "video_step_seconds_median": 89
       },
       "image_cache": {
-        "latent_bytes": [199880],
-        "text_bytes_each": [147712, 155904, 172288, 262656, 287232, 328192]
+        "latent_bytes": [
+          199880
+        ],
+        "text_bytes_each": [
+          147712,
+          155904,
+          172288,
+          262656,
+          287232,
+          328192
+        ]
       },
       "video_cache": {
-        "latent_bytes": [1797336],
-        "text_bytes_each": [336384, 393728, 393728, 451072]
+        "latent_bytes": [
+          1797336
+        ],
+        "text_bytes_each": [
+          336384,
+          393728,
+          393728,
+          451072
+        ]
       },
       "sample": {
         "bytes": 951402,
@@ -130,15 +146,24 @@
         }
       ],
       "step_times": {
-        "steps_timed": 10,
-        "image_steps": 10,
-        "image_step_seconds_median": 6.0,
+        "steps_timed": 9,
+        "image_steps": 9,
+        "image_step_seconds_median": 5,
         "video_steps": 0,
         "video_step_seconds_median": null
       },
       "image_cache": {
-        "latent_bytes": [85980],
-        "text_bytes_each": [164736, 174984, 185488, 298216, 328960, 380200]
+        "latent_bytes": [
+          85980
+        ],
+        "text_bytes_each": [
+          164736,
+          174984,
+          185488,
+          298216,
+          328960,
+          380200
+        ]
       },
       "video_cache": null,
       "sample": {
@@ -156,7 +181,9 @@
       "route": "upstream CLI, because review still blocks this",
       "purpose": "H3 with one image section and one video section sharing the TOML but not a cache directory.",
       "result": "pass",
-      "added_flags": ["--one_frame on latent_cache, text_cache, train"],
+      "added_flags": [
+        "--one_frame on latent_cache, text_cache, train"
+      ],
       "size": "640x352",
       "video_frames": 124,
       "rank": 8,
@@ -192,19 +219,35 @@
         }
       ],
       "step_times": {
-        "steps_timed": 16,
+        "steps_timed": 15,
         "image_steps": 9,
         "image_step_seconds_median": 5,
-        "video_steps": 7,
-        "video_step_seconds_median": 78
+        "video_steps": 6,
+        "video_step_seconds_median": 78.0
       },
       "image_cache": {
-        "latent_bytes": [85980],
-        "text_bytes_each": [164736, 174984, 185488, 298216, 328960, 380200]
+        "latent_bytes": [
+          85980
+        ],
+        "text_bytes_each": [
+          164736,
+          174984,
+          185488,
+          298216,
+          328960,
+          380200
+        ]
       },
       "video_cache": {
-        "latent_bytes": [3179604],
-        "text_bytes_each": [462184, 462184, 482680, 513424]
+        "latent_bytes": [
+          3179604
+        ],
+        "text_bytes_each": [
+          462184,
+          462184,
+          482680,
+          513424
+        ]
       },
       "sample": {
         "bytes": 418135,
