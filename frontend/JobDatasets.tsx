@@ -34,19 +34,22 @@ export function JobDatasets({
       datasets: [...job.datasets, { dataset_id: chosen, repeats: null }],
     });
     setAdding('');
+    // The button is about to be disabled, which would otherwise drop keyboard focus.
+    focusField('dataset_id');
   }
-  function remove(id: string) {
+  // By position: an imported job can list a dataset twice, and Review asks to remove the extra row.
+  function remove(row: number) {
     edit({
       ...job,
-      datasets: job.datasets.filter((entry) => entry.dataset_id !== id),
+      datasets: job.datasets.filter((_, index) => index !== row),
     });
     focusField('dataset_id');
   }
-  function setRepeats(id: string, value: string) {
+  function setRepeats(row: number, value: string) {
     edit({
       ...job,
-      datasets: job.datasets.map((entry) =>
-        entry.dataset_id === id
+      datasets: job.datasets.map((entry, index) =>
+        index === row
           ? { ...entry, repeats: value === '' ? null : Number(value) }
           : entry,
       ),
@@ -57,14 +60,14 @@ export function JobDatasets({
       <h3>Datasets</h3>
       {job.datasets.length > 0 && (
         <ol aria-label="Datasets in this job">
-          {job.datasets.map((entry) => {
+          {job.datasets.map((entry, row) => {
             const dataset = datasets.find(
               (item) => item.id === entry.dataset_id,
             );
             const key = datasetField(entry.dataset_id);
             const name = dataset?.name ?? 'deleted dataset';
             return (
-              <li key={entry.dataset_id}>
+              <li key={`${entry.dataset_id}-${row}`}>
                 <div className="job-dataset-name">
                   {/* The library may still be loading, which doesn't mean the dataset is gone. */}
                   <strong>
@@ -91,7 +94,7 @@ export function JobDatasets({
                       placeholder={String(job.config.repeats)}
                       value={entry.repeats ?? ''}
                       onChange={(event) =>
-                        setRepeats(entry.dataset_id, event.target.value)
+                        setRepeats(row, event.target.value)
                       }
                       {...problemProps(key)}
                     />
@@ -101,7 +104,7 @@ export function JobDatasets({
                   id={dataset ? undefined : fieldId(key)}
                   aria-label={`Remove ${name}`}
                   disabled={busy}
-                  onClick={() => remove(entry.dataset_id)}
+                  onClick={() => remove(row)}
                 >
                   Remove
                 </button>

@@ -1295,10 +1295,11 @@ test('a Wan job combines an image dataset and a video dataset through review, re
       .click();
     await expect(page.getByRole('status')).toContainText('Preset applied');
 
-    // By keyboard: choose, Tab to the button, Enter. Focus stays to add another.
+    // By keyboard: arrow to the first dataset, Tab to the button, Enter. Focus returns to add another.
     const add = page.getByRole('combobox', { name: 'Add a dataset' });
-    await add.selectOption({ label: 'Susan images (2 images)' });
     await add.focus();
+    await add.press('ArrowDown');
+    await expect(add).not.toHaveValue('');
     await page.keyboard.press('Tab');
     const addButton = page.getByRole('button', {
       name: 'Add dataset',
@@ -1308,6 +1309,7 @@ test('a Wan job combines an image dataset and a video dataset through review, re
     await page.keyboard.press('Enter');
     const rows = page.getByRole('list', { name: 'Datasets in this job' });
     await expect(rows.getByRole('listitem')).toHaveCount(1);
+    await expect(add).toBeFocused();
     await expect(rows).toContainText('Susan images');
     await expect(rows).toContainText('2 images');
     // A listed dataset is no longer offered.
@@ -1442,6 +1444,40 @@ test('a review error about a dataset focuses its row, and a deleted dataset can 
     await expect(remove).toBeFocused();
     await page.keyboard.press('Enter');
     await expect(rows).toHaveCount(0);
+  } finally {
+    await app.close();
+  }
+});
+
+test('removing one row of a dataset listed twice keeps the other', async ({
+  page,
+}) => {
+  const app = await runWorkspace();
+  try {
+    const job = app.manifest.jobs.find((item) => item.family === 'wan')!;
+    const saved = (await (
+      await fetch(`${app.url}/api/jobs/${job.id}`)
+    ).json()) as { datasets: { dataset_id: string }[] } & Record<string, unknown>;
+    const twice = await fetch(`${app.url}/api/jobs/${job.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...saved,
+        version: undefined,
+        id: undefined,
+        datasets: [
+          { dataset_id: saved.datasets[0].dataset_id, repeats: 2 },
+          { dataset_id: saved.datasets[0].dataset_id, repeats: 3 },
+        ],
+      }),
+    });
+    expect(twice.ok).toBe(true);
+    await page.goto(`${app.url}/#/jobs/${job.id}`);
+    const rows = page.getByRole('list', { name: 'Datasets in this job' });
+    await expect(rows.getByRole('listitem')).toHaveCount(2);
+    await rows.getByRole('button', { name: /^Remove/ }).first().click();
+    await expect(rows.getByRole('listitem')).toHaveCount(1);
+    await expect(rows.getByRole('spinbutton')).toHaveValue('3');
   } finally {
     await app.close();
   }
