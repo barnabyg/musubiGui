@@ -73,28 +73,12 @@
         "video_step_seconds_median": 89
       },
       "image_cache": {
-        "latent_bytes": [
-          199880
-        ],
-        "text_bytes_each": [
-          147712,
-          155904,
-          172288,
-          262656,
-          287232,
-          328192
-        ]
+        "latent_bytes": [199880],
+        "text_bytes_each": [147712, 155904, 172288, 262656, 287232, 328192]
       },
       "video_cache": {
-        "latent_bytes": [
-          1797336
-        ],
-        "text_bytes_each": [
-          336384,
-          393728,
-          393728,
-          451072
-        ]
+        "latent_bytes": [1797336],
+        "text_bytes_each": [336384, 393728, 393728, 451072]
       },
       "sample": {
         "bytes": 951402,
@@ -153,17 +137,8 @@
         "video_step_seconds_median": null
       },
       "image_cache": {
-        "latent_bytes": [
-          85980
-        ],
-        "text_bytes_each": [
-          164736,
-          174984,
-          185488,
-          298216,
-          328960,
-          380200
-        ]
+        "latent_bytes": [85980],
+        "text_bytes_each": [164736, 174984, 185488, 298216, 328960, 380200]
       },
       "video_cache": null,
       "sample": {
@@ -181,9 +156,7 @@
       "route": "upstream CLI, because review still blocks this",
       "purpose": "H3 with one image section and one video section sharing the TOML but not a cache directory.",
       "result": "pass",
-      "added_flags": [
-        "--one_frame on latent_cache, text_cache, train"
-      ],
+      "added_flags": ["--one_frame on latent_cache, text_cache, train"],
       "size": "640x352",
       "video_frames": 124,
       "rank": 8,
@@ -226,28 +199,12 @@
         "video_step_seconds_median": 78.0
       },
       "image_cache": {
-        "latent_bytes": [
-          85980
-        ],
-        "text_bytes_each": [
-          164736,
-          174984,
-          185488,
-          298216,
-          328960,
-          380200
-        ]
+        "latent_bytes": [85980],
+        "text_bytes_each": [164736, 174984, 185488, 298216, 328960, 380200]
       },
       "video_cache": {
-        "latent_bytes": [
-          3179604
-        ],
-        "text_bytes_each": [
-          462184,
-          462184,
-          482680,
-          513424
-        ]
+        "latent_bytes": [3179604],
+        "text_bytes_each": [462184, 462184, 482680, 513424]
       },
       "sample": {
         "bytes": 418135,
@@ -269,9 +226,7 @@
       "video_frames": 124,
       "rank": 8,
       "steps": 12,
-      "added_flags": [
-        "--one_frame"
-      ],
+      "added_flags": ["--one_frame"],
       "jsonl_records": 4,
       "stages": [
         {
