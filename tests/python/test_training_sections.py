@@ -382,6 +382,15 @@ def test_review_warns_about_images_a_centre_crop_would_reshape_only_with_bucketi
     assert shape_warnings(workspace.review(workspace.job("wan", row, width=256, height=256))) == []
 
 
+def test_the_crop_warning_only_recommends_bucketing_where_it_ran(workspace: Workspace) -> None:
+    square = wide_images(workspace, "Square stills", (64, 64))
+    [wan] = shape_warnings(workspace.review(workspace.job("wan", {"dataset_id": square}, width=832, height=480)))
+    assert "Enable bucketing" in wan
+    [h3] = shape_warnings(workspace.review(workspace.job("h3", {"dataset_id": square}, width=640, height=352)))
+    assert "Enable bucketing" not in h3
+    assert "has not been tried" in h3
+
+
 def test_review_counts_only_included_images_and_treats_a_mixed_folder_like_any_other(workspace: Workspace) -> None:
     mixed = workspace.images("Mixed")
     synthetic_video(workspace.folder / "Mixed" / "clip.mp4", 33, rate=Fraction(16))

@@ -775,7 +775,12 @@ def _reshaped_image_warning(job: Job, dataset: dict[str, Any], items: list[dict[
     images = "1 image has" if count == 1 else f"{count} images have"
     return [
         f'Dataset "{dataset["name"]}": {images} a different shape from {config.width}×{config.height} and bucketing is '
-        "off, so training scales each to cover that size and crops the overflow from the centre. Enable bucketing to keep the whole image."
+        "off, so training scales each to cover that size and crops the overflow from the centre. "
+        + (
+            "Enable bucketing to keep the whole image."
+            if job.family == "wan"
+            else "Bucketing with H3 images has not been tried on the target PC, so crop or resize them to this shape instead."
+        )
     ]
 
 

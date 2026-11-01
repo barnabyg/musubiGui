@@ -155,7 +155,8 @@ extension lists as preflight, so supported PNG images remain image datasets.
 With bucketing off, every image is trained at the job's exact size: the pinned loader scales it
 to cover that size and crops the overflow from the centre (`image_video_dataset.py`). Review
 warns with the number of included images in each dataset that this reshapes, using the size the
-scan recorded, and allows 1% of difference in shape. Enabling bucketing clears the warning.
+scan recorded, and allows 1% of difference in shape. Enabling bucketing clears the warning, though
+bucketing with H3 images has not been tried on the target PC, so its warning suggests cropping instead.
 
 ## Default configuration
 
