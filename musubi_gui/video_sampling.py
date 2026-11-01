@@ -63,7 +63,7 @@ def source_rates(items: list[dict[str, Any]]) -> list[float]:
 
 
 def video_sections(
-    directory: Path, cache: Path, rates: list[float], prefix: str = "dataset"
+    directory: Path, cache: Path, rates: list[float], prefix: str
 ) -> list[tuple[float | None, Path, Path]]:
     """(source_fps, video directory, cache directory) per Wan video section of one dataset."""
     if len(rates) <= 1:

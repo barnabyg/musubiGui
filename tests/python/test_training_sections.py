@@ -166,7 +166,9 @@ def test_h3_with_two_video_datasets_prepares_trains_and_retries_with_both_jsonl_
             assert section["video_jsonl_file"] == metadata.as_posix()
             assert str(metadata) in retried["input_files"]
             assert section["cache_directory"].startswith(Path(retried["cache"]).as_posix())
-        assert wait_for(service, retried["id"], "prepared", device_released=True)
+        wait_for(service, retried["id"], "prepared", device_released=True)
+        service.start(retried["id"])
+        assert wait_for(service, retried["id"], "completed", device_released=True)["checkpoints"]
     finally:
         service.close()
 

@@ -115,6 +115,13 @@ test('main screens keep text readable and fit the window at every supported widt
         async () => {
           await page.goto(`${app.url}/#/jobs/${job.id}`);
           await expect(page.getByLabel('Job name')).toBeVisible();
+          // Also checks the dataset rows and the review's Training sections table.
+          await page
+            .getByRole('button', { name: 'Review configuration', exact: true })
+            .click();
+          await expect(
+            page.getByRole('table', { name: 'Training sections' }),
+          ).toBeVisible();
         },
       ],
       [

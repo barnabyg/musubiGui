@@ -43,11 +43,6 @@ one, and its unchanged caches are reused.
 
 Dataset exclusions belong to the dataset, not the job, so they apply to every job using it.
 
-With bucketing off, every image is trained at the job's exact size: the pinned loader scales it
-to cover that size and crops the overflow from the centre (`image_video_dataset.py`). Review
-warns with the number of included images in each dataset that this reshapes, using the size the
-scan recorded, and allows 1% of difference in shape. Enabling bucketing clears the warning.
-
 ## Datasets in a job
 
 Job & dataset lists the job's datasets in order. Each row shows the dataset, its contents
@@ -157,6 +152,11 @@ images remain browsable, but Job review names each incompatible included item an
 requires conversion to PNG/JPEG/WebP/BMP or explicit exclusion before preparation.
 Original media is preserved. The native dataset builder uses the same pinned media
 extension lists as preflight, so supported PNG images remain image datasets.
+
+With bucketing off, every image is trained at the job's exact size: the pinned loader scales it
+to cover that size and crops the overflow from the centre (`image_video_dataset.py`). Review
+warns with the number of included images in each dataset that this reshapes, using the size the
+scan recorded, and allows 1% of difference in shape. Enabling bucketing clears the warning.
 
 ## Default configuration
 
