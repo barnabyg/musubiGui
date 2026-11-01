@@ -42,6 +42,11 @@ one, and its unchanged caches are reused.
 
 Dataset exclusions belong to the dataset, not the job, so they apply to every job using it.
 
+With bucketing off, every image is trained at the job's exact size: the pinned loader scales it
+to cover that size and crops the overflow from the centre (`image_video_dataset.py`). Review
+warns with the number of included images in each dataset that this reshapes, using the size the
+scan recorded, and allows 1% of difference in shape. Enabling bucketing clears the warning.
+
 ## Training sections
 
 `musubi_gui/training_sections.py` turns a job and its included items into native dataset

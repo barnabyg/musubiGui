@@ -10,6 +10,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 from helpers import PNG, acceptance_workspace, wait_for
+from PIL import Image
 
 from musubi_gui.acceptance import synthetic_audio, synthetic_video
 from musubi_gui.app import create_app
@@ -236,7 +237,7 @@ def test_review_prefixes_item_errors_because_relative_paths_can_collide(workspac
 def test_identical_files_in_one_dataset_are_not_a_warning(workspace: Workspace) -> None:
     clips = workspace.videos("clips", ("a.mp4", 33, 16))
     shutil.copyfile(workspace.folder / "clips" / "a.mp4", workspace.folder / "clips" / "b.mp4")
-    workspace.client.post(f"/api/datasets/{clips}/scan")
+    assert workspace.client.post(f"/api/datasets/{clips}/scan", json={}).is_success
     other = workspace.images("stills")
     review = workspace.review(workspace.job("wan", {"dataset_id": clips}, {"dataset_id": other}))
     assert not any(warning.startswith("Identical files") for warning in review["warnings"])
@@ -250,3 +251,42 @@ def test_h3_rejects_images_by_naming_the_dataset_to_remove(workspace: Workspace)
     assert message.startswith('Dataset "Susan images":')
     assert "Remove it from this job" in message
     assert "exclude" not in message.lower()
+
+
+def wide_images(workspace: Workspace, name: str, size: tuple[int, int]) -> str:
+    folder = workspace.folder / name
+    folder.mkdir()
+    for index in range(2):
+        Image.new("RGB", size, (index, 0, 0)).save(folder / f"still{index}.png")
+        (folder / f"still{index}.txt").write_text("A still.", encoding="utf-8")
+    return workspace.register(name, folder)
+
+
+def shape_warnings(review: dict[str, Any]) -> list[str]:
+    return [warning for warning in review["warnings"] if "different shape" in warning]
+
+
+def test_review_warns_about_images_a_centre_crop_would_reshape_only_with_bucketing_off(workspace: Workspace) -> None:
+    square = wide_images(workspace, "Square stills", (64, 64))
+    row = {"dataset_id": square}
+    [message] = shape_warnings(workspace.review(workspace.job("wan", row, width=832, height=480)))
+    assert message.startswith('Dataset "Square stills": 2 images have a different shape from 832×480')
+    assert "crops" in message
+    assert shape_warnings(workspace.review(workspace.job("wan", row, width=832, height=480, enable_bucket=True))) == []
+    assert shape_warnings(workspace.review(workspace.job("wan", row, width=256, height=256))) == []
+
+
+def test_review_counts_only_included_images_and_treats_a_mixed_folder_like_any_other(workspace: Workspace) -> None:
+    mixed = workspace.images("Mixed")
+    synthetic_video(workspace.folder / "Mixed" / "clip.mp4", 33, rate=Fraction(16))
+    (workspace.folder / "Mixed" / "clip.txt").write_text("A clip.", encoding="utf-8")
+    assert workspace.client.post(f"/api/datasets/{mixed}/scan", json={}).is_success
+    items = workspace.client.get(f"/api/datasets/{mixed}/items").json()
+    excluded = next(item["id"] for item in items if item["name"] == "still0.png")
+    body = {"item_ids": [excluded], "excluded": True}
+    assert workspace.client.post(f"/api/datasets/{mixed}/exclusions", json=body).is_success
+    # The clip is square too, but the warning is about images; the mixed folder itself never warns.
+    review = workspace.review(workspace.job("wan", {"dataset_id": mixed}, width=320, height=256))
+    [message] = shape_warnings(review)
+    assert '"Mixed": 1 image has a different shape' in message
+    assert not any("mixed" in text.lower() for text in [*review["warnings"], *review["errors"]] if "Mixed" not in text)

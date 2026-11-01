@@ -39,6 +39,8 @@ WAN_MAX_BLOCKS_TO_SWAP = 38
 H3_MAX_BLOCKS_TO_SWAP = 48
 # Below this a LoRA has made no visible change to samples in the owner's experience on the target PC.
 LOW_STEPS_WARNING = 600
+# A shape this close to the job's loses too little to a crop to be worth a warning.
+ASPECT_TOLERANCE = 0.01
 NEW_DRAFT_STEPS = 600
 
 
@@ -746,7 +748,29 @@ def _review_items(
                     )
             elif not inspection.get("errors"):
                 audio_coverage["supervised"] += 1
+    warnings.extend(_reshaped_image_warning(job, dataset, items))
     return items
+
+
+def _reshaped_image_warning(job: Job, dataset: dict[str, Any], items: list[dict[str, Any]]) -> list[str]:
+    """Bucketing off leaves the pinned loader one bucket: image_video_dataset.py scales to cover it and centre-crops."""
+    config = job.config
+    if config.enable_bucket or config.width < 1 or config.height < 1:
+        return []
+    target = config.width / config.height
+
+    def reshaped(item: dict[str, Any]) -> bool:
+        width, height = item.get("metadata", {}).get("width"), item.get("metadata", {}).get("height")
+        return bool(width and height) and abs(width / height / target - 1) > ASPECT_TOLERANCE
+
+    count = sum(1 for item in items if item["kind"] == "image" and reshaped(item))
+    if not count:
+        return []
+    images = "1 image has" if count == 1 else f"{count} images have"
+    return [
+        f'Dataset "{dataset["name"]}": {images} a different shape from {config.width}×{config.height} and bucketing is '
+        "off, so training scales each to cover that size and crops the overflow from the centre. Enable bucketing to keep the whole image."
+    ]
 
 
 def _plan_job_windows(job: Job, datasets: list[dict[str, Any]], items: list[dict[str, Any]]) -> dict[str, Any]:

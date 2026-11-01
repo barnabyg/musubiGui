@@ -40,6 +40,10 @@ test('register mixed media, preview, and recover library after service restart',
     await expect(
       page.getByRole('button', { name: /Mixed library.*4 media/ }),
     ).toBeVisible();
+    // The invalid video is in the media total but not in what the dataset contains.
+    await expect(page.locator('.dataset-contents')).toHaveText(
+      '2 images · 1 video',
+    );
   } finally {
     await app.cleanup();
   }

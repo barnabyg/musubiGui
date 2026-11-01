@@ -12,6 +12,13 @@ the creation screen, then choose **Use existing folder** to register a folder as
 Both flows open the individual dataset editor. **Back to datasets** returns to
 the library after saving the active caption; a failed save keeps the draft open.
 
+Each library entry shows its worked-out contents, such as `12 images`, `3 videos` or
+`12 images · 3 videos`. These count valid media that isn't excluded, the same items as the
+included count, and follow each re-scan. A dataset has no stored image or video type, and
+creating one asks for none, so a mixed folder works like any other. Keeping images and videos
+in separate datasets lets each be reused with models that take only one of them, and a
+[job can list several](jobs.md#training-sections).
+
 The individual editor fills the available window with thumbnails and editable captions.
 A compact top bar contains back navigation, the dataset name/scan status, **Add media**,
 **Bulk actions** and **Dataset settings**. Thumbnails start directly below this bar; the

@@ -28,6 +28,8 @@ export type Dataset = {
     total: number;
     valid: number;
     included: number;
+    images: number;
+    videos: number;
     captioned: number;
     excluded: number;
   };
