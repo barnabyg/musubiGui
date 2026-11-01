@@ -62,21 +62,15 @@ def source_rates(items: list[dict[str, Any]]) -> list[float]:
     return sorted({rate for item in items if item["kind"] == "video" and (rate := source_rate(item)) is not None})
 
 
-def video_sections(directory: Path, cache: Path, rates: list[float]) -> list[tuple[float | None, Path, Path]]:
-    """(source_fps, video directory, cache directory) per Wan video section.
-
-    Sections never share a cache directory: the pinned cachers delete files that their own section did not produce.
-    """
+def video_sections(
+    directory: Path, cache: Path, rates: list[float], prefix: str
+) -> list[tuple[float | None, Path, Path]]:
+    """(source_fps, video directory, cache directory) per Wan video section of one dataset."""
     if len(rates) <= 1:
-        return [(rates[0] if rates else None, directory, cache / "dataset")]
-    return [(rate, directory / f"rate-{index}", cache / f"dataset-rate-{index}") for index, rate in enumerate(rates, 1)]
-
-
-def video_directory(directory: Path, rates: list[float], rate: float | None) -> Path:
-    for section_rate, section_directory, _ in video_sections(directory, Path(), rates):
-        if section_rate == rate:
-            return section_directory
-    raise ValueError("A video's frame rate is unknown; rescan the dataset before preparation.")
+        return [(rates[0] if rates else None, directory, cache / prefix)]
+    return [
+        (rate, directory / f"rate-{index}", cache / f"{prefix}-rate-{index}") for index, rate in enumerate(rates, 1)
+    ]
 
 
 def rate_label(fps: float) -> str:

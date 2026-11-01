@@ -41,6 +41,35 @@ def prepare(root: Path) -> Path:
     return media
 
 
+def add_separate_folders(root: Path, media: Path) -> tuple[Path, Path]:
+    """A folder of images and a folder of videos, the usual way to combine media in one job."""
+    images, videos = root / "images", root / "videos"
+    images.mkdir()
+    videos.mkdir()
+    for name, colour in [("green.png", "green"), ("yellow.png", "yellow")]:
+        Image.new("RGB", (256, 256), colour).save(images / name)
+        (images / name).with_suffix(".txt").write_text(f"A {colour} square.", encoding="utf-8")
+    shutil.copyfile(media / "motion.mp4", videos / "motion.mp4")
+    (videos / "motion.txt").write_text("A blue field gradually brightens.", encoding="utf-8")
+    write_tone(videos / "motion.wav", 124 / 24)
+    roots = [str(media.resolve()), str(images.resolve()), str(videos.resolve())]
+    save_settings(root / "state", Settings(dataset_roots=roots))
+    return images, videos
+
+
+def write_tone(file: Path, seconds: float) -> None:
+    with wave.open(str(file), "wb") as stream:
+        stream.setnchannels(1)
+        stream.setsampwidth(2)
+        stream.setframerate(32000)
+        stream.writeframes(
+            b"".join(
+                struct.pack("<h", int(2000 * math.sin(2 * math.pi * 440 * index / 32000)))
+                for index in range(round(seconds * 32000))
+            )
+        )
+
+
 def add_h3_cases(media: Path) -> None:
     for name in ["missing", "sidecar", "ambiguous", "malformed", "short"]:
         shutil.copyfile(media / "motion.mp4", media / f"{name}.mp4")
@@ -50,16 +79,7 @@ def add_h3_cases(media: Path) -> None:
         ("ambiguous.wav", 124 / 24),
         ("short.wav", 0.5),
     ]:
-        with wave.open(str(media / name), "wb") as stream:
-            stream.setnchannels(1)
-            stream.setsampwidth(2)
-            stream.setframerate(32000)
-            stream.writeframes(
-                b"".join(
-                    struct.pack("<h", int(2000 * math.sin(2 * math.pi * 440 * index / 32000)))
-                    for index in range(round(seconds * 32000))
-                )
-            )
+        write_tone(media / name, seconds)
     (media / "ambiguous.flac").write_bytes(b"Ambiguous sidecar fixture; not selected for decoding.")
     (media / "malformed.wav").write_bytes(b"Not audio.")
     for name, offset in [("embedded", 0), ("late", 12800)]:
@@ -98,7 +118,10 @@ def main() -> None:
     media = prepare(args.root.resolve())
     if args.h3_audio:
         add_h3_cases(media)
+    images, videos = add_separate_folders(args.root.resolve(), media)
     print(f"Register this folder in Datasets: {media}", flush=True)
+    print(f"To combine media in one job, also register the image folder: {images}", flush=True)
+    print(f"and the video folder: {videos}", flush=True)
     if args.launch:
         import uvicorn
 

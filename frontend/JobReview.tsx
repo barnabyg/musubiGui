@@ -6,6 +6,10 @@ import { plural } from './labels';
 function rateLabel(fps: number | null) {
   return fps === null ? 'unknown fps' : `${Number(fps.toPrecision(6))} fps`;
 }
+function sectionType(section: Review['sections'][number]) {
+  if (section.kind === 'image') return 'Images';
+  return section.fps === null ? 'Videos' : `Videos, ${rateLabel(section.fps)}`;
+}
 function sizeLabel(bytes: number) {
   return bytes >= 100_000_000
     ? `${(bytes / 1_000_000_000).toFixed(1)} GB`
@@ -112,6 +116,35 @@ export function JobReview({
           ))}
         </ul>
       </details>
+      {review.sections.length > 0 && (
+        <div className="job-balance">
+          <table aria-label="Training sections">
+            <caption>Training sections</caption>
+            <thead>
+              <tr>
+                <th scope="col">Dataset</th>
+                <th scope="col">Type</th>
+                <th scope="col">Items</th>
+                <th scope="col">Repeats</th>
+                <th scope="col">Samples per epoch</th>
+                <th scope="col">Share of training</th>
+              </tr>
+            </thead>
+            <tbody>
+              {review.sections.map((section, index) => (
+                <tr key={index}>
+                  <th scope="row">{section.dataset}</th>
+                  <td>{sectionType(section)}</td>
+                  <td>{section.items}</td>
+                  <td>{section.repeats}</td>
+                  <td>{section.samples}</td>
+                  <td>{(section.share * 100).toFixed(1)}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
       {review.video_windows.items.length > 0 && (
         <div data-testid="video-windows">
           <h3>Cached video windows</h3>

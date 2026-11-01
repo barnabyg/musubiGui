@@ -1,4 +1,5 @@
 import os
+import shutil
 import subprocess
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -11,6 +12,8 @@ from fastapi.testclient import TestClient
 from helpers import PNG, fixture
 
 from musubi_gui import datasets
+from musubi_gui.dataset_fixture import prepare
+from musubi_gui.datasets_api import dataset_router
 
 
 def test_rename_and_delete_library_entry_preserve_files_and_recovery_history(tmp_path: Path) -> None:
@@ -79,14 +82,20 @@ def test_register_preview_rescan_and_restart_preserve_dataset(tmp_path: Path) ->
     dataset_id = created.json()["id"]
     detail = client.get(f"/api/datasets/{dataset_id}").json()
     assert detail["scan"]["state"] == "complete"
-    assert detail["counts"] == {"total": 2, "valid": 1, "included": 1, "captioned": 1, "excluded": 0}
+    assert detail["counts"] == {
+        "total": 2,
+        "valid": 1,
+        "included": 1,
+        "images": 1,
+        "videos": 0,
+        "captioned": 1,
+        "excluded": 0,
+    }
     items = client.get(f"/api/datasets/{dataset_id}/items").json()
     image = next(item for item in items if item["name"] == "red.png")
     assert client.get(f"/api/datasets/{dataset_id}/items/{image['id']}/media").content == PNG
     assert client.get(f"/api/datasets/{dataset_id}/items/{image['id']}/thumbnail").status_code == 200
     assert client.post("/api/datasets", json={"name": "Escape", "path": str(tmp_path)}).status_code == 422
-    from musubi_gui.datasets_api import dataset_router
-
     restarted = FastAPI()
     restarted.include_router(dataset_router(state))
     assert TestClient(restarted).get("/api/datasets").json()[0]["id"] == dataset_id
@@ -304,3 +313,31 @@ def test_caption_editor_rejects_a_sidecar_reparse_point_without_deleting_the_tar
         assert (media / "red.png").read_bytes() == PNG
     finally:
         sidecar.rmdir()
+
+
+def test_contents_count_valid_included_media_and_follow_rescans(tmp_path: Path) -> None:
+    root = tmp_path / "fixture"
+    media = prepare(root)
+    app = FastAPI()
+    app.include_router(dataset_router(root / "state"))
+    client = TestClient(app)
+    dataset_id = client.post("/api/datasets", json={"name": "Mixed", "path": str(media)}).json()["id"]
+
+    def counts() -> dict[str, int]:
+        result: dict[str, int] = client.get(f"/api/datasets/{dataset_id}").json()["counts"]
+        return result
+
+    # Two images and a video; the invalid video counts in neither.
+    assert (counts()["images"], counts()["videos"]) == (2, 1)
+    assert counts()["included"] == counts()["images"] + counts()["videos"]
+    items = client.get(f"/api/datasets/{dataset_id}/items").json()
+    red = next(item["id"] for item in items if item["name"] == "red.png")
+    assert client.post(f"/api/datasets/{dataset_id}/exclusions", json={"item_ids": [red], "excluded": True}).is_success
+    assert (counts()["images"], counts()["videos"], counts()["included"]) == (1, 1, 2)
+    shutil.copyfile(media / "blue.png", media / "green.png")
+    assert client.post(f"/api/datasets/{dataset_id}/scan", json={}).is_success
+    assert (counts()["images"], counts()["videos"], counts()["included"]) == (2, 1, 3)
+    (media / "green.png").unlink()
+    (media / "motion.mp4").unlink()
+    assert client.post(f"/api/datasets/{dataset_id}/scan", json={}).is_success
+    assert (counts()["images"], counts()["videos"], counts()["included"]) == (1, 0, 1)

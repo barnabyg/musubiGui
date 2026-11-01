@@ -29,20 +29,25 @@ export type JobConfig = {
   sample_steps: number;
   seed: number;
 };
+export type JobDataset = { dataset_id: string; repeats: number | null };
 export type Job = {
   version: number;
   id: string;
   revision: number;
   name: string;
   family: 'wan' | 'h3';
-  dataset_id: string;
+  datasets: JobDataset[];
   config: JobConfig;
 };
 export type SetConfig = <K extends keyof JobConfig>(
   key: K,
   value: JobConfig[K],
 ) => void;
-export type DatasetOption = { id: string; name: string };
+export type DatasetOption = {
+  id: string;
+  name: string;
+  counts: { images: number; videos: number };
+};
 export type Preset = { id: string; name: string; family: Job['family'] };
 export type ConversionPreview = {
   draft: unknown;
@@ -54,6 +59,17 @@ export type Review = {
   errors: string[];
   warnings: string[];
   effective_count: number;
+  datasets: { id: string; name: string }[];
+  sections: {
+    dataset_id: string;
+    dataset: string;
+    kind: 'image' | 'video';
+    fps: number | null;
+    items: number;
+    repeats: number;
+    samples: number;
+    share: number;
+  }[];
   models: Record<string, string>;
   model_provenance: Record<string, Record<string, string>>;
   paths: Record<string, string>;

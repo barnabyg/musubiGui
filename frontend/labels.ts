@@ -13,3 +13,12 @@ export const componentLabels: Record<string, string> = {
 export function plural(count: number, noun: string) {
   return `${count} ${noun}${count === 1 ? '' : 's'}`;
 }
+
+// What a dataset holds, worked out from its files: there is no stored image or video type.
+export function contentsLabel(counts: { images: number; videos: number }) {
+  const parts = [
+    counts.images ? plural(counts.images, 'image') : '',
+    counts.videos ? plural(counts.videos, 'video') : '',
+  ].filter(Boolean);
+  return parts.join(' · ') || 'No included media';
+}

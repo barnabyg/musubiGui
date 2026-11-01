@@ -1,4 +1,11 @@
-import { errorField, componentError, fieldId, fieldProblems } from './jobRules';
+import {
+  componentError,
+  datasetField,
+  errorField,
+  fieldId,
+  fieldProblems,
+  reviewDatasetField,
+} from './jobRules';
 import type { Job, JobConfig, Review, SetConfig } from './jobTypes';
 
 export type JobFields = ReturnType<typeof jobFields>;
@@ -13,11 +20,23 @@ export function jobFields(
   const liveProblems: Record<string, string> = job
     ? fieldProblems(job.family, job.config)
     : {};
+  for (const entry of job?.datasets ?? [])
+    if (
+      entry.repeats !== null &&
+      (!Number.isInteger(entry.repeats) || entry.repeats < 1)
+    )
+      liveProblems[datasetField(entry.dataset_id)] =
+        'Enter a whole number of 1 or more, or leave blank.';
   // Review errors about a field show beside it, unless the check while typing already says so.
   const problems: Record<string, string> = {};
   // Review reports size as one error, so the check while typing says which dimension it means.
   const reviewField = (message: string) => {
-    const key = errorField(message);
+    const key =
+      reviewDatasetField(
+        message,
+        job?.datasets ?? [],
+        review?.datasets ?? [],
+      ) ?? errorField(message);
     return key === 'width' && !liveProblems.width && liveProblems.height
       ? 'height'
       : key;

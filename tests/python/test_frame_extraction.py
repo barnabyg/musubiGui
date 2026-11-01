@@ -20,7 +20,7 @@ def fixture_client(tmp_path: Path, fixture: dict[str, Any]) -> TestClient:
 
 def revise(client: TestClient, job_id: str, **changes: Any) -> dict[str, Any]:
     saved = client.get(f"/api/jobs/{job_id}").json()
-    update = {key: saved[key] for key in ["name", "family", "dataset_id", "revision"]}
+    update = {key: saved[key] for key in ["name", "family", "datasets", "revision"]}
     response = client.put(f"/api/jobs/{job_id}", json={**update, "config": {**saved["config"], **changes}})
     assert response.status_code == 200, response.text
     revised: dict[str, Any] = response.json()

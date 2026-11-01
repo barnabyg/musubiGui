@@ -207,7 +207,7 @@ export function useJobEditor({
       saved = await request<Job>(`/api/jobs/${draft.id}`, 'PUT', {
         name: draft.name,
         family: draft.family,
-        dataset_id: draft.dataset_id,
+        datasets: draft.datasets,
         config: draft.config,
         revision: draft.revision,
       });

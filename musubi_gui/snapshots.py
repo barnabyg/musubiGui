@@ -11,10 +11,11 @@ from pathlib import Path
 from typing import Any
 
 from musubi_gui.diagnostics import training_environment, upstream_revision
-from musubi_gui.jobs import Job, JobStore, build_stages, dataset_toml, effective_settings, load_job, review_job
+from musubi_gui.jobs import Job, JobStore, build_stages, effective_settings, load_job, review_job
 from musubi_gui.safetensors_file import safetensors_header
 from musubi_gui.settings import Settings, atomic_json, load_settings, within_root
-from musubi_gui.video_sampling import WAN_FPS, source_rate, source_rates, video_directory
+from musubi_gui.training_sections import dataset_toml, layout_identity, plan_sections, section_folders
+from musubi_gui.video_sampling import WAN_FPS, source_rates
 
 
 def digest_file(path: Path) -> str:
@@ -76,6 +77,91 @@ def cache_environment_identity(settings: Settings, environment: dict[str, Any]) 
     }
 
 
+def job_manifest(store: Any, job: Job) -> dict[str, Any]:
+    """Every listed dataset's manifest in one, keeping the keys a single-dataset manifest always had.
+
+    Each item names its dataset, because relative paths can repeat across datasets.
+    """
+    parts = [(entry, store.manifest(entry.dataset_id)) for entry in job.datasets]
+    manifest: dict[str, Any] = (
+        {**parts[0][1]}
+        if len(parts) == 1
+        else {
+            "dataset": parts[0][1]["dataset"],
+            "excluded": [item for _, part in parts for item in part["excluded"]],
+            "invalid": [item for _, part in parts for item in part["invalid"]],
+            "digest": digest([part["digest"] for _, part in parts]),
+        }
+    )
+    manifest["items"] = [{**item, "dataset_id": entry.dataset_id} for entry, part in parts for item in part["items"]]
+    manifest["datasets"] = [
+        {"dataset_id": entry.dataset_id, "repeats": entry.repeats, "name": part["dataset"]["name"]}
+        for entry, part in parts
+    ]
+    return manifest
+
+
+def cache_stage_keys(
+    job: Job, items: list[dict[str, Any]], models: dict[str, Any], checkout: dict[str, str], environment: dict[str, Any]
+) -> tuple[dict[str, str], list[dict[str, Any]], list[dict[str, Any]]]:
+    """The reusable-cache keys, with the media and caption identities they cover."""
+    preparation_settings = job.config.model_dump(
+        include={
+            "width",
+            "height",
+            "frames",
+            "batch_size",
+            "repeats",
+            "enable_bucket",
+            "bucket_no_upscale",
+            "recipe",
+            "audio_policy",
+        }
+    )
+    if job.family == "wan":
+        # Sections resample each source rate to 16 fps; caches built from un-resampled TOML are never reused.
+        config = job.config
+        preparation_settings["video_sampling"] = {
+            "target_fps": WAN_FPS,
+            "source_fps": source_rates(items),
+            "frame_extraction": config.frame_extraction,
+            "frame_stride": config.frame_stride if config.frame_extraction == "slide" else None,
+            "frame_sample": config.frame_sample if config.frame_extraction == "uniform" else None,
+        }
+    media = [
+        {"path": item["path"], "sha256": item["sha256"], "audio": item.get("audio") if job.family == "h3" else None}
+        for item in items
+    ]
+    captions = [
+        {"path": item["path"], "text": item["caption"]["text"], "exists": item["caption"]["exists"]} for item in items
+    ]
+    # One dataset's keys stay as they were, so its caches stay reusable.
+    layout = {"sections": layout_identity(job, items)} if len(job.datasets) > 1 else {}
+    keys = {
+        "latent_cache": digest(
+            {
+                "media": media,
+                "settings": preparation_settings,
+                "models": {k: v for k, v in models.items() if "vae" in k},
+                "checkout": checkout,
+                "environment": environment,
+                **layout,
+            }
+        ),
+        "text_cache": digest(
+            {
+                "captions": captions,
+                "settings": preparation_settings,
+                "models": {k: v for k, v in models.items() if k.endswith(("_t5", "_text"))},
+                "checkout": checkout,
+                "environment": environment,
+                **layout,
+            }
+        ),
+    }
+    return keys, media, captions
+
+
 @dataclass
 class SnapshotIdentity:
     root: Path
@@ -96,7 +182,7 @@ def identify_snapshot(root: Path, job_id: str, *, fixture_mode: bool = False) ->
     if not review["valid"]:
         raise ValueError("Preparation blocked: " + " ".join(review["errors"]))
     store: Any = import_module("musubi_gui.datasets").DatasetStore(root)
-    manifest: dict[str, Any] = store.manifest(job.dataset_id)
+    manifest = job_manifest(store, job)
     if not manifest["items"]:
         raise ValueError("No effective dataset items remain.")
     models = {
@@ -115,57 +201,9 @@ def identify_snapshot(root: Path, job_id: str, *, fixture_mode: bool = False) ->
         "cache_environment": cache_environment_identity(settings, environment),
         "audio_coverage": review.get("audio_coverage", {}),
     }
-    preparation_settings = job.config.model_dump(
-        include={
-            "width",
-            "height",
-            "frames",
-            "batch_size",
-            "repeats",
-            "enable_bucket",
-            "bucket_no_upscale",
-            "recipe",
-            "audio_policy",
-        }
+    keys, media, captions = cache_stage_keys(
+        job, manifest["items"], models, provenance["checkout"], provenance["cache_environment"]
     )
-    if job.family == "wan":
-        # Sections resample each source rate to 16 fps; caches built from un-resampled TOML are never reused.
-        config = job.config
-        preparation_settings["video_sampling"] = {
-            "target_fps": WAN_FPS,
-            "source_fps": source_rates(manifest["items"]),
-            "frame_extraction": config.frame_extraction,
-            "frame_stride": config.frame_stride if config.frame_extraction == "slide" else None,
-            "frame_sample": config.frame_sample if config.frame_extraction == "uniform" else None,
-        }
-    media = [
-        {"path": item["path"], "sha256": item["sha256"], "audio": item.get("audio") if job.family == "h3" else None}
-        for item in manifest["items"]
-    ]
-    captions = [
-        {"path": item["path"], "text": item["caption"]["text"], "exists": item["caption"]["exists"]}
-        for item in manifest["items"]
-    ]
-    keys = {
-        "latent_cache": digest(
-            {
-                "media": media,
-                "settings": preparation_settings,
-                "models": {k: v for k, v in models.items() if "vae" in k},
-                "checkout": provenance["checkout"],
-                "environment": provenance["cache_environment"],
-            }
-        ),
-        "text_cache": digest(
-            {
-                "captions": captions,
-                "settings": preparation_settings,
-                "models": {k: v for k, v in models.items() if k.endswith(("_t5", "_text"))},
-                "checkout": provenance["checkout"],
-                "environment": provenance["cache_environment"],
-            }
-        ),
-    }
     stable_provenance: dict[str, Any] = {**provenance}
     stable_provenance["environment"] = provenance["cache_environment"]
     identity = digest(
@@ -206,13 +244,14 @@ def materialize_snapshot(inputs: SnapshotIdentity) -> dict[str, Any]:
         media_directory = directory / "media"
         media_directory.mkdir()
         cache.mkdir(parents=True)
-        rates = source_rates(manifest["items"]) if job.family == "wan" else []
+        sections = plan_sections(job, manifest["items"], directory, cache)
+        folders = section_folders(sections)
         for index, item in enumerate(manifest["items"]):
-            source = store.media_path(job.dataset_id, item["id"])
-            folder = media_directory
-            if rates and item["kind"] == "video":
-                folder = video_directory(media_directory, rates, source_rate(item))
-                folder.mkdir(exist_ok=True)
+            source = store.media_path(item["dataset_id"], item["id"])
+            folder = folders.get(item["id"])
+            if folder is None:
+                raise ValueError(f"{item['name']}: its frame rate is unknown; rescan the dataset before preparation.")
+            folder.mkdir(parents=True, exist_ok=True)
             target = folder / f"item{index:06d}{source.suffix.lower()}"
             shutil.copyfile(source, target)
             actual = digest_file(target)
@@ -236,24 +275,20 @@ def materialize_snapshot(inputs: SnapshotIdentity) -> dict[str, Any]:
                 audio["snapshot_path"] = str(target_audio)
                 files[str(target_audio)] = actual_audio
         native = directory / "dataset.toml"
-        native_text = dataset_toml(job, media_directory, cache, video_rates=rates)
-        if job.family == "h3":
-            records = []
-            for item in manifest["items"]:
-                record = {"video_path": item["snapshot_path"], "caption": item["caption"]["text"]}
-                audio = item.get("audio")
-                if audio and audio.get("source") in {"explicit", "sidecar"}:
-                    record["audio_path"] = audio["snapshot_path"]
-                records.append(record)
-            metadata = directory / "dataset.jsonl"
-            metadata.write_text(
-                "\n".join(json.dumps(record, ensure_ascii=False) for record in records) + "\n", encoding="utf-8"
-            )
-            files[str(metadata)] = digest_file(metadata)
-            native_text = native_text.replace(
-                "video_directory = " + json.dumps(media_directory.as_posix(), ensure_ascii=False),
-                "video_jsonl_file = " + json.dumps(metadata.as_posix(), ensure_ascii=False),
-            )
+        native_text = dataset_toml(job, sections)
+        for section in sections:
+            if section.jsonl:
+                records = []
+                for item in section.items:
+                    record = {"video_path": item["snapshot_path"], "caption": item["caption"]["text"]}
+                    audio = item.get("audio")
+                    if audio and audio.get("source") in {"explicit", "sidecar"}:
+                        record["audio_path"] = audio["snapshot_path"]
+                    records.append(record)
+                section.jsonl.write_text(
+                    "\n".join(json.dumps(record, ensure_ascii=False) for record in records) + "\n", encoding="utf-8"
+                )
+                files[str(section.jsonl)] = digest_file(section.jsonl)
         native.write_text(native_text, encoding="utf-8")
         files[str(native)] = digest_file(native)
         snapshot_record.update(status="materialized", input_files=files)
@@ -264,7 +299,7 @@ def materialize_snapshot(inputs: SnapshotIdentity) -> dict[str, Any]:
             "manifest": manifest,
             "directory": directory,
             "cache": cache,
-            "stages": build_stages(job, settings, directory, cache),
+            "stages": build_stages(job, settings, directory, cache, {item["kind"] for item in manifest["items"]}),
             "fingerprint": identity,
             "stage_keys": keys,
             "input_files": files,

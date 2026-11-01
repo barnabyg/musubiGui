@@ -166,7 +166,7 @@ def prepare(workspace: Path, mode: str, selected: Path | None, *, scan_library: 
     try:
         from musubi_gui.dataset_fixture import prepare as prepare_library
         from musubi_gui.datasets import DatasetStore
-        from musubi_gui.jobs import JobDraft, JobStore, smoke_config
+        from musubi_gui.jobs import JobDataset, JobDraft, JobStore, smoke_config
 
         prepare_library(workspace / "library")
         datasets = workspace / "datasets"
@@ -211,7 +211,7 @@ def prepare(workspace: Path, mode: str, selected: Path | None, *, scan_library: 
                     JobDraft(
                         name=f"{family.upper()} acceptance {number}",
                         family=family,
-                        dataset_id=dataset["id"],
+                        datasets=[JobDataset(dataset_id=dataset["id"])],
                         config=config,
                     )
                 )

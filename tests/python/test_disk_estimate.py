@@ -55,6 +55,18 @@ def test_h3_estimate_matches_measured_rank_eight_and_both_measured_geometries() 
     assert larger["caches"] == pytest.approx(133_243_503, rel=0.01)
 
 
+def test_image_latents_match_the_sizes_measured_in_the_combined_trial() -> None:
+    wan = smoke_config("wan").model_copy(update={"width": 832, "height": 480})
+    h3 = smoke_config("h3").model_copy(update={"width": 640, "height": 352})
+    image = [{"kind": "image"}]
+    empty = {"wan": estimate_disk("wan", wan, [], media_bytes=0), "h3": estimate_disk("h3", h3, [], media_bytes=0)}
+    # The cost of one image, less its text cache: docs/reference/evidence/combined-image-video-trial.json.
+    wan_latent = estimate_disk("wan", wan, image, media_bytes=0)["caches"] - empty["wan"]["caches"] - 397_532
+    h3_latent = estimate_disk("h3", h3, image, media_bytes=0)["caches"] - empty["h3"]["caches"] - 491_904
+    assert wan_latent == pytest.approx(199_880, rel=0.001)
+    assert h3_latent == 85_980
+
+
 def test_saves_scale_the_estimate_and_state_can_be_left_out() -> None:
     long_run = estimate_disk("wan", wan_trial_config(steps=2000), [clip()], media_bytes=0)
     assert long_run["saves"] == 21

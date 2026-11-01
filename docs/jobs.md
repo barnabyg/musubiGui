@@ -9,8 +9,9 @@ a link that focuses that field.
 
 Launch with `launch.cmd`, register a dataset, and open Jobs. Jobs are listed in a table
 of name, model, dataset, revision, last Run and last edited time, most recently edited
-first; choose a heading to sort by it. New Wan job creates an incomplete saveable draft
-with a name no other job is using, ready to retype. Select its dataset and edit the grouped preparation,
+first; choose a heading to sort by it. The dataset column shows the first dataset and how
+many more follow, such as `Susan images +1`. New Wan job creates an incomplete saveable draft
+with a name no other job is using, ready to retype. Add its datasets and edit the grouped preparation,
 LoRA, memory, checkpoint and sample controls. Save draft, Review configuration, Prepare
 run and the status stay visible in a bar as you scroll. Duplicate job, Change model,
 Archive job, Delete job and Import / export configuration are in the bar's ⋯ menu.
@@ -19,9 +20,71 @@ revision; reopening the application retains every supported value. An outdated t
 cannot overwrite a newer revision.
 Revision allocation is serialized across backend processes sharing the same state
 directory, including saved drafts, confirmed model conversions and preset application.
-The version-one revision JSON files remain unchanged.
 Interrupted writes retain their temporary files; only published revisions appear
 in the library. Unknown storage remains blocked and preserved for repair.
+
+## Revision and export versions
+
+A version 2 revision or export lists its datasets: `datasets` holds a `dataset_id` and
+`repeats` for each one. Blank repeats inherit the job's `repeats`, which stays the
+`[general]` default, so presets are unaffected. Version 1 had a single `dataset_id`.
+
+New revisions and exports are written as version 2. Version 1 files stay readable and are
+never rewritten: a version 1 revision opens as a job with one dataset, and saving it creates
+a version 2 revision beside it. A version 1 export imports the same way, and API requests may
+still send `dataset_id`. A file that mixes the two shapes is rejected, like an unknown version
+or field.
+
+An older application version cannot read version 2. It reports the revision as unknown
+storage and blocks that job, so it only affects jobs saved after upgrading. Runs prepared
+before this change keep working, because each uses its own frozen records. Preparing a revision
+that already has a Run from before the upgrade creates a new Run rather than returning that
+one, and its unchanged caches are reused.
+
+Dataset exclusions belong to the dataset, not the job, so they apply to every job using it.
+
+## Datasets in a job
+
+Job & dataset lists the job's datasets in order. Each row shows the dataset, its contents
+(`12 images · 3 videos`), its repeats and Remove. Blank repeats use the job's Repeats, shown in
+the field. Add a dataset offers only those not already listed. A row whose dataset was deleted
+from the library says so and can be removed. Review's errors about a dataset link to its row.
+
+Review's Training sections table has a row per section: dataset, type, items, repeats, samples
+per epoch and share of training. A cached video window counts as one sample, as does an image,
+and repeats multiply both. Review warns when one of several sections has over 80% of the samples,
+because 200 images can otherwise swamp 10 clips without notice. This is only a warning.
+
+## Training sections
+
+`musubi_gui/training_sections.py` turns a job and its included items into native dataset
+sections. Review and preparation both use it, so the TOML that review shows is the one that
+runs, apart from the Run's own folder. A section has a dataset, a type (images or videos), a
+frame rate, repeats, its media and a cache folder. A section sets `num_repeats` only when its
+dataset row sets repeats; otherwise it inherits `[general]`.
+
+A job with one dataset keeps its original layout, paths and cache keys, so its caches stay
+reusable. A job with several uses these, where N is the dataset's position in the list and M
+its frame rate's position within that dataset:
+
+| Section               | Media                | Cache folder       |
+| --------------------- | -------------------- | ------------------ |
+| Images                | `media/set-N`        | `dataset-N-images` |
+| Videos, one rate      | `media/set-N`        | `dataset-N`        |
+| Videos, several rates | `media/set-N/rate-M` | `dataset-N-rate-M` |
+
+Every section has its own cache folder, as upstream requires. The section layout and repeats
+join the cache keys of these jobs, so caches are reused only between jobs with the same
+datasets in the same order with the same repeats.
+
+An H3 video section lists its clips in its own JSONL, `dataset.jsonl` for one dataset and
+`dataset-N.jsonl` for several. Retry copies each of them. Frame-rate sections and window counts
+work within each dataset.
+
+With several datasets, review starts each item's errors and warnings with the dataset's name,
+because relative paths can repeat across datasets. It also warns when two datasets hold
+identical files (the same SHA-256), which train once for each dataset. It compares contents
+only for files of the same size.
 
 ## Configuration review
 
@@ -59,8 +122,8 @@ The estimate uses sizes measured on the target PC
   falls on the interval, the duplicate exists until training succeeds and it is removed,
   so a successful Run keeps one set fewer.
 - Wan latents are computed from size and frames, and H3 latents are fitted to two measured
-  sizes at 124 frames. Each cached video window or image adds one latent file, and repeats
-  add none.
+  sizes at 124 frames. H3 image latents use the same rate, and were measured at one size. Each
+  cached video window or image adds one latent file, and repeats add none.
 
 Its limits:
 
@@ -88,6 +151,12 @@ images remain browsable, but Job review names each incompatible included item an
 requires conversion to PNG/JPEG/WebP/BMP or explicit exclusion before preparation.
 Original media is preserved. The native dataset builder uses the same pinned media
 extension lists as preflight, so supported PNG images remain image datasets.
+
+With bucketing off, every image is trained at the job's exact size: the pinned loader scales it
+to cover that size and crops the overflow from the centre (`image_video_dataset.py`). Review
+warns with the number of included images in each dataset that this reshapes, using the size the
+scan recorded, and allows 1% of difference in shape. Enabling bucketing clears the warning, though
+bucketing with H3 images has not been tried on the target PC, so its warning suggests cropping instead.
 
 ## Default configuration
 
@@ -117,7 +186,7 @@ The earlier small recipe remains as the **Smoke test** built-in presets: 256×25
 frames for Wan or 124 for H3, batch one, rank/alpha eight for Wan or four for H3, two
 steps saved every step, no state and a four-step sample with a synthetic prompt. These
 values are also the fixed fallbacks for fields missing from saved revisions and
-version 1 exports, so existing jobs keep their meaning. Acceptance fixtures use them
+exports, so existing jobs keep their meaning. Acceptance fixtures use them
 and stay quick.
 
 Changing capacity controls requires capacity validation on the
@@ -130,8 +199,23 @@ optimizer/training state is distinct from saving LoRA weights.
 New H3 job uses the proven T2VA guidance-loss recipe: 124 frames, BF16, 48 H2D-only swapped blocks, unconditional text caching and both video/audio
 losses. Geometry must be a multiple of 32; the released frame lengths are `17*n+5`
 between 124 and 345. Unsupported CFG, negative prompts, Ref2VA, FL2VA training and
-full fine-tuning are not offered. H3 drafts require video items; Wan may use images
-and videos, emitted as separate native dataset sections.
+full fine-tuning are not offered. Images and videos are emitted as separate
+[native dataset sections](#training-sections) for both models.
+
+### H3 images
+
+H3 can also train on images, with upstream's experimental one-frame mode. When a job includes
+images, the latent cache, text cache and training gain `--one_frame`, and a job with only images
+also gains `--video_only` on training, following upstream's table. The sample stays a video.
+Video-only jobs keep the same commands and cache keys. Image sections use a plain
+`image_directory` with their own cache folder, and only clips go in the JSONL.
+
+Review warns that this is experimental and that using the result for video is unvalidated, and
+[what was measured](reference/h3.md#image-and-mixed-trials-1-november-2026) proves only that it
+runs. It also mentions upstream's advice to state the absence of sound in image captions. Captions
+belong to the dataset, so editing them affects every other model using it, and the application
+never changes them itself. Audio inspection and coverage apply to videos: an image is never
+counted as missing audio.
 
 ## Wan frame rates
 
@@ -150,7 +234,7 @@ resampling are not reused.
 ## Frame extraction
 
 Frame extraction chooses which windows of each clip are cached and trained. Head
-(the default, and what earlier version 1 jobs keep) uses only each clip's first
+(the default, and what earlier jobs keep) uses only each clip's first
 window. Wan also offers chunk (consecutive non-overlapping windows), slide (a
 window every stride, emitted as `frame_stride`) and uniform (the given number of
 evenly spaced windows, emitted as `frame_sample`; at least two). The pinned `full`
@@ -177,7 +261,7 @@ is repaired or silently discarded. The selected audio VAE remains mandatory.
 
 Duplicate job creates an independent identity and output destination. Save as preset
 records named model-specific controls; Apply preset creates a new job revision while
-retaining that job's name and dataset selection.
+retaining that job's name and datasets.
 
 Two built-in **Measured** presets carry the largest configurations that trained on
 the target PC during the production trial
@@ -202,7 +286,7 @@ ran out of VRAM at the first training step, so larger H3 sizes are not qualified
 
 Archive job hides a job you no longer need, even while it has Runs, because each Run's
 frozen snapshot records the job's identity and revision. Nothing is
-removed from disk, and version-one revision files are not rewritten: the archive is a
+removed from disk, and revision files are not rewritten: the archive is a
 separate marker file in `archived-jobs` in the state directory. An older application
 version ignores the marker and lists the job again.
 
@@ -239,10 +323,10 @@ new-draft default move to the target model's, and values you chose are kept.
 
 ## Import and export
 
-Import / export configuration downloads or accepts strict `musubi-gui-job` version 1
-JSON. Reimport creates an independent job. Unknown versions, formats and fields are
-rejected; missing optional controls in earlier version 1 exports receive documented
-family defaults. Recognised credential strings are redacted on export/import and in
+Import / export configuration downloads strict `musubi-gui-job` version 2 JSON, and
+accepts [versions 1 and 2](#revision-and-export-versions). Reimport creates an independent job. Unknown versions, formats and fields are
+rejected; missing optional controls in earlier exports receive documented family
+defaults. Recognised credential strings are redacted on export/import and in
 presets. Review local filesystem paths before sharing a configuration. No model,
 dataset or training-state payload is embedded in the export.
 

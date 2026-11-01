@@ -33,6 +33,17 @@ def validate_h3(settings: Settings) -> list[str]:
     return errors
 
 
+def add_image_flags(stages: list[Stage], kinds: set[str]) -> None:
+    """Upstream's plain image recipe: --one_frame on both caches and training, plus --video_only without any videos."""
+    if "image" not in kinds:
+        return
+    for stage in stages:
+        if stage.name in {"latent_cache", "text_cache", "train"}:
+            stage.args.append("--one_frame")
+        if stage.name == "train" and "video" not in kinds:
+            stage.args.append("--video_only")
+
+
 def h3_stages(settings: Settings, run: Path, cache: Path) -> list[Stage]:
     model = settings.models
     dataset = str(run / "dataset.toml")

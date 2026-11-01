@@ -1,4 +1,5 @@
 import type { RefObject } from 'react';
+import { JobDatasets } from './JobDatasets';
 import { componentLabels } from './labels';
 import type { JobFields } from './jobFields';
 import { fieldId } from './jobRules';
@@ -69,24 +70,13 @@ export function JobIdentity({
         />
         {problemText('name')}
       </label>
-      <label className="field">
-        Dataset
-        <select
-          id={fieldId('dataset_id')}
-          {...problemProps('dataset_id')}
-          disabled={busy}
-          value={job.dataset_id}
-          onChange={(event) => edit({ ...job, dataset_id: event.target.value })}
-        >
-          <option value="">Select a registered dataset</option>
-          {datasets.map((dataset) => (
-            <option key={dataset.id} value={dataset.id}>
-              {dataset.name}
-            </option>
-          ))}
-        </select>
-        {problemText('dataset_id')}
-      </label>
+      <JobDatasets
+        job={job}
+        busy={busy}
+        fields={fields}
+        edit={edit}
+        datasets={datasets}
+      />
       <label className="field">
         Recipe
         <select
@@ -169,7 +159,11 @@ export function JobControls({
           {number('Width', 'width')}
           {number('Height', 'height')}
           {number('Frames', 'frames')}
-          {number('Repeats', 'repeats')}
+          {number(
+            'Repeats',
+            'repeats',
+            'The default for datasets that leave theirs blank.',
+          )}
           {number('Dataset batch size', 'batch_size')}
         </div>
         <p className="hint">

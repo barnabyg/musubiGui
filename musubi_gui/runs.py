@@ -218,7 +218,9 @@ class RunService:
         directory = Path(previous["directory"]).parent / ("retry-" + uuid.uuid4().hex)
         cache = Path(previous["cache"]).parent / ("retry-" + uuid.uuid4().hex)
         directory.mkdir(parents=True)
-        native_names = ["dataset.toml", "dataset.jsonl", "samples.txt"]
+        # An H3 Run has one metadata file per video section.
+        metadata = sorted(file.name for file in Path(previous["directory"]).glob("dataset*.jsonl"))
+        native_names = ["dataset.toml", *metadata, "samples.txt"]
         old_native = {str(Path(previous["directory"]) / name) for name in native_names}
         input_files = {path: value for path, value in previous.get("input_files", {}).items() if path not in old_native}
         for name in native_names:
@@ -227,10 +229,11 @@ class RunService:
                 text = source.read_text(encoding="utf-8")
                 if name == "dataset.toml":
                     text = text.replace(previous["cache"].replace("\\", "/"), cache.as_posix())
-                    text = text.replace(
-                        json.dumps((Path(previous["directory"]) / "dataset.jsonl").as_posix(), ensure_ascii=False),
-                        json.dumps((directory / "dataset.jsonl").as_posix(), ensure_ascii=False),
-                    )
+                    for file in metadata:
+                        text = text.replace(
+                            json.dumps((Path(previous["directory"]) / file).as_posix(), ensure_ascii=False),
+                            json.dumps((directory / file).as_posix(), ensure_ascii=False),
+                        )
                 target = directory / name
                 target.write_text(text, encoding="utf-8")
                 input_files[str(target)] = digest_file(target)
@@ -811,7 +814,7 @@ class RunService:
 
     def _cache_artifacts(self, run: dict[str, Any], stage: str) -> builtins.list[dict[str, str]]:
         cache = Path(run["cache"])
-        # dataset, dataset-images, and one dataset-rate-N per Wan source frame rate.
+        # dataset, dataset-images and dataset-rate-N, with dataset-N in place of dataset for several datasets.
         candidates = list(cache.glob("dataset*/*.safetensors"))
         files = [file for file in candidates if file.name.endswith("_te.safetensors") == (stage == "text_cache")]
         if run["job"]["family"] == "h3" and stage == "text_cache":

@@ -132,12 +132,22 @@ class DatasetStore:
             if row is None:
                 raise KeyError("Dataset was not found.")
             rows = db.execute("SELECT valid,excluded,relative FROM items WHERE dataset=?", (dataset_id,)).fetchall()
-        counts = {"total": len(rows), "valid": 0, "included": 0, "captioned": 0, "excluded": 0}
+        counts = {
+            "total": len(rows),
+            "valid": 0,
+            "included": 0,
+            "images": 0,
+            "videos": 0,
+            "captioned": 0,
+            "excluded": 0,
+        }
         missing = not Path(row["path"]).is_dir()
         for item in rows:
             counts["valid"] += int(item["valid"])
             counts["excluded"] += int(item["excluded"])
-            counts["included"] += int(bool(item["valid"]) and not item["excluded"])
+            if item["valid"] and not item["excluded"]:
+                counts["included"] += 1
+                counts["images" if Path(item["relative"]).suffix.lower() in IMAGES else "videos"] += 1
             try:
                 caption = self._folder(row["path"]) / item["relative"]
                 caption = within_root(caption.with_suffix(".txt"), [self._folder(row["path"])])

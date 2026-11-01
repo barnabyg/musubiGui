@@ -1,5 +1,6 @@
 import { ArrowRight, Images } from 'lucide-react';
 import type { Dataset } from './Datasets';
+import { contentsLabel } from './labels';
 
 export function DatasetLibrary({
   busy,
@@ -39,6 +40,9 @@ export function DatasetLibrary({
             onClick={() => void open(value.id)}
           >
             <strong>{value.name}</strong>
+            <small className="dataset-contents">
+              {contentsLabel(value.counts)}
+            </small>
             <small>
               {value.counts.total} media · {value.counts.captioned} captioned ·{' '}
               {value.counts.included} included
