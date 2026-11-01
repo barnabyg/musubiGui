@@ -115,3 +115,8 @@ def test_dataset_audio_coverage_counts_clips_and_not_images(tmp_path: Path) -> N
     # Two images, one valid clip without audio, and an invalid video that isn't included.
     assert [item["name"] for item in report["items"]] == ["motion.mp4"]
     assert report["included"] == 1
+    assert report["invalid"] == 1
+    items = client.get(f"/api/datasets/{dataset_id}/items").json()
+    red = next(item["id"] for item in items if item["name"] == "red.png")
+    assert client.post(f"/api/datasets/{dataset_id}/exclusions", json={"item_ids": [red], "excluded": True}).is_success
+    assert client.get(f"/api/datasets/{dataset_id}/h3").json()["excluded"] == 0

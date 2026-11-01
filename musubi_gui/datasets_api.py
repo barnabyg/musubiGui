@@ -194,12 +194,12 @@ def dataset_router(root: Path) -> APIRouter:
     @router.get("/{dataset_id}/h3")
     def h3_summary(dataset_id: str, frames: int = 124) -> dict[str, Any]:
         def inspect() -> dict[str, Any]:
-            items = store.items(dataset_id)
+            # Images never have audio to supervise, so they aren't missing any.
+            items = [item for item in store.items(dataset_id) if item["kind"] == "video"]
             inspected = [
                 {"id": item["id"], "name": item["name"], **store.inspect_h3(dataset_id, item["id"], frames)}
                 for item in items
-                # Images never have audio to supervise, so they aren't missing any.
-                if item["valid"] and not item["excluded"] and item["kind"] == "video"
+                if item["valid"] and not item["excluded"]
             ]
             supervised = sum(
                 1 for item in inspected if item["source"] not in {"missing", "ambiguous"} and not item["errors"]
