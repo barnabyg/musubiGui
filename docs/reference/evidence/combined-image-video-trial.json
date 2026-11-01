@@ -1,0 +1,222 @@
+{
+  "version": 1,
+  "issue": "https://github.com/barnabyg/musubiGui/issues/105",
+  "application_revision": "88cb195fe6d6da06d7161e98bc80aa7238c3ee65",
+  "expected_upstream": "f8a1b03794a49239a3539015075f5123d6c07d66",
+  "date": "2026-11-01",
+  "environment": {
+    "python": "3.12.10",
+    "platform": "Windows-11-10.0.26300-SP0",
+    "packages": {
+      "torch": "2.13.0+cu130",
+      "accelerate": "1.15.0",
+      "safetensors": "0.8.0",
+      "transformers": "5.17.0",
+      "av": "17.1.0",
+      "musubi-tuner": "0.3.6"
+    },
+    "cuda": "13.0",
+    "gpu": {
+      "name": "NVIDIA GeForce RTX 3090",
+      "vram_bytes": 25769279488
+    }
+  },
+  "power_limit_w": 280,
+  "dataset": "6 owner-provided images of varied shapes, centre-cropped with bucketing off, plus 4 owner-provided clips per model: 16 fps without audio for Wan, 30 fps with embedded speech audio for H3.",
+  "measurement_limits": "Short runs prove mechanics and say nothing about learning. VRAM is whole-device and includes about 0.8 GiB of desktop baseline. The Wan run's resources were sampled every 2 s and the H3 runs' every 0.5 s or more, so brief peaks can be missed. Step times come from upstream's progress bar in whole seconds; image and video batches are told apart by their duration. Samples were decoded but not watched or listened to.",
+  "runs": [
+    {
+      "name": "wan-combined",
+      "route": "application: Datasets, Jobs, Review configuration, Prepare and start",
+      "purpose": "One image dataset and one video dataset at the Measured Wan size.",
+      "result": "pass",
+      "size": "832x480",
+      "video_frames": 33,
+      "rank": 16,
+      "blocks_to_swap": 36,
+      "steps": 20,
+      "stages": [
+        {
+          "name": "latent_cache",
+          "exit_code": 0,
+          "elapsed_seconds": 52.7,
+          "peak_device_vram_gib": 7.23,
+          "peak_process_tree_rss_gib": 4.06
+        },
+        {
+          "name": "text_cache",
+          "exit_code": 0,
+          "elapsed_seconds": 23.3,
+          "peak_device_vram_gib": 8.31,
+          "peak_process_tree_rss_gib": 11.5
+        },
+        {
+          "name": "train",
+          "exit_code": 0,
+          "elapsed_seconds": 752.8,
+          "peak_device_vram_gib": 20.57,
+          "peak_process_tree_rss_gib": 16.91
+        },
+        {
+          "name": "generate",
+          "exit_code": 0,
+          "elapsed_seconds": 286.3,
+          "peak_device_vram_gib": 10.44,
+          "peak_process_tree_rss_gib": 18.44
+        }
+      ],
+      "step_times": {
+        "steps_timed": 20,
+        "image_steps": 12,
+        "image_step_seconds_median": 5.0,
+        "video_steps": 8,
+        "video_step_seconds_median": 88.0
+      },
+      "image_cache": {
+        "latent_bytes": [199880],
+        "text_bytes_each": [147712, 155904, 172288, 262656, 287232, 328192]
+      },
+      "video_cache": {
+        "latent_bytes": [1797336],
+        "text_bytes_each": [336384, 393728, 393728, 451072]
+      },
+      "sample": {
+        "bytes": 951402,
+        "video_frames": 33,
+        "audio_samples": 0
+      }
+    },
+    {
+      "name": "h3-image",
+      "route": "upstream CLI, because review still blocks this",
+      "purpose": "H3 image-only with one-frame training.",
+      "result": "pass",
+      "added_flags": [
+        "--one_frame on latent_cache, text_cache, train",
+        "--video_only on train"
+      ],
+      "size": "640x352",
+      "video_frames": null,
+      "rank": 8,
+      "steps": 10,
+      "stages": [
+        {
+          "name": "latent_cache",
+          "exit_code": 0,
+          "elapsed_seconds": 10.875,
+          "peak_device_vram_gib": 2.84,
+          "peak_process_tree_rss_gib": 1.17
+        },
+        {
+          "name": "text_cache",
+          "exit_code": 0,
+          "elapsed_seconds": 41.125,
+          "peak_device_vram_gib": 4.07,
+          "peak_process_tree_rss_gib": 29.49
+        },
+        {
+          "name": "train",
+          "exit_code": 0,
+          "elapsed_seconds": 112.063,
+          "peak_device_vram_gib": 5.98,
+          "peak_process_tree_rss_gib": 20.77
+        },
+        {
+          "name": "generate",
+          "exit_code": 0,
+          "elapsed_seconds": 140.75,
+          "peak_device_vram_gib": 9.43,
+          "peak_process_tree_rss_gib": 34.09
+        }
+      ],
+      "step_times": {
+        "steps_timed": 10,
+        "image_steps": 10,
+        "image_step_seconds_median": 6.0,
+        "video_steps": 0,
+        "video_step_seconds_median": null
+      },
+      "image_cache": {
+        "latent_bytes": [85980],
+        "text_bytes_each": [164736, 174984, 185488, 298216, 328960, 380200]
+      },
+      "video_cache": null,
+      "sample": {
+        "bytes": 428714,
+        "video_frames": 124,
+        "audio_samples": 165888
+      },
+      "upstream_audio_messages": [
+        "musubi_tuner.minimax_h3_cache_latents:MiniMax-H3 one-frame cache summary: 6 image items (silence audio placeholder, excluded from audio supervision)",
+        "musubi_tuner.minimax_h3_train_network:MiniMax-H3 one-frame training: image batches carry a silence audio placeholder that presence gating excludes from the audio loss; pass --video_only for image-only runs to skip the au"
+      ]
+    },
+    {
+      "name": "h3-mixed",
+      "route": "upstream CLI, because review still blocks this",
+      "purpose": "H3 with one image section and one video section sharing the TOML but not a cache directory.",
+      "result": "pass",
+      "added_flags": ["--one_frame on latent_cache, text_cache, train"],
+      "size": "640x352",
+      "video_frames": 124,
+      "rank": 8,
+      "steps": 16,
+      "stages": [
+        {
+          "name": "latent_cache",
+          "exit_code": 0,
+          "elapsed_seconds": 88.156,
+          "peak_device_vram_gib": 8.39,
+          "peak_process_tree_rss_gib": 1.89
+        },
+        {
+          "name": "text_cache",
+          "exit_code": 0,
+          "elapsed_seconds": 29.484,
+          "peak_device_vram_gib": 4.07,
+          "peak_process_tree_rss_gib": 28.47
+        },
+        {
+          "name": "train",
+          "exit_code": 0,
+          "elapsed_seconds": 636.157,
+          "peak_device_vram_gib": 22.25,
+          "peak_process_tree_rss_gib": 20.6
+        },
+        {
+          "name": "generate",
+          "exit_code": 0,
+          "elapsed_seconds": 134.968,
+          "peak_device_vram_gib": 9.44,
+          "peak_process_tree_rss_gib": 34.11
+        }
+      ],
+      "step_times": {
+        "steps_timed": 16,
+        "image_steps": 9,
+        "image_step_seconds_median": 5,
+        "video_steps": 7,
+        "video_step_seconds_median": 78
+      },
+      "image_cache": {
+        "latent_bytes": [85980],
+        "text_bytes_each": [164736, 174984, 185488, 298216, 328960, 380200]
+      },
+      "video_cache": {
+        "latent_bytes": [3179604],
+        "text_bytes_each": [462184, 462184, 482680, 513424]
+      },
+      "sample": {
+        "bytes": 418135,
+        "video_frames": 124,
+        "audio_samples": 165888
+      },
+      "upstream_audio_messages": [
+        "musubi_tuner.minimax_h3_cache_latents:MiniMax-H3 one-frame cache summary: 6 image items (silence audio placeholder, excluded from audio supervision)",
+        "musubi_tuner.minimax_h3_cache_latents:MiniMax-H3 target-audio cache summary: real_audio=4 missing_audio=0 supervised_audio_fraction=1.000000",
+        "musubi_tuner.minimax_h3_train_network:MiniMax-H3 one-frame training: image batches carry a silence audio placeholder that presence gating excludes from the audio loss; pass --video_only for image-only runs to skip the au"
+      ]
+    }
+  ],
+  "not_shown": "Whether a LoRA learns from images, or whether an image-trained LoRA helps video. Those need 600+ steps and human review."
+}

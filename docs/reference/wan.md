@@ -165,6 +165,28 @@ named `disabled` in the shared folder: stages then download with Hub access on, 
 did before seeding. Deleting the folder doesn't help, because the next successful
 download publishes it again.
 
+## Combined image and video trial, 1 November 2026
+
+[Issue #105](https://github.com/barnabyg/musubiGui/issues/105) ran one image dataset and one
+video dataset through the application at the Measured preset's 832×480, 33 frames and rank 16,
+on the 280 W limit: six images of varied shapes, four 16 fps clips, 20 steps
+([evidence](evidence/combined-image-video-trial.json)).
+
+| Stage          | Seconds | Peak device VRAM (GiB) | Peak process RSS (GiB) |
+| -------------- | ------: | ---------------------: | ---------------------: |
+| Latent cache   |      53 |                   7.23 |                   4.06 |
+| Text cache     |      23 |                   8.31 |                  11.50 |
+| Training       |     753 |                  20.57 |                  16.91 |
+| 10-step sample |     286 |                  10.44 |                  18.44 |
+
+An image step took about 5 s and a video step about 88 s, so short runs that are mostly images
+finish far sooner than the video step time suggests. Each image's latent cache is 199,880 bytes,
+which the disk estimate's formula already predicts. The sample decoded 33 frames.
+
+**Qualified:** images and videos from separate datasets train together through the job flow on
+this PC. **Not qualified:** whether the images help the LoRA, which needs 600+ steps and human
+review. A short run proves mechanics only.
+
 ## Measured disk use
 
 Job review's [disk estimate](../jobs.md) uses these sizes from the target PC.

@@ -123,8 +123,8 @@ The estimate uses sizes measured on the target PC
   falls on the interval, the duplicate exists until training succeeds and it is removed,
   so a successful Run keeps one set fewer.
 - Wan latents are computed from size and frames, and H3 latents are fitted to two measured
-  sizes at 124 frames. Each cached video window or image adds one latent file, and repeats
-  add none.
+  sizes at 124 frames. H3 image latents use the same rate, and were measured at one size. Each
+  cached video window or image adds one latent file, and repeats add none.
 
 Its limits:
 

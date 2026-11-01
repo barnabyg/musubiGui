@@ -33,6 +33,10 @@ def _latent_bytes(family: str, config: "JobConfig", frames: int) -> int:
     if family == "wan":
         # 16 channels at 1/8 scale, one latent per four frames, two bytes per value and a safetensors header.
         return 2 * 16 * ((max(1, frames) - 1) // 4 + 1) * (height // 8) * (width // 8) + 216
+    if frames == 1:
+        # An image is one latent token of 48 channels at 1/16 scale and two bytes per value, the same rate as
+        # the video fit below, plus its two silent audio frames and header. Measured at 640x352 only (85,980 bytes).
+        return int(0.375 * width * height) + 1_500
     # Fitted to 640x352 and 832x480 at 124 frames, including the audio latents; frame scaling is unmeasured.
     return int((13.875 * width * height + 53_860) * max(0, frames) / 124)
 
