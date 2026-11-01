@@ -34,7 +34,7 @@ def validate_h3(settings: Settings) -> list[str]:
 
 
 def add_image_flags(stages: list[Stage], kinds: set[str]) -> None:
-    """Upstream's plain image rows: --one_frame on both caches and training, and --video_only when no clip has audio."""
+    """Upstream's plain image recipe: --one_frame on both caches and training, plus --video_only without any videos."""
     if "image" not in kinds:
         return
     for stage in stages:
