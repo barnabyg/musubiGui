@@ -24,7 +24,8 @@ from musubi_gui.redaction import redact
 from musubi_gui.run_store import RunStore, preparation_transaction
 from musubi_gui.safetensors_file import safetensors_header
 from musubi_gui.settings import Settings, atomic_json, validate_paths, within_root
-from musubi_gui.video_sampling import plan_windows, video_sections
+from musubi_gui.training_sections import dataset_toml, plan_sections
+from musubi_gui.video_sampling import plan_windows
 from musubi_gui.wan import validate_wan, wan_stages
 
 _lock = threading.RLock()
@@ -628,53 +629,6 @@ def configuration_errors(job: Job) -> list[str]:
     return errors
 
 
-def dataset_toml(
-    job: Job, directory: Path, cache: Path, *, kinds: set[str] | None = None, video_rates: list[float] | None = None
-) -> str:
-    """Directory is an immutable managed snapshot, never the mutable source dataset.
-
-    Wan videos resample to 16 fps from each section's `source_fps`; H3 resamples by timestamps and ignores it.
-    """
-    config = job.config
-
-    def quote(path: Path) -> str:
-        return json.dumps(path.as_posix(), ensure_ascii=False)
-
-    general = (
-        f"[general]\nresolution = [{config.width}, {config.height}]\nbatch_size = {config.batch_size}\n"
-        f"num_repeats = {config.repeats}\nenable_bucket = {str(config.enable_bucket).lower()}\n"
-        f"bucket_no_upscale = {str(config.bucket_no_upscale).lower()}\n\n"
-    )
-    if kinds is None:
-        files = [file for file in directory.rglob("*") if file.is_file()] if directory.exists() else []
-        kinds = {"image" for file in files if file.suffix.lower() in TRAINING_IMAGES}
-        kinds.update("video" for file in files if file.suffix.lower() in TRAINING_VIDEOS)
-        if not kinds:
-            if files:
-                raise ValueError(
-                    "The snapshot has no media format supported by the pinned training recipe. Convert or exclude unsupported items before preparation."
-                )
-            kinds = {"video"}
-    sections = []
-    if "image" in kinds:
-        sections.append(
-            f"[[datasets]]\nimage_directory = {quote(directory)}\n"
-            f'cache_directory = {quote(cache / "dataset-images")}\ncaption_extension = ".txt"\n'
-        )
-    if "video" in kinds:
-        rates = video_rates if job.family == "wan" and video_rates else []
-        for rate, video_directory, cache_directory in video_sections(directory, cache, rates):
-            sections.append(
-                f"[[datasets]]\nvideo_directory = {quote(video_directory)}\ncache_directory = {quote(cache_directory)}\n"
-                f'caption_extension = ".txt"\ntarget_frames = [{config.frames}]\n'
-                f'frame_extraction = "{config.frame_extraction}"\n'
-                + (f"frame_stride = {config.frame_stride}\n" if config.frame_extraction == "slide" else "")
-                + (f"frame_sample = {config.frame_sample}\n" if config.frame_extraction == "uniform" else "")
-                + (f"source_fps = {rate!r}\n" if rate is not None else "")
-            )
-    return general + "\n".join(sections)
-
-
 def _set_argument(args: list[str], flag: str, value: str) -> None:
     if flag in args:
         args[args.index(flag) + 1] = value
@@ -755,7 +709,7 @@ def _review_items(
         errors.append(f"{prefix or 'Dataset: '}no valid, included media remain.")
     if job.family == "h3" and any(item["kind"] != "video" for item in items):
         errors.append(
-            f"{prefix or 'Dataset: '}this initial video recipe requires videos; exclude images or select another dataset."
+            f'Dataset "{dataset["name"]}": this H3 recipe trains on videos, and this dataset includes images. Remove it from this job.'
         )
     for item in items:
         name = prefix + item["name"]
@@ -793,6 +747,54 @@ def _review_items(
             elif not inspection.get("errors"):
                 audio_coverage["supervised"] += 1
     return items
+
+
+def _plan_job_windows(job: Job, datasets: list[dict[str, Any]], items: list[dict[str, Any]]) -> dict[str, Any]:
+    """plan_windows within each dataset, because frame-rate sections and their warnings belong to one dataset."""
+    config = job.config
+    merged: dict[str, Any] = {"errors": [], "warnings": [], "items": [], "total": 0, "source_rates": []}
+    for dataset in datasets or [{"id": "", "name": ""}]:
+        prefix = f'Dataset "{dataset["name"]}": ' if len(job.datasets) > 1 else ""
+        plan = plan_windows(
+            job.family,
+            config.frames,
+            [item for item in items if item["dataset_id"] == dataset["id"]],
+            extraction=config.frame_extraction,
+            stride=config.frame_stride,
+            sample=config.frame_sample,
+        )
+        merged["errors"].extend(prefix + message for message in plan["errors"])
+        merged["warnings"].extend(prefix + message for message in plan["warnings"])
+        merged["items"].extend(plan["items"])
+        merged["total"] += plan["total"]
+        merged["source_rates"] = sorted({*merged["source_rates"], *plan["source_rates"]})
+    return merged
+
+
+def _duplicate_warnings(root: Path, datasets: list[dict[str, Any]], items: list[dict[str, Any]]) -> list[str]:
+    """Name files that train twice because two listed datasets hold the same content."""
+    names = {dataset["id"]: dataset["name"] for dataset in datasets}
+    by_size: dict[int, list[dict[str, Any]]] = {}
+    for item in items:
+        try:
+            by_size.setdefault(Path(item["absolute_path"]).stat().st_size, []).append(item)
+        except OSError:
+            # Review reports unreadable media through the dataset checks.
+            continue
+    content_hash = import_module("musubi_gui.datasets").content_hash
+    by_content: dict[str, list[dict[str, Any]]] = {}
+    # Only files whose size repeats in another dataset can match, so most are never read.
+    for group in by_size.values():
+        if len({item["dataset_id"] for item in group}) > 1:
+            for item in group:
+                by_content.setdefault(content_hash(Path(item["absolute_path"])), []).append(item)
+    return [
+        "Identical files in several datasets train more than once: "
+        + ", ".join(f'{item["name"]} in "{names[item["dataset_id"]]}"' for item in group)
+        + "."
+        for group in by_content.values()
+        if len({item["dataset_id"] for item in group}) > 1
+    ]
 
 
 def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool = False) -> dict[str, Any]:
@@ -870,10 +872,6 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
     audio_coverage: dict[str, Any] = {"included": 0, "supervised": 0, "missing": 0, "items": []}
     if job.datasets:
         store: Any = import_module("musubi_gui.datasets").DatasetStore(root)
-        if len(job.datasets) > 1:
-            errors.append(
-                "Dataset: a job with several datasets can be saved and reviewed, but preparing it is not available yet."
-            )
         for entry in job.datasets:
             try:
                 dataset = store.get(entry.dataset_id)
@@ -888,14 +886,8 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
                 effective_items.extend(_review_items(store, job, dataset, prefix, errors, warnings, audio_coverage))
             except (ValueError, OSError, ImportError, HTTPException) as error:
                 errors.append(f"Dataset: {error}")
-    windows = plan_windows(
-        job.family,
-        job.config.frames,
-        effective_items,
-        extraction=job.config.frame_extraction,
-        stride=job.config.frame_stride,
-        sample=job.config.frame_sample,
-    )
+    warnings.extend(_duplicate_warnings(root, datasets, effective_items))
+    windows = _plan_job_windows(job, datasets, effective_items)
     errors.extend(windows.pop("errors"))
     warnings.extend(windows.pop("warnings"))
     disk = disk_preflight(job, settings, effective_items, windows["items"], fixture_mode=fixture_mode)
@@ -930,12 +922,6 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
         "expected_upstream": UPSTREAM,
         "upstream_revision": actual_revision,
         "paths": {"output": str(output), "cache": str(cache), "snapshot": str(snapshot)},
-        "dataset_toml": dataset_toml(
-            job,
-            snapshot / "media",
-            cache,
-            kinds={item["kind"] for item in effective_items} or None,
-            video_rates=windows["source_rates"],
-        ),
+        "dataset_toml": dataset_toml(job, plan_sections(job, effective_items, snapshot, cache)),
         "stages": [{"name": stage.name, "args": stage.args} for stage in stages],
     }

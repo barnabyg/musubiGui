@@ -9,10 +9,11 @@ from fastapi.testclient import TestClient
 from helpers import acceptance_workspace, wait_for
 
 from musubi_gui.app import create_app
-from musubi_gui.jobs import Job, JobConfig, JobStore, as_draft, dataset_toml, smoke_config
+from musubi_gui.jobs import Job, JobConfig, JobStore, as_draft, smoke_config
 from musubi_gui.outputs import compare_runs
 from musubi_gui.runs import RunService
 from musubi_gui.snapshots import cache_stage_keys
+from musubi_gui.training_sections import dataset_toml, plan_sections
 
 CONFIG = smoke_config("wan").model_dump()
 
@@ -262,9 +263,8 @@ GENERAL = (
 
 def test_one_dataset_toml_matches_the_text_from_before_dataset_lists() -> None:
     job = one_dataset_job("wan", smoke_config("wan"))
-    assert dataset_toml(
-        job, Path("run/media"), Path("cache"), kinds={"image", "video"}, video_rates=[16.0, 30.0]
-    ) == GENERAL + (
+    items = [{**item, "dataset_id": "d"} for item in ITEMS]
+    assert dataset_toml(job, plan_sections(job, items, Path("run"), Path("cache"))) == GENERAL + (
         '[[datasets]]\nimage_directory = "run/media"\ncache_directory = "cache/dataset-images"\n'
         'caption_extension = ".txt"\n\n'
         '[[datasets]]\nvideo_directory = "run/media/rate-1"\ncache_directory = "cache/dataset-rate-1"\n'
@@ -272,23 +272,6 @@ def test_one_dataset_toml_matches_the_text_from_before_dataset_lists() -> None:
         '[[datasets]]\nvideo_directory = "run/media/rate-2"\ncache_directory = "cache/dataset-rate-2"\n'
         'caption_extension = ".txt"\ntarget_frames = [17]\nframe_extraction = "head"\nsource_fps = 30.0\n'
     )
-
-
-def test_several_datasets_are_blocked_from_preparing_with_a_clear_error(tmp_path: Path) -> None:
-    workspace = acceptance_workspace(tmp_path)
-    client = fixture_client(tmp_path, workspace)
-    datasets = [
-        {"dataset_id": registered(client, workspace, "wan")},
-        {"dataset_id": str(workspace["library_dataset"])},
-    ]
-    job = client.post("/api/jobs", json={"name": "Two", "family": "wan", "datasets": datasets}).json()
-    review = client.post(f"/api/jobs/{job['id']}/review", json={}).json()
-    assert review["valid"] is False
-    assert any("several datasets" in error for error in review["errors"])
-    assert [dataset["id"] for dataset in review["datasets"]] == [entry["dataset_id"] for entry in datasets]
-    prepared = client.post("/api/runs/prepare", json={"job_id": job["id"]})
-    assert prepared.status_code >= 400
-    assert "several datasets" in prepared.text
 
 
 def as_run_before_dataset_lists(service: RunService, run_id: str) -> None:

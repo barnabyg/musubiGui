@@ -11,10 +11,11 @@ from pathlib import Path
 from typing import Any
 
 from musubi_gui.diagnostics import training_environment, upstream_revision
-from musubi_gui.jobs import Job, JobStore, build_stages, dataset_toml, effective_settings, load_job, review_job
+from musubi_gui.jobs import Job, JobStore, build_stages, effective_settings, load_job, review_job
 from musubi_gui.safetensors_file import safetensors_header
 from musubi_gui.settings import Settings, atomic_json, load_settings, within_root
-from musubi_gui.video_sampling import WAN_FPS, source_rate, source_rates, video_directory
+from musubi_gui.training_sections import dataset_toml, layout_identity, plan_sections, section_folders
+from musubi_gui.video_sampling import WAN_FPS, source_rates
 
 
 def digest_file(path: Path) -> str:
@@ -134,6 +135,8 @@ def cache_stage_keys(
     captions = [
         {"path": item["path"], "text": item["caption"]["text"], "exists": item["caption"]["exists"]} for item in items
     ]
+    # One dataset's keys stay as they were, so its caches stay reusable.
+    layout = {"sections": layout_identity(job, items)} if len(job.datasets) > 1 else {}
     keys = {
         "latent_cache": digest(
             {
@@ -142,6 +145,7 @@ def cache_stage_keys(
                 "models": {k: v for k, v in models.items() if "vae" in k},
                 "checkout": checkout,
                 "environment": environment,
+                **layout,
             }
         ),
         "text_cache": digest(
@@ -151,6 +155,7 @@ def cache_stage_keys(
                 "models": {k: v for k, v in models.items() if k.endswith(("_t5", "_text"))},
                 "checkout": checkout,
                 "environment": environment,
+                **layout,
             }
         ),
     }
@@ -239,13 +244,14 @@ def materialize_snapshot(inputs: SnapshotIdentity) -> dict[str, Any]:
         media_directory = directory / "media"
         media_directory.mkdir()
         cache.mkdir(parents=True)
-        rates = source_rates(manifest["items"]) if job.family == "wan" else []
+        sections = plan_sections(job, manifest["items"], directory, cache)
+        folders = section_folders(sections)
         for index, item in enumerate(manifest["items"]):
             source = store.media_path(item["dataset_id"], item["id"])
-            folder = media_directory
-            if rates and item["kind"] == "video":
-                folder = video_directory(media_directory, rates, source_rate(item))
-                folder.mkdir(exist_ok=True)
+            folder = folders.get(item["id"])
+            if folder is None:
+                raise ValueError(f"{item['name']}: its frame rate is unknown; rescan the dataset before preparation.")
+            folder.mkdir(parents=True, exist_ok=True)
             target = folder / f"item{index:06d}{source.suffix.lower()}"
             shutil.copyfile(source, target)
             actual = digest_file(target)
@@ -269,24 +275,20 @@ def materialize_snapshot(inputs: SnapshotIdentity) -> dict[str, Any]:
                 audio["snapshot_path"] = str(target_audio)
                 files[str(target_audio)] = actual_audio
         native = directory / "dataset.toml"
-        native_text = dataset_toml(job, media_directory, cache, video_rates=rates)
-        if job.family == "h3":
-            records = []
-            for item in manifest["items"]:
-                record = {"video_path": item["snapshot_path"], "caption": item["caption"]["text"]}
-                audio = item.get("audio")
-                if audio and audio.get("source") in {"explicit", "sidecar"}:
-                    record["audio_path"] = audio["snapshot_path"]
-                records.append(record)
-            metadata = directory / "dataset.jsonl"
-            metadata.write_text(
-                "\n".join(json.dumps(record, ensure_ascii=False) for record in records) + "\n", encoding="utf-8"
-            )
-            files[str(metadata)] = digest_file(metadata)
-            native_text = native_text.replace(
-                "video_directory = " + json.dumps(media_directory.as_posix(), ensure_ascii=False),
-                "video_jsonl_file = " + json.dumps(metadata.as_posix(), ensure_ascii=False),
-            )
+        native_text = dataset_toml(job, sections)
+        for section in sections:
+            if section.jsonl:
+                records = []
+                for item in section.items:
+                    record = {"video_path": item["snapshot_path"], "caption": item["caption"]["text"]}
+                    audio = item.get("audio")
+                    if audio and audio.get("source") in {"explicit", "sidecar"}:
+                        record["audio_path"] = audio["snapshot_path"]
+                    records.append(record)
+                section.jsonl.write_text(
+                    "\n".join(json.dumps(record, ensure_ascii=False) for record in records) + "\n", encoding="utf-8"
+                )
+                files[str(section.jsonl)] = digest_file(section.jsonl)
         native.write_text(native_text, encoding="utf-8")
         files[str(native)] = digest_file(native)
         snapshot_record.update(status="materialized", input_files=files)

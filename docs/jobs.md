@@ -42,6 +42,38 @@ one, and its unchanged caches are reused.
 
 Dataset exclusions belong to the dataset, not the job, so they apply to every job using it.
 
+## Training sections
+
+`musubi_gui/training_sections.py` turns a job and its included items into native dataset
+sections. Review and preparation both use it, so the TOML that review shows is the one that
+runs, apart from the Run's own folder. A section has a dataset, a type (images or videos), a
+frame rate, repeats, its media and a cache folder. A section sets `num_repeats` only when its
+dataset row sets repeats; otherwise it inherits `[general]`.
+
+A job with one dataset keeps its original layout, paths and cache keys, so its caches stay
+reusable. A job with several uses these, where N is the dataset's position in the list and M
+its frame rate's position within that dataset:
+
+| Section               | Media                | Cache folder       |
+| --------------------- | -------------------- | ------------------ |
+| Images                | `media/set-N`        | `dataset-N-images` |
+| Videos, one rate      | `media/set-N`        | `dataset-N`        |
+| Videos, several rates | `media/set-N/rate-M` | `dataset-N-rate-M` |
+
+Every section has its own cache folder, as upstream requires. The section layout and repeats
+join the cache keys of these jobs, so caches are reused only between jobs with the same
+datasets in the same order with the same repeats.
+
+An H3 video section lists its clips in its own JSONL, `dataset.jsonl` for one dataset and
+`dataset-N.jsonl` for several. Retry copies each of them. Frame-rate sections and window counts
+work within each dataset.
+
+With several datasets, review starts each item's errors and warnings with the dataset's name,
+because relative paths can repeat across datasets. It also warns when two datasets hold
+identical files (the same SHA-256), which train once for each dataset. It compares contents
+only for files of the same size. H3 still rejects images: the error names the dataset and says
+to remove it from the job, since excluding the items would change every other job using it.
+
 ## Configuration review
 
 Review configuration scrolls to its result, which opens with pass or fail, the error
@@ -150,7 +182,7 @@ New H3 job uses the proven T2VA guidance-loss recipe: 124 frames, BF16, 48 H2D-o
 losses. Geometry must be a multiple of 32; the released frame lengths are `17*n+5`
 between 124 and 345. Unsupported CFG, negative prompts, Ref2VA, FL2VA training and
 full fine-tuning are not offered. H3 drafts require video items; Wan may use images
-and videos, emitted as separate native dataset sections.
+and videos, emitted as separate [native dataset sections](#training-sections).
 
 ## Wan frame rates
 
