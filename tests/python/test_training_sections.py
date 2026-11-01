@@ -1,5 +1,6 @@
 """Sections across several datasets: the reviewed TOML is the TOML that runs."""
 
+import hashlib
 import json
 import shutil
 import tomllib
@@ -14,8 +15,9 @@ from PIL import Image
 
 from musubi_gui.acceptance import synthetic_audio, synthetic_video
 from musubi_gui.app import create_app
-from musubi_gui.jobs import smoke_config
+from musubi_gui.jobs import Job, JobDataset, build_stages, smoke_config
 from musubi_gui.runs import RunService
+from musubi_gui.settings import Settings
 
 
 class Workspace:
@@ -245,14 +247,116 @@ def test_identical_files_in_one_dataset_are_not_a_warning(workspace: Workspace) 
     assert not any(warning.startswith("Identical files") for warning in review["warnings"])
 
 
-def test_h3_rejects_images_by_naming_the_dataset_to_remove(workspace: Workspace) -> None:
-    clips = workspace.videos("clips", ("a.mp4", 124, 24), audio=True)
+def stage_args(run: dict[str, Any], name: str) -> list[str]:
+    stage: list[str] = next(stage["args"] for stage in run["stages"] if stage["name"] == name)
+    return stage
+
+
+@pytest.mark.parametrize("combined", [True, False], ids=["combined", "image-only"])
+def test_h3_images_review_prepare_train_sample_and_retry_with_the_right_flags(
+    workspace: Workspace, combined: bool
+) -> None:
     stills = workspace.images("Susan images")
-    review = workspace.review(workspace.job("h3", {"dataset_id": clips}, {"dataset_id": stills}))
-    [message] = [error for error in review["errors"] if "includes images" in error]
-    assert message.startswith('Dataset "Susan images":')
-    assert "Remove it from this job" in message
-    assert "exclude" not in message.lower()
+    rows: list[dict[str, Any]] = [{"dataset_id": stills}]
+    if combined:
+        rows.append({"dataset_id": workspace.videos("Susan videos", ("a.mp4", 124, 24), audio=True)})
+    job = workspace.job("h3", *rows)
+    review = workspace.review(job)
+    assert review["valid"] is True, review["errors"]
+    for name in ["latent_cache", "text_cache", "train"]:
+        assert "--one_frame" in stage_args(review, name)
+    assert "--one_frame" not in stage_args(review, "generate")
+    assert ("--video_only" in stage_args(review, "train")) is not combined
+    assert "--video_only" not in stage_args(review, "latent_cache")
+    warnings = " ".join(review["warnings"])
+    assert "experimental" in warnings and "unvalidated" in warnings and "85,980" in warnings
+    assert "absence of sound" in warnings and "every other model" in warnings
+    # Audio coverage counts the clips only: an image is never missing audio.
+    assert review["audio_coverage"]["included"] == (1 if combined else 0)
+    assert review["audio_coverage"]["missing"] == 0
+    assert not any("audio" in error for error in review["errors"])
+
+    service = workspace.service()
+    try:
+        run = service.prepare(job["id"], start=True)
+        completed = wait_for(service, run["id"], "completed", device_released=True)
+        directory = Path(completed["directory"])
+        native = tomllib.loads((directory / "dataset.toml").read_text(encoding="utf-8"))
+        images = native["datasets"][0]
+        assert images["image_directory"].endswith("/media/set-1" if combined else "/media")
+        assert images["cache_directory"].endswith("/dataset-1-images" if combined else "/dataset-images")
+        assert "video_jsonl_file" not in images
+        if combined:
+            lines = (directory / "dataset-2.jsonl").read_text(encoding="utf-8").splitlines()
+            assert [Path(json.loads(line)["video_path"]).suffix for line in lines] == [".mp4"]
+            assert native["datasets"][1]["cache_directory"] != images["cache_directory"]
+        # The sample stays a video with audio.
+        assert completed["samples"][0]["metadata"]["frames"] == 124
+        assert completed["samples"][0]["metadata"]["audio"]
+        assert Path(completed["cache"], "uncond.safetensors").is_file()
+
+        service.store.update(run["id"], lambda record: record.update(status="failed"))
+        retried = service.retry(run["id"])
+        assert "--one_frame" in stage_args(retried, "train")
+        wait_for(service, retried["id"], "prepared", device_released=True)
+        service.start(retried["id"])
+        assert wait_for(service, retried["id"], "completed", device_released=True)["checkpoints"]
+    finally:
+        service.close()
+
+
+def test_a_mixed_folder_works_for_h3_with_its_clips_alone_in_the_jsonl(workspace: Workspace) -> None:
+    mixed = workspace.videos("Mixed", ("a.mp4", 124, 24), audio=True)
+    (workspace.folder / "Mixed" / "still.png").write_bytes(PNG)
+    assert workspace.client.post(f"/api/datasets/{mixed}/scan", json={}).is_success
+    job = workspace.job("h3", {"dataset_id": mixed})
+    review = workspace.review(job)
+    assert review["valid"] is True, review["errors"]
+    assert "--video_only" not in stage_args(review, "train")
+    service = workspace.service()
+    try:
+        run = wait_for(service, service.prepare(job["id"])["id"], "prepared", device_released=True)
+    finally:
+        service.close()
+    records = Path(run["directory"], "dataset.jsonl").read_text(encoding="utf-8").splitlines()
+    assert [Path(json.loads(line)["video_path"]).suffix for line in records] == [".mp4"]
+
+
+def test_a_video_only_h3_jobs_arguments_match_a_fixed_regression_value() -> None:
+    names = ["h3_dit", "h3_video_vae", "h3_audio_vae", "h3_text"]
+    settings = Settings(
+        checkout="checkout", python="python.exe", models={name: f"models/{name}.safetensors" for name in names}
+    )
+    job = Job(
+        id="f" * 32, revision=1, name="n", family="h3", datasets=[JobDataset(dataset_id="d")], config=smoke_config("h3")
+    )
+    stages = build_stages(job, settings, Path("run"), Path("cache"), {"video"})
+    text = json.dumps([[stage.name, stage.args] for stage in stages])
+    # Computed before H3 accepted images. The paths use this platform's separators; the suite runs on Windows.
+    expected = "e272a88e6eee7d18141e853b952f88ec5c0aea54fab1995b6724e3d4dbb97c96"  # pragma: allowlist secret
+    assert hashlib.sha256(text.encode()).hexdigest() == expected
+
+
+def test_the_h3_fixture_refuses_an_image_section_without_the_one_frame_flag(workspace: Workspace) -> None:
+    stills = workspace.images("stills")
+    job = workspace.job("h3", {"dataset_id": stills})
+    # Not started until the record is changed, so the stage can't run with the flag first.
+    service = RunService(
+        workspace.state, fixture_mode=True, device_path=workspace.tmp_path / "s.sqlite", autostart=False
+    )
+    try:
+        run = service.prepare(job["id"])
+
+        def without_flag(record: dict[str, Any]) -> None:
+            for stage in record["stages"]:
+                stage["args"] = [arg for arg in stage["args"] if arg != "--one_frame"]
+
+        service.store.update(run["id"], without_flag)
+        service.start_worker()
+        failed = wait_for(service, run["id"], "failed", device_released=True)
+        assert "latent_cache exited 2" in failed["error"]
+    finally:
+        service.close()
 
 
 def wide_images(workspace: Workspace, name: str, size: tuple[int, int]) -> str:

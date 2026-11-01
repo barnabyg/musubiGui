@@ -198,7 +198,8 @@ def dataset_router(root: Path) -> APIRouter:
             inspected = [
                 {"id": item["id"], "name": item["name"], **store.inspect_h3(dataset_id, item["id"], frames)}
                 for item in items
-                if item["valid"] and not item["excluded"]
+                # Images never have audio to supervise, so they aren't missing any.
+                if item["valid"] and not item["excluded"] and item["kind"] == "video"
             ]
             supervised = sum(
                 1 for item in inspected if item["source"] not in {"missing", "ambiguous"} and not item["errors"]

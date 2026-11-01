@@ -1491,3 +1491,58 @@ test('removing one row of a dataset listed twice keeps the other', async ({
     await app.close();
   }
 });
+
+test('an H3 job adds an image dataset, warns that it is experimental and uses the one-frame flags', async ({
+  page,
+}) => {
+  const app = await runWorkspace();
+  try {
+    const stills = path.join(app.fixture, 'datasets', 'stills');
+    await mkdir(stills);
+    await writeFile(path.join(stills, 'a.png'), PNG);
+    await writeFile(path.join(stills, 'a.txt'), 'A silent still.');
+    await registerScanned(app, 'Susan images', stills);
+    const job = app.manifest.jobs.find((item) => item.family === 'h3')!;
+    await page.goto(`${app.url}/#/jobs/${job.id}`);
+    const add = page.getByRole('combobox', { name: 'Add a dataset' });
+    await expect(add.getByRole('option', { name: /Susan images/ })).toHaveCount(
+      1,
+    );
+    await add.selectOption({ label: 'Susan images (1 image)' });
+    await page
+      .getByRole('button', { name: 'Add dataset', exact: true })
+      .click();
+    const review = page.getByRole('button', {
+      name: 'Review configuration',
+      exact: true,
+    });
+    await review.click();
+    await expect(page.getByRole('status')).toContainText('Review passed');
+    const panel = page.getByRole('region', { name: 'Configuration review' });
+    await expect(panel).toContainText('experimental');
+    await expect(panel).toContainText('every other model using it');
+    await expect(panel).toContainText('1 supervised / 1 included');
+    await page.getByText('Advanced', { exact: true }).click();
+    const args = (name: string) =>
+      panel
+        .locator('details details')
+        .filter({ has: page.getByText(`${name} arguments`, { exact: true }) })
+        .locator('pre');
+    await page.getByText('train arguments', { exact: true }).click();
+    await expect(args('train')).toContainText('--one_frame');
+    await expect(args('train')).not.toContainText('--video_only');
+
+    // Without the video dataset, training also turns off audio supervision.
+    await page
+      .getByRole('button', { name: 'Remove H3 acceptance', exact: true })
+      .click();
+    await review.click();
+    await expect(page.getByRole('status')).toContainText('Review passed');
+    await expect(panel).toContainText('0 supervised / 0 included');
+    await page.getByText('Advanced', { exact: true }).click();
+    await page.getByText('train arguments', { exact: true }).click();
+    await expect(args('train')).toContainText('--video_only');
+  } finally {
+    await app.close();
+  }
+});

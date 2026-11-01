@@ -84,8 +84,7 @@ work within each dataset.
 With several datasets, review starts each item's errors and warnings with the dataset's name,
 because relative paths can repeat across datasets. It also warns when two datasets hold
 identical files (the same SHA-256), which train once for each dataset. It compares contents
-only for files of the same size. H3 still rejects images: the error names the dataset and says
-to remove it from the job, since excluding the items would change every other job using it.
+only for files of the same size.
 
 ## Configuration review
 
@@ -199,8 +198,23 @@ optimizer/training state is distinct from saving LoRA weights.
 New H3 job uses the proven T2VA guidance-loss recipe: 124 frames, BF16, 48 H2D-only swapped blocks, unconditional text caching and both video/audio
 losses. Geometry must be a multiple of 32; the released frame lengths are `17*n+5`
 between 124 and 345. Unsupported CFG, negative prompts, Ref2VA, FL2VA training and
-full fine-tuning are not offered. H3 drafts require video items; Wan may use images
-and videos, emitted as separate [native dataset sections](#training-sections).
+full fine-tuning are not offered. Images and videos are emitted as separate
+[native dataset sections](#training-sections) for both models.
+
+### H3 images
+
+H3 can also train on images, with upstream's experimental one-frame mode. When a job includes
+images, the latent cache, text cache and training gain `--one_frame`, and a job with only images
+also gains `--video_only` on training, following upstream's table. The sample stays a video.
+Video-only jobs keep the same commands and cache keys. Image sections use a plain
+`image_directory` with their own cache folder, and only clips go in the JSONL.
+
+Review warns that this is experimental and that using the result for video is unvalidated, and
+[what was measured](reference/h3.md#image-and-mixed-trials-1-november-2026) proves only that it
+runs. It also mentions upstream's advice to state the absence of sound in image captions. Captions
+belong to the dataset, so editing them affects every other model using it, and the application
+never changes them itself. Audio inspection and coverage apply to videos: an image is never
+counted as missing audio.
 
 ## Wan frame rates
 

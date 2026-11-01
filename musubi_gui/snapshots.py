@@ -299,7 +299,7 @@ def materialize_snapshot(inputs: SnapshotIdentity) -> dict[str, Any]:
             "manifest": manifest,
             "directory": directory,
             "cache": cache,
-            "stages": build_stages(job, settings, directory, cache),
+            "stages": build_stages(job, settings, directory, cache, {item["kind"] for item in manifest["items"]}),
             "fingerprint": identity,
             "stage_keys": keys,
             "input_files": files,

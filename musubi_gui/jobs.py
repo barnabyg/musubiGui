@@ -18,7 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from musubi_gui.diagnostics import upstream_revision
 from musubi_gui.disk_estimate import check_volumes, estimate_disk, free_space_reader
-from musubi_gui.h3 import h3_stages, validate_h3
+from musubi_gui.h3 import add_image_flags, h3_stages, validate_h3
 from musubi_gui.recipe import CAPTION, UPSTREAM, Stage
 from musubi_gui.redaction import redact
 from musubi_gui.run_store import RunStore, preparation_transaction
@@ -39,6 +39,13 @@ WAN_MAX_BLOCKS_TO_SWAP = 38
 H3_MAX_BLOCKS_TO_SWAP = 48
 # Below this a LoRA has made no visible change to samples in the owner's experience on the target PC.
 LOW_STEPS_WARNING = 600
+H3_IMAGE_WARNINGS = (
+    "H3 images: upstream calls this one-frame training experimental, and using the result for video is unvalidated. "
+    "Short image-only and mixed runs completed on the target PC (about 6 s per image step, 85,980 bytes per image cache "
+    "at 640×352), which proves mechanics and not learning.",
+    "H3 images: upstream advises stating the absence of sound in each image's caption, such as a sound: field describing "
+    "a silent still. Captions belong to the dataset, so editing them affects every other model using it. This application doesn't change them.",
+)
 # Above this share one section can swamp the others without notice, such as 200 images beside 10 clips.
 BALANCE_WARNING_SHARE = 0.8
 # A shape this close to the job's loses too little to a crop to be worth a warning.
@@ -638,11 +645,14 @@ def _set_argument(args: list[str], flag: str, value: str) -> None:
         args.extend([flag, value])
 
 
-def build_stages(job: Job, settings: Settings, run: Path, cache: Path) -> list[Stage]:
+def build_stages(job: Job, settings: Settings, run: Path, cache: Path, kinds: set[str]) -> list[Stage]:
+    """Kinds are the included item kinds, because H3 images change its commands."""
     settings = effective_settings(job, settings)
     config = job.config
     recipe_stages = wan_stages if job.family == "wan" else h3_stages
     stages = [stage for stage in recipe_stages(settings, run, cache) if stage.name != "fixture"]
+    if job.family == "h3":
+        add_image_flags(stages, kinds)
     for stage in stages:
         args = stage.args
         if stage.name == "train":
@@ -709,10 +719,6 @@ def _review_items(
     ]
     if not items:
         errors.append(f'Dataset "{dataset["name"]}": no valid, included media remain.')
-    if job.family == "h3" and any(item["kind"] != "video" for item in items):
-        errors.append(
-            f'Dataset "{dataset["name"]}": this H3 recipe trains on videos, and this dataset includes images. Remove it from this job.'
-        )
     for item in items:
         name = prefix + item["name"]
         suffix = Path(item["path"]).suffix.lower()
@@ -918,6 +924,8 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
     cache = Path(settings.cache_root) / "jobs" / job.id
     snapshot = output / f"revision-{job.revision}"
     warnings.extend(_duplicate_warnings(root, datasets, effective_items))
+    if job.family == "h3" and any(item["kind"] == "image" for item in effective_items):
+        warnings.extend(H3_IMAGE_WARNINGS)
     windows = _plan_job_windows(job, datasets, effective_items)
     errors.extend(windows.pop("errors"))
     warnings.extend(windows.pop("warnings"))
@@ -934,7 +942,7 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
     warnings.extend(volume["warning"] for volume in disk["volumes"] if volume["warning"])
     stages: list[Stage] = []
     try:
-        stages = build_stages(job, settings, snapshot, cache)
+        stages = build_stages(job, settings, snapshot, cache, {item["kind"] for item in effective_items})
         if settings.output_root:
             within_root(output, [Path(settings.output_root)])
         if settings.cache_root:

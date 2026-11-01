@@ -102,3 +102,16 @@ def test_h3_embedded_timeline_and_target_frame_rules(tmp_path: Path) -> None:
     assert late["source"] == "embedded"
     assert late["offset_seconds"] > 0.3
     assert "misaligned" in " ".join(late["errors"])
+
+
+def test_dataset_audio_coverage_counts_clips_and_not_images(tmp_path: Path) -> None:
+    root = tmp_path / "fixture"
+    media = prepare(root)
+    app = FastAPI()
+    app.include_router(dataset_router(root / "state"))
+    client = TestClient(app)
+    dataset_id = client.post("/api/datasets", json={"name": "Mixed", "path": str(media)}).json()["id"]
+    report = client.get(f"/api/datasets/{dataset_id}/h3").json()
+    # Two images, one valid clip without audio, and an invalid video that isn't included.
+    assert [item["name"] for item in report["items"]] == ["motion.mp4"]
+    assert report["included"] == 1
