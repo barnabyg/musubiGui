@@ -111,3 +111,19 @@ export function errorField(message: string) {
 }
 
 export const fieldId = (key: string) => `job-field-${key}`;
+
+export const datasetField = (id: string) => `dataset-${id}`;
+
+// Review starts an error about one listed dataset with its name, or its id once it is deleted.
+export function reviewDatasetField(
+  message: string,
+  datasets: { dataset_id: string }[],
+  named: { id: string; name: string }[],
+) {
+  const label = /^Dataset "(.+?)":/.exec(message)?.[1];
+  if (label === undefined) return undefined;
+  const id =
+    named.find((dataset) => dataset.name === label)?.id ??
+    datasets.find((entry) => entry.dataset_id === label)?.dataset_id;
+  return id === undefined ? 'dataset_id' : datasetField(id);
+}

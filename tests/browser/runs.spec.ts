@@ -1,9 +1,16 @@
 import { test, expect } from '@playwright/test';
-import { spawn } from 'node:child_process';
-import { access, writeFile, readFile } from 'node:fs/promises';
+import { execFile, spawn } from 'node:child_process';
+import { access, mkdir, writeFile, readFile } from 'node:fs/promises';
 import path from 'node:path';
+import { promisify } from 'node:util';
 import { helper, python } from './backend';
-import { runWorkspace } from './runHarness';
+import { runWorkspace, type RunRecord } from './runHarness';
+
+const execute = promisify(execFile);
+const PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=',
+  'base64',
+);
 
 const exists = (file: string) =>
   access(file).then(
@@ -1219,6 +1226,222 @@ test('a partial Run shows the outputs it has, with their problems', async ({
     await expect(
       result.getByRole('link', { name: 'Download latest checkpoint' }),
     ).toHaveAttribute('href', '/nowhere?download=true');
+  } finally {
+    await app.close();
+  }
+});
+
+// Registering returns before its scan ends, and the Jobs screen shows the counts it loads.
+async function registerScanned(
+  app: Awaited<ReturnType<typeof runWorkspace>>,
+  name: string,
+  folder: string,
+) {
+  const { id } = (await app.post('/api/datasets', {
+    name,
+    path: folder,
+  })) as { id: string };
+  await expect
+    .poll(
+      async () =>
+        (
+          (await (await fetch(`${app.url}/api/datasets/${id}`)).json()) as {
+            scan: { state: string };
+          }
+        ).scan.state,
+      { timeout: 240_000 },
+    )
+    .toBe('complete');
+  return id;
+}
+
+test('a Wan job combines an image dataset and a video dataset through review, restart and preparation', async ({
+  page,
+}) => {
+  const app = await runWorkspace();
+  try {
+    const datasets = path.join(app.fixture, 'datasets');
+    const [stills, clips] = [
+      path.join(datasets, 'stills'),
+      path.join(datasets, 'clips'),
+    ];
+    await mkdir(stills);
+    await writeFile(path.join(stills, 'a.png'), PNG);
+    await writeFile(path.join(stills, 'a.txt'), 'A still.');
+    await writeFile(path.join(stills, 'b.png'), PNG);
+    await writeFile(path.join(stills, 'b.txt'), 'Another still.');
+    await execute(python, [
+      helper,
+      'video',
+      path.join(clips, 'c.mp4'),
+      '33',
+      '16',
+    ]);
+    await writeFile(path.join(clips, 'c.txt'), 'A clip.');
+    for (const [name, folder] of [
+      ['Susan images', stills],
+      ['Susan videos', clips],
+    ])
+      await registerScanned(app, name, folder);
+    await page.goto(`${app.url}/#/jobs`);
+    await page
+      .getByRole('button', { name: 'New Wan job', exact: true })
+      .click();
+    await page
+      .getByRole('combobox', { name: 'Compatible preset' })
+      .selectOption({ label: 'Smoke test · Wan · 2 steps' });
+    await page
+      .getByRole('button', { name: 'Apply preset', exact: true })
+      .click();
+    await expect(page.getByRole('status')).toContainText('Preset applied');
+
+    // By keyboard: choose, Tab to the button, Enter. Focus stays to add another.
+    const add = page.getByRole('combobox', { name: 'Add a dataset' });
+    await add.selectOption({ label: 'Susan images (2 images)' });
+    await add.focus();
+    await page.keyboard.press('Tab');
+    const addButton = page.getByRole('button', {
+      name: 'Add dataset',
+      exact: true,
+    });
+    await expect(addButton).toBeFocused();
+    await page.keyboard.press('Enter');
+    const rows = page.getByRole('list', { name: 'Datasets in this job' });
+    await expect(rows.getByRole('listitem')).toHaveCount(1);
+    await expect(rows).toContainText('Susan images');
+    await expect(rows).toContainText('2 images');
+    // A listed dataset is no longer offered.
+    await expect(add.getByRole('option', { name: /Susan images/ })).toHaveCount(
+      0,
+    );
+    await add.selectOption({ label: 'Susan videos (1 video)' });
+    await addButton.click();
+    await expect(rows.getByRole('listitem')).toHaveCount(2);
+
+    // Remove by keyboard returns focus to where another can be added.
+    await page.getByRole('button', { name: 'Remove Susan videos' }).focus();
+    await page.keyboard.press('Enter');
+    await expect(rows.getByRole('listitem')).toHaveCount(1);
+    await expect(add).toBeFocused();
+    await add.selectOption({ label: 'Susan videos (1 video)' });
+    await addButton.click();
+
+    const imageRepeats = page.getByLabel('Repeats for Susan images');
+    await expect(imageRepeats).toHaveAttribute('placeholder', '1');
+    await imageRepeats.fill('2');
+    await page
+      .getByRole('button', { name: 'Review configuration', exact: true })
+      .click();
+    const sections = page.getByRole('table', { name: 'Training sections' });
+    await expect(sections.locator('tbody tr')).toHaveCount(2);
+    await expect(sections.locator('tbody tr').first()).toContainText(
+      /Susan images\s*Images\s*2\s*2\s*4\s*80\.0%/,
+    );
+    await expect(sections.locator('tbody tr').last()).toContainText(
+      /Susan videos\s*Videos, 16 fps\s*1\s*1\s*1\s*20\.0%/,
+    );
+    await page.setViewportSize({ width: 760, height: 900 });
+    expect(
+      await page.evaluate(
+        () =>
+          document.documentElement.scrollWidth <=
+          document.documentElement.clientWidth,
+      ),
+    ).toBe(true);
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await expect(
+      page
+        .getByRole('table', { name: 'Saved jobs' })
+        .locator('tbody tr')
+        .first(),
+    ).toContainText('Susan images +1');
+
+    await app.crash();
+    await app.start();
+    await page.reload();
+    await expect(rows.getByRole('listitem')).toHaveCount(2);
+    await expect(page.getByLabel('Repeats for Susan images')).toHaveValue('2');
+    await expect(page.getByLabel('Repeats for Susan videos')).toHaveValue('');
+
+    await page
+      .getByRole('button', { name: 'Review configuration', exact: true })
+      .click();
+    await expect(page.getByRole('status')).toContainText('Review passed');
+    await page
+      .getByRole('button', { name: 'Prepare run', exact: true })
+      .click();
+    await expect(page.getByRole('heading', { name: 'Runs' })).toBeVisible();
+    let prepared: RunRecord | undefined;
+    await expect
+      .poll(
+        async () => {
+          prepared = (await app.records()).find(
+            (run) => run.job.name === 'New Wan job',
+          );
+          return prepared?.status;
+        },
+        { timeout: 240_000 },
+      )
+      .toBe('prepared');
+    const toml = await readFile(
+      path.join(prepared!.directory, 'dataset.toml'),
+      'utf8',
+    );
+    expect(toml).toContain('media/set-1"');
+    expect(toml).toContain('dataset-1-images"');
+    expect(toml).toContain('num_repeats = 2');
+    expect(toml).toContain('media/set-2"');
+    expect(toml).toContain('dataset-2"');
+    expect(prepared!.manifest.items).toHaveLength(3);
+  } finally {
+    await app.close();
+  }
+});
+
+test('a review error about a dataset focuses its row, and a deleted dataset can be removed', async ({
+  page,
+}) => {
+  const app = await runWorkspace();
+  try {
+    const empty = path.join(app.fixture, 'datasets', 'empty');
+    await mkdir(empty);
+    const dataset = { id: await registerScanned(app, 'Nothing here', empty) };
+    await page.goto(`${app.url}/#/jobs`);
+    await page
+      .getByRole('button', { name: 'New Wan job', exact: true })
+      .click();
+    const add = page.getByRole('combobox', { name: 'Add a dataset' });
+    await add.selectOption(dataset.id);
+    await page
+      .getByRole('button', { name: 'Add dataset', exact: true })
+      .click();
+    await page
+      .getByRole('button', { name: 'Review configuration', exact: true })
+      .click();
+    await page
+      .getByRole('button', { name: /^Dataset "Nothing here": no valid/ })
+      .click();
+    const repeats = page.getByLabel('Repeats for Nothing here');
+    await expect(repeats).toBeFocused();
+    await expect(repeats).toHaveAttribute('aria-invalid', 'true');
+
+    const deleted = await page.request.delete(
+      `${app.url}/api/datasets/${dataset.id}`,
+      { data: {} },
+    );
+    expect(deleted.status()).toBe(200);
+    await page.reload();
+    const rows = page.getByRole('list', { name: 'Datasets in this job' });
+    await expect(rows).toContainText('Deleted dataset');
+    await expect(rows).toContainText('No longer in the library');
+    await page
+      .getByRole('button', { name: 'Review configuration', exact: true })
+      .click();
+    await page.getByRole('button', { name: /no longer registered/ }).click();
+    const remove = page.getByRole('button', { name: 'Remove deleted dataset' });
+    await expect(remove).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(rows).toHaveCount(0);
   } finally {
     await app.close();
   }

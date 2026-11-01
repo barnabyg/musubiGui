@@ -80,6 +80,41 @@ def layout_identity(job: "Job", items: list[dict[str, Any]]) -> list[dict[str, A
     ]
 
 
+def section_balance(
+    job: "Job", sections: list[Section], windows: list[dict[str, Any]], names: dict[str, str]
+) -> list[dict[str, Any]]:
+    """Each section's samples per epoch: a cached video window counts as one sample, as does an image.
+
+    A clip of unknown length still caches once, as the disk estimate assumes.
+    """
+    counts = {entry["id"]: entry["windows"] for entry in windows}
+
+    def samples(item: dict[str, Any]) -> int:
+        if item["kind"] == "image":
+            return 1
+        count = counts.get(item["id"])
+        return 1 if count is None else int(count)
+
+    rows: list[dict[str, Any]] = []
+    for section in sections:
+        if not section.items:
+            continue
+        repeats = job.config.repeats if section.repeats is None else section.repeats
+        rows.append(
+            {
+                "dataset_id": section.dataset_id,
+                "dataset": names.get(section.dataset_id, section.dataset_id),
+                "kind": section.kind,
+                "fps": section.fps,
+                "items": len(section.items),
+                "repeats": repeats,
+                "samples": max(0, repeats) * sum(samples(item) for item in section.items),
+            }
+        )
+    total = sum(row["samples"] for row in rows)
+    return [{**row, "share": row["samples"] / total if total else 0.0} for row in rows]
+
+
 def dataset_toml(job: "Job", sections: list[Section]) -> str:
     """Directories are an immutable managed snapshot, never the mutable source dataset.
 

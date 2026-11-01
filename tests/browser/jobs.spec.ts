@@ -570,8 +570,11 @@ test('Wan frame extraction controls persist and review counts cached windows aft
       .getByRole('button', { name: 'New Wan job', exact: true })
       .click();
     await page
-      .getByRole('combobox', { name: /^Dataset\b/ })
+      .getByRole('combobox', { name: 'Add a dataset' })
       .selectOption(dataset.id);
+    await page
+      .getByRole('button', { name: 'Add dataset', exact: true })
+      .click();
     await page.getByRole('spinbutton', { name: /^Frames\b/ }).fill('17');
     await page
       .getByRole('combobox', { name: /^Frame extraction\b/ })
@@ -727,7 +730,7 @@ test('duplication presets cancelled conversion and versioned export import keep 
         .getByRole('textbox', { name: 'Configuration JSON', exact: true })
         .inputValue(),
     ) as { version: number; draft: { name: string } };
-    expect(exported.version).toBe(1);
+    expect(exported.version).toBe(2);
     exported.draft.name = 'Imported draft';
     await page
       .getByRole('textbox', { name: 'Configuration JSON', exact: true })

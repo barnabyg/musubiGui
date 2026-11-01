@@ -190,3 +190,70 @@
   background: var(--color-danger-surface);
   color: var(--color-danger-strong);
 }
+.job-datasets ol {
+  margin: var(--space-4) 0;
+  padding: 0;
+  list-style: none;
+}
+.job-datasets li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-4) var(--space-7);
+  padding: var(--space-5) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+.job-dataset-name {
+  flex: 1 1 240px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.job-dataset-name small {
+  display: block;
+  margin-top: var(--space-1);
+}
+.job-dataset-repeats {
+  font-size: var(--text-base);
+  color: var(--color-text-label);
+}
+.job-dataset-repeats input {
+  display: block;
+  width: 100px;
+}
+.job-dataset-add {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0 var(--space-5);
+}
+.job-dataset-add .field {
+  flex: 1 1 280px;
+  margin-bottom: 0;
+}
+.job-dataset-add button {
+  margin-bottom: var(--space-3);
+}
+.job-balance {
+  overflow-x: auto;
+  margin: var(--space-6) 0;
+}
+.job-balance table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-base);
+}
+.job-balance caption {
+  margin-bottom: var(--space-3);
+  text-align: left;
+  font-weight: 650;
+}
+.job-balance th,
+.job-balance td {
+  padding: var(--space-3) var(--space-5);
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+  font-weight: 400;
+}
+.job-balance thead th {
+  color: var(--color-text-muted);
+}

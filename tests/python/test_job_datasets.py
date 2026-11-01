@@ -182,7 +182,7 @@ def test_review_rejects_the_same_dataset_twice_and_a_deleted_dataset(tmp_path: P
 def test_review_rejects_row_repeats_below_one(tmp_path: Path, client: TestClient) -> None:
     job = client.post("/api/jobs", json={"name": "Zero", "datasets": [{"dataset_id": "d", "repeats": 0}]}).json()
     errors = client.post(f"/api/jobs/{job['id']}/review", json={}).json()["errors"]
-    assert any(error.startswith("Dataset:") and "repeats" in error for error in errors)
+    assert any(error.startswith('Dataset "d":') and "repeats" in error for error in errors)
 
 
 ITEMS: list[dict[str, Any]] = [

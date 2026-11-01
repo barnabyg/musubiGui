@@ -53,7 +53,8 @@ Use a new destination each time; existing fixture directories are preserved. Ope
 The CC0 fixture contains two images, one video and one deliberately invalid video. No GPU, model weights,
 training Python or downloads are required. Media decoding and thumbnails use the application's pinned PyAV/Pillow.
 
-Check the four indexed items, missing-caption coverage, image/video preview and named invalid-media error.
+The command also prints a separate image folder and video folder, for combining media in one
+[job](jobs.md#datasets-in-a-job). Check the four indexed items, missing-caption coverage, image/video preview and named invalid-media error.
 Re-scan unchanged files, restart with `MUSUBI_GUI_STATE` pointing at the fixture's `state` folder, and confirm
 the library survives. Source files stay in place. Paths outside Settings' dataset roots are rejected after
 symlink/junction resolution. If the source folder disappears, its library entry is retained for recovery.

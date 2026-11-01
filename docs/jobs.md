@@ -9,8 +9,9 @@ a link that focuses that field.
 
 Launch with `launch.cmd`, register a dataset, and open Jobs. Jobs are listed in a table
 of name, model, dataset, revision, last Run and last edited time, most recently edited
-first; choose a heading to sort by it. New Wan job creates an incomplete saveable draft
-with a name no other job is using, ready to retype. Select its dataset and edit the grouped preparation,
+first; choose a heading to sort by it. The dataset column shows the first dataset and how
+many more follow, such as `Susan images +1`. New Wan job creates an incomplete saveable draft
+with a name no other job is using, ready to retype. Add its datasets and edit the grouped preparation,
 LoRA, memory, checkpoint and sample controls. Save draft, Review configuration, Prepare
 run and the status stay visible in a bar as you scroll. Duplicate job, Change model,
 Archive job, Delete job and Import / export configuration are in the bar's ⋯ menu.
@@ -46,6 +47,18 @@ With bucketing off, every image is trained at the job's exact size: the pinned l
 to cover that size and crops the overflow from the centre (`image_video_dataset.py`). Review
 warns with the number of included images in each dataset that this reshapes, using the size the
 scan recorded, and allows 1% of difference in shape. Enabling bucketing clears the warning.
+
+## Datasets in a job
+
+Job & dataset lists the job's datasets in order. Each row shows the dataset, its contents
+(`12 images · 3 videos`), its repeats and Remove. Blank repeats use the job's Repeats, shown in
+the field. Add a dataset offers only those not already listed. A row whose dataset was deleted
+from the library says so and can be removed. Review's errors about a dataset link to its row.
+
+Review's Training sections table has a row per section: dataset, type, items, repeats, samples
+per epoch and share of training. A cached video window counts as one sample, as does an image,
+and repeats multiply both. Review warns when one of several sections has over 80% of the samples,
+because 200 images can otherwise swamp 10 clips without notice. This is only a warning.
 
 ## Training sections
 
@@ -233,7 +246,7 @@ is repaired or silently discarded. The selected audio VAE remains mandatory.
 
 Duplicate job creates an independent identity and output destination. Save as preset
 records named model-specific controls; Apply preset creates a new job revision while
-retaining that job's name and dataset selection.
+retaining that job's name and datasets.
 
 Two built-in **Measured** presets carry the largest configurations that trained on
 the target PC during the production trial

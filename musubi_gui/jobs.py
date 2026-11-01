@@ -24,7 +24,7 @@ from musubi_gui.redaction import redact
 from musubi_gui.run_store import RunStore, preparation_transaction
 from musubi_gui.safetensors_file import safetensors_header
 from musubi_gui.settings import Settings, atomic_json, validate_paths, within_root
-from musubi_gui.training_sections import dataset_toml, plan_sections
+from musubi_gui.training_sections import dataset_toml, plan_sections, section_balance
 from musubi_gui.video_sampling import plan_windows
 from musubi_gui.wan import validate_wan, wan_stages
 
@@ -39,6 +39,8 @@ WAN_MAX_BLOCKS_TO_SWAP = 38
 H3_MAX_BLOCKS_TO_SWAP = 48
 # Below this a LoRA has made no visible change to samples in the owner's experience on the target PC.
 LOW_STEPS_WARNING = 600
+# Above this share one section can swamp the others without notice, such as 200 images beside 10 clips.
+BALANCE_WARNING_SHARE = 0.8
 # A shape this close to the job's loses too little to a crop to be worth a warning.
 ASPECT_TOLERANCE = 0.01
 NEW_DRAFT_STEPS = 600
@@ -555,8 +557,11 @@ def configuration_errors(job: Job) -> list[str]:
         errors.append("Dataset: select a registered dataset.")
     if len(set(listed)) != len(listed):
         errors.append("Dataset: the same dataset is listed more than once; remove the extra row.")
-    if any(entry.repeats is not None and entry.repeats < 1 for entry in job.datasets):
-        errors.append("Dataset: a row's repeats must be a positive integer, or blank to use the job's default.")
+    for entry in job.datasets:
+        if entry.repeats is not None and entry.repeats < 1:
+            errors.append(
+                f'Dataset "{entry.dataset_id}": enter repeats of at least one, or leave them blank to use the job\'s.'
+            )
     if job.family == "wan":
         if config.recipe != "low-noise":
             errors.append("Recipe: only low-noise Wan training is currently available in the GUI.")
@@ -708,7 +713,7 @@ def _review_items(
         {**item, "dataset_id": dataset_id} for item in store.items(dataset_id) if not item["excluded"] and item["valid"]
     ]
     if not items:
-        errors.append(f"{prefix or 'Dataset: '}no valid, included media remain.")
+        errors.append(f'Dataset "{dataset["name"]}": no valid, included media remain.')
     if job.family == "h3" and any(item["kind"] != "video" for item in items):
         errors.append(
             f'Dataset "{dataset["name"]}": this H3 recipe trains on videos, and this dataset includes images. Remove it from this job.'
@@ -910,15 +915,24 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
                 effective_items.extend(_review_items(store, job, dataset, prefix, errors, warnings, audio_coverage))
             except (ValueError, OSError, ImportError, HTTPException) as error:
                 errors.append(f"Dataset: {error}")
+    output = Path(settings.output_root) / "jobs" / job.id
+    cache = Path(settings.cache_root) / "jobs" / job.id
+    snapshot = output / f"revision-{job.revision}"
     warnings.extend(_duplicate_warnings(root, datasets, effective_items))
     windows = _plan_job_windows(job, datasets, effective_items)
     errors.extend(windows.pop("errors"))
     warnings.extend(windows.pop("warnings"))
+    sections = plan_sections(job, effective_items, snapshot, cache)
+    balance = section_balance(job, sections, windows["items"], {item["id"]: item["name"] for item in datasets})
+    if len(balance) > 1:
+        warnings.extend(
+            f'Balance: "{row["dataset"]}" ({row["kind"]}s) has {row["share"]:.0%} of the training samples per epoch, '
+            "so the other sections have little influence. Consider more repeats on the others."
+            for row in balance
+            if row["share"] > BALANCE_WARNING_SHARE
+        )
     disk = disk_preflight(job, settings, effective_items, windows["items"], fixture_mode=fixture_mode)
     warnings.extend(volume["warning"] for volume in disk["volumes"] if volume["warning"])
-    output = Path(settings.output_root) / "jobs" / job.id
-    cache = Path(settings.cache_root) / "jobs" / job.id
-    snapshot = output / f"revision-{job.revision}"
     stages: list[Stage] = []
     try:
         stages = build_stages(job, settings, snapshot, cache)
@@ -946,6 +960,7 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
         "expected_upstream": UPSTREAM,
         "upstream_revision": actual_revision,
         "paths": {"output": str(output), "cache": str(cache), "snapshot": str(snapshot)},
-        "dataset_toml": dataset_toml(job, plan_sections(job, effective_items, snapshot, cache)),
+        "sections": balance,
+        "dataset_toml": dataset_toml(job, sections),
         "stages": [{"name": stage.name, "args": stage.args} for stage in stages],
     }

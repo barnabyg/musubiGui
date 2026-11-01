@@ -45,9 +45,16 @@ export function JobTable<T extends Row>({
     descending: true,
   });
   const summary = (id: string) => summaries.find((item) => item.id === id);
-  const dataset = (job: Row) =>
-    datasets.find((item) => item.id === job.datasets[0]?.dataset_id)?.name ??
-    '';
+  // The first dataset's name plus how many more, which is also the text this column sorts on.
+  const dataset = (job: Row) => {
+    if (!job.datasets.length) return '';
+    const first =
+      datasets.find((item) => item.id === job.datasets[0].dataset_id)?.name ??
+      'Deleted dataset';
+    return job.datasets.length > 1
+      ? `${first} +${job.datasets.length - 1}`
+      : first;
+  };
   const value = (job: Row, key: Column): string | number => {
     if (key === 'name') return job.name;
     if (key === 'model') return job.family;

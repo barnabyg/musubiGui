@@ -290,3 +290,55 @@ def test_review_counts_only_included_images_and_treats_a_mixed_folder_like_any_o
     [message] = shape_warnings(review)
     assert '"Mixed": 1 image has a different shape' in message
     assert not any("mixed" in text.lower() for text in [*review["warnings"], *review["errors"]] if "Mixed" not in text)
+
+
+def balance(review: dict[str, Any]) -> list[tuple[str, str, int, int, int, float]]:
+    return [
+        (row["dataset"], row["kind"], row["items"], row["repeats"], row["samples"], round(row["share"], 4))
+        for row in review["sections"]
+    ]
+
+
+def test_samples_and_shares_match_a_hand_worked_example(workspace: Workspace) -> None:
+    stills = workspace.images("stills")
+    clips = workspace.videos("clips", ("native.mp4", 33, 16), ("thirty.mp4", 90, 30))
+    job = workspace.job(
+        "wan",
+        {"dataset_id": stills, "repeats": 3},
+        {"dataset_id": clips},
+        frames=17,
+        repeats=2,
+        frame_extraction="slide",
+        frame_stride=8,
+    )
+    review = workspace.review(job)
+    assert review["valid"] is True, review["errors"]
+    # 2 images × 3 repeats = 6.
+    # native.mp4: 33 frames at 16 fps, windows at 0, 8 and 16 = 3, × the job's 2 repeats = 6.
+    # thirty.mp4: 90 frames at 30 fps keep 48 at 16 fps, windows at 0, 8, 16 and 24 = 4, × 2 = 8.
+    assert balance(review) == [
+        ("stills", "image", 2, 3, 6, 0.3),
+        ("clips", "video", 1, 2, 6, 0.3),
+        ("clips", "video", 1, 2, 8, 0.4),
+    ]
+    assert [row["fps"] for row in review["sections"]] == [None, 16.0, 30.0]
+    assert sum(row["share"] for row in review["sections"]) == pytest.approx(1)
+    assert not any(warning.startswith("Balance:") for warning in review["warnings"])
+
+
+def test_review_warns_when_one_section_has_most_of_the_samples_but_never_blocks(workspace: Workspace) -> None:
+    stills = workspace.images("stills", count=5)
+    clips = workspace.videos("clips", ("a.mp4", 33, 16))
+    swamped = workspace.review(workspace.job("wan", {"dataset_id": stills, "repeats": 9}, {"dataset_id": clips}))
+    assert swamped["valid"] is True, swamped["errors"]
+    assert any(warning.startswith('Balance: "stills" (images) has 98%') for warning in swamped["warnings"])
+    # Exactly 80% is not over the line.
+    level = workspace.review(
+        workspace.job("wan", {"dataset_id": stills, "repeats": 4}, {"dataset_id": clips, "repeats": 5})
+    )
+    assert [row["samples"] for row in level["sections"]] == [20, 5]
+    assert not any(warning.startswith("Balance:") for warning in level["warnings"])
+    # One section is all of training, which is not an imbalance.
+    alone = workspace.review(workspace.job("wan", {"dataset_id": clips}))
+    assert [row["share"] for row in alone["sections"]] == [1.0]
+    assert not any(warning.startswith("Balance:") for warning in alone["warnings"])
