@@ -260,15 +260,27 @@ class OutputBrowser:
         )
 
 
+def _job_view(job: dict[str, Any]) -> dict[str, Any]:
+    """A Run from before job dataset lists records one dataset_id, so only a real difference shows as a change."""
+    view = {key: value for key, value in job.items() if key not in {"version", "dataset_id"}}
+    if "dataset_id" in job:
+        view["datasets"] = [{"dataset_id": job["dataset_id"], "repeats": None}] if job["dataset_id"] else []
+    return view
+
+
 def _comparison_view(run: dict[str, Any]) -> dict[str, Any]:
-    items = run.get("manifest", {}).get("items", [])
+    manifest = {key: value for key, value in run.get("manifest", {}).items() if key != "datasets"}
+    # Each item's id already includes its dataset, and the job lists the datasets.
+    items = [
+        {key: value for key, value in item.items() if key != "dataset_id"} for item in manifest.get("items", [])
+    ]
     return dict(
         _scrub(
             {
-                "job": run.get("job", {}),
+                "job": _job_view(run.get("job", {})),
                 "settings": run.get("settings", {}),
                 "dataset": {
-                    **run.get("manifest", {}),
+                    **manifest,
                     "items": {str(item.get("id", item.get("path", index))): item for index, item in enumerate(items)},
                 },
                 "provenance": run.get("provenance", {}),

@@ -332,7 +332,10 @@ def test_a_run_prepared_before_dataset_lists_still_opens_compares_retries_and_re
         newer = service.prepare(job["id"])
         assert newer["id"] != run["id"]
         changes = compare_runs(old, service.get(newer["id"]))["changes"]
-        assert any(change["path"].startswith("job.dataset") for change in changes)
+        paths = [change["path"] for change in changes]
+        assert "job.name" in paths
+        assert not [path for path in paths if path.startswith(("job.dataset", "job.version", "dataset.datasets"))]
+        assert not [path for path in paths if path.endswith(".dataset_id")]
         wait_for(service, newer["id"], "prepared", device_released=True)
 
         states = service.saved_states(run["id"])
@@ -344,5 +347,7 @@ def test_a_run_prepared_before_dataset_lists_still_opens_compares_retries_and_re
         retried = service.retry(run["id"])
         assert retried["manifest"]["items"] == old["manifest"]["items"]
         wait_for(service, retried["id"], "prepared", device_released=True)
+        service.start(retried["id"])
+        wait_for(service, retried["id"], "completed", device_released=True)
     finally:
         service.close()
