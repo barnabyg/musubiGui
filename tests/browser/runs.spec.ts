@@ -207,7 +207,7 @@ test('live progress steps through stages, reports steps and loss, and shows a fa
     ).json()) as {
       name: string;
       family: string;
-      dataset_id: string;
+      datasets: unknown[];
       revision: number;
       config: Record<string, unknown>;
     };
@@ -713,7 +713,7 @@ test('backend interruption retains GPU ownership and offers explicit recovery wi
     ).json()) as {
       name: string;
       family: string;
-      dataset_id: string;
+      datasets: unknown[];
       revision: number;
       config: Record<string, unknown>;
     };
@@ -789,7 +789,7 @@ test('a gracefully stopped revision can be prepared and started again', async ({
     ).json()) as {
       name: string;
       family: string;
-      dataset_id: string;
+      datasets: unknown[];
       revision: number;
       config: Record<string, unknown>;
     };

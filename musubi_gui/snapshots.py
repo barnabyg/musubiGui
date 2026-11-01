@@ -76,6 +76,87 @@ def cache_environment_identity(settings: Settings, environment: dict[str, Any]) 
     }
 
 
+def job_manifest(store: Any, job: Job) -> dict[str, Any]:
+    """Every listed dataset's manifest in one, keeping the keys a single-dataset manifest always had.
+
+    Each item names its dataset, because relative paths can repeat across datasets.
+    """
+    parts = [(entry, store.manifest(entry.dataset_id)) for entry in job.datasets]
+    manifest: dict[str, Any] = (
+        {**parts[0][1]}
+        if len(parts) == 1
+        else {
+            "dataset": parts[0][1]["dataset"],
+            "excluded": [item for _, part in parts for item in part["excluded"]],
+            "invalid": [item for _, part in parts for item in part["invalid"]],
+            "digest": digest([part["digest"] for _, part in parts]),
+        }
+    )
+    manifest["items"] = [{**item, "dataset_id": entry.dataset_id} for entry, part in parts for item in part["items"]]
+    manifest["datasets"] = [
+        {"dataset_id": entry.dataset_id, "repeats": entry.repeats, "name": part["dataset"]["name"]}
+        for entry, part in parts
+    ]
+    return manifest
+
+
+def cache_stage_keys(
+    job: Job, items: list[dict[str, Any]], models: dict[str, Any], checkout: dict[str, str], environment: dict[str, Any]
+) -> tuple[dict[str, str], list[dict[str, Any]], list[dict[str, Any]]]:
+    """The reusable-cache keys, with the media and caption identities they cover."""
+    preparation_settings = job.config.model_dump(
+        include={
+            "width",
+            "height",
+            "frames",
+            "batch_size",
+            "repeats",
+            "enable_bucket",
+            "bucket_no_upscale",
+            "recipe",
+            "audio_policy",
+        }
+    )
+    if job.family == "wan":
+        # Sections resample each source rate to 16 fps; caches built from un-resampled TOML are never reused.
+        config = job.config
+        preparation_settings["video_sampling"] = {
+            "target_fps": WAN_FPS,
+            "source_fps": source_rates(items),
+            "frame_extraction": config.frame_extraction,
+            "frame_stride": config.frame_stride if config.frame_extraction == "slide" else None,
+            "frame_sample": config.frame_sample if config.frame_extraction == "uniform" else None,
+        }
+    media = [
+        {"path": item["path"], "sha256": item["sha256"], "audio": item.get("audio") if job.family == "h3" else None}
+        for item in items
+    ]
+    captions = [
+        {"path": item["path"], "text": item["caption"]["text"], "exists": item["caption"]["exists"]} for item in items
+    ]
+    keys = {
+        "latent_cache": digest(
+            {
+                "media": media,
+                "settings": preparation_settings,
+                "models": {k: v for k, v in models.items() if "vae" in k},
+                "checkout": checkout,
+                "environment": environment,
+            }
+        ),
+        "text_cache": digest(
+            {
+                "captions": captions,
+                "settings": preparation_settings,
+                "models": {k: v for k, v in models.items() if k.endswith(("_t5", "_text"))},
+                "checkout": checkout,
+                "environment": environment,
+            }
+        ),
+    }
+    return keys, media, captions
+
+
 @dataclass
 class SnapshotIdentity:
     root: Path
@@ -96,7 +177,7 @@ def identify_snapshot(root: Path, job_id: str, *, fixture_mode: bool = False) ->
     if not review["valid"]:
         raise ValueError("Preparation blocked: " + " ".join(review["errors"]))
     store: Any = import_module("musubi_gui.datasets").DatasetStore(root)
-    manifest: dict[str, Any] = store.manifest(job.dataset_id)
+    manifest = job_manifest(store, job)
     if not manifest["items"]:
         raise ValueError("No effective dataset items remain.")
     models = {
@@ -115,57 +196,9 @@ def identify_snapshot(root: Path, job_id: str, *, fixture_mode: bool = False) ->
         "cache_environment": cache_environment_identity(settings, environment),
         "audio_coverage": review.get("audio_coverage", {}),
     }
-    preparation_settings = job.config.model_dump(
-        include={
-            "width",
-            "height",
-            "frames",
-            "batch_size",
-            "repeats",
-            "enable_bucket",
-            "bucket_no_upscale",
-            "recipe",
-            "audio_policy",
-        }
+    keys, media, captions = cache_stage_keys(
+        job, manifest["items"], models, provenance["checkout"], provenance["cache_environment"]
     )
-    if job.family == "wan":
-        # Sections resample each source rate to 16 fps; caches built from un-resampled TOML are never reused.
-        config = job.config
-        preparation_settings["video_sampling"] = {
-            "target_fps": WAN_FPS,
-            "source_fps": source_rates(manifest["items"]),
-            "frame_extraction": config.frame_extraction,
-            "frame_stride": config.frame_stride if config.frame_extraction == "slide" else None,
-            "frame_sample": config.frame_sample if config.frame_extraction == "uniform" else None,
-        }
-    media = [
-        {"path": item["path"], "sha256": item["sha256"], "audio": item.get("audio") if job.family == "h3" else None}
-        for item in manifest["items"]
-    ]
-    captions = [
-        {"path": item["path"], "text": item["caption"]["text"], "exists": item["caption"]["exists"]}
-        for item in manifest["items"]
-    ]
-    keys = {
-        "latent_cache": digest(
-            {
-                "media": media,
-                "settings": preparation_settings,
-                "models": {k: v for k, v in models.items() if "vae" in k},
-                "checkout": provenance["checkout"],
-                "environment": provenance["cache_environment"],
-            }
-        ),
-        "text_cache": digest(
-            {
-                "captions": captions,
-                "settings": preparation_settings,
-                "models": {k: v for k, v in models.items() if k.endswith(("_t5", "_text"))},
-                "checkout": provenance["checkout"],
-                "environment": provenance["cache_environment"],
-            }
-        ),
-    }
     stable_provenance: dict[str, Any] = {**provenance}
     stable_provenance["environment"] = provenance["cache_environment"]
     identity = digest(
@@ -208,7 +241,7 @@ def materialize_snapshot(inputs: SnapshotIdentity) -> dict[str, Any]:
         cache.mkdir(parents=True)
         rates = source_rates(manifest["items"]) if job.family == "wan" else []
         for index, item in enumerate(manifest["items"]):
-            source = store.media_path(job.dataset_id, item["id"])
+            source = store.media_path(item["dataset_id"], item["id"])
             folder = media_directory
             if rates and item["kind"] == "video":
                 folder = video_directory(media_directory, rates, source_rate(item))

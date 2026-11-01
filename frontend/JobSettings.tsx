@@ -75,8 +75,15 @@ export function JobIdentity({
           id={fieldId('dataset_id')}
           {...problemProps('dataset_id')}
           disabled={busy}
-          value={job.dataset_id}
-          onChange={(event) => edit({ ...job, dataset_id: event.target.value })}
+          value={job.datasets[0]?.dataset_id ?? ''}
+          onChange={(event) =>
+            edit({
+              ...job,
+              datasets: event.target.value
+                ? [{ dataset_id: event.target.value, repeats: null }]
+                : [],
+            })
+          }
         >
           <option value="">Select a registered dataset</option>
           {datasets.map((dataset) => (

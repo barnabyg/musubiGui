@@ -79,7 +79,7 @@ class JobConfig(BaseModel):
 def smoke_config(family: str) -> JobConfig:
     """The quick execution check, which proves mechanics and not learning.
 
-    H3 fields missing from saved revisions and version 1 exports resolve to these values, so they must stay fixed.
+    H3 fields missing from saved revisions and exports resolve to these values, so they must stay fixed.
     """
     if family == "h3":
         return JobConfig(
@@ -107,13 +107,39 @@ def default_config(family: str) -> JobConfig:
     )
 
 
+class JobDataset(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    dataset_id: str
+    # None inherits config.repeats, the [general] default.
+    repeats: int | None = None
+
+
+def _check_version_fields(version: Any, draft: Any) -> None:
+    """A version names one shape: 1 has a single dataset_id and 2 has the datasets list."""
+    if isinstance(draft, dict) and ((version == 1 and "datasets" in draft) or (version == 2 and "dataset_id" in draft)):
+        raise ValueError(f"Version {version} does not have this dataset field; preserve the file before repair.")
+
+
 class JobDraft(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = "Untitled job"
     family: Literal["wan", "h3"] = "wan"
-    dataset_id: str = ""
+    datasets: list[JobDataset] = Field(default_factory=list)
     config: JobConfig = Field(default_factory=JobConfig)
+
+    @model_validator(mode="before")
+    @classmethod
+    def legacy_dataset(cls, value: Any) -> Any:
+        """Version 1 revisions and exports, and API requests that still send dataset_id."""
+        if not isinstance(value, dict) or "dataset_id" not in value:
+            return value
+        if "datasets" in value:
+            raise ValueError("Send either dataset_id or datasets, not both.")
+        rest = {key: child for key, child in value.items() if key != "dataset_id"}
+        legacy = value["dataset_id"]
+        return {**rest, "datasets": [{"dataset_id": legacy}] if legacy else []}
 
     @model_validator(mode="before")
     @classmethod
@@ -126,17 +152,33 @@ class JobDraft(BaseModel):
 
 
 class Job(JobDraft):
-    version: Literal[1] = 1
+    version: Literal[2] = 2
     id: str
     revision: int
+
+    @model_validator(mode="before")
+    @classmethod
+    def read_version_1(cls, value: Any) -> Any:
+        """Revision files stay as written; a version 1 file reads as the version 2 job it now means."""
+        if not isinstance(value, dict) or "version" not in value:
+            return value
+        _check_version_fields(value["version"], value)
+        return {**value, "version": 2} if value["version"] == 1 else value
 
 
 class JobExport(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    version: Literal[1]
+    version: Literal[1, 2]
     format: Literal["musubi-gui-job"]
     draft: JobDraft
+
+    @model_validator(mode="before")
+    @classmethod
+    def version_fields(cls, value: Any) -> Any:
+        if isinstance(value, dict):
+            _check_version_fields(value.get("version"), value.get("draft"))
+        return value
 
 
 class NamedPreset(BaseModel):
@@ -235,7 +277,7 @@ def export_draft(draft: JobDraft) -> JobExport:
             return [scrub(child) for child in value]
         return value
 
-    return JobExport(version=1, format="musubi-gui-job", draft=JobDraft.model_validate(scrub(draft.model_dump())))
+    return JobExport(version=2, format="musubi-gui-job", draft=JobDraft.model_validate(scrub(draft.model_dump())))
 
 
 def conversion_draft(job: Job, family: Literal["wan", "h3"]) -> JobDraft:
@@ -272,7 +314,7 @@ def conversion_draft(job: Job, family: Literal["wan", "h3"]) -> JobDraft:
             if value >= 64 and value % (32 if family == "h3" else 16) == 0:
                 shared[key] = value
     config = default_config(family).model_copy(update=shared)
-    return JobDraft(name=job.name, family=family, dataset_id=job.dataset_id, config=config)
+    return JobDraft(name=job.name, family=family, datasets=job.datasets, config=config)
 
 
 def identifier(value: str) -> str:
@@ -380,7 +422,7 @@ class JobStore:
         return [
             {
                 "id": job.id,
-                # The revision file's time: revision files stay as version 1 wrote them, with no time field.
+                # The revision file's time: revision files stay as written, with no time field.
                 "edited": datetime.fromtimestamp(
                     (self.root / job.id / f"{job.revision}.json").stat().st_mtime, UTC
                 ).isoformat(),
@@ -505,8 +547,13 @@ def configuration_errors(job: Job) -> list[str]:
     errors: list[str] = []
     if not job.name.strip():
         errors.append("Name: enter a job name.")
-    if not job.dataset_id:
+    listed = [entry.dataset_id for entry in job.datasets]
+    if not listed:
         errors.append("Dataset: select a registered dataset.")
+    if len(set(listed)) != len(listed):
+        errors.append("Dataset: the same dataset is listed more than once; remove the extra row.")
+    if any(entry.repeats is not None and entry.repeats < 1 for entry in job.datasets):
+        errors.append("Dataset: a row's repeats must be a positive integer, or blank to use the job's default.")
     if job.family == "wan":
         if config.recipe != "low-noise":
             errors.append("Recipe: only low-noise Wan training is currently available in the GUI.")
@@ -690,6 +737,64 @@ def disk_preflight(
     return {"estimate": estimate, "volumes": volumes}
 
 
+def _review_items(
+    store: Any,
+    job: Job,
+    dataset: dict[str, Any],
+    prefix: str,
+    errors: list[str],
+    warnings: list[str],
+    audio_coverage: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Check one listed dataset's included items; returns them labelled with the dataset they came from."""
+    dataset_id = dataset["id"]
+    items = [
+        {**item, "dataset_id": dataset_id} for item in store.items(dataset_id) if not item["excluded"] and item["valid"]
+    ]
+    if not items:
+        errors.append(f"{prefix or 'Dataset: '}no valid, included media remain.")
+    if job.family == "h3" and any(item["kind"] != "video" for item in items):
+        errors.append(
+            f"{prefix or 'Dataset: '}this initial video recipe requires videos; exclude images or select another dataset."
+        )
+    for item in items:
+        name = prefix + item["name"]
+        suffix = Path(item["path"]).suffix.lower()
+        supported = TRAINING_IMAGES if item["kind"] == "image" else TRAINING_VIDEOS
+        if suffix not in supported:
+            target = "PNG, JPEG, WebP or BMP" if item["kind"] == "image" else "MP4"
+            errors.append(
+                f"{name}: {suffix} {item['kind']} files can be previewed but are not supported by the pinned {job.family.upper()} training recipe. Convert to {target} or exclude this item before preparation."
+            )
+        if not item["caption"]["exists"]:
+            warnings.append(f"{name}: no caption sidecar; the frozen caption will be empty.")
+        frames = item.get("metadata", {}).get("frames")
+        # Wan duration is checked after resampling to 16 fps, in plan_windows.
+        if job.family == "h3" and item["kind"] == "video" and isinstance(frames, int) and frames < job.config.frames:
+            errors.append(
+                f"{name}: {frames} decoded frames cannot supply the requested {job.config.frames}; shorten the job or choose a longer video."
+            )
+        if job.family == "h3" and item["kind"] == "video":
+            inspection: dict[str, Any] = store.inspect_h3(dataset_id, item["id"], frames=job.config.frames)
+            audio_coverage["included"] += 1
+            audio_coverage["items"].append({"id": item["id"], "name": item["name"], **inspection})
+            errors.extend(f"{name}: {message}" for message in inspection.get("errors", []))
+            warnings.extend(f"{name}: {message}" for message in inspection.get("warnings", []))
+            if inspection.get("source") == "missing":
+                audio_coverage["missing"] += 1
+                if job.config.audio_policy == "require":
+                    errors.append(
+                        f"{name}: audio policy requires supervised audio; supply valid aligned audio or allow missing audio explicitly."
+                    )
+                else:
+                    warnings.append(
+                        f"{name}: absent audio is allowed and excluded from audio supervision; no audio is synthesized."
+                    )
+            elif not inspection.get("errors"):
+                audio_coverage["supervised"] += 1
+    return items
+
+
 def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool = False) -> dict[str, Any]:
     errors = configuration_errors(job)
     warnings = [
@@ -761,60 +866,28 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
     if not settings.python or not Path(settings.python).is_file():
         errors.append("Training Python: select an existing executable in Settings.")
     effective_items: list[dict[str, Any]] = []
-    dataset: dict[str, Any] = {}
+    datasets: list[dict[str, Any]] = []
     audio_coverage: dict[str, Any] = {"included": 0, "supervised": 0, "missing": 0, "items": []}
-    if job.dataset_id:
-        try:
-            store: Any = import_module("musubi_gui.datasets").DatasetStore(root)
-            dataset = store.get(job.dataset_id)
-            effective_items = [item for item in store.items(job.dataset_id) if not item["excluded"] and item["valid"]]
-            if not effective_items:
-                errors.append("Dataset: no valid, included media remain.")
-            if job.family == "h3" and any(item["kind"] != "video" for item in effective_items):
+    if job.datasets:
+        store: Any = import_module("musubi_gui.datasets").DatasetStore(root)
+        if len(job.datasets) > 1:
+            errors.append(
+                "Dataset: a job with several datasets can be saved and reviewed, but preparing it is not available yet."
+            )
+        for entry in job.datasets:
+            try:
+                dataset = store.get(entry.dataset_id)
+            except KeyError:
                 errors.append(
-                    "Dataset: this initial video recipe requires videos; exclude images or select another dataset."
+                    f'Dataset "{entry.dataset_id}": this dataset is no longer registered. Remove it from the job.'
                 )
-            for item in effective_items:
-                suffix = Path(item["path"]).suffix.lower()
-                supported = TRAINING_IMAGES if item["kind"] == "image" else TRAINING_VIDEOS
-                if suffix not in supported:
-                    target = "PNG, JPEG, WebP or BMP" if item["kind"] == "image" else "MP4"
-                    errors.append(
-                        f"{item['name']}: {suffix} {item['kind']} files can be previewed but are not supported by the pinned {job.family.upper()} training recipe. Convert to {target} or exclude this item before preparation."
-                    )
-                if not item["caption"]["exists"]:
-                    warnings.append(f"{item['name']}: no caption sidecar; the frozen caption will be empty.")
-                frames = item.get("metadata", {}).get("frames")
-                # Wan duration is checked after resampling to 16 fps, below.
-                if (
-                    job.family == "h3"
-                    and item["kind"] == "video"
-                    and isinstance(frames, int)
-                    and frames < job.config.frames
-                ):
-                    errors.append(
-                        f"{item['name']}: {frames} decoded frames cannot supply the requested {job.config.frames}; shorten the job or choose a longer video."
-                    )
-                if job.family == "h3" and item["kind"] == "video":
-                    inspection: dict[str, Any] = store.inspect_h3(job.dataset_id, item["id"], frames=job.config.frames)
-                    audio_coverage["included"] += 1
-                    audio_coverage["items"].append({"id": item["id"], "name": item["name"], **inspection})
-                    errors.extend(f"{item['name']}: {message}" for message in inspection.get("errors", []))
-                    warnings.extend(f"{item['name']}: {message}" for message in inspection.get("warnings", []))
-                    if inspection.get("source") == "missing":
-                        audio_coverage["missing"] += 1
-                        if job.config.audio_policy == "require":
-                            errors.append(
-                                f"{item['name']}: audio policy requires supervised audio; supply valid aligned audio or allow missing audio explicitly."
-                            )
-                        else:
-                            warnings.append(
-                                f"{item['name']}: absent audio is allowed and excluded from audio supervision; no audio is synthesized."
-                            )
-                    elif not inspection.get("errors"):
-                        audio_coverage["supervised"] += 1
-        except (ValueError, OSError, ImportError, HTTPException) as error:
-            errors.append(f"Dataset: {error}")
+                continue
+            datasets.append(dataset)
+            prefix = f'Dataset "{dataset["name"]}": ' if len(job.datasets) > 1 else ""
+            try:
+                effective_items.extend(_review_items(store, job, dataset, prefix, errors, warnings, audio_coverage))
+            except (ValueError, OSError, ImportError, HTTPException) as error:
+                errors.append(f"Dataset: {error}")
     windows = plan_windows(
         job.family,
         job.config.frames,
@@ -845,7 +918,8 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
         "warnings": warnings,
         "job_id": job.id,
         "revision": job.revision,
-        "dataset": dataset,
+        "dataset": datasets[0] if datasets else {},
+        "datasets": datasets,
         "effective_items": effective_items,
         "effective_count": len(effective_items),
         "audio_coverage": audio_coverage,

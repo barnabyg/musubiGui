@@ -13,7 +13,7 @@ type Row = {
   name: string;
   family: 'wan' | 'h3';
   revision: number;
-  dataset_id: string;
+  datasets: { dataset_id: string }[];
 };
 type Column = 'name' | 'model' | 'dataset' | 'revision' | 'run' | 'edited';
 const columns: { key: Column; label: string }[] = [
@@ -46,7 +46,8 @@ export function JobTable<T extends Row>({
   });
   const summary = (id: string) => summaries.find((item) => item.id === id);
   const dataset = (job: Row) =>
-    datasets.find((item) => item.id === job.dataset_id)?.name ?? '';
+    datasets.find((item) => item.id === job.datasets[0]?.dataset_id)?.name ??
+    '';
   const value = (job: Row, key: Column): string | number => {
     if (key === 'name') return job.name;
     if (key === 'model') return job.family;

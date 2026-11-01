@@ -19,9 +19,28 @@ revision; reopening the application retains every supported value. An outdated t
 cannot overwrite a newer revision.
 Revision allocation is serialized across backend processes sharing the same state
 directory, including saved drafts, confirmed model conversions and preset application.
-The version-one revision JSON files remain unchanged.
 Interrupted writes retain their temporary files; only published revisions appear
 in the library. Unknown storage remains blocked and preserved for repair.
+
+## Revision and export versions
+
+A version 2 revision or export lists its datasets: `datasets` holds a `dataset_id` and
+`repeats` for each one. Blank repeats inherit the job's `repeats`, which stays the
+`[general]` default, so presets are unaffected. Version 1 had a single `dataset_id`.
+
+New revisions and exports are written as version 2. Version 1 files stay readable and are
+never rewritten: a version 1 revision opens as a job with one dataset, and saving it creates
+a version 2 revision beside it. A version 1 export imports the same way, and API requests may
+still send `dataset_id`. A file that mixes the two shapes is rejected, like an unknown version
+or field.
+
+An older application version cannot read version 2. It reports the revision as unknown
+storage and blocks that job, so it only affects jobs saved after upgrading. Runs prepared
+before this change keep working, because each uses its own frozen records. Preparing a revision
+that already has a Run from before the upgrade creates a new Run rather than returning that
+one, and its unchanged caches are reused.
+
+Dataset exclusions belong to the dataset, not the job, so they apply to every job using it.
 
 ## Configuration review
 
@@ -117,7 +136,7 @@ The earlier small recipe remains as the **Smoke test** built-in presets: 256×25
 frames for Wan or 124 for H3, batch one, rank/alpha eight for Wan or four for H3, two
 steps saved every step, no state and a four-step sample with a synthetic prompt. These
 values are also the fixed fallbacks for fields missing from saved revisions and
-version 1 exports, so existing jobs keep their meaning. Acceptance fixtures use them
+exports, so existing jobs keep their meaning. Acceptance fixtures use them
 and stay quick.
 
 Changing capacity controls requires capacity validation on the
@@ -150,7 +169,7 @@ resampling are not reused.
 ## Frame extraction
 
 Frame extraction chooses which windows of each clip are cached and trained. Head
-(the default, and what earlier version 1 jobs keep) uses only each clip's first
+(the default, and what earlier jobs keep) uses only each clip's first
 window. Wan also offers chunk (consecutive non-overlapping windows), slide (a
 window every stride, emitted as `frame_stride`) and uniform (the given number of
 evenly spaced windows, emitted as `frame_sample`; at least two). The pinned `full`
@@ -202,7 +221,7 @@ ran out of VRAM at the first training step, so larger H3 sizes are not qualified
 
 Archive job hides a job you no longer need, even while it has Runs, because each Run's
 frozen snapshot records the job's identity and revision. Nothing is
-removed from disk, and version-one revision files are not rewritten: the archive is a
+removed from disk, and revision files are not rewritten: the archive is a
 separate marker file in `archived-jobs` in the state directory. An older application
 version ignores the marker and lists the job again.
 
@@ -239,10 +258,10 @@ new-draft default move to the target model's, and values you chose are kept.
 
 ## Import and export
 
-Import / export configuration downloads or accepts strict `musubi-gui-job` version 1
-JSON. Reimport creates an independent job. Unknown versions, formats and fields are
-rejected; missing optional controls in earlier version 1 exports receive documented
-family defaults. Recognised credential strings are redacted on export/import and in
+Import / export configuration downloads strict `musubi-gui-job` version 2 JSON, and
+accepts [versions 1 and 2](#revision-and-export-versions). Reimport creates an independent job. Unknown versions, formats and fields are
+rejected; missing optional controls in earlier exports receive documented family
+defaults. Recognised credential strings are redacted on export/import and in
 presets. Review local filesystem paths before sharing a configuration. No model,
 dataset or training-state payload is embedded in the export.
 

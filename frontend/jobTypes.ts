@@ -29,13 +29,14 @@ export type JobConfig = {
   sample_steps: number;
   seed: number;
 };
+export type JobDataset = { dataset_id: string; repeats: number | null };
 export type Job = {
   version: number;
   id: string;
   revision: number;
   name: string;
   family: 'wan' | 'h3';
-  dataset_id: string;
+  datasets: JobDataset[];
   config: JobConfig;
 };
 export type SetConfig = <K extends keyof JobConfig>(
