@@ -41,7 +41,7 @@ H3_MAX_BLOCKS_TO_SWAP = 48
 LOW_STEPS_WARNING = 600
 H3_IMAGE_WARNINGS = (
     "H3 images: upstream calls this one-frame training experimental, and using the result for video is unvalidated. "
-    "Short image-only and mixed runs completed on the target PC (about 5 s per image step, 85,980 bytes per image cache "
+    "Short image-only and mixed runs completed on the target PC (about 5–6 s per image step, 85,980 bytes per image cache "
     "at 640×352), which proves mechanics and not learning.",
     "H3 images: upstream advises stating the absence of sound in each image's caption, such as a sound: field describing "
     "a silent still. Captions belong to the dataset, so editing them affects every other model using it. This application doesn't change them.",

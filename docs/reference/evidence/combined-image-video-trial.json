@@ -259,6 +259,63 @@
         "musubi_tuner.minimax_h3_cache_latents:MiniMax-H3 target-audio cache summary: real_audio=4 missing_audio=0 supervised_audio_fraction=1.000000",
         "musubi_tuner.minimax_h3_train_network:MiniMax-H3 one-frame training: image batches carry a silence audio placeholder that presence gating excludes from the audio loss; pass --video_only for image-only runs to skip the au"
       ]
+    },
+    {
+      "name": "h3-mixed-application",
+      "route": "application: Datasets, Jobs, Review configuration, Prepare and start, with this branch's H3 image support",
+      "purpose": "The sections the application emits: an image_directory and a video_jsonl_file, with the flags it adds.",
+      "result": "pass",
+      "size": "640x352",
+      "video_frames": 124,
+      "rank": 8,
+      "steps": 12,
+      "added_flags": [
+        "--one_frame"
+      ],
+      "jsonl_records": 4,
+      "stages": [
+        {
+          "name": "latent_cache",
+          "exit_code": 0,
+          "elapsed_seconds": 85.6,
+          "peak_device_vram_gib": 8.39,
+          "peak_process_tree_rss_gib": 1.83
+        },
+        {
+          "name": "text_cache",
+          "exit_code": 0,
+          "elapsed_seconds": 29.3,
+          "peak_device_vram_gib": 4.07,
+          "peak_process_tree_rss_gib": 28.7
+        },
+        {
+          "name": "train",
+          "exit_code": 0,
+          "elapsed_seconds": 372.1,
+          "peak_device_vram_gib": 22.25,
+          "peak_process_tree_rss_gib": 20.84
+        },
+        {
+          "name": "generate",
+          "exit_code": 0,
+          "elapsed_seconds": 134.1,
+          "peak_device_vram_gib": 9.44,
+          "peak_process_tree_rss_gib": 29.07
+        }
+      ],
+      "step_times": {
+        "steps_timed": 11,
+        "image_steps": 8,
+        "image_step_seconds_median": 6.0,
+        "video_steps": 3,
+        "video_step_seconds_median": 75
+      },
+      "sample": {
+        "bytes": 429175,
+        "video_frames": 124,
+        "audio_samples": 165888
+      },
+      "run_application_revision": "285350d"
     }
   ],
   "not_shown": "Whether a LoRA learns from images, or whether an image-trained LoRA helps video. Those need 600+ steps and human review."
