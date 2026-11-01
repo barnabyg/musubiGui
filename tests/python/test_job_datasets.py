@@ -238,8 +238,8 @@ def test_one_dataset_stage_keys_match_the_values_from_before_dataset_lists() -> 
     }
     keys, _, _ = cache_stage_keys(one_dataset_job("wan", smoke_config("wan")), ITEMS, wan_models, CHECKOUT, ENVIRONMENT)
     assert keys == {
-        "latent_cache": "32a4df9d456ad793aca4f3983305d30df517a1cda0740a746d8b5cf786e0d779",
-        "text_cache": "80e9c8467ad3c0fd9a481b456734359a03a6bb69a389ed1ca23f272d9a1eb9ae",
+        "latent_cache": "32a4df9d456ad793aca4f3983305d30df517a1cda0740a746d8b5cf786e0d779",  # pragma: allowlist secret
+        "text_cache": "80e9c8467ad3c0fd9a481b456734359a03a6bb69a389ed1ca23f272d9a1eb9ae",  # pragma: allowlist secret
     }
     h3_models = {
         "h3_video_vae": {"path": "vae", "bytes": 1, "modified_ns": 2, "header_sha256": "h"},
@@ -250,8 +250,8 @@ def test_one_dataset_stage_keys_match_the_values_from_before_dataset_lists() -> 
         one_dataset_job("h3", smoke_config("h3")), ITEMS[1:2], h3_models, CHECKOUT, ENVIRONMENT
     )
     assert keys == {
-        "latent_cache": "dff3f3c34c43d3dc1237848b0254208e961c5b03a25928959ef01a388c0a6c38",
-        "text_cache": "9ebd1d31b3038b0ffd783813a7968b3a8af4e12f86730b0d6a10fe5fd718cfe9",
+        "latent_cache": "dff3f3c34c43d3dc1237848b0254208e961c5b03a25928959ef01a388c0a6c38",  # pragma: allowlist secret
+        "text_cache": "9ebd1d31b3038b0ffd783813a7968b3a8af4e12f86730b0d6a10fe5fd718cfe9",  # pragma: allowlist secret
     }
 
 

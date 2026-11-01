@@ -63,7 +63,8 @@ Revisit these if command sources change. Missing Torch in the application enviro
 the probe imports Torch only through the selected existing training Python.
 
 The detect-secrets allowlist marks the public upstream Git revision in `recipe.py`, and
-the public Hub commit and tokenizer file hashes in `wan_tokenizer.py`.
+the public Hub commit and tokenizer file hashes in `wan_tokenizer.py`, and the fixed stage-key
+digests of made-up inputs in `test_job_datasets.py`.
 An exact JSON-field regex also exempts 40/64-character hexadecimal `expected_upstream` / `upstream_revision`,
 `application_revision` and `header_sha256` values in reference evidence: these are public Git revisions/content hashes,
 not credentials. Re-review both exceptions whenever the identity schema or recipe pin changes.
