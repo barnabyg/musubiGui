@@ -179,10 +179,36 @@ def test_review_rejects_the_same_dataset_twice_and_a_deleted_dataset(tmp_path: P
     assert any(error.startswith(f'Dataset "{"f" * 32}"') for error in response.json()["errors"])
 
 
-def test_review_rejects_row_repeats_below_one(tmp_path: Path, client: TestClient) -> None:
-    job = client.post("/api/jobs", json={"name": "Zero", "datasets": [{"dataset_id": "d", "repeats": 0}]}).json()
+def test_review_names_the_dataset_whose_repeats_are_below_one(tmp_path: Path) -> None:
+    workspace = acceptance_workspace(tmp_path)
+    client = fixture_client(tmp_path, workspace)
+    datasets = [{"dataset_id": registered(client, workspace, "wan"), "repeats": 0}]
+    job = client.post("/api/jobs", json={"name": "Zero", "datasets": datasets}).json()
     errors = client.post(f"/api/jobs/{job['id']}/review", json={}).json()["errors"]
-    assert any(error.startswith('Dataset "d":') and "repeats" in error for error in errors)
+    assert any(error.startswith('Dataset "WAN acceptance":') and "repeats" in error for error in errors)
+
+
+def test_a_deleted_dataset_beside_a_live_one_is_reported_and_blocks_preparing(tmp_path: Path) -> None:
+    workspace = acceptance_workspace(tmp_path)
+    client = fixture_client(tmp_path, workspace)
+    live = registered(client, workspace, "wan")
+    job = client.post(
+        "/api/jobs",
+        json={
+            "name": "One gone",
+            "family": "wan",
+            "datasets": [{"dataset_id": live}, {"dataset_id": "f" * 32}],
+            "config": smoke_config("wan").model_dump(),
+        },
+    ).json()
+    review = client.post(f"/api/jobs/{job['id']}/review", json={}).json()
+    assert [error for error in review["errors"] if error.startswith("Dataset")] == [
+        f'Dataset "{"f" * 32}": this dataset is no longer registered. Remove it from the job.'
+    ]
+    assert review["effective_count"] == 1
+    prepared = client.post("/api/runs/prepare", json={"job_id": job["id"]})
+    assert prepared.status_code >= 400
+    assert "no longer registered" in prepared.text
 
 
 ITEMS: list[dict[str, Any]] = [

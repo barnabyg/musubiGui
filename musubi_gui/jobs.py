@@ -557,11 +557,6 @@ def configuration_errors(job: Job) -> list[str]:
         errors.append("Dataset: select a registered dataset.")
     if len(set(listed)) != len(listed):
         errors.append("Dataset: the same dataset is listed more than once; remove the extra row.")
-    for entry in job.datasets:
-        if entry.repeats is not None and entry.repeats < 1:
-            errors.append(
-                f'Dataset "{entry.dataset_id}": enter repeats of at least one, or leave them blank to use the job\'s.'
-            )
     if job.family == "wan":
         if config.recipe != "low-noise":
             errors.append("Recipe: only low-noise Wan training is currently available in the GUI.")
@@ -910,11 +905,15 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
                 )
                 continue
             datasets.append(dataset)
+            if entry.repeats is not None and entry.repeats < 1:
+                errors.append(
+                    f'Dataset "{dataset["name"]}": enter repeats of at least one, or leave them blank to use the job\'s.'
+                )
             prefix = f'Dataset "{dataset["name"]}": ' if len(job.datasets) > 1 else ""
             try:
                 effective_items.extend(_review_items(store, job, dataset, prefix, errors, warnings, audio_coverage))
             except (ValueError, OSError, ImportError, HTTPException) as error:
-                errors.append(f"Dataset: {error}")
+                errors.append(f'Dataset "{dataset["name"]}": {error}')
     output = Path(settings.output_root) / "jobs" / job.id
     cache = Path(settings.cache_root) / "jobs" / job.id
     snapshot = output / f"revision-{job.revision}"
