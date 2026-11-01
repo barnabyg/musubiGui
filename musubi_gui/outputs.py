@@ -271,9 +271,7 @@ def _job_view(job: dict[str, Any]) -> dict[str, Any]:
 def _comparison_view(run: dict[str, Any]) -> dict[str, Any]:
     manifest = {key: value for key, value in run.get("manifest", {}).items() if key != "datasets"}
     # Each item's id already includes its dataset, and the job lists the datasets.
-    items = [
-        {key: value for key, value in item.items() if key != "dataset_id"} for item in manifest.get("items", [])
-    ]
+    items = [{key: value for key, value in item.items() if key != "dataset_id"} for item in manifest.get("items", [])]
     return dict(
         _scrub(
             {

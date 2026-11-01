@@ -93,9 +93,7 @@ export function JobDatasets({
                       disabled={busy}
                       placeholder={String(job.config.repeats)}
                       value={entry.repeats ?? ''}
-                      onChange={(event) =>
-                        setRepeats(row, event.target.value)
-                      }
+                      onChange={(event) => setRepeats(row, event.target.value)}
                       {...problemProps(key)}
                     />
                   </label>
