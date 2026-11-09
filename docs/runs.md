@@ -12,6 +12,9 @@ details change or after an action. Action responses select the Run; a fresh deta
 request keeps a delayed response from replacing newer live progress. Logs refresh while work is running or needs recovery; a terminal Run's
 logs are fetched once on selection or a status transition. Slow responses finish before
 the next poll is scheduled, and leaving a selection cancels its outstanding requests.
+Failed detail/log requests retry after the response completes, even for an unchanged
+terminal Run. A successful retry clears that read's error and stops terminal log
+refreshes; unrelated action and capability errors remain visible.
 Output lists still refresh at stage transitions and through Refresh outputs.
 
 `GET /api/runs/summaries` returns Run ID, creation time, status, queue order, job

@@ -306,6 +306,14 @@ export function Runs({
   const [detailRefresh, setDetailRefresh] = useState(0);
   const selected = selectedId ?? '';
   const [error, setError] = useState('');
+  const [detailFailure, setDetailFailure] = useState<{
+    runId: string;
+    message: string;
+  }>();
+  const [logFailure, setLogFailure] = useState<{
+    runId: string;
+    message: string;
+  }>();
   const [notice, setNotice] = useState('');
   const [deleting, setDeleting] = useState('');
   const [busy, setBusy] = useState(false);
@@ -324,21 +332,33 @@ export function Runs({
   useEffect(() => {
     const controller = new AbortController();
     if (!selected) return;
-    void request<Run>(
-      `/api/runs/${selected}`,
-      'GET',
-      undefined,
-      controller.signal,
-    )
-      .then((record) => {
-        if (!controller.signal.aborted) setDetail(record);
-      })
-      .catch((reason: Error) => {
+    let timer: number;
+    async function refresh() {
+      try {
+        const record = await request<Run>(
+          `/api/runs/${selected}`,
+          'GET',
+          undefined,
+          controller.signal,
+        );
         if (controller.signal.aborted) return;
-        if (reason.message === 'Run not found.') forgetRun();
-        else setError(reason.message);
-      });
-    return () => controller.abort();
+        setDetail(record);
+        setDetailFailure(undefined);
+      } catch (reason) {
+        if (controller.signal.aborted) return;
+        const message = (reason as Error).message;
+        if (message === 'Run not found.') forgetRun();
+        else {
+          setDetailFailure({ runId: selected, message });
+          timer = window.setTimeout(() => void refresh(), 1000);
+        }
+      }
+    }
+    void refresh();
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
   }, [selected, changeKey, detailRefresh]);
   const run = detail?.id === selected ? detail : undefined;
   useEffect(() => {
@@ -381,16 +401,22 @@ export function Runs({
       'uncertain',
     ].includes(status);
     async function refresh() {
+      let succeeded = false;
       try {
         const result = await request<{
           text: string;
           progress: Progress | null;
         }>(`/api/runs/${runId}/logs`, 'GET', undefined, controller.signal);
-        if (!controller.signal.aborted) setLive({ runId: runId!, ...result });
+        if (!controller.signal.aborted) {
+          setLive({ runId: runId!, ...result });
+          setLogFailure(undefined);
+          succeeded = true;
+        }
       } catch (reason) {
-        if (!controller.signal.aborted) setError((reason as Error).message);
+        if (!controller.signal.aborted)
+          setLogFailure({ runId: runId!, message: (reason as Error).message });
       } finally {
-        if (live && !controller.signal.aborted)
+        if ((live || !succeeded) && !controller.signal.aborted)
           timer = window.setTimeout(() => void refresh(), 1000);
       }
     }
@@ -407,6 +433,9 @@ export function Runs({
     .sort((a, b) => a.order - b.order);
   const ownerRun = runs.find((record) => record.id === owner?.run_id);
   const current = live?.runId === run?.id ? live : null;
+  const readError =
+    (detailFailure?.runId === selected ? detailFailure.message : '') ||
+    (logFailure && logFailure.runId === run?.id ? logFailure.message : '');
   const showFiles = run && run.status !== 'deleting' && run.id !== deleting;
   // Changes whenever the Run or one of its stages does, so finished work appears without a click.
   const outputs = useRunOutputs(
@@ -501,9 +530,9 @@ export function Runs({
           support.
         </p>
       )}
-      {(error || history.error) && (
+      {(error || history.error || readError) && (
         <p role="alert" className="error">
-          {error || history.error}
+          {error || history.error || readError}
         </p>
       )}
       <p role="status">
