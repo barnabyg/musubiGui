@@ -339,7 +339,7 @@ In Configuration review, follow an item error or warning to open its media previ
 caption editor or H3 audio inspector. The link identifies the dataset and item even
 when several datasets contain the same filename. Captions, audio sources and exclusions
 are shared by all jobs using that dataset. **Return to job and review** waits for
-caption saves, reopens the originating job and checks its current inputs again. Warnings
+caption saves, bulk changes, uploads and rescans, reopens the originating job and checks its current inputs again. Warnings
 allow preparation when all errors have been resolved.
 
 To try this from the repository root on Windows with the acceptance prerequisites:

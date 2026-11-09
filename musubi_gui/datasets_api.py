@@ -162,7 +162,9 @@ def dataset_router(root: Path) -> APIRouter:
         return result(lambda: uploads.cancel(dataset_id, upload_id))
 
     @router.post("/{dataset_id}/scan")
-    def scan(dataset_id: str, background: BackgroundTasks) -> dict[str, Any]:
+    def scan(dataset_id: str, background: BackgroundTasks, wait: bool = False) -> dict[str, Any]:
+        if wait:
+            return result(lambda: store.scan(dataset_id))
         dataset = result(lambda: store.get(dataset_id))
         background.add_task(store.scan, dataset_id)
         return dataset

@@ -83,6 +83,7 @@ export function Datasets({
   const [dataset, setDataset] = useState<Dataset | null>(null);
   const [items, setItems] = useState<DatasetItem[]>([]);
   const [audioBusy, setAudioBusy] = useState(false);
+  const [returning, setReturning] = useState(false);
   const [preview, setPreview] = useState<DatasetItem | null>(null);
   const active = repair
     ? (items.find((item) => item.id === repair.itemId) ?? null)
@@ -138,12 +139,17 @@ export function Datasets({
   useEffect(() => {
     onEditorChange?.(screen === 'edit');
   }, [screen, onEditorChange]);
-  const refresh = useCallback(async (id?: string) => {
+  const currentSelection = useRef(selectedId);
+  useEffect(() => {
+    currentSelection.current = selectedId;
+  }, [selectedId]);
+  const refresh = useCallback(async (id?: string, onlyIfSelected = false) => {
     const list = await api<Dataset[]>('/api/datasets');
     const requested = performance.now();
     const contents = id
       ? await api<DatasetItem[]>(`/api/datasets/${id}/items`)
       : [];
+    if (onlyIfSelected && currentSelection.current !== id) return list;
     setDatasets(list);
     if (id) {
       setDataset(list.find((value) => value.id === id) ?? null);
@@ -195,7 +201,8 @@ export function Datasets({
     return () => window.clearInterval(timer);
   }, [visible, screen, datasets, refresh]);
   async function select(item: DatasetItem | null) {
-    if (!(await captions.flushAll())) return;
+    const origin = window.location.hash;
+    if (!(await captions.flushAll()) || window.location.hash !== origin) return;
     setActive(item);
   }
   const followRoute = useEffectEvent(() => {
@@ -206,15 +213,23 @@ export function Datasets({
   useEffect(() => followRoute(), [selectedId, loaded]);
   async function returnToJob() {
     if (!repair) return;
-    if (!(await captions.flushAll())) {
-      reviewFailed();
-      return;
+    const origin = window.location.hash;
+    setReturning(true);
+    try {
+      const saved = await captions.flushAll();
+      if (window.location.hash !== origin) return;
+      if (!saved) {
+        reviewFailed();
+        return;
+      }
+      window.location.hash = formatRoute({
+        screen: 'Jobs',
+        id: repair.jobId,
+        review: true,
+      });
+    } finally {
+      setReturning(false);
     }
-    window.location.hash = formatRoute({
-      screen: 'Jobs',
-      id: repair.jobId,
-      review: true,
-    });
   }
   async function open(id: string, fromRoute = false) {
     // A job repair can visit another dataset while this draft remains available to resolve.
@@ -333,10 +348,14 @@ export function Datasets({
   }
   async function rescan() {
     if (!dataset) return;
-    if (!(await captions.flushAll())) return;
     setBusy(true);
     try {
-      await api(`/api/datasets/${dataset.id}/scan`, 'POST', {});
+      if (!(await captions.flushAll())) return;
+      await api(
+        `/api/datasets/${dataset.id}/scan${repair ? '?wait=true' : ''}`,
+        'POST',
+        {},
+      );
       await refresh(dataset.id);
     } catch (reason) {
       setError((reason as Error).message);
@@ -369,14 +388,20 @@ export function Datasets({
       {repair && (
         <div className="dataset-repair">
           <button
-            disabled={busy || audioBusy}
+            disabled={
+              busy ||
+              audioBusy ||
+              returning ||
+              ['pending', 'scanning'].includes(dataset?.scan.state ?? '')
+            }
             onClick={() => void returnToJob()}
           >
             <ArrowLeft /> Return to job and review
           </button>
           <span>
-            Caption edits, audio sources and exclusions apply to every job using
-            this dataset.
+            {returning
+              ? 'Waiting for dataset changes…'
+              : 'Caption edits, audio sources and exclusions apply to every job using this dataset.'}
           </span>
         </div>
       )}
@@ -485,7 +510,7 @@ export function Datasets({
         />
       )}
       {screen === 'edit' && dataset && (
-        <section className="dataset-content">
+        <section className="dataset-content" inert={returning}>
           {dataset.missing && (
             <p role="alert" className="error dataset-missing">
               Dataset folder is missing. Restore its original location and
@@ -505,8 +530,13 @@ export function Datasets({
             visibleItems={visibleItems}
             selected={selected}
             setSelected={setSelected}
-            setActive={setActive}
-            refresh={refresh}
+            onChanged={async () => {
+              // A background repair may finish after navigation. Keep the current URL.
+              if (currentSelection.current === dataset.id) {
+                setPreview(null);
+                await refresh(dataset.id, true);
+              }
+            }}
           />
           <div className={`dataset-workspace ${active ? 'has-viewer' : ''}`}>
             <DatasetGallery

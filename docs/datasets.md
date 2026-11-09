@@ -38,7 +38,12 @@ changes the column count, but the active tile stays in view when it opens or clo
 managed dataset and stays open while files upload. Closing or switching panels keeps
 uploads and tool state intact. Panels and the preview overlay the gallery on narrow
 windows, each with its own close control. A registered folder is populated by adding
-files on disk and choosing **Re-scan** in **Dataset settings**.
+files on disk and choosing **Re-scan** in **Dataset settings**. When repairing job
+inputs, the editor requests `POST /api/datasets/{id}/scan?wait=true` so returning
+to the job uses the refreshed index. Omitting `wait` starts a background scan.
+
+**Pause uploads** pauses remaining files. A file already submitted for validation
+finishes publication and scanning before the job can review the dataset again.
 
 **Delete** requires confirmation naming the dataset and removes its library entry
 and indexed items only. Original and uploaded media, caption sidecars, thumbnails,
