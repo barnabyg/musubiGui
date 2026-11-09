@@ -12,7 +12,7 @@ import { confirmDialog } from './ConfirmDialog';
 import {
   type Caption,
   type CaptionSession,
-  useCaptionSession,
+  useCaptionSessions,
 } from './captionSession';
 import { DatasetCreate } from './DatasetCreate';
 import { type CaptionEditing, DatasetGallery } from './DatasetGallery';
@@ -62,7 +62,7 @@ export function Datasets({
   defaultFolder = '',
   datasetRoots,
   onEditorChange,
-  onCaptionSession,
+  onCaptionSessions,
 }: {
   visible?: boolean;
   selectedId?: string;
@@ -71,7 +71,7 @@ export function Datasets({
   defaultFolder?: string;
   datasetRoots?: string[];
   onEditorChange?: (editing: boolean) => void;
-  onCaptionSession: (session: CaptionSession) => void;
+  onCaptionSessions: (sessions: CaptionSession[]) => void;
 }) {
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [screen, setScreen] = useState<'library' | 'create' | 'edit'>(
@@ -121,10 +121,11 @@ export function Datasets({
       values.map((item) => (item.id === id ? { ...item, caption } : item)),
     );
   }, []);
-  const captions = useCaptionSession(dataset?.id ?? '', onCaptionSaved);
+  const sessions = useCaptionSessions(dataset?.id ?? '', onCaptionSaved);
+  const captions = sessions[0];
   useEffect(() => {
-    onCaptionSession(captions);
-  }, [onCaptionSession, captions]);
+    onCaptionSessions(sessions);
+  }, [onCaptionSessions, sessions]);
   useEffect(() => {
     captions.sync(items);
   }, [captions, items]);
@@ -216,7 +217,8 @@ export function Datasets({
     });
   }
   async function open(id: string, fromRoute = false) {
-    if (!(await captions.flushAll())) {
+    // A job repair can visit another dataset while this draft remains available to resolve.
+    if (!(fromRoute && repair) && !(await captions.flushAll())) {
       onSelect?.(dataset?.id, true);
       return;
     }
@@ -351,7 +353,7 @@ export function Datasets({
       })
     : matchingItems(items, query, filter, sort, selected);
   function reviewFailed() {
-    const failed = captions.firstFailed();
+    const failed = captions.firstFailed()?.item;
     if (failed) setActive(itemsById.get(failed.id) ?? failed);
   }
   return (

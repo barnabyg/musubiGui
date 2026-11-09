@@ -156,7 +156,7 @@ function App() {
   const position = useRef(initialPosition);
   const [jobDirty, setJobDirty] = useState(false);
   const [datasetEditor, setDatasetEditor] = useState(false);
-  const [captions, setCaptions] = useState<CaptionSession | null>(null);
+  const [captions, setCaptions] = useState<CaptionSession[]>([]);
   useRunSignals(screen);
   const go = useCallback((target: Screen, id?: string, replace = false) => {
     currentScreen.current = target;
@@ -409,7 +409,7 @@ function App() {
       >
         <div hidden={landing || screen !== 'Datasets'}>
           <Datasets
-            onCaptionSession={setCaptions}
+            onCaptionSessions={setCaptions}
             onEditorChange={setDatasetEditor}
             visible={!landing && screen === 'Datasets'}
             selectedId={selection.Datasets}

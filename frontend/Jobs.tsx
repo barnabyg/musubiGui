@@ -119,17 +119,16 @@ export function Jobs(props: JobsProps) {
         prepareReason={prepareReason}
         captionRepair={
           job &&
-          failedCaption &&
-          props.captions && (
+          failedCaption && (
             <a
               href={datasetItemRoute(
-                props.captions.datasetId,
-                failedCaption.id,
+                failedCaption.datasetId,
+                failedCaption.item.id,
                 'caption',
                 job.id,
               )}
             >
-              Resolve caption for {failedCaption.name}
+              Resolve caption for {failedCaption.item.name}
             </a>
           )
         }
