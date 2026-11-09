@@ -1,6 +1,7 @@
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { confirmDialog } from './ConfirmDialog';
 import { apiClient } from './api';
+import { type CaptionSession, useCaptionSummary } from './captionSession';
 import { jobFields } from './jobFields';
 import type {
   ConversionPreview,
@@ -15,6 +16,7 @@ import type { JobSummary } from './JobTable';
 import { plural } from './labels';
 
 export type JobsProps = {
+  captions: CaptionSession | null;
   selectedId?: string;
   reviewOnOpen?: boolean;
   onSelect?: (id?: string, replace?: boolean) => void;
@@ -26,6 +28,7 @@ const request = apiClient('Check the entered values and retry.');
 
 // All of the Jobs screen's state, and everything it does to a job.
 export function useJobEditor({
+  captions,
   selectedId,
   reviewOnOpen,
   onSelect,
@@ -41,6 +44,14 @@ export function useJobEditor({
   const [models, setModels] = useState<Record<string, string>>({});
   const [modelRoots, setModelRoots] = useState<string[]>([]);
   const [job, setJob] = useState<Job | null>(null);
+  // Dataset navigation already flushes the previous session before switching.
+  // Only the mounted dataset editor can hold in-flight writes or retained drafts.
+  const jobCaptions =
+    captions &&
+    job?.datasets.some(({ dataset_id }) => dataset_id === captions.datasetId)
+      ? captions
+      : null;
+  const captionSummary = useCaptionSummary(jobCaptions);
   const [dirty, setDirty] = useState(false);
   // Busy until the initial load lands, so it cannot replace drafts created meanwhile.
   const [loading, setLoading] = useState(true);
@@ -270,6 +281,7 @@ export function useJobEditor({
   async function prepare(start = false) {
     if (!job || !review?.valid || dirty) return;
     await perform(async () => {
+      if (jobCaptions && !(await jobCaptions.flushAll())) return;
       let run: PreparedRun;
       try {
         run = await request<PreparedRun>('/api/runs/prepare', 'POST', {
@@ -454,13 +466,17 @@ export function useJobEditor({
       setStatus('Configuration imported as an independent draft');
     });
   }
-  const prepareReason = dirty
-    ? 'Choose Review configuration to save these edits and check them before preparing.'
-    : !review
-      ? 'Choose Review configuration before preparing.'
-      : !review.valid
-        ? 'Resolve the review errors before preparing.'
-        : '';
+  function prepareReason() {
+    if (captionSummary.failed)
+      return 'Resolve the unsaved captions in this job’s datasets before preparing.';
+    if (captionSummary.unsaved)
+      return 'Waiting for caption saves in this job’s datasets.';
+    if (dirty)
+      return 'Choose Review configuration to save these edits and check them before preparing.';
+    if (!review) return 'Choose Review configuration before preparing.';
+    if (!review.valid) return 'Resolve the review errors before preparing.';
+    return '';
+  }
   return {
     jobs,
     archived,
@@ -503,6 +519,9 @@ export function useJobEditor({
     convert,
     exportConfiguration,
     importConfiguration,
-    prepareReason,
+    prepareReason: prepareReason(),
+    failedCaption: captionSummary.failed
+      ? jobCaptions?.firstFailed()
+      : undefined,
   };
 }

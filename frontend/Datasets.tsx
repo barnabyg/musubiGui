@@ -9,7 +9,11 @@ import { ArrowLeft } from 'lucide-react';
 import './datasets.css';
 import { apiClient } from './api';
 import { confirmDialog } from './ConfirmDialog';
-import { type Caption, useCaptionSession } from './captionSession';
+import {
+  type Caption,
+  type CaptionSession,
+  useCaptionSession,
+} from './captionSession';
 import { DatasetCreate } from './DatasetCreate';
 import { type CaptionEditing, DatasetGallery } from './DatasetGallery';
 import { matchingItems } from './datasetItems';
@@ -58,6 +62,7 @@ export function Datasets({
   defaultFolder = '',
   datasetRoots,
   onEditorChange,
+  onCaptionSession,
 }: {
   visible?: boolean;
   selectedId?: string;
@@ -66,6 +71,7 @@ export function Datasets({
   defaultFolder?: string;
   datasetRoots?: string[];
   onEditorChange?: (editing: boolean) => void;
+  onCaptionSession: (session: CaptionSession) => void;
 }) {
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [screen, setScreen] = useState<'library' | 'create' | 'edit'>(
@@ -116,6 +122,9 @@ export function Datasets({
     );
   }, []);
   const captions = useCaptionSession(dataset?.id ?? '', onCaptionSaved);
+  useEffect(() => {
+    onCaptionSession(captions);
+  }, [onCaptionSession, captions]);
   useEffect(() => {
     captions.sync(items);
   }, [captions, items]);

@@ -263,3 +263,14 @@ export function useCaption(session: CaptionSession, item: DatasetItem) {
     useCallback(() => session.get(item), [session, item]),
   );
 }
+
+const emptySummary = { unsaved: 0, saving: 0, failed: 0 };
+const noSession = () => emptySummary;
+const noSubscription = () => () => {};
+
+export function useCaptionSummary(session: CaptionSession | null) {
+  return useSyncExternalStore(
+    session?.subscribeSummary ?? noSubscription,
+    session?.getSummary ?? noSession,
+  );
+}

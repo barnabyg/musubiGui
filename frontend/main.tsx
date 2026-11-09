@@ -15,6 +15,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { apiClient } from './api';
+import type { CaptionSession } from './captionSession';
 import './style.css';
 import { ConfirmDialogHost, confirmDialog } from './ConfirmDialog';
 import { Jobs } from './Jobs';
@@ -155,6 +156,7 @@ function App() {
   const position = useRef(initialPosition);
   const [jobDirty, setJobDirty] = useState(false);
   const [datasetEditor, setDatasetEditor] = useState(false);
+  const [captions, setCaptions] = useState<CaptionSession | null>(null);
   useRunSignals(screen);
   const go = useCallback((target: Screen, id?: string, replace = false) => {
     currentScreen.current = target;
@@ -407,6 +409,7 @@ function App() {
       >
         <div hidden={landing || screen !== 'Datasets'}>
           <Datasets
+            onCaptionSession={setCaptions}
             onEditorChange={setDatasetEditor}
             visible={!landing && screen === 'Datasets'}
             selectedId={selection.Datasets}
@@ -418,6 +421,7 @@ function App() {
         </div>
         {landing ? null : screen === 'Jobs' ? (
           <Jobs
+            captions={captions}
             selectedId={selection.Jobs}
             reviewOnOpen={route.review}
             onSelect={selectJob}

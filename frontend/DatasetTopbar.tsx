@@ -1,6 +1,6 @@
-import { useSyncExternalStore, type RefObject } from 'react';
+import type { RefObject } from 'react';
 import { ArrowLeft, Settings as SettingsIcon } from 'lucide-react';
-import type { CaptionSession } from './captionSession';
+import { type CaptionSession, useCaptionSummary } from './captionSession';
 import { hasCaption } from './datasetItems';
 import type { Dataset, DatasetItem } from './Datasets';
 
@@ -48,10 +48,7 @@ export function DatasetTopbar({
   ) => void;
   selected: Set<string>;
 }) {
-  const captionSummary = useSyncExternalStore(
-    captions.subscribeSummary,
-    captions.getSummary,
-  );
+  const captionSummary = useCaptionSummary(captions);
   return (
     <div className="dataset-topbar">
       <button

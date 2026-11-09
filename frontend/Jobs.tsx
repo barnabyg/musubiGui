@@ -7,6 +7,7 @@ import { JobControls, JobIdentity } from './JobSettings';
 import { JobTable } from './JobTable';
 import { JobTransfer } from './JobTransfer';
 import { runStatus } from './runStatus';
+import { datasetItemRoute } from './route';
 import './jobs.css';
 
 export function Jobs(props: JobsProps) {
@@ -54,6 +55,7 @@ export function Jobs(props: JobsProps) {
     exportConfiguration,
     importConfiguration,
     prepareReason,
+    failedCaption,
   } = useJobEditor(props);
   const { actionBar, section, goToSection } = useJobSections(!!job);
   return (
@@ -115,6 +117,22 @@ export function Jobs(props: JobsProps) {
         busy={busy}
         review={review}
         prepareReason={prepareReason}
+        captionRepair={
+          job &&
+          failedCaption &&
+          props.captions && (
+            <a
+              href={datasetItemRoute(
+                props.captions.datasetId,
+                failedCaption.id,
+                'caption',
+                job.id,
+              )}
+            >
+              Resolve caption for {failedCaption.name}
+            </a>
+          )
+        }
         error={error}
         section={section}
         goToSection={goToSection}
@@ -186,6 +204,7 @@ export function Jobs(props: JobsProps) {
           )}
           {review && (
             <JobReview
+              prepareReason={prepareReason}
               job={job}
               review={review}
               reviewField={fields.reviewField}

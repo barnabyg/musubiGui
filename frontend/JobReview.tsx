@@ -34,10 +34,12 @@ export function JobReview({
   job,
   review,
   reviewField,
+  prepareReason,
 }: {
   job: Job;
   review: Review;
   reviewField: JobFields['reviewField'];
+  prepareReason: string;
 }) {
   const reviewPanel = useRef<HTMLElement>(null);
   useEffect(() => {
@@ -55,7 +57,9 @@ export function JobReview({
       <div className={`review-verdict ${review.valid ? 'passed' : 'failed'}`}>
         <strong>
           {review.valid
-            ? 'Review passed. Ready for preparation.'
+            ? prepareReason
+              ? 'Review passed.'
+              : 'Review passed. Ready for preparation.'
             : `Review failed: resolve ${plural(review.errors.length, 'error')} before preparation.`}
         </strong>
         <span>
