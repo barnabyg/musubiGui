@@ -330,6 +330,27 @@ defaults. Recognised credential strings are redacted on export/import and in
 presets. Review local filesystem paths before sharing a configuration. No model,
 dataset or training-state payload is embedded in the export.
 
+## Repairing reviewed dataset items
+
+In Configuration review, follow an item error or warning to open its media preview,
+caption editor or H3 audio inspector. The link identifies the dataset and item even
+when several datasets contain the same filename. Captions, audio sources and exclusions
+are shared by all jobs using that dataset. **Return to job and review** waits for
+caption saves, reopens the originating job and checks its current inputs again. Warnings
+allow preparation when all errors have been resolved.
+
+To try this from the repository root on Windows with the acceptance prerequisites:
+
+```powershell
+.\acceptance.cmd --workspace ".cache/ux-check-$([guid]::NewGuid().ToString('N'))"
+```
+
+Create an H3 job using **Mixed media and invalid item**, review it, and use Enter on
+the **motion.mp4** supervised-audio error. The H3 inspector opens for that clip.
+Return to the job, choose the allow-missing audio policy and review again. The audio
+policy message now appears as a warning. Open the missing-caption warning for
+**blue.png**, enter a caption and return. That warning should disappear.
+
 ## Checks
 
 Focused checks: `npm.cmd run typecheck` and

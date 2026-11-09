@@ -1403,7 +1403,7 @@ test('a Wan job combines an image dataset and a video dataset through review, re
   }
 });
 
-test('a review error about a dataset focuses its row, and a deleted dataset can be removed', async ({
+test('a review error about an empty dataset opens its gallery, and a deleted dataset can be removed', async ({
   page,
 }) => {
   const app = await runWorkspace();
@@ -1423,12 +1423,20 @@ test('a review error about a dataset focuses its row, and a deleted dataset can 
     await page
       .getByRole('button', { name: 'Review configuration', exact: true })
       .click();
-    await page
-      .getByRole('button', { name: /^Dataset "Nothing here": no valid/ })
-      .click();
     const repeats = page.getByLabel('Repeats for Nothing here');
-    await expect(repeats).toBeFocused();
-    await expect(repeats).toHaveAttribute('aria-invalid', 'true');
+    await expect(repeats).not.toHaveAttribute('aria-invalid', 'true');
+    await page
+      .getByRole('link', { name: /^Dataset "Nothing here": no valid/ })
+      .press('Enter');
+    await expect(
+      page.getByRole('heading', { name: 'Nothing here' }),
+    ).toBeVisible();
+    await page
+      .getByRole('button', { name: 'Return to job and review' })
+      .click();
+    await expect(
+      page.getByRole('link', { name: /^Dataset "Nothing here": no valid/ }),
+    ).toBeVisible();
 
     const deleted = await page.request.delete(
       `${app.url}/api/datasets/${dataset.id}`,

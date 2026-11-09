@@ -16,6 +16,7 @@ import { plural } from './labels';
 
 export type JobsProps = {
   selectedId?: string;
+  reviewOnOpen?: boolean;
   onSelect?: (id?: string, replace?: boolean) => void;
   onRun?: (id: string) => void;
   onDirtyChange?: (dirty: boolean) => void;
@@ -26,6 +27,7 @@ const request = apiClient('Check the entered values and retry.');
 // All of the Jobs screen's state, and everything it does to a job.
 export function useJobEditor({
   selectedId,
+  reviewOnOpen,
   onSelect,
   onRun,
   onDirtyChange,
@@ -41,7 +43,9 @@ export function useJobEditor({
   const [job, setJob] = useState<Job | null>(null);
   const [dirty, setDirty] = useState(false);
   // Busy until the initial load lands, so it cannot replace drafts created meanwhile.
-  const [busy, setBusy] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [working, setBusy] = useState(false);
+  const busy = loading || working;
   const [status, setStatus] = useState('Loading jobs…');
   const [error, setError] = useState('');
   const [review, setReview] = useState<Review | null>(null);
@@ -74,14 +78,19 @@ export function useJobEditor({
         setStatus('Jobs loaded');
       })
       .catch((reason: Error) => setError(reason.message))
-      .finally(() => setBusy(false));
+      .finally(() => setLoading(false));
   }, []);
   // Follows the URL: a link, refresh or browser history can name a job that isn't open here.
   const followRoute = useEffectEvent((items: Job[]) => {
     if (selectedId === job?.id) return;
     const found = items.find((item) => item.id === selectedId);
     if (found) {
-      select(found);
+      if (reviewOnOpen) {
+        setJob(found);
+        setDirty(false);
+        onSelect?.(found.id, true);
+        void perform(() => reviewSaved(found));
+      } else select(found);
       return;
     }
     setJob(null);
@@ -93,6 +102,7 @@ export function useJobEditor({
     }
   });
   useEffect(() => {
+    if (loading) return;
     let stale = false;
     void request<Job[]>('/api/jobs')
       .then((items) => {
@@ -104,7 +114,7 @@ export function useJobEditor({
     return () => {
       stale = true;
     };
-  }, [selectedId]);
+  }, [selectedId, loading]);
   // A new draft's name is the first thing worth changing; the field is disabled until the request lands.
   useEffect(() => {
     if (focusName.current && !busy && nameField.current) {
@@ -228,22 +238,25 @@ export function useJobEditor({
       await persist(job);
     });
   }
+  async function reviewSaved(current: Job) {
+    const result = await request<Review>(
+      `/api/jobs/${current.id}/review`,
+      'POST',
+      {},
+    );
+    setReview(result);
+    setStatus(
+      result.valid
+        ? `Review passed for revision ${current.revision}`
+        : `Review failed for revision ${current.revision}: ${plural(result.errors.length, 'error')}`,
+    );
+  }
   async function inspect() {
     if (!job) return;
     await perform(async () => {
       // A failed save throws here, so the review never describes something other than the edits on screen.
       const current = dirty ? await persist(job) : job;
-      const result = await request<Review>(
-        `/api/jobs/${current.id}/review`,
-        'POST',
-        {},
-      );
-      setReview(result);
-      setStatus(
-        result.valid
-          ? `Review passed for revision ${current.revision}`
-          : `Review failed for revision ${current.revision}: ${plural(result.errors.length, 'error')}`,
-      );
+      await reviewSaved(current);
     });
   }
   async function prepare(start = false) {

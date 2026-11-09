@@ -703,13 +703,25 @@ def disk_preflight(
     return {"estimate": estimate, "volumes": volumes}
 
 
+class ReviewMessages(list[str]):
+    """Text stays compatible with API clients; targets are indexed so identical messages can link to different items."""
+
+    def __init__(self, messages: list[str]) -> None:
+        super().__init__(messages)
+        self.targets: dict[int, dict[str, str]] = {}
+
+    def add(self, message: str, **target: str) -> None:
+        self.targets[len(self)] = target
+        self.append(message)
+
+
 def _review_items(
     store: Any,
     job: Job,
     dataset: dict[str, Any],
     prefix: str,
-    errors: list[str],
-    warnings: list[str],
+    errors: ReviewMessages,
+    warnings: ReviewMessages,
     audio_coverage: dict[str, Any],
 ) -> list[dict[str, Any]]:
     """Check one listed dataset's included items; returns them labelled with the dataset they came from."""
@@ -718,39 +730,56 @@ def _review_items(
         {**item, "dataset_id": dataset_id} for item in store.items(dataset_id) if not item["excluded"] and item["valid"]
     ]
     if not items:
-        errors.append(f'Dataset "{dataset["name"]}": no valid, included media remain.')
+        errors.add(f'Dataset "{dataset["name"]}": no valid, included media remain.', dataset_id=dataset_id)
     for item in items:
         name = prefix + item["name"]
+        target_item = {"dataset_id": dataset_id, "item_id": item["id"]}
         suffix = Path(item["path"]).suffix.lower()
         supported = TRAINING_IMAGES if item["kind"] == "image" else TRAINING_VIDEOS
         if suffix not in supported:
             target = "PNG, JPEG, WebP or BMP" if item["kind"] == "image" else "MP4"
-            errors.append(
-                f"{name}: {suffix} {item['kind']} files can be previewed but are not supported by the pinned {job.family.upper()} training recipe. Convert to {target} or exclude this item before preparation."
+            errors.add(
+                f"{name}: {suffix} {item['kind']} files can be previewed but are not supported by the pinned {job.family.upper()} training recipe. Convert to {target} or exclude this item before preparation.",
+                view="preview",
+                **target_item,
             )
         if not item["caption"]["exists"]:
-            warnings.append(f"{name}: no caption sidecar; the frozen caption will be empty.")
+            warnings.add(
+                f"{name}: no caption sidecar; the frozen caption will be empty.", view="caption", **target_item
+            )
         frames = item.get("metadata", {}).get("frames")
         # Wan duration is checked after resampling to 16 fps, in plan_windows.
         if job.family == "h3" and item["kind"] == "video" and isinstance(frames, int) and frames < job.config.frames:
-            errors.append(
-                f"{name}: {frames} decoded frames cannot supply the requested {job.config.frames}; shorten the job or choose a longer video."
+            errors.add(
+                f"{name}: {frames} decoded frames cannot supply the requested {job.config.frames}; shorten the job or choose a longer video.",
+                view="preview",
+                **target_item,
             )
         if job.family == "h3" and item["kind"] == "video":
-            inspection: dict[str, Any] = store.inspect_h3(dataset_id, item["id"], frames=job.config.frames)
             audio_coverage["included"] += 1
+            try:
+                inspection: dict[str, Any] = store.inspect_h3(dataset_id, item["id"], frames=job.config.frames)
+            except (ValueError, OSError, HTTPException) as error:
+                errors.add(f"{name}: {error}", view="audio", **target_item)
+                continue
             audio_coverage["items"].append({"id": item["id"], "name": item["name"], **inspection})
-            errors.extend(f"{name}: {message}" for message in inspection.get("errors", []))
-            warnings.extend(f"{name}: {message}" for message in inspection.get("warnings", []))
+            for message in inspection.get("errors", []):
+                errors.add(f"{name}: {message}", view="audio", **target_item)
+            for message in inspection.get("warnings", []):
+                warnings.add(f"{name}: {message}", view="audio", **target_item)
             if inspection.get("source") == "missing":
                 audio_coverage["missing"] += 1
                 if job.config.audio_policy == "require":
-                    errors.append(
-                        f"{name}: audio policy requires supervised audio; supply valid aligned audio or allow missing audio explicitly."
+                    errors.add(
+                        f"{name}: audio policy requires supervised audio; supply valid aligned audio or allow missing audio explicitly.",
+                        view="audio",
+                        **target_item,
                     )
                 else:
-                    warnings.append(
-                        f"{name}: absent audio is allowed and excluded from audio supervision; no audio is synthesized."
+                    warnings.add(
+                        f"{name}: absent audio is allowed and excluded from audio supervision; no audio is synthesized.",
+                        view="audio",
+                        **target_item,
                     )
             elif not inspection.get("errors"):
                 audio_coverage["supervised"] += 1
@@ -784,10 +813,16 @@ def _reshaped_image_warning(job: Job, dataset: dict[str, Any], items: list[dict[
     ]
 
 
-def _plan_job_windows(job: Job, datasets: list[dict[str, Any]], items: list[dict[str, Any]]) -> dict[str, Any]:
+def _plan_job_windows(
+    job: Job,
+    datasets: list[dict[str, Any]],
+    items: list[dict[str, Any]],
+    errors: ReviewMessages,
+    warnings: ReviewMessages,
+) -> dict[str, Any]:
     """plan_windows within each dataset, because frame-rate sections and their warnings belong to one dataset."""
     config = job.config
-    merged: dict[str, Any] = {"errors": [], "warnings": [], "items": [], "total": 0, "source_rates": []}
+    merged: dict[str, Any] = {"items": [], "total": 0, "source_rates": []}
     for dataset in datasets or [{"id": "", "name": ""}]:
         prefix = f'Dataset "{dataset["name"]}": ' if len(job.datasets) > 1 else ""
         plan = plan_windows(
@@ -798,8 +833,12 @@ def _plan_job_windows(job: Job, datasets: list[dict[str, Any]], items: list[dict
             stride=config.frame_stride,
             sample=config.frame_sample,
         )
-        merged["errors"].extend(prefix + message for message in plan["errors"])
-        merged["warnings"].extend(prefix + message for message in plan["warnings"])
+        for level, messages in [("errors", errors), ("warnings", warnings)]:
+            for item_id, message in plan[level]:
+                if item_id:
+                    messages.add(prefix + message, dataset_id=dataset["id"], item_id=item_id, view="preview")
+                else:
+                    messages.append(prefix + message)
         merged["items"].extend(plan["items"])
         merged["total"] += plan["total"]
         merged["source_rates"] = sorted({*merged["source_rates"], *plan["source_rates"]})
@@ -833,13 +872,15 @@ def _duplicate_warnings(root: Path, datasets: list[dict[str, Any]], items: list[
 
 
 def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool = False) -> dict[str, Any]:
-    errors = configuration_errors(job)
-    warnings = [
-        "Wan has short-run execution evidence on the 96 GB host using the documented native and converted weights; other artifacts and larger workloads need qualification."
-        if job.family == "wan"
-        else "H3 has short-run execution evidence on the 96 GB host; training quality and larger workloads remain unqualified.",
-        "Changes to geometry, duration or memory controls need their own capacity validation.",
-    ]
+    errors = ReviewMessages(configuration_errors(job))
+    warnings = ReviewMessages(
+        [
+            "Wan has short-run execution evidence on the 96 GB host using the documented native and converted weights; other artifacts and larger workloads need qualification."
+            if job.family == "wan"
+            else "H3 has short-run execution evidence on the 96 GB host; training quality and larger workloads remain unqualified.",
+            "Changes to geometry, duration or memory controls need their own capacity validation.",
+        ]
+    )
     if 0 < job.config.steps < LOW_STEPS_WARNING:
         warnings.append(
             f"Training steps: {job.config.steps} steps can check that training runs, but expect no visible change "
@@ -911,29 +952,29 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
             try:
                 dataset = store.get(entry.dataset_id)
             except KeyError:
-                errors.append(
-                    f'Dataset "{entry.dataset_id}": this dataset is no longer registered. Remove it from the job.'
+                errors.add(
+                    f'Dataset "{entry.dataset_id}": this dataset is no longer registered. Remove it from the job.',
+                    field=f"remove-dataset-{entry.dataset_id}",
                 )
                 continue
             datasets.append(dataset)
             if entry.repeats is not None and entry.repeats < 1:
-                errors.append(
-                    f'Dataset "{dataset["name"]}": enter repeats of at least one, or leave them blank to use the job\'s.'
+                errors.add(
+                    f'Dataset "{dataset["name"]}": enter repeats of at least one, or leave them blank to use the job\'s.',
+                    field=f"dataset-{entry.dataset_id}",
                 )
             prefix = f'Dataset "{dataset["name"]}": ' if len(job.datasets) > 1 else ""
             try:
                 effective_items.extend(_review_items(store, job, dataset, prefix, errors, warnings, audio_coverage))
             except (ValueError, OSError, ImportError, HTTPException) as error:
-                errors.append(f'Dataset "{dataset["name"]}": {error}')
+                errors.add(f'Dataset "{dataset["name"]}": {error}', dataset_id=entry.dataset_id)
     output = Path(settings.output_root) / "jobs" / job.id
     cache = Path(settings.cache_root) / "jobs" / job.id
     snapshot = output / f"revision-{job.revision}"
     warnings.extend(_duplicate_warnings(root, datasets, effective_items))
     if job.family == "h3" and any(item["kind"] == "image" for item in effective_items):
         warnings.extend(H3_IMAGE_WARNINGS)
-    windows = _plan_job_windows(job, datasets, effective_items)
-    errors.extend(windows.pop("errors"))
-    warnings.extend(windows.pop("warnings"))
+    windows = _plan_job_windows(job, datasets, effective_items, errors, warnings)
     sections = plan_sections(job, effective_items, snapshot, cache)
     balance = section_balance(job, sections, windows["items"], {item["id"]: item["name"] for item in datasets})
     if len(balance) > 1:
@@ -956,6 +997,8 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
         errors.append(f"Commands: {error}")
     return {
         "valid": not errors,
+        "error_targets": errors.targets,
+        "warning_targets": warnings.targets,
         "errors": errors,
         "warnings": warnings,
         "job_id": job.id,

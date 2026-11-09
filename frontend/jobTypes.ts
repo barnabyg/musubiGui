@@ -1,3 +1,4 @@
+import type { ItemView } from './route';
 export type JobConfig = {
   recipe: string;
   components: Record<string, string>;
@@ -54,7 +55,17 @@ export type ConversionPreview = {
   changes: { field: string; before: unknown; after: unknown }[];
   message: string;
 };
+export type ReviewTarget =
+  | { field: string }
+  | {
+      dataset_id: string;
+      item_id?: string;
+      view?: ItemView;
+    };
+
 export type Review = {
+  error_targets: Record<number, ReviewTarget>;
+  warning_targets: Record<number, ReviewTarget>;
   valid: boolean;
   errors: string[];
   warnings: string[];

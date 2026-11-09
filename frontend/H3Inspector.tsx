@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { apiClient } from './api';
 
 const readCoverage = apiClient('Coverage inspection failed.');
@@ -71,16 +71,29 @@ export function H3Coverage({ datasetId }: { datasetId: string }) {
 export function H3Inspector({
   datasetId,
   itemId,
+  open,
+  onBusy,
 }: {
   datasetId: string;
   itemId: string;
+  open: boolean;
+  onBusy: (busy: boolean) => void;
 }) {
   const [inspection, setInspection] = useState<Inspection | null>(null);
   const [path, setPath] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const inspector = useRef<HTMLDetailsElement>(null);
+  const summary = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (open && inspector.current) {
+      inspector.current.open = true;
+      summary.current?.focus();
+    }
+  }, [open]);
   async function inspect(save: boolean) {
     setBusy(true);
+    onBusy(true);
     setError('');
     try {
       const item = `/api/datasets/${datasetId}/items/${itemId}`;
@@ -93,11 +106,12 @@ export function H3Inspector({
       setError((reason as Error).message);
     } finally {
       setBusy(false);
+      onBusy(false);
     }
   }
   return (
-    <details>
-      <summary>H3 audio and media inspector</summary>
+    <details ref={inspector}>
+      <summary ref={summary}>H3 audio and media inspector</summary>
       <p>
         Inspect the selected 124-frame, 24 fps T2VA window. Explicit audio takes
         precedence over one same-stem sidecar and then the embedded track.
