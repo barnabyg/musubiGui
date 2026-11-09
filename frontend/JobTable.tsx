@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ArrowDown, ArrowUp } from 'lucide-react';
 import { runStatus } from './runStatus';
+import { formatRoute } from './route';
 import { StatusBadge } from './StatusBadge';
 
 export type JobSummary = {
@@ -130,9 +131,17 @@ export function JobTable<T extends Row>({
                 <td>r{job.revision}</td>
                 <td>
                   {info?.last_run ? (
-                    <StatusBadge tone={runStatus(info.last_run.status).tone}>
-                      {runStatus(info.last_run.status).label}
-                    </StatusBadge>
+                    <a
+                      href={formatRoute({
+                        screen: 'Runs',
+                        id: info.last_run.id,
+                      })}
+                      aria-label={`Open last Run for ${job.name} · ${job.family.toUpperCase()}: ${runStatus(info.last_run.status).label}`}
+                    >
+                      <StatusBadge tone={runStatus(info.last_run.status).tone}>
+                        {runStatus(info.last_run.status).label}
+                      </StatusBadge>
+                    </a>
                   ) : (
                     'No Runs'
                   )}

@@ -120,6 +120,28 @@ The address bar names the screen and its selection, such as `#/runs/<id>` or
 place. The sidebar reopens each screen's last selection. Leaving a job with unsaved edits
 asks first, whichever way you leave.
 
+The Last Run status in each saved job row links directly to that Run. Run details show
+the frozen job name, model and revision alongside a separate link to the current editable
+draft. The current draft can have a different name or a later revision; opening it does
+not change the Run or start work. Archived jobs are identified and link to the Jobs list,
+where Archived jobs offers Restore. An unavailable job or a failed job lookup leaves the
+Run and its downloads accessible.
+
+To check this navigation manually, run the following from the repository root in PowerShell 7:
+
+```powershell
+.\acceptance.cmd --workspace ".cache/ux-check-$([guid]::NewGuid().ToString('N'))"
+```
+
+Complete WAN acceptance 1, then follow its Last Run link in Jobs using Tab and Enter.
+The Run should offer its final LoRA and identify the frozen job revision. Follow the
+current draft link, save a changed job name or step count, and use browser Back to return
+to the Run. The frozen revision should stay the same and the current draft link should
+show the new revision. Copy the Run address into another tab and verify the same details.
+Archive the job, reopen the Run, and verify that it explains where to restore the archived
+job while keeping the final LoRA downloadable. Repeat with WAN acceptance 2 to check that
+similarly named jobs lead to their own Runs.
+
 ## Queueing
 
 Add prepared runs to the pending queue while another operation owns the GPU. Move
