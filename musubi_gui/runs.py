@@ -33,6 +33,14 @@ from musubi_gui.snapshots import (
     materialize_snapshot,
     verify_inputs,
 )
+from musubi_gui.wan_pair_runtime import (
+    finish_phase,
+    is_paired,
+    paired_saved_states,
+    sampling_pair,
+    stage_log,
+    validate_phase_input,
+)
 from musubi_gui.wan_tokenizer import publish_shared, seed_run, shared_directory
 from musubi_gui.windows_job import ProcessJob, WindowsProcess
 
@@ -171,7 +179,7 @@ class RunService:
             "status": "pending_preparation",
             "phase": "prepare",
             "order": time.time_ns(),
-            "stages": [{"name": stage.name, "args": stage.args, "status": "pending"} for stage in plan.stages],
+            "stages": [{**stage.record(), "status": "pending"} for stage in plan.stages],
             "processes": [],
             "error": None,
             "fixture": self.fixture_mode,
@@ -193,20 +201,39 @@ class RunService:
         directory = Path(run["directory"])
         parts = []
         for stage in run["stages"]:
-            file = directory / f"{stage['name']}.log"
+            file = directory / stage_log(stage)
             if file.is_file():
                 with file.open("rb") as stream:
                     stream.seek(max(0, file.stat().st_size - 256_000))
-                    parts.append(f"--- {stage['name']} ---\n" + redact(stream.read().decode("utf-8", errors="replace")))
+                    label = stage_log(stage).removesuffix(".log")
+                    parts.append(f"--- {label} ---\n" + redact(stream.read().decode("utf-8", errors="replace")))
         return "\n".join(parts)
 
     def progress(self, run_id: str) -> dict[str, Any] | None:
-        file = Path(self.get(run_id)["directory"]) / "train.log"
+        run = self.get(run_id)
+        training = [stage for stage in run["stages"] if stage["name"] == "train" and stage["status"] != "pending"]
+        stage: dict[str, Any] = training[-1] if training else {"name": "train"}
+        file = Path(run["directory"]) / stage_log(stage)
         if not file.is_file():
             return None
         with file.open("rb") as stream:
             stream.seek(max(0, file.stat().st_size - 64_000))
-            return parse_progress(stream.read().decode("utf-8", errors="replace"))
+            progress = parse_progress(stream.read().decode("utf-8", errors="replace"))
+        if progress and stage.get("training"):
+            phase = stage["training"]
+            from musubi_gui.wan_pair import expert_steps
+
+            absolute = phase["start"] + progress["step"]
+            progress.update(
+                expert=phase["expert"],
+                phase_step=progress["step"],
+                phase_total=progress["total"],
+                step=absolute - run.get("segment", {}).get("schedule_start", 0),
+                total=run.get("segment", {}).get("additional_steps", run["job"]["config"]["steps"]),
+                expert_steps=expert_steps(absolute, phase["interval"]),
+                eta=None,
+            )
+        return progress
 
     def close(self) -> None:
         self.stopping.set()
@@ -215,6 +242,13 @@ class RunService:
 
     def retry(self, run_id: str) -> dict[str, Any]:
         previous = self.get(run_id)
+        if is_paired(previous) and (
+            previous.get("pair_sources")
+            or any(stage["status"] != "pending" for stage in previous["stages"] if stage["name"] == "train")
+        ):
+            raise ValueError(
+                "Inspect paired saved states and restore the schedule as a new segment. To restart both experts, prepare a new Run from the Job."
+            )
         if previous["status"] not in {"failed", "cancelled", "interrupted"} or previous.get("processes"):
             raise ValueError(
                 "Only failed, cancelled or interrupted Runs without recorded processes can be retried. "
@@ -252,7 +286,10 @@ class RunService:
                 else arg.replace(previous["directory"], str(directory)).replace(previous["cache"], str(cache))
                 for arg in stage["args"]
             ]
-            stages.append(Stage(stage["name"], args))
+            training = copy.deepcopy(stage.get("training"))
+            if training:
+                training["checkpoint"] = training["checkpoint"].replace(previous["directory"], str(directory))
+            stages.append(Stage(stage["name"], args, training))
         plan = ExecutionPlan(
             copy.deepcopy(previous["job"]),
             Settings.model_validate(previous["settings"]),
@@ -389,7 +426,7 @@ class RunService:
             return []
         if run.get("processes"):
             raise ValueError("Choose Check for leftover processes before inspecting saved state.")
-        states = discover_states(run)
+        states = paired_saved_states(run) if is_paired(run) else discover_states(run)
         self.store.update(run_id, lambda r: r.update(saved_states=states))
         return states
 
@@ -409,6 +446,21 @@ class RunService:
             raise ValueError(
                 "Saved state is incomplete or changed. A LoRA checkpoint alone is not resumable optimizer state."
             )
+        if state.get("paired"):
+            from musubi_gui.wan_pair_restore import restored_pair
+
+            record = restored_pair(original, state, additional_steps)
+            self.store.create(record)
+            atomic_json(
+                Path(record["directory"]) / "inputs.json",
+                {
+                    "job": record["job"],
+                    "manifest": record["manifest"],
+                    "resume_of": run_id,
+                    "segment": record["segment"],
+                },
+            )
+            return self.enqueue(record["id"])
         directory = Path(original["directory"]).parent / ("restore-" + uuid.uuid4().hex)
         directory.mkdir()
         record = copy.deepcopy(original)
@@ -540,9 +592,24 @@ class RunService:
                 if stage["name"] not in ({"latent_cache", "text_cache"} if preparing else {"train", "generate"}):
                     continue
                 verify_inputs(run)
+                fresh_run = self.get(run_id)
+                if fresh_run.get("stop_requested"):
+                    self.store.update(
+                        run_id,
+                        lambda r: r.update(
+                            status="stopped", stop_kind=r["stop_requested"], processes=[], finished=utc_now()
+                        ),
+                    )
+                    return
                 if preparing and self._reuse(run, stage["name"], index):
                     continue
+                pair = None
+                if stage.get("training"):
+                    validate_phase_input(fresh_run, stage)
                 if stage["name"] == "generate":
+                    if is_paired(run):
+                        pair = sampling_pair(fresh_run, stage)
+                        self.store.update(run_id, lambda r: r.update(sample_pair=pair))
                     self.store.update(run_id, lambda r: r.update(status="generating"))
                 self.store.update(run_id, lambda r: r["stages"][index].update(status="running", started=utc_now()))
                 settings = Settings.model_validate(run["settings"])
@@ -557,7 +624,7 @@ class RunService:
                     names.append(name)
                 self.store.update(run_id, lambda r: r.update(job_objects=names, launch_pending=True, launch_protocol=3))
                 self.device.update(run_id, [], job_objects=names, launch_pending=True, launch_protocol=3)
-                log_file = Path(run["directory"]) / f"{stage['name']}.log"
+                log_file = Path(run["directory"]) / stage_log(stage)
                 with log_file.open("a", encoding="utf-8") as log:
                     environment = reference_environment(Path(run["cache"]))
                     if self._seed_wan_tokenizer(run):
@@ -675,8 +742,19 @@ class RunService:
                         raise ValueError("Training exited successfully but no nonempty checkpoint was found.")
                     self.store.update(
                         run_id,
-                        lambda r: r.update(checkpoints=[str(file) for file in checkpoints], removed_duplicates=removed),
+                        lambda r: r.update(
+                            checkpoints=[str(file) for file in checkpoints],
+                            removed_duplicates=[*r.get("removed_duplicates", []), *removed],
+                        ),
                     )
+                    if stage.get("training"):
+                        state = finish_phase(self.get(run_id), stage)
+
+                        def save_expert(record: dict[str, Any]) -> None:
+                            record.setdefault("pair_seals", {})[state["path"]] = state
+                            record.setdefault("expert_states", {})[stage["training"]["expert"]] = state
+
+                        self.store.update(run_id, save_expert)
                 elif stage["name"] == "generate":
                     samples = list((Path(run["directory"]) / "samples").rglob("*"))
                     media_files = [
@@ -691,7 +769,15 @@ class RunService:
                         metadata = inspect_media(file, timeline=True)
                         if run["job"]["family"] == "h3" and (not metadata.get("frames") or not metadata.get("audio")):
                             raise ValueError("H3 sample is incomplete: decodable video and audio are both required.")
-                        inspected.append({"path": str(file), "status": "playable", "metadata": metadata})
+                        inspected.append(
+                            {
+                                "path": str(file),
+                                "status": "playable",
+                                "metadata": metadata,
+                                "sha256": digest_file(file),
+                                **({"lora_pair": pair} if pair else {}),
+                            }
+                        )
                     self.store.update(run_id, lambda r: r.update(samples=inspected))
 
             def finish(record: dict[str, Any]) -> None:
@@ -762,7 +848,7 @@ class RunService:
         args = stage["args"]
         if "--output_name" not in args or "--max_train_steps" not in args:
             return []
-        log_file = Path(run["directory"]) / f"{stage['name']}.log"
+        log_file = Path(run["directory"]) / stage_log(stage)
         removed, problems = remove_final_duplicates(
             Path(run["directory"]) / "checkpoints",
             args[args.index("--output_name") + 1],

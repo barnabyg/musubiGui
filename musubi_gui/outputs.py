@@ -16,8 +16,10 @@ from musubi_gui.media_probe import inspect
 from musubi_gui.redaction import redact
 from musubi_gui.run_deletion import output_index_file
 from musubi_gui.runs import RunService
-from musubi_gui.safetensors_file import safetensors_header
+from musubi_gui.safetensors_file import complete_safetensors
 from musubi_gui.settings import atomic_json, load_settings, within_root
+from musubi_gui.snapshots import digest_file
+from musubi_gui.wan_pair_runtime import is_paired
 
 _lock = threading.RLock()
 IMAGES = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff", ".gif"}
@@ -38,6 +40,11 @@ def download_name(job: dict[str, Any], file: Path) -> str:
     source = file.parent.name.removesuffix("-state") if state else file.stem
     step = re.search(r"-step(\d+)$", source)
     tag = f"-step{int(step[1])}" if step else ""
+    phase = re.search(r"-(low|high)-phase(\d+)", source)
+    if phase:
+        tag = f"-{phase[1]}-phase{int(phase[2])}{tag}"
+    elif source.endswith(("-low-source", "-high-source")):
+        tag = "-" + source.rsplit("-", 2)[1] + "-source"
     return f"{name}-r{job.get('revision', 0)}{tag}{f'-state-{file.stem}' if state else ''}{file.suffix}"
 
 
@@ -67,22 +74,8 @@ def checkpoint_metadata(file: Path) -> dict[str, Any]:
             "checkpoint": {},
             "note": "Legacy artifact: contents are not loaded; resumability is unestablished.",
         }
-    header = safetensors_header(file)
-    with file.open("rb") as stream:
-        header_bytes = int.from_bytes(stream.read(8), "little")
-    available = file.stat().st_size - 8 - header_bytes
+    header = complete_safetensors(file)
     tensors = [value for key, value in header.items() if key != "__metadata__"]
-    for tensor in tensors:
-        if not isinstance(tensor, dict):
-            raise ValueError("Checkpoint tensor metadata is malformed.")
-        offsets = tensor.get("data_offsets")
-        if (
-            not isinstance(offsets, list)
-            or len(offsets) != 2
-            or not all(isinstance(value, int) for value in offsets)
-            or not 0 <= offsets[0] <= offsets[1] <= available
-        ):
-            raise ValueError("Checkpoint payload is incomplete or has invalid tensor offsets.")
     metadata = header.get("__metadata__", {})
     return {**result, "checkpoint": _scrub(metadata), "tensor_count": len(tensors)}
 
@@ -148,6 +141,15 @@ class OutputBrowser:
             if run["status"] == "deleting":
                 return self._result(run, {}, [BEING_DELETED])
             entries = self._load(run_id)
+            if is_paired(run):
+                # Phase-end deduplication intentionally removes interval-save aliases.
+                # They may have been observed while training, but are not missing outputs.
+                removed = set(run.get("removed_duplicates", []))
+                entries = {
+                    identity: entry
+                    for identity, entry in entries.items()
+                    if not removed.intersection(Path(entry["path"]).parts)
+                }
             warnings = []
             try:
                 directory = self._directory(run)
@@ -203,6 +205,17 @@ class OutputBrowser:
                                 "H3 T2VA sample has no decodable audio stream. Video-only output does not establish complete joint audio/video sampling."
                             )
                     entry.update(status="available", error=None)
+                    recorded_sample = next(
+                        (sample for sample in run.get("samples", []) if sample["path"] == str(file)), None
+                    )
+                    if kind != "checkpoint" and recorded_sample and recorded_sample.get("lora_pair"):
+                        if recorded_sample.get("sha256") and digest_file(file) != recorded_sample["sha256"]:
+                            entry["metadata"].pop("lora_pair", None)
+                            entry["metadata"]["provenance_note"] = (
+                                "Sample changed after generation; the recorded LoRA pair cannot be attributed to this file."
+                            )
+                        else:
+                            entry["metadata"]["lora_pair"] = recorded_sample["lora_pair"]
                 except HTTPException as error:
                     entry.update(status="blocked", error=str(error.detail))
                 except PermissionError:
@@ -225,6 +238,32 @@ class OutputBrowser:
             return self._result(run, entries, warnings)
 
     def _result(self, run: dict[str, Any], entries: dict[str, dict[str, Any]], warnings: list[str]) -> dict[str, Any]:
+        pair: dict[str, Any] | None = None
+        if is_paired(run):
+            states = {**run.get("pair_sources", {}), **run.get("expert_states", {})}
+            pair = {}
+            for expert in ("low", "high"):
+                checkpoint = states.get(expert, {}).get("checkpoint", {})
+                match = next(
+                    (
+                        entry
+                        for entry in entries.values()
+                        if checkpoint.get("path") and Path(run["directory"]) / entry["path"] == Path(checkpoint["path"])
+                    ),
+                    None,
+                )
+                pair[expert] = {
+                    "steps": checkpoint.get("steps", 0),
+                    "output": match,
+                    "source_path": checkpoint.get("path"),
+                }
+            if not all(
+                pair[expert]["output"] and pair[expert]["output"]["status"] == "available" for expert in ("low", "high")
+            ):
+                warnings = [
+                    *warnings,
+                    "The paired LoRA outputs are incomplete in this Run. Inspect both expert checkpoints and any source Run before using them together.",
+                ]
         return {
             "run_id": run["id"],
             "job": run["job"],
@@ -232,6 +271,7 @@ class OutputBrowser:
             "outputs": sorted(entries.values(), key=lambda entry: entry["path"]),
             "warnings": warnings,
             "note": "These files belong to this Run.",
+            "lora_pair": pair,
         }
 
     def file(self, run_id: str, identity: str, download: bool) -> FileResponse:

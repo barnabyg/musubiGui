@@ -3,6 +3,7 @@
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from musubi_gui.settings import Settings
 
@@ -15,6 +16,10 @@ CAPTION = "A red square moves across a blue background."
 class Stage:
     name: str
     args: list[str]
+    training: dict[str, Any] | None = None
+
+    def record(self) -> dict[str, Any]:
+        return {"name": self.name, "args": self.args, **({"training": self.training} if self.training else {})}
 
 
 def python_args(settings: Settings) -> list[str]:

@@ -144,11 +144,65 @@ screen. Prepare run and Prepare and start use the revision that passed review. I
 tab saves a newer revision, preparation reports the old and new revision numbers and stops.
 Choose Review configuration to load the saved changes and review them before preparing.
 Component overrides must stay inside the configured
-model roots. The GUI's Wan recipe trains the low-noise expert. A separate
+model roots. The original Wan recipe trains the low-noise expert. A separate
 [native-weight CLI acceptance scenario](reference/wan.md#native-weight-qualification)
 also passed high-noise-only training; that recipe is not exposed by the GUI.
-Combined training remains unqualified. Runtime FP8 scaling requires native FP16 sources,
+The alternating recipe below trains both experts sequentially. Simultaneous combined
+training remains unqualified. Runtime FP8 scaling requires native FP16 sources,
 not saved scaled-FP8 weights. Inactive-DiT offload is not supported by this recipe.
+
+### Alternating Wan high/low LoRAs
+
+The **Smoke test · Wan alternating · 4 steps** preset selects a complete small paired
+configuration with N = 1 and state saving enabled. The original **Wan · 2 steps**
+smoke preset selects low-noise training, including when applied to a paired job.
+
+Choose **Wan alternating low/high experts** under Recipe. **Steps per expert before
+switching** is a positive integer N, counted in optimizer updates after gradient
+accumulation. **Training steps** is the total across both experts. For N = 30 and
+120 total steps the phases are low 30 → high 30 → low 30 → high 30, giving each expert
+60 updates. The final phase can be shorter. A new paired job must train both experts;
+its total must exceed N. Review shows the allocation and exact commands before preparation.
+An alternating Run is limited to 10,000 phases to bound its stored command plan.
+
+Optimizer/training state saving is required. Every phase has a distinct checkpoint
+and saved-state name; an expert resumes its own previous weights, optimizer, scheduler
+and RNG when it becomes active again. Each phase launches the pinned trainer again,
+so small N adds substantial model-loading overhead and retains more phase checkpoints
+and states. Disk estimates include every phase's final saves and interval saves.
+The existing AdamW/constant-scheduler recipe is retained.
+
+**Musubi starts a fresh shuffled dataset pass at every switch.** Its resume implementation
+does not restore the batch position or epoch, and resets its displayed step counter.
+The GUI maintains total and per-expert counters separately. A short phase can repeat
+some examples before others are seen; this is not equivalent to an uninterrupted
+dataset traversal. Existing saved low-noise jobs keep their original behaviour.
+
+Final sampling loads the trained low and high LoRAs into their respective experts,
+with both checkpoint identities and step counts recorded. The GUI currently offers
+a final sample only; this feature does not add periodic sampling.
+
+From the repository root in PowerShell 7, this command prepares and launches an isolated
+four-step CPU demonstration at `http://127.0.0.1:8767`:
+
+```powershell
+.\acceptance.cmd --workspace ".cache/wan-pair-$([guid]::NewGuid().ToString('N'))" --wan-paired
+```
+
+Open **WAN acceptance 1**, review the schedule, and choose **Prepare and start**.
+Expect low 1 → high 1 → low 1 → high 1, two steps per expert, two LoRA download links
+and a playable synthetic video. Close/reopen the browser and inspect the saved paired
+states. Restore schedule step 3 with one additional step: high finishes and both
+outputs remain available. To exercise stopping, edit a new paired job to 24 steps
+with N = 6, start it, and stop during training. Inspect states and restore a complete
+save; expect the remaining part of that phase before the next expert.
+
+For real GPU verification, add `--mode gpu --settings .state/settings.json` to the
+same command. Prerequisites are the installed pinned musubi-tuner/Python environment,
+native Wan FP16 low/high experts, Wan 2.1 VAE and T5 paths configured in that settings
+file, and the target RTX 3090/96 GB PC. Acceptance copies settings into an isolated
+workspace and does not change the installation. CPU fixtures establish orchestration,
+not real training or useful learning; see the [Wan reference](reference/wan.md).
 
 ## Disk estimates
 

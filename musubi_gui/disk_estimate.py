@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from musubi_gui.settings import Settings
+from musubi_gui.wan_pair import PAIRED_RECIPE
 
 if TYPE_CHECKING:
     from musubi_gui.jobs import JobConfig
@@ -53,6 +54,18 @@ def estimate_disk(family: str, config: "JobConfig", items: list[dict[str, Any]],
             latents += _latent_bytes(family, config, config.frames) * (1 if windows is None else windows)
     caches = latents + TEXT_CACHE_BYTES[family] * len(items) + HUGGING_FACE_BYTES[family]
     saves = config.steps // config.save_every + 1 if config.steps >= 1 and config.save_every >= 1 else 0
+    if (
+        family == "wan"
+        and config.recipe == PAIRED_RECIPE
+        and config.steps > 0
+        and config.expert_interval > 0
+        and config.save_every > 0
+    ):
+        # Every phase retains its final checkpoint/state, plus interval saves until deduplication.
+        whole_phases, remaining = divmod(config.steps, config.expert_interval)
+        saves = whole_phases * (config.expert_interval // config.save_every + 1)
+        if remaining:
+            saves += remaining // config.save_every + 1
     offset, per_rank = CHECKPOINT_BYTES[family]
     checkpoint = offset + per_rank * max(0, config.rank)
     checkpoints = saves * checkpoint

@@ -65,9 +65,9 @@ export function JobPresets({
       </div>
       <p className="hint">
         Measured presets set only size, frames, rank and memory controls
-        qualified on the target PC. Smoke tests also set steps, checkpoints and
-        the sample, to check that training runs. Saved presets replace all
-        settings.
+        qualified on the target PC. Smoke tests also select the expert recipe
+        and set steps, checkpoints and the sample, to check that training runs.
+        Saved presets replace all settings.
       </p>
       <div className="actions">
         <button

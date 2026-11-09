@@ -10,6 +10,14 @@ binary attachments, named after the job as `<job name>-r<revision>[-step<N>].saf
 with unsafe filename characters replaced. Files on disk keep their job-ID names, because
 existing Runs and duplicate removal rely on them. Legacy `.pt`/`.pth`/`.ckpt` files are never unpickled.
 
+Alternating Wan Runs show **Paired LoRAs** with separate low/high download links and
+each expert's cumulative optimizer steps. Download names include the expert and phase
+(or `source` for a checkpoint copied into a restored segment), so the two files do not
+share a download name. Earlier phase and interval checkpoints remain in Run outputs.
+An incomplete pair is labelled explicitly. Saved-state weights remain separate from
+the downloadable LoRAs. Paired sample metadata records both exact checkpoint paths,
+SHA-256 digests and step counts; sampling refuses missing or changed trained checkpoints.
+
 The inventory survives restart and retains previously observed missing files.
 Missing/moved, unreadable, empty/truncated and blocked outputs have separate status
 messages; browsing never deletes or repairs a source file. The inventory reloads by itself

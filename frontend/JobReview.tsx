@@ -136,6 +136,33 @@ export function JobReview({
           )
         );
       })}
+      {review.expert_schedule && (
+        <section aria-label="Expert training schedule">
+          <h3>Alternating expert schedule</h3>
+          <p>
+            Switch every {review.expert_schedule.interval} optimizer updates,
+            low-noise first. Low-noise: {review.expert_schedule.counts.low}{' '}
+            steps · High-noise: {review.expert_schedule.counts.high} steps ·{' '}
+            {review.expert_schedule.phases.length} phases.
+          </p>
+          <p>
+            Each expert keeps its own weights, optimizer, scheduler and RNG
+            state. Musubi starts a fresh dataset pass at each switch; exact data
+            position is not restored.
+          </p>
+          <details>
+            <summary>Phase allocation</summary>
+            <ol>
+              {review.expert_schedule.phases.map((phase) => (
+                <li key={phase.start}>
+                  {phase.expert}-noise: {phase.steps} steps (overall{' '}
+                  {phase.start + 1}–{phase.start + phase.steps})
+                </li>
+              ))}
+            </ol>
+          </details>
+        </section>
+      )}
       <details data-testid="disk-estimate">
         <summary>Estimated disk use</summary>
         <ul>
@@ -246,8 +273,8 @@ export function JobReview({
           These paths are a preview. Preparing creates the Run's own folder and
           records the exact arguments it runs with.
         </p>
-        {review.stages.map((stage) => (
-          <details key={stage.name}>
+        {review.stages.map((stage, index) => (
+          <details key={index}>
             <summary>{stage.name} arguments</summary>
             <pre>{JSON.stringify(stage.args, null, 2)}</pre>
           </details>

@@ -27,6 +27,7 @@ from musubi_gui.settings import Settings, atomic_json, validate_paths, within_ro
 from musubi_gui.training_sections import dataset_toml, plan_sections, section_balance
 from musubi_gui.video_sampling import plan_windows
 from musubi_gui.wan import validate_wan, wan_stages
+from musubi_gui.wan_pair import MAX_PHASES, PAIRED_RECIPE, alternating_phases, expert_steps
 
 _lock = threading.RLock()
 
@@ -57,6 +58,7 @@ class JobConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
     recipe: str = "low-noise"
+    expert_interval: int = 30
     components: dict[str, str] = Field(default_factory=dict)
     width: int = 256
     height: int = 256
@@ -244,6 +246,8 @@ MEASURED_PRESETS = {
 # Applying one replaces everything that decides how long the check takes, and keeps components, learning rate and seed.
 SMOKE_CONTROLS = (
     *MEASURED_CONTROLS,
+    "recipe",
+    "expert_interval",
     "steps",
     "save_every",
     "save_state",
@@ -255,6 +259,14 @@ SMOKE_PRESETS = {
     preset.id: preset
     for preset in [
         Preset(id="smoke-wan", name="Smoke test · Wan · 2 steps", family="wan", config=smoke_config("wan")),
+        Preset(
+            id="smoke-wan-paired",
+            name="Smoke test · Wan alternating · 4 steps",
+            family="wan",
+            config=smoke_config("wan").model_copy(
+                update={"recipe": PAIRED_RECIPE, "expert_interval": 1, "steps": 4, "save_state": True}
+            ),
+        ),
         Preset(id="smoke-h3", name="Smoke test · H3 · 2 steps", family="h3", config=smoke_config("h3")),
     ]
 }
@@ -565,8 +577,19 @@ def configuration_errors(job: Job) -> list[str]:
     if len(set(listed)) != len(listed):
         errors.append("Dataset: the same dataset is listed more than once; remove the extra row.")
     if job.family == "wan":
-        if config.recipe != "low-noise":
-            errors.append("Recipe: only low-noise Wan training is currently available in the GUI.")
+        if config.recipe not in {"low-noise", PAIRED_RECIPE}:
+            errors.append("Recipe: choose low-noise or alternating high/low Wan training.")
+        if config.recipe == PAIRED_RECIPE:
+            if config.expert_interval < 1:
+                errors.append("Expert interval: enter a positive integer.")
+            elif math.ceil(config.steps / config.expert_interval) > MAX_PHASES:
+                errors.append(f"Expert interval: increase it to keep the Run within {MAX_PHASES} phases.")
+            elif config.steps <= config.expert_interval:
+                errors.append(
+                    "Steps: paired training must include at least one update of each expert; increase steps or reduce the expert interval."
+                )
+            if not config.save_state:
+                errors.append("Training state: alternating experts requires saved optimizer/training state.")
         if config.width < 64 or config.height < 64 or config.width % 16 or config.height % 16:
             errors.append("Geometry: Wan width and height must be at least 64 and multiples of 16.")
         if config.frames < 1 or (config.frames - 1) % 4:
@@ -679,7 +702,12 @@ def build_stages(job: Job, settings: Settings, run: Path, cache: Path, kinds: se
             index = args.index("--video_size")
             args[index + 1 : index + 3] = [str(config.height), str(config.width)]
             _set_argument(args, "--lora_weight", str(run / "checkpoints" / f"{job.family}-{job.id}.safetensors"))
-    return [stage for stage in stages if stage.name != "generate" or config.sample_enabled]
+    stages = [stage for stage in stages if stage.name != "generate" or config.sample_enabled]
+    if job.family == "wan" and config.recipe == PAIRED_RECIPE:
+        from musubi_gui.wan_pair_plan import paired_stages
+
+        return paired_stages(stages, settings.models, config.steps, config.expert_interval)
+    return stages
 
 
 def disk_preflight(
@@ -894,6 +922,10 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
             f"Training steps: {job.config.steps} steps can check that training runs, but expect no visible change "
             f"in samples below about {LOW_STEPS_WARNING} steps."
         )
+    if job.family == "wan" and job.config.recipe == PAIRED_RECIPE:
+        warnings.append(
+            "Alternating experts: native GPU qualification covers 256×256, 17 frames, rank 8 and N=1. Useful learning and production-size paired capacity remain unqualified."
+        )
     if job.family == "h3" and job.config.width * job.config.height > 640 * 352:
         warnings.append(
             "Geometry: H3 is qualified up to 640×352 on the target PC; 832×480 ran out of VRAM at the first step."
@@ -1025,5 +1057,20 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
         "paths": {"output": str(output), "cache": str(cache), "snapshot": str(snapshot)},
         "sections": balance,
         "dataset_toml": dataset_toml(job, sections),
-        "stages": [{"name": stage.name, "args": stage.args} for stage in stages],
+        "stages": [stage.record() for stage in stages],
+        "expert_schedule": (
+            {
+                "interval": job.config.expert_interval,
+                "counts": expert_steps(job.config.steps, job.config.expert_interval),
+                "phases": [
+                    phase.record() for phase in alternating_phases(job.config.steps, job.config.expert_interval)
+                ],
+            }
+            if job.family == "wan"
+            and job.config.recipe == PAIRED_RECIPE
+            and job.config.expert_interval > 0
+            and job.config.steps > 0
+            and math.ceil(job.config.steps / job.config.expert_interval) <= MAX_PHASES
+            else None
+        ),
     }

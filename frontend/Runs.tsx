@@ -22,7 +22,13 @@ type Run = {
   status: string;
   error: string | null;
   fixture: boolean;
-  job: { id: string; name: string; family: string; revision: number };
+  job: {
+    id: string;
+    name: string;
+    family: string;
+    revision: number;
+    config?: { recipe?: string };
+  };
   manifest: {
     items: { name?: string; path: string; caption: { text: string } }[];
   };
@@ -37,6 +43,7 @@ type Run = {
   directory: string;
   order: number;
   start_after_prepare?: boolean;
+  resume_of?: string;
   deletion?: {
     error: string | null;
     remaining: { path: string; bytes?: number }[];
@@ -55,6 +62,10 @@ type Progress = {
   elapsed: string | null;
   eta: string | null;
   loss: string | null;
+  expert?: string;
+  phase_step?: number;
+  phase_total?: number;
+  expert_steps?: { low: number; high: number };
 };
 type StepState = 'pending' | 'current' | 'completed' | 'failed' | 'stopped';
 const stepLabels: Record<StepState, string> = {
@@ -147,6 +158,13 @@ function TrainingProgress({
           Step {progress.step}/{progress.total}
         </strong>
       </p>
+      {progress.expert_steps && (
+        <p>
+          Active expert: {progress.expert}-noise · Phase {progress.phase_step}/
+          {progress.phase_total} · Low-noise {progress.expert_steps.low} steps ·
+          High-noise {progress.expert_steps.high} steps
+        </p>
+      )}
       <progress
         aria-label="Training steps"
         max={progress.total}
@@ -203,6 +221,8 @@ function SavedStates({
       valid: boolean;
       error: string;
       optimizer_step?: number;
+      paired?: boolean;
+      counts?: { low: number; high: number };
     }[]
   >([]);
   const [steps, setSteps] = useState(1);
@@ -267,7 +287,11 @@ function SavedStates({
       {states.map((state) => (
         <p key={state.id}>
           {state.name} ·{' '}
-          {state.valid ? `optimizer step ${state.optimizer_step}` : state.error}
+          {state.valid
+            ? state.counts
+              ? `low-noise ${state.counts.low} steps · high-noise ${state.counts.high} steps`
+              : `optimizer step ${state.optimizer_step}`
+            : state.error}
           <button
             disabled={!state.valid || !Number.isInteger(steps) || steps < 1}
             onClick={() =>
@@ -275,6 +299,8 @@ function SavedStates({
                 title: 'Restore this optimizer state as a new segment?',
                 body: (
                   <p>
+                    {state.paired &&
+                      'Both expert states and the alternating schedule continue from this saved position. Additional steps count across both experts. '}
                     The displayed step counter and data position restart.
                     Original run inputs are preserved.
                   </p>
@@ -433,6 +459,12 @@ export function Runs({
     .sort((a, b) => a.order - b.order);
   const ownerRun = runs.find((record) => record.id === owner?.run_id);
   const current = live?.runId === run?.id ? live : null;
+  const pairedStarted =
+    run?.job.config?.recipe === 'alternating' &&
+    (run.resume_of ||
+      run.stages.some(
+        (stage) => stage.name === 'train' && stage.status !== 'pending',
+      ));
   const readError =
     (detailFailure?.runId === selected ? detailFailure.message : '') ||
     (logFailure && logFailure.runId === run?.id ? logFailure.message : '');
@@ -630,23 +662,49 @@ export function Runs({
                   start; prepared files remain available.
                 </p>
               )}
-              {['failed', 'cancelled', 'interrupted'].includes(run.status) && (
-                <div aria-label="Retry frozen inputs">
+              {pairedStarted &&
+                ['failed', 'stopped', 'interrupted'].includes(run.status) && (
                   <p>
-                    Retry creates a new Run using this Run’s frozen job revision
-                    and dataset inputs. Only verified matching latent and text
-                    caches are eligible for reuse. Training will not start
-                    automatically. Training and sampling run again after you
-                    start training (sampling only if enabled in the frozen job).
-                    It does not resume optimizer state.
+                    Inspect paired saved states below to continue both experts
+                    and the schedule as a new segment. Updates after the
+                    selected save are lost. Prepare from Jobs to restart both
+                    experts.
+                    {run.resume_of && (
+                      <>
+                        {' '}
+                        You can also restore again from the{' '}
+                        <a
+                          href={formatRoute({
+                            screen: 'Runs',
+                            id: run.resume_of,
+                          })}
+                        >
+                          source Run
+                        </a>
+                        , including when this segment failed before saving
+                        state.
+                      </>
+                    )}
                   </p>
-                  <p>
-                    To change the build, edit the job, save and review it, then
-                    prepare from Jobs. For saved optimizer state, use Inspect
-                    saved states below.
-                  </p>
-                </div>
-              )}
+                )}
+              {!pairedStarted &&
+                ['failed', 'cancelled', 'interrupted'].includes(run.status) && (
+                  <div aria-label="Retry frozen inputs">
+                    <p>
+                      Retry creates a new Run using this Run’s frozen job
+                      revision and dataset inputs. Only verified matching latent
+                      and text caches are eligible for reuse. Training will not
+                      start automatically. Training and sampling run again after
+                      you start training (sampling only if enabled in the frozen
+                      job). It does not resume optimizer state.
+                    </p>
+                    <p>
+                      To change the build, edit the job, save and review it,
+                      then prepare from Jobs. For saved optimizer state, use
+                      Inspect saved states below.
+                    </p>
+                  </div>
+                )}
               {run.status === 'deleting' && (
                 <div aria-label="Unfinished delete">
                   <p className="error">
@@ -772,13 +830,17 @@ export function Runs({
                         : 'Cancel preparation'}
                   </button>
                 )}
-                {['failed', 'cancelled', 'interrupted'].includes(
-                  run.status,
-                ) && (
-                  <button disabled={busy} onClick={() => void action('retry')}>
-                    Prepare new Run from frozen inputs
-                  </button>
-                )}
+                {!pairedStarted &&
+                  ['failed', 'cancelled', 'interrupted'].includes(
+                    run.status,
+                  ) && (
+                    <button
+                      disabled={busy}
+                      onClick={() => void action('retry')}
+                    >
+                      Prepare new Run from frozen inputs
+                    </button>
+                  )}
                 <button
                   className="danger"
                   disabled={busy}

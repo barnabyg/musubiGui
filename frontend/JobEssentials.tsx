@@ -65,7 +65,13 @@ export function JobEssentials({
         {job.config.frames} frames · LoRA rank {job.config.rank}. New jobs start
         from the measured target-PC defaults.
       </p>
-      {fields.number('Training steps', 'steps')}
+      {fields.number(
+        'Training steps',
+        'steps',
+        job.config.recipe === 'alternating'
+          ? 'Total optimizer updates across both experts, not steps per expert.'
+          : undefined,
+      )}
       {fields.toggle('Generate a final sample', 'sample_enabled')}
       {job.config.sample_enabled && (
         <label className="field">

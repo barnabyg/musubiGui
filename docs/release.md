@@ -83,8 +83,13 @@ the separately validated [offline weight conversion](reference/wan-conversion.md
 Fresh [native-weight qualification](reference/wan.md#native-weight-qualification)
 also passed with the user-supplied FP16 experts and native T5 encoder on 27 October 2026. It exercised the final atomic Windows launcher through real GUI preparation,
 training, playback and optimizer-state restoration from step 2 to 3. A separate
-high-noise-only CLI training/generation/playback scenario passed. The GUI continues
-to expose its low-noise recipe; combined-expert training remains unqualified.
+high-noise-only CLI training/generation/playback scenario passed. The original low-noise
+recipe remains available. On 9 November 2026, the GUI's sequential alternating high/low
+recipe also passed [native paired qualification](reference/wan.md#native-paired-qualification-9-november-2026),
+including both LoRAs in sampling, Edge playback and graceful stop/restoration. It uses
+the pinned upstream's resume semantics, which restart the dataset pass at each switch.
+Paired production capacity, useful learning and simultaneous combined-expert training
+remain unqualified.
 
 ```powershell
 .\acceptance.cmd --workspace .cache\gpu-acceptance-1 --mode gpu --settings C:\absolute\settings.json
