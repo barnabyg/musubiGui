@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { localBackend, python } from './backend';
+import { stopBackendTree } from './processes';
 
 test('comparison plays both Runs and keeps provenance and downloads when a sample is missing', async ({
   page,
@@ -17,11 +18,31 @@ test('comparison plays both Runs and keeps provenance and downloads when a sampl
     args: ['--acceptance-fixture'],
   });
   try {
-    await promisify(execFile)(python, [
+    const generation = promisify(execFile)(python, [
       '-m',
       'musubi_gui.output_fixture',
       fixture,
     ]);
+    let deadline: NodeJS.Timeout | undefined;
+    try {
+      await Promise.race([
+        generation,
+        new Promise<never>((_, reject) => {
+          deadline = setTimeout(() => {
+            const pid = generation.child.pid;
+            void (pid ? stopBackendTree(pid) : Promise.resolve()).then(
+              () =>
+                reject(
+                  new Error('Output fixture generation exceeded five minutes.'),
+                ),
+              reject,
+            );
+          }, 300_000);
+        }),
+      ]);
+    } finally {
+      clearTimeout(deadline);
+    }
     const { runs } = JSON.parse(
       await readFile(path.join(fixture, 'output-fixture.json'), 'utf8'),
     ) as {
@@ -32,7 +53,7 @@ test('comparison plays both Runs and keeps provenance and downloads when a sampl
         directory: string;
       }[];
     };
-    // No samples have ever been indexed for this Run: it represents sampling disabled.
+    // No samples have ever been indexed for this Run.
     const noSample = runs.find(
       (run) => run.family === 'wan' && run.revision === 2,
     )!;
