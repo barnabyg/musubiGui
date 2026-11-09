@@ -45,6 +45,8 @@ name, storage path and H3 coverage. Renaming changes the library name without mo
 the folder. Opening a panel keeps the gallery's rows and columns and narrows the tiles. The preview
 changes the column count, but the active tile stays in view when it opens or closes. Below
 1000 px the preview sits above the gallery, so another item can be chosen without closing it.
+At 550 px or narrower, the preview fills the workspace with media, caption and
+previous/next controls in one scroll pane; close it to return to inline gallery editing.
 **Add media** opens the managed upload panel; it starts open for a new
 managed dataset and stays open while files upload. Closing or switching panels keeps
 uploads and tool state intact. Panels and the preview overlay the gallery on narrow
@@ -111,13 +113,33 @@ editor for retry, conflict resolution and history. Closing the browser with unsa
 captions requests confirmation.
 
 Captions autosave after 350 ms and all pending captions flush before selecting another item or dataset. Switching application
-sections also flushes pending captions. Alt+Left/Right navigates the viewer. Saved appears only after
+sections also flushes pending captions. The preview shows its Alt+Left/Right shortcuts.
+Consecutive previous/next actions move through the filtered list and focus the next
+caption, or the preview itself if that sidecar cannot be edited. A failed save keeps
+the original draft and returns focus to its caption. Closing the preview returns
+focus to its gallery tile, or the gallery if that tile is no longer available.
+Saved appears only after
 the backend confirms an atomic `.txt` replacement. If another program has the sidecar open, the save
 keeps trying for two seconds. Failed writes block item navigation and retain the
 draft for retry. External changes produce a conflict: review the current sidecar before explicitly
 choosing it or saving the retained draft over that revision. Caption history can restore an earlier
 text only against the current revision; concurrent edits are rejected. Original/replacement text is
 recorded before writing so interruption evidence stays recoverable in the state directory.
+
+To check preview navigation, run this from the repository root in PowerShell 7:
+
+```powershell
+.\acceptance.cmd --workspace ".cache/ux-check-$([guid]::NewGuid().ToString('N'))"
+```
+
+Open **Mixed media and invalid item**, preview blue.png and type a caption.
+Press Alt+Right twice: invalid.mp4 and then motion.mp4 should open, each with its
+caption focused. Press Alt+Left twice and confirm blue.png retained the saved text.
+Close the preview and expect its tile to have keyboard focus. Repeat at 390 px wide:
+the preview should occupy one pane with reachable caption and navigation controls.
+For a conflict check, edit the active `.txt` outside the browser, type different text
+in its caption, and choose Next or Close preview. Expect the original item, draft and
+caption focus to remain until the conflict is resolved.
 
 For H3 inspection, add `--h3-audio` to the fixture command. It creates sidecar, embedded,
 missing, ambiguous, malformed, short and offset-audio examples alongside the base media.

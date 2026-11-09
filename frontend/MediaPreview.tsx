@@ -18,20 +18,32 @@ export function MediaPreview({
   dataset: Dataset;
   active: DatasetItem;
   visibleItems: DatasetItem[];
-  select: (item: DatasetItem | null) => Promise<void>;
+  select: (item: DatasetItem | null) => Promise<boolean>;
   captions: CaptionSession;
   repairView?: ItemView;
   frames?: number;
   onAudioBusy: (busy: boolean) => void;
 }) {
   const viewer = useRef<HTMLDivElement>(null);
+  function focusCaption() {
+    const caption = viewer.current?.querySelector<HTMLTextAreaElement>(
+      'textarea[aria-label="Caption"]:not(:disabled)',
+    );
+    (caption ?? viewer.current)?.focus();
+  }
+  async function navigate(item: DatasetItem | null) {
+    if (!(await select(item))) focusCaption();
+  }
   useEffect(() => {
     if (repairView === 'preview') viewer.current?.focus();
-  }, [repairView]);
+    else if (repairView !== 'audio') focusCaption();
+  }, [active.id, repairView]);
   return (
     <div
       ref={viewer}
       className="media-viewer"
+      role="region"
+      aria-label={`Media preview: ${active.name}`}
       tabIndex={0}
       onKeyDown={(event) => {
         if (event.altKey && ['ArrowLeft', 'ArrowRight'].includes(event.key)) {
@@ -39,13 +51,13 @@ export function MediaPreview({
           const index =
             visibleItems.findIndex((item) => item.id === active.id) +
             (event.key === 'ArrowRight' ? 1 : -1);
-          if (visibleItems[index]) void select(visibleItems[index]);
+          if (visibleItems[index]) void navigate(visibleItems[index]);
         }
       }}
     >
       <div className="actions viewer-heading">
         <h2>{active.name}</h2>
-        <button className="quiet" onClick={() => void select(null)}>
+        <button className="quiet" onClick={() => void navigate(null)}>
           Close preview
         </button>
       </div>
@@ -67,11 +79,12 @@ export function MediaPreview({
       )}
       <div className="actions">
         <button
+          aria-keyshortcuts="Alt+ArrowLeft"
           disabled={
             visibleItems.findIndex((item) => item.id === active.id) <= 0
           }
           onClick={() =>
-            void select(
+            void navigate(
               visibleItems[
                 visibleItems.findIndex((item) => item.id === active.id) - 1
               ],
@@ -81,12 +94,13 @@ export function MediaPreview({
           Previous
         </button>
         <button
+          aria-keyshortcuts="Alt+ArrowRight"
           disabled={
             visibleItems.findIndex((item) => item.id === active.id) >=
             visibleItems.length - 1
           }
           onClick={() =>
-            void select(
+            void navigate(
               visibleItems[
                 visibleItems.findIndex((item) => item.id === active.id) + 1
               ],
@@ -96,6 +110,9 @@ export function MediaPreview({
           Next
         </button>
       </div>
+      <p className="viewer-shortcuts">
+        Alt+Left / Alt+Right: previous / next caption
+      </p>
       <CaptionEditor
         session={captions}
         item={active}

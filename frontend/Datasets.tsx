@@ -234,8 +234,10 @@ export function Datasets({
   }, [visible, screen, datasets, refresh]);
   async function select(item: DatasetItem | null) {
     const origin = window.location.hash;
-    if (!(await captions.flushAll()) || window.location.hash !== origin) return;
+    if (!(await captions.flushAll()) || window.location.hash !== origin)
+      return false;
     setActive(item);
+    return true;
   }
   const followRoute = useEffectEvent((signal: AbortSignal) => {
     if (!loaded || repair || selectedId === dataset?.id) return;
