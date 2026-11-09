@@ -102,7 +102,7 @@ export function jobFields(
 
 export function focusField(key: string) {
   const field = document.getElementById(fieldId(key));
-  const section = field?.closest('details');
-  if (section) section.open = true;
+  for (let parent = field?.parentElement; parent; parent = parent.parentElement)
+    if (parent instanceof HTMLDetailsElement) parent.open = true;
   field?.focus();
 }

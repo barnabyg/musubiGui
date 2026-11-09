@@ -114,6 +114,7 @@ test('H3 repair inspects and applies audio against the reviewed frame count', as
   try {
     const job = app.manifest.jobs.find((entry) => entry.family === 'h3')!;
     await page.goto(`${app.url}/#/jobs/${job.id}`);
+    await page.getByText('Advanced controls', { exact: true }).click();
     await page
       .getByRole('spinbutton', { name: 'Frames', exact: true })
       .fill('141');

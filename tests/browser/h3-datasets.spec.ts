@@ -27,7 +27,13 @@ test('H3 inspector plays resolved audio and identifies missing, ambiguous, malfo
     await page
       .getByLabel('Dataset name', { exact: true })
       .fill('H3 audio library');
+    await page
+      .getByRole('radio', { name: 'Use existing folder', exact: true })
+      .check();
     await page.getByLabel('Dataset folder', { exact: true }).fill(app.media);
+    await page
+      .getByRole('checkbox', { name: 'Index this entire dataset root' })
+      .check();
     await page.getByRole('button', { name: 'Use existing folder' }).click();
     // Eleven media probes can exceed the default DOM assertion deadline on CI.
     await expect(page.getByText('Scan: complete 11/11')).toBeVisible({

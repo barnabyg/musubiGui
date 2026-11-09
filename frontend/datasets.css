@@ -4,6 +4,32 @@
   justify-content: space-between;
   gap: var(--space-9);
 }
+.dataset-create-method {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-7);
+  border: 0;
+  padding: 0;
+  margin: var(--space-7) 0;
+}
+.dataset-create-method label,
+.dataset-root-warning label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+.dataset-create-method input,
+.dataset-root-warning input {
+  width: auto;
+  margin: 0;
+}
+.dataset-root-warning {
+  margin: var(--space-7) 0;
+  color: var(--color-warning);
+}
+.dataset-create > p {
+  overflow-wrap: anywhere;
+}
 .dataset-heading h1,
 .dataset-heading p {
   overflow-wrap: anywhere;
@@ -205,6 +231,27 @@ main.dataset-editor-shell {
 }
 .dataset-topbar-actions button {
   padding: var(--space-3) var(--space-5);
+}
+.dataset-training-job {
+  position: relative;
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+.dataset-training-job > summary {
+  cursor: pointer;
+  font-size: var(--text-small);
+}
+.dataset-training-job > div {
+  position: absolute;
+  left: 0;
+  top: 100%;
+  width: min(340px, 85vw);
+  padding: var(--space-6);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  z-index: 6;
 }
 .dataset-topbar-actions .has-filters {
   color: var(--color-accent-strong);

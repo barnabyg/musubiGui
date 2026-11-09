@@ -49,7 +49,7 @@ test('settings survive backend restart and invalid installations explain correct
     await page.getByRole('button', { name: 'Datasets', exact: true }).click();
     await page.getByRole('button', { name: 'New dataset' }).click();
     await expect(
-      page.getByLabel('Dataset folder', { exact: true }),
+      page.getByLabel('Upload parent folder', { exact: true }),
     ).toHaveValue(defaultDatasets);
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
     await page
@@ -428,20 +428,20 @@ test('path fields warn before saving, browse local folders and show the full pat
     await page.getByLabel('Dataset roots (one per line)').fill(root);
     await page.getByRole('button', { name: 'Datasets', exact: true }).click();
     await page.getByRole('button', { name: 'New dataset' }).click();
-    const folder = page.getByLabel('Dataset folder', { exact: true });
-    const useExisting = page.getByRole('button', {
-      name: 'Use existing folder',
+    const folder = page.getByLabel('Upload parent folder', { exact: true });
+    const createUploads = page.getByRole('button', {
+      name: 'Create a new folder for uploads',
     });
     await folder.fill(path.join(root, 'datasets', 'missing'));
     await expect(
       page.getByText("This folder doesn't exist yet."),
     ).toBeVisible();
-    const buttonAt = await pageTop(useExisting);
+    const buttonAt = await pageTop(createUploads);
     await folder.fill('');
     await expect(page.getByText("This folder doesn't exist yet.")).toHaveCount(
       0,
     );
-    expect(await pageTop(useExisting)).toBe(buttonAt);
+    expect(await pageTop(createUploads)).toBe(buttonAt);
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
 
     // The wrong kind of thing is named before saving, too.

@@ -5,6 +5,33 @@ such as multiples, frame formulas and ranges are flagged beside their field whil
 never block saving a draft. Review stays the authority: each of its errors about a field is
 a link that focuses that field.
 
+## Compact job setup
+
+Jobs opens with name, datasets, recipe, training steps and final sample choice together.
+Required choices names anything still missing, including the sample prompt when sampling
+is enabled. Turn sampling off explicitly if no final sample is needed. The compact view
+shows the draft's current size, frame count and rank; new drafts start from the measured
+target-PC defaults. Review still checks media, model files and every saved setting.
+
+Expand Advanced controls to use presets or change preparation, LoRA, memory and checkpoint
+settings. Collapsing the controls, reopening a saved job or importing a configuration
+preserves its values. Section jumps and review error links open hidden controls before
+focusing them. Generated configuration remains under Advanced in Configuration review.
+
+To verify manually, run this from the repository root in PowerShell 7:
+
+```powershell
+.\acceptance.cmd --workspace ".cache/ux-check-$([guid]::NewGuid().ToString('N'))"
+```
+
+Create a Wan job, choose a dataset, and enter a sample prompt or turn off the final sample.
+For the fixture's short WAN acceptance clip, expand Advanced controls and apply its Smoke
+test preset before review; normal 33-frame-or-longer clips use the new-job recipe directly.
+Repeat with H3 acceptance, which supports the default 124 frames. Review should pass without
+changing memory or optimizer settings. Change LoRA rank in Advanced controls, save, collapse
+and reopen the job, then expand it again: the saved rank should remain. Check keyboard
+operation and a window about 700 pixels wide; the form should stay within the window.
+
 ## Drafts and revisions
 
 Launch with `launch.cmd`, register a dataset, and open Jobs. Jobs are listed in a table
@@ -44,6 +71,24 @@ one, and its unchanged caches are reused.
 Dataset exclusions belong to the dataset, not the job, so they apply to every job using it.
 
 ## Datasets in a job
+
+From an open dataset, choose **Create training job**, then **Create Wan job** or
+**Create H3 job**. Pending captions save before a separate draft is created with
+that dataset selected once. Failed caption saves keep the gallery open for repair.
+Missing folders, scans that have not finished and datasets without valid included
+media explain what to fix before creating a job. Existing jobs stay independent.
+
+To check this handoff, run the following from `C:/docs/git/musubiGui` in PowerShell 7:
+
+```powershell
+.\acceptance.cmd --workspace ".cache/ux-check-$([guid]::NewGuid().ToString('N'))"
+```
+
+In the CPU fixture, edit a caption in WAN acceptance, create a Wan job from the
+dataset, add H3 acceptance as a second dataset and set the first dataset's repeats.
+Save and reload: both datasets retain their order and repeats, and reopening the
+gallery shows the saved caption. Try the H3 handoff too. This checks navigation
+and persistence without starting GPU training.
 
 Job & dataset lists the job's datasets in order. Each row shows the dataset, its contents
 (`12 images · 3 videos`), its repeats and Remove. Blank repeats use the job's Repeats, shown in

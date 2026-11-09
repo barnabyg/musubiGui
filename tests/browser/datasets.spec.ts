@@ -14,7 +14,13 @@ test('register mixed media, preview, and recover library after service restart',
     await page
       .getByLabel('Dataset name', { exact: true })
       .fill('Mixed library');
+    await page
+      .getByRole('radio', { name: 'Use existing folder', exact: true })
+      .check();
     await page.getByLabel('Dataset folder', { exact: true }).fill(app.media);
+    await page
+      .getByRole('checkbox', { name: 'Index this entire dataset root' })
+      .check();
     await page.getByRole('button', { name: 'Use existing folder' }).click();
     await expect(page.getByText('Scan: complete 4/4')).toBeVisible({
       timeout: 240_000,
@@ -38,6 +44,10 @@ test('register mixed media, preview, and recover library after service restart',
     await page.reload();
     await page.getByRole('button', { name: 'Datasets', exact: true }).click();
     await expect(
+      page.getByRole('heading', { level: 1, name: 'Mixed library' }),
+    ).toBeVisible();
+    await page.getByRole('button', { name: 'Back to datasets' }).click();
+    await expect(
       page.getByRole('button', { name: /Mixed library.*4 media/ }),
     ).toBeVisible();
     // The invalid video is in the media total but not in what the dataset contains.
@@ -60,7 +70,13 @@ test('caption autosave flushes navigation, preserves failed drafts, rejects exte
     await page
       .getByLabel('Dataset name', { exact: true })
       .fill('Caption library');
+    await page
+      .getByRole('radio', { name: 'Use existing folder', exact: true })
+      .check();
     await page.getByLabel('Dataset folder', { exact: true }).fill(app.media);
+    await page
+      .getByRole('checkbox', { name: 'Index this entire dataset root' })
+      .check();
     await page.getByRole('button', { name: 'Use existing folder' }).click();
     await expect(page.getByText('Scan: complete 4/4')).toBeVisible({
       timeout: 240_000,
@@ -156,7 +172,13 @@ test('search stays visible, states read as badges and the caption count filters 
     await page.getByRole('button', { name: 'Datasets', exact: true }).click();
     await page.getByRole('button', { name: 'New dataset' }).click();
     await page.getByLabel('Dataset name', { exact: true }).fill('Badges');
+    await page
+      .getByRole('radio', { name: 'Use existing folder', exact: true })
+      .check();
     await page.getByLabel('Dataset folder', { exact: true }).fill(app.media);
+    await page
+      .getByRole('checkbox', { name: 'Index this entire dataset root' })
+      .check();
     await page.getByRole('button', { name: 'Use existing folder' }).click();
     await expect(page.getByText('Scan: complete 4/4')).toBeVisible({
       timeout: 240_000,

@@ -250,7 +250,6 @@ export function JobControls({
           {number('LoRA rank', 'rank')}
           {number('LoRA alpha', 'alpha')}
           {number('Learning rate', 'learning_rate')}
-          {number('Training steps', 'steps')}
           {number('Gradient accumulation', 'gradient_accumulation')}
           {number('Seed', 'seed')}
         </div>
@@ -304,27 +303,7 @@ export function JobControls({
           'save_state',
           'A LoRA checkpoint alone is not resumable optimizer state.',
         )}
-        {toggle('Generate a final sample', 'sample_enabled')}
-        {job.config.sample_enabled && (
-          <>
-            <label className="field">
-              Sample prompt
-              <textarea
-                id={fieldId('sample_prompt')}
-                {...problemProps('sample_prompt')}
-                disabled={busy}
-                value={job.config.sample_prompt}
-                onChange={(event) =>
-                  config('sample_prompt', event.target.value)
-                }
-              />
-              {problemText('sample_prompt')}
-            </label>
-            {number('Sample inference steps', 'sample_steps')}
-          </>
-        )}
-        {!job.config.sample_enabled &&
-          problems.sample_steps &&
+        {(job.config.sample_enabled || problems.sample_steps) &&
           number('Sample inference steps', 'sample_steps')}
       </section>
     </>

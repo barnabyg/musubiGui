@@ -21,6 +21,7 @@ import { DatasetLibrary } from './DatasetLibrary';
 import { DatasetPanels } from './DatasetPanels';
 import { type DatasetPanel, DatasetTopbar } from './DatasetTopbar';
 import { MediaPreview } from './MediaPreview';
+import { DatasetJobImpact, loadDatasetUsage } from './datasetUsage';
 import { datasetItemRoute, type DatasetRepair, formatRoute } from './route';
 
 export type Dataset = {
@@ -77,6 +78,7 @@ export function Datasets({
   datasetRoots,
   onEditorChange,
   onCaptionSessions,
+  onTrainingJob,
 }: {
   visible?: boolean;
   selectedId?: string;
@@ -86,6 +88,7 @@ export function Datasets({
   datasetRoots?: string[];
   onEditorChange?: (editing: boolean) => void;
   onCaptionSessions: (sessions: CaptionSession[]) => void;
+  onTrainingJob: (id: string) => void;
 }) {
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [screen, setScreen] = useState<'library' | 'create' | 'edit'>(
@@ -340,26 +343,30 @@ export function Datasets({
     }
   }
   async function remove(value: Dataset) {
-    const confirmed = await confirmDialog({
-      title: `Delete "${value.name}" from the dataset library?`,
-      body: (
-        <p>
-          Only the library entry is removed. Media files, captions and recovery
-          history stay on disk, including uploaded files. Jobs using this
-          dataset will need a dataset selected again.
-        </p>
-      ),
-      confirmLabel: 'Delete from library',
-      danger: true,
-    });
-    if (!confirmed) return;
     setBusy(true);
     setError('');
     try {
+      const jobs = await loadDatasetUsage(value.id);
+      const confirmed = await confirmDialog({
+        title: `Remove "${value.name}" from the dataset library?`,
+        body: (
+          <>
+            <p>
+              Only the library entry is removed. Media files, captions and
+              recovery history stay on disk, including uploaded files. The
+              drafts below will need another dataset selected.
+            </p>
+            <DatasetJobImpact jobs={jobs} newTab />
+          </>
+        ),
+        confirmLabel: 'Remove from library',
+        danger: true,
+      });
+      if (!confirmed) return;
       await api(`/api/datasets/${value.id}`, 'DELETE', {});
       await refresh();
       setStatus(
-        `Deleted "${value.name}" from the library. Files are preserved.`,
+        `Removed "${value.name}" from the library. Files are preserved.`,
       );
       heading.current?.focus();
     } catch (reason) {
@@ -368,14 +375,14 @@ export function Datasets({
       setBusy(false);
     }
   }
-  async function create(managed: boolean) {
+  async function create(managed: boolean, destination: string) {
     setBusy(true);
     setError('');
     try {
       const created = await api<Dataset>(
         managed ? '/api/datasets/managed' : '/api/datasets',
         'POST',
-        managed ? { name, root: folder } : { name, path: folder },
+        managed ? { name, root: destination } : { name, path: destination },
       );
       await open(created.id);
       setPanel(managed ? 'uploads' : null);
@@ -526,6 +533,7 @@ export function Datasets({
             panelButtons.current[name] = element;
           }}
           selected={selected}
+          onTrainingJob={onTrainingJob}
         />
       )}
       {repair?.itemId &&
@@ -567,6 +575,7 @@ export function Datasets({
           folder={folder}
           setFolder={setFolder}
           datasetRoots={datasetRoots}
+          datasets={datasets}
           create={create}
         />
       )}
@@ -579,6 +588,7 @@ export function Datasets({
             </p>
           )}
           <DatasetPanels
+            visible={visible}
             dataset={dataset}
             panel={panel}
             closePanel={closePanel}

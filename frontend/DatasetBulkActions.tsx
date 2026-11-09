@@ -18,6 +18,7 @@ type Props = {
   selected: string[];
   afterCaptionFlush: (action: () => Promise<void>) => Promise<boolean>;
   onChanged: () => Promise<void>;
+  impactReady: boolean;
 };
 
 export function DatasetBulkActions({
@@ -25,6 +26,7 @@ export function DatasetBulkActions({
   selected,
   afterCaptionFlush,
   onChanged,
+  impactReady,
 }: Props) {
   const [fields, setFields] = useState({
     prefix: '',
@@ -36,6 +38,7 @@ export function DatasetBulkActions({
   const [operation, setOperation] = useState<Operation | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState('');
   const url = `/api/datasets/${datasetId}`;
   const request = <T,>(path: string, data: object) =>
     batchRequest<T>(url + path, 'POST', data);
@@ -76,7 +79,7 @@ export function DatasetBulkActions({
       <summary>Selection and bulk caption actions</summary>
       <div className="actions">
         <button
-          disabled={busy || !selected.length}
+          disabled={busy || !selected.length || !impactReady}
           onClick={() =>
             void action(async () => {
               await request('/exclusions', {
@@ -84,13 +87,16 @@ export function DatasetBulkActions({
                 excluded: true,
               });
               await onChanged();
+              setStatus(
+                'Selection excluded. Choose Include selection to reverse this change.',
+              );
             })
           }
         >
           Exclude selection
         </button>
         <button
-          disabled={busy || !selected.length}
+          disabled={busy || !selected.length || !impactReady}
           onClick={() =>
             void action(async () => {
               await request('/exclusions', {
@@ -98,12 +104,14 @@ export function DatasetBulkActions({
                 excluded: false,
               });
               await onChanged();
+              setStatus('Selection included.');
             })
           }
         >
           Include selection
         </button>
       </div>
+      {status && <p role="status">{status}</p>}
       <div className="columns">
         {field('Caption prefix', 'prefix')}
         {field('Caption suffix', 'suffix')}

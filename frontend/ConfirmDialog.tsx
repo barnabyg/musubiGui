@@ -69,16 +69,18 @@ export function ConfirmDialogHost() {
   // A modal dialog would otherwise let Tab leave for the browser's own controls.
   function trap(event: KeyboardEvent) {
     if (event.key !== 'Tab') return;
-    const buttons = [
-      ...(dialog.current?.querySelectorAll<HTMLElement>('button') ?? []),
+    const controls = [
+      ...(dialog.current?.querySelectorAll<HTMLElement>(
+        'a[href], button:not(:disabled)',
+      ) ?? []),
     ];
-    const last = buttons[buttons.length - 1];
-    if (event.shiftKey && document.activeElement === buttons[0]) {
+    const last = controls[controls.length - 1];
+    if (event.shiftKey && document.activeElement === controls[0]) {
       event.preventDefault();
       last.focus();
     } else if (!event.shiftKey && document.activeElement === last) {
       event.preventDefault();
-      buttons[0].focus();
+      controls[0].focus();
     }
   }
   if (!pending) return null;

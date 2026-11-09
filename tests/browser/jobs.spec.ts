@@ -94,6 +94,7 @@ test('the action bar stays visible, identity comes first and rare actions are in
     await expect.poll(inView).toBe(true);
 
     // Tabbing to a field below the bar scrolls it clear of the bar.
+    await page.getByText('Advanced controls', { exact: true }).click();
     const seed = page.getByLabel('Seed', { exact: true });
     await seed.focus();
     await page.evaluate(() => window.scrollTo(0, 0));
@@ -102,11 +103,15 @@ test('the action bar stays visible, identity comes first and rare actions are in
     const field = await seed.boundingBox();
     expect(field!.y).toBeGreaterThanOrEqual(bar!.y + bar!.height);
 
-    // Job name and dataset lead the editor; presets follow them.
+    // Required job choices lead the editor; advanced presets follow them.
     const headings = await page
       .getByRole('heading', { level: 2 })
       .allInnerTexts();
-    expect(headings.slice(0, 2)).toEqual(['Job & dataset', 'Presets']);
+    expect(headings.slice(0, 3)).toEqual([
+      'Job & dataset',
+      'Training & sample',
+      'Presets',
+    ]);
 
     const menu = page.getByRole('button', { name: 'More job actions' });
     await menu.focus();
@@ -232,6 +237,7 @@ test('Review saves a dirty draft first, and disabled actions explain themselves'
     await page
       .getByRole('button', { name: 'New Wan job', exact: true })
       .click();
+    await page.getByText('Advanced controls', { exact: true }).click();
     const prepare = page.getByRole('button', {
       name: 'Prepare run',
       exact: true,
@@ -413,6 +419,7 @@ test('Wan draft controls, validation and reviewed native configuration survive s
       .getByRole('button', { name: 'New Wan job', exact: true })
       .click();
     await page.getByLabel('Job name', { exact: true }).fill('Browser Wan');
+    await page.getByText('Advanced controls', { exact: true }).click();
     await page.getByLabel('LoRA rank', { exact: true }).fill('16');
     await page.getByRole('spinbutton', { name: /^Frames\b/ }).fill('18');
     await page.getByRole('button', { name: 'Save draft', exact: true }).click();
@@ -467,6 +474,7 @@ test('Wan draft controls, validation and reviewed native configuration survive s
     await app.start();
     await openJobs(page, app.url);
     await page.getByRole('button', { name: /Browser Wan · WAN/ }).click();
+    await page.getByText('Advanced controls', { exact: true }).click();
     await expect(
       page.getByRole('spinbutton', { name: /^Frames\b/ }),
     ).toHaveValue('33');
@@ -487,6 +495,7 @@ test('a new draft starts realistic, warns about low steps and offers the smoke-t
     await page
       .getByRole('button', { name: 'New Wan job', exact: true })
       .click();
+    await page.getByText('Advanced controls', { exact: true }).click();
     await expect(
       page.getByRole('spinbutton', { name: /^Width\b/ }),
     ).toHaveValue('832');
@@ -575,6 +584,7 @@ test('Wan frame extraction controls persist and review counts cached windows aft
     await page
       .getByRole('button', { name: 'Add dataset', exact: true })
       .click();
+    await page.getByText('Advanced controls', { exact: true }).click();
     await page.getByRole('spinbutton', { name: /^Frames\b/ }).fill('17');
     await page
       .getByRole('combobox', { name: /^Frame extraction\b/ })
@@ -599,6 +609,7 @@ test('Wan frame extraction controls persist and review counts cached windows aft
     await page.reload();
     await openJobs(page, app.url);
     await page.getByRole('button', { name: /New Wan job · WAN/ }).click();
+    await page.getByText('Advanced controls', { exact: true }).click();
     await expect(
       page.getByRole('combobox', { name: /^Frame extraction\b/ }),
     ).toHaveValue('slide');
@@ -617,6 +628,7 @@ test('H3 editor keeps T2VA guidance stages and identifies invalid geometry', asy
   try {
     await openJobs(page, app.url);
     await page.getByRole('button', { name: 'New H3 job', exact: true }).click();
+    await page.getByText('Advanced controls', { exact: true }).click();
     await expect(
       page.getByRole('spinbutton', { name: /^Frames\b/ }),
     ).toHaveValue('124');
@@ -662,6 +674,7 @@ test('duplication presets cancelled conversion and versioned export import keep 
       .getByRole('button', { name: 'New Wan job', exact: true })
       .click();
     await page.getByLabel('Job name', { exact: true }).fill('Reusable');
+    await page.getByText('Advanced controls', { exact: true }).click();
     await page.getByLabel('LoRA rank', { exact: true }).fill('16');
     await page.getByRole('button', { name: 'Save draft', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('Draft saved');
@@ -801,6 +814,11 @@ test('the job form uses short fields for short values and shares rows between re
       (await page
         .getByRole('spinbutton', { name: new RegExp(`^${label}`) })
         .boundingBox())!;
+    // The compact setup stays shorter than the previous expanded form.
+    expect(
+      await page.evaluate(() => document.documentElement.scrollHeight),
+    ).toBeLessThan(3200);
+    await page.getByText('Advanced controls', { exact: true }).click();
     for (const label of ['Blocks to swap', 'Width', 'Training steps'])
       expect((await box(label)).width).toBeLessThan(200);
     const width = await box('Width');
@@ -808,10 +826,6 @@ test('the job form uses short fields for short values and shares rows between re
     expect((await box('Frames')).y).toBe(width.y);
     // The header and its repeated title are gone.
     await expect(page.locator('main header')).toHaveCount(0);
-    // It was 3381 px with the header, full-width number fields and larger gaps.
-    expect(
-      await page.evaluate(() => document.documentElement.scrollHeight),
-    ).toBeLessThan(3200);
   } finally {
     await app.close();
   }
@@ -832,6 +846,7 @@ test('the section menu reaches every section, marks the current one and keeps un
       menu.getByRole('button', { name, exact: true }).click();
     const current = menu.locator('[aria-current="true"]');
     const headings: [string, string][] = [
+      ['Training & sample', 'Training & sample'],
       ['Dataset preparation', 'Dataset preparation'],
       ['LoRA & training', 'LoRA & training'],
       ['Memory', 'Memory'],
@@ -893,6 +908,7 @@ test('invalid fields are flagged while typing and review errors lead to their fi
     await page
       .getByRole('button', { name: 'New Wan job', exact: true })
       .click();
+    await page.getByText('Advanced controls', { exact: true }).click();
     const width = page.getByLabel('Width', { exact: true });
     await expect(width).not.toHaveAttribute('aria-invalid', 'true');
     await width.fill('250');
@@ -980,6 +996,7 @@ test('a review size error leads to the dimension that is wrong', async ({
     await page
       .getByRole('button', { name: 'New Wan job', exact: true })
       .click();
+    await page.getByText('Advanced controls', { exact: true }).click();
     await page.getByLabel('Height', { exact: true }).fill('250');
     await page
       .getByRole('button', { name: 'Review configuration', exact: true })

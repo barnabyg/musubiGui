@@ -24,7 +24,13 @@ test('large galleries scroll, resize and filter without losing access to media',
     await page
       .getByLabel('Dataset name', { exact: true })
       .fill('Large collection');
+    await page
+      .getByRole('radio', { name: 'Use existing folder', exact: true })
+      .check();
     await page.getByLabel('Dataset folder', { exact: true }).fill(app.media);
+    await page
+      .getByRole('checkbox', { name: 'Index this entire dataset root' })
+      .check();
     await page.getByRole('button', { name: 'Use existing folder' }).click();
     await expect(page.locator('.dataset-identity [role="status"]')).toHaveText(
       'Scan: complete 8/8',
@@ -110,7 +116,13 @@ test('the active tile stays in view and panels keep the column count', async ({
     await page.getByRole('button', { name: 'Datasets', exact: true }).click();
     await page.getByRole('button', { name: 'New dataset' }).click();
     await page.getByLabel('Dataset name', { exact: true }).fill('Layout');
+    await page
+      .getByRole('radio', { name: 'Use existing folder', exact: true })
+      .check();
     await page.getByLabel('Dataset folder', { exact: true }).fill(app.media);
+    await page
+      .getByRole('checkbox', { name: 'Index this entire dataset root' })
+      .check();
     await page.getByRole('button', { name: 'Use existing folder' }).click();
     await expect(page.locator('.dataset-identity [role="status"]')).toHaveText(
       /^Scan: complete/,
@@ -194,7 +206,7 @@ test('the active tile stays in view and panels keep the column count', async ({
   }
 });
 
-test('separate library and editor create, populate, rename, reopen and delete without removing files', async ({
+test('separate library and editor create, populate, rename, reopen and remove entries without removing files', async ({
   page,
 }) => {
   const app = await datasetHarness();
@@ -215,7 +227,9 @@ test('separate library and editor create, populate, rename, reopen and delete wi
     await page
       .getByLabel('Dataset name', { exact: true })
       .fill('Portrait studies');
-    await page.getByLabel('Dataset folder', { exact: true }).fill(app.media);
+    await page
+      .getByLabel('Upload parent folder', { exact: true })
+      .fill(app.media);
     await page
       .getByRole('button', { name: 'Create a new folder for uploads' })
       .click();
@@ -325,7 +339,7 @@ test('separate library and editor create, populate, rename, reopen and delete wi
     );
     await page.getByRole('button', { name: 'Back to datasets' }).click();
     await page
-      .getByRole('button', { name: 'Delete Portrait collection' })
+      .getByRole('button', { name: 'Remove Portrait collection from library' })
       .click();
     const question = page.getByRole('dialog');
     await expect(question).toContainText('Portrait collection');
@@ -345,9 +359,9 @@ test('separate library and editor create, populate, rename, reopen and delete wi
       else await route.continue();
     });
     await page
-      .getByRole('button', { name: 'Delete Portrait collection' })
+      .getByRole('button', { name: 'Remove Portrait collection from library' })
       .click();
-    await question.getByRole('button', { name: 'Delete from library' }).click();
+    await question.getByRole('button', { name: 'Remove from library' }).click();
     await expect(page.getByRole('alert')).toContainText(
       'Fixture deletion failed',
     );
@@ -356,9 +370,9 @@ test('separate library and editor create, populate, rename, reopen and delete wi
     ).toBeVisible();
     await page.unroute(`**/api/datasets/${stored.id}`);
     await page
-      .getByRole('button', { name: 'Delete Portrait collection' })
+      .getByRole('button', { name: 'Remove Portrait collection from library' })
       .click();
-    await question.getByRole('button', { name: 'Delete from library' }).click();
+    await question.getByRole('button', { name: 'Remove from library' }).click();
     await expect(page.getByText('Your library starts here')).toBeVisible();
     expect(await readFile(path.join(stored.path, 'red.png'))).toEqual(
       await readFile(path.join(app.media, 'red.png')),

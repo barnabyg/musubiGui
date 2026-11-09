@@ -1287,6 +1287,7 @@ test('a Wan job combines an image dataset and a video dataset through review, re
     await page
       .getByRole('button', { name: 'New Wan job', exact: true })
       .click();
+    await page.getByText('Advanced controls', { exact: true }).click();
     await page
       .getByRole('combobox', { name: 'Compatible preset' })
       .selectOption({ label: 'Smoke test · Wan · 2 steps' });

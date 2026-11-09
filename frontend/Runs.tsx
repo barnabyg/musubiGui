@@ -9,6 +9,7 @@ import {
   type Output,
 } from './Outputs';
 import { formatRoute } from './route';
+import { RunJobLink } from './RunJobLink';
 import { notificationsWanted, setNotificationsWanted } from './runSignals';
 import { readableTime, runStatus, sizeLabel } from './runStatus';
 import { StatusBadge } from './StatusBadge';
@@ -530,6 +531,7 @@ export function Runs({
             <section className="panel">
               <h2>{run.job.name}</h2>
               <p title={run.id}>Run {run.id.slice(0, 8)}</p>
+              <RunJobLink key={run.id} frozen={run.job} />
               <p>
                 <strong>
                   State: <RunBadge status={run.status} />

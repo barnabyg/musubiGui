@@ -62,13 +62,13 @@ export function DatasetLibrary({
             </span>
             <button
               className="danger"
-              aria-label={`Delete ${value.name}`}
+              aria-label={`Remove ${value.name} from library`}
               disabled={
                 busy || ['pending', 'scanning'].includes(value.scan.state)
               }
               onClick={() => void remove(value)}
             >
-              Delete
+              Remove from library
             </button>
             {['pending', 'scanning'].includes(value.scan.state) && (
               <small>Scan in progress; open to check.</small>
