@@ -10,6 +10,7 @@ import { DatasetJobImpact, useDatasetUsage } from './datasetUsage';
 
 export function DatasetPanels({
   dataset,
+  visible,
   panel,
   closePanel,
   busy,
@@ -24,6 +25,7 @@ export function DatasetPanels({
   onChanged,
 }: {
   dataset: Dataset;
+  visible: boolean;
   panel: DatasetPanel | null;
   closePanel: () => void;
   busy: boolean;
@@ -39,7 +41,7 @@ export function DatasetPanels({
 }) {
   const usage = useDatasetUsage(
     dataset.id,
-    panel === 'settings' || panel === 'tools',
+    visible && (panel === 'settings' || panel === 'tools'),
   );
   return (
     <>

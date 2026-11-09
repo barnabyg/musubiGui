@@ -26,12 +26,16 @@ export async function loadDatasetUsage(
 
 export function useDatasetUsage(datasetId: string, enabled: boolean) {
   const [attempt, setAttempt] = useState(0);
+  const [activation, setActivation] = useState({ enabled, generation: 0 });
+  // Panels stay mounted while hidden. Discard their old scope before a return can enable actions.
+  if (activation.enabled !== enabled)
+    setActivation({ enabled, generation: activation.generation + 1 });
   const [result, setResult] = useState<{
     key: string;
     jobs?: DatasetUsage;
     error?: string;
   }>();
-  const key = `${datasetId}/${attempt}`;
+  const key = `${datasetId}/${activation.generation}/${attempt}`;
   useEffect(() => {
     if (!enabled) return;
     const controller = new AbortController();

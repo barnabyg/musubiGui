@@ -588,6 +588,7 @@ export function Datasets({
             </p>
           )}
           <DatasetPanels
+            visible={visible}
             dataset={dataset}
             panel={panel}
             closePanel={closePanel}

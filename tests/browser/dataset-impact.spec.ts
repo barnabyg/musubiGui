@@ -5,6 +5,62 @@ import { runWorkspace } from './runHarness';
 
 test.use({ actionTimeout: 240_000 });
 
+test('returning from a new training draft refreshes the affected jobs before exclusion', async ({
+  page,
+}) => {
+  const app = await runWorkspace();
+  let release = () => {};
+  try {
+    const wan = app.manifest.jobs.find((job) => job.family === 'wan')!;
+    await page.goto(`${app.url}/#/datasets/${wan.dataset_id}`);
+    await page
+      .getByRole('button', { name: 'Bulk actions', exact: true })
+      .click();
+    const impact = page.getByRole('region', {
+      name: 'Jobs using this dataset',
+    });
+    await expect(impact.getByRole('link')).toHaveCount(2);
+    await page.getByText('Create training job', { exact: true }).click();
+    await page
+      .getByRole('button', { name: 'Create Wan job', exact: true })
+      .click();
+    await expect(page.getByLabel('Job name', { exact: true })).toHaveValue(
+      'WAN acceptance · Wan',
+    );
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route('**/api/jobs', async (route) => {
+      await held;
+      await route.continue();
+    });
+    await page.getByRole('button', { name: 'Datasets', exact: true }).click();
+    await expect(impact).toContainText('Loading affected jobs…');
+    await page.getByLabel('Select motion.mp4', { exact: true }).focus();
+    await page.keyboard.press('Space');
+    await page
+      .getByText('Selection and bulk caption actions', { exact: true })
+      .click();
+    const exclude = page.getByRole('button', {
+      name: 'Exclude selection',
+      exact: true,
+    });
+    await expect(exclude).toBeDisabled();
+    release();
+    await expect(impact.getByRole('link')).toHaveCount(3);
+    await expect(
+      impact.getByRole('link', {
+        name: 'WAN acceptance · Wan · WAN · r1',
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(exclude).toBeEnabled();
+  } finally {
+    release();
+    await app.close();
+  }
+});
+
 test('dataset inclusion and removal name dependent drafts while prepared Runs keep their snapshot', async ({
   page,
 }) => {
