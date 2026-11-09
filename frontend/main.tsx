@@ -195,6 +195,7 @@ function App() {
     [selectOn],
   );
   const openRun = useCallback((id: string) => go('Runs', id), [go]);
+  const openTrainingJob = useCallback((id: string) => go('Jobs', id), [go]);
   async function navigate(name: Screen) {
     const replace = landingPending.current;
     landingPending.current = false;
@@ -409,6 +410,7 @@ function App() {
       >
         <div hidden={landing || screen !== 'Datasets'}>
           <Datasets
+            onTrainingJob={openTrainingJob}
             onCaptionSessions={setCaptions}
             onEditorChange={setDatasetEditor}
             visible={!landing && screen === 'Datasets'}

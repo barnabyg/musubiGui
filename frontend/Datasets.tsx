@@ -77,6 +77,7 @@ export function Datasets({
   datasetRoots,
   onEditorChange,
   onCaptionSessions,
+  onTrainingJob,
 }: {
   visible?: boolean;
   selectedId?: string;
@@ -86,6 +87,7 @@ export function Datasets({
   datasetRoots?: string[];
   onEditorChange?: (editing: boolean) => void;
   onCaptionSessions: (sessions: CaptionSession[]) => void;
+  onTrainingJob: (id: string) => void;
 }) {
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [screen, setScreen] = useState<'library' | 'create' | 'edit'>(
@@ -526,6 +528,7 @@ export function Datasets({
             panelButtons.current[name] = element;
           }}
           selected={selected}
+          onTrainingJob={onTrainingJob}
         />
       )}
       {repair?.itemId &&

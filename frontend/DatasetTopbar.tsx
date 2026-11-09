@@ -2,6 +2,7 @@ import type { RefObject } from 'react';
 import { ArrowLeft, Settings as SettingsIcon } from 'lucide-react';
 import { type CaptionSession, useCaptionSummary } from './captionSession';
 import { hasCaption } from './datasetItems';
+import { DatasetTrainingJob } from './DatasetTrainingJob';
 import type { Dataset, DatasetItem } from './Datasets';
 
 export type DatasetPanel = 'settings' | 'tools' | 'uploads';
@@ -25,6 +26,7 @@ export function DatasetTopbar({
   setPanel,
   setPanelButton,
   selected,
+  onTrainingJob,
 }: {
   dataset: Dataset;
   items: DatasetItem[];
@@ -47,6 +49,7 @@ export function DatasetTopbar({
     element: HTMLButtonElement | null,
   ) => void;
   selected: Set<string>;
+  onTrainingJob: (id: string) => void;
 }) {
   const captionSummary = useCaptionSummary(captions);
   return (
@@ -81,6 +84,17 @@ export function DatasetTopbar({
             </>
           )}
         </small>
+        <DatasetTrainingJob
+          key={dataset.id}
+          dataset={dataset}
+          busy={busy}
+          beforeCreate={async () => {
+            const saved = await captions.flushAll();
+            if (!saved) reviewFailed();
+            return saved;
+          }}
+          onCreated={onTrainingJob}
+        />
       </div>
       <div className="dataset-filters">
         <input

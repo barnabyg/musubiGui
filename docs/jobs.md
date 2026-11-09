@@ -45,6 +45,24 @@ Dataset exclusions belong to the dataset, not the job, so they apply to every jo
 
 ## Datasets in a job
 
+From an open dataset, choose **Create training job**, then **Create Wan job** or
+**Create H3 job**. Pending captions save before a separate draft is created with
+that dataset selected once. Failed caption saves keep the gallery open for repair.
+Missing folders, scans that have not finished and datasets without valid included
+media explain what to fix before creating a job. Existing jobs stay independent.
+
+To check this handoff, run the following from `C:/docs/git/musubiGui` in PowerShell 7:
+
+```powershell
+.\acceptance.cmd --workspace ".cache/ux-check-$([guid]::NewGuid().ToString('N'))"
+```
+
+In the CPU fixture, edit a caption in WAN acceptance, create a Wan job from the
+dataset, add H3 acceptance as a second dataset and set the first dataset's repeats.
+Save and reload: both datasets retain their order and repeats, and reopening the
+gallery shows the saved caption. Try the H3 handoff too. This checks navigation
+and persistence without starting GPU training.
+
 Job & dataset lists the job's datasets in order. Each row shows the dataset, its contents
 (`12 images · 3 videos`), its repeats and Remove. Blank repeats use the job's Repeats, shown in
 the field. Add a dataset offers only those not already listed. A row whose dataset was deleted
