@@ -36,6 +36,14 @@ upstream/environment provenance of the two Runs' frozen inputs.
 It compares recorded facts and offers no quality ranking. Comparing changes no Job or
 Run.
 
+Comparison also shows an independent sample selector for each Run alongside those
+differences. Both sides identify the job, frozen revision and full Run ID, and show
+the sample prompt and seed recorded in the Run settings when present. These settings
+are provenance, not a claim about the quality of a particular file. Videos and audio
+have playback controls; missing samples keep their availability message, and a Run
+that has no generated samples remains comparable. Each side's final LoRA download
+belongs to that side's Run. On narrow screens the two sample panels stack.
+
 One command creates **two synthetic Runs per model** and launches their real media
 output browser, without model weights or GPU work:
 
@@ -47,6 +55,10 @@ Use a new destination; existing directories are preserved. Open the local URL on
 port 8768, choose Runs, and inspect a Wan and H3 fixture. Play their videos, the H3
 audio sample and the still image; download a checkpoint. Compare revision one with
 revision two and inspect changed rank, caption, model identity and upstream version.
+Select and play a sample on each side without leaving comparison, then select H3's
+audio sample. Check both final LoRA download names against their displayed revisions.
+Repeat at 390 px width. Comparing a Run prepared with sampling disabled should show
+no generated samples on that side while keeping its recorded input differences usable.
 Remove one generated fixture file, refresh, restart the service and confirm its
 missing status remains visible. The fixture manifest lists exact paths and Run IDs.
 All fixture media is original CC0 synthetic content and its tiny checkpoint is
@@ -57,6 +69,7 @@ Focused verification:
 ```powershell
 .venv\Scripts\python.exe -m pytest tests/python/test_outputs_api.py -q
 npm.cmd run test:browser -- tests/browser/outputs.spec.ts
+npm.cmd run test:browser -- tests/browser/sampleComparison.spec.ts
 ```
 
 The API tests cover persistent/missing inventory, checkpoint bounds, image/audio/video
