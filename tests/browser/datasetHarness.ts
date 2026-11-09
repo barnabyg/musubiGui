@@ -1,11 +1,14 @@
 import { spawn } from 'node:child_process';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { localBackend, python } from './backend';
 
 export async function datasetHarness(options: { h3Audio?: boolean } = {}) {
-  const root = await mkdtemp(path.join(tmpdir(), 'musubi-dataset-'));
+  // Windows CI's TEMP can use an 8.3 alias; fixture settings use resolved paths.
+  const root = await realpath(
+    await mkdtemp(path.join(tmpdir(), 'musubi-dataset-')),
+  );
   const fixture = path.join(root, 'fixture');
   const creator = spawn(
     python,
