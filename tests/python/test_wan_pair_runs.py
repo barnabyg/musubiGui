@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 from helpers import acceptance_workspace, wait_for
 
-from musubi_gui.jobs import JobConfig, JobDataset, JobDraft, JobStore, configuration_errors, review_job
+from musubi_gui.jobs import JobConfig, JobDataset, JobDraft, JobStore, PresetSelection, configuration_errors, review_job
 from musubi_gui.outputs import OutputBrowser
 from musubi_gui.runs import RunService
 from musubi_gui.settings import load_settings
@@ -237,3 +237,15 @@ def test_missing_old_phase_does_not_invalidate_a_later_complete_pair(tmp_path: P
         assert next(state for state in inspected if state["schedule_step"] == 4)["valid"]
     finally:
         service.close()
+
+
+def test_smoke_presets_select_a_complete_expert_recipe(tmp_path: Path) -> None:
+    root, job_id = paired_job(tmp_path, expert_interval=30, steps=120)
+    store = JobStore(root)
+    low = store.apply_preset(job_id, PresetSelection(preset_id="smoke-wan", revision=1))
+    assert low.config.recipe == "low-noise"
+    assert low.config.steps == 2 and not low.config.save_state
+    paired = store.apply_preset(job_id, PresetSelection(preset_id="smoke-wan-paired", revision=2))
+    assert paired.config.recipe == "alternating"
+    assert (paired.config.steps, paired.config.expert_interval, paired.config.save_state) == (4, 1, True)
+    assert configuration_errors(paired) == []

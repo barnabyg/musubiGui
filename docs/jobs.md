@@ -153,6 +153,10 @@ not saved scaled-FP8 weights. Inactive-DiT offload is not supported by this reci
 
 ### Alternating Wan high/low LoRAs
 
+The **Smoke test · Wan alternating · 4 steps** preset selects a complete small paired
+configuration with N = 1 and state saving enabled. The original **Wan · 2 steps**
+smoke preset selects low-noise training, including when applied to a paired job.
+
 Choose **Wan alternating low/high experts** under Recipe. **Steps per expert before
 switching** is a positive integer N, counted in optimizer updates after gradient
 accumulation. **Training steps** is the total across both experts. For N = 30 and

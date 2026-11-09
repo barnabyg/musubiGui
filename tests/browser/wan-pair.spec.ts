@@ -1,6 +1,61 @@
 import { test, expect } from '@playwright/test';
 import { runWorkspace } from './runHarness';
 
+test('Wan smoke presets switch expert recipe together with the required state settings', async ({
+  page,
+}) => {
+  const app = await runWorkspace();
+  try {
+    const job = app.manifest.jobs.find((item) => item.family === 'wan')!;
+    await page.goto(`${app.url}/#/jobs/${job.id}`);
+    await page.getByText('Advanced controls', { exact: true }).click();
+    await page
+      .getByRole('combobox', { name: 'Compatible preset', exact: true })
+      .selectOption('smoke-wan-paired');
+    await page
+      .getByRole('button', { name: 'Apply preset', exact: true })
+      .click();
+    await expect(page.getByRole('combobox', { name: /^Recipe/ })).toHaveValue(
+      'alternating',
+    );
+    await expect(
+      page.getByLabel('Training steps', { exact: true }),
+    ).toHaveValue('4');
+    await expect(
+      page.getByLabel('Steps per expert before switching', { exact: true }),
+    ).toHaveValue('1');
+    await expect(
+      page.getByRole('checkbox', { name: /^Save optimizer\/training state/ }),
+    ).toBeChecked();
+    await page
+      .getByRole('button', { name: 'Review configuration', exact: true })
+      .click();
+    await expect(page.getByLabel('Configuration review')).toContainText(
+      'Review passed.',
+    );
+    await page
+      .getByRole('combobox', { name: 'Compatible preset', exact: true })
+      .selectOption('smoke-wan');
+    await page
+      .getByRole('button', { name: 'Apply preset', exact: true })
+      .click();
+    await expect(page.getByRole('combobox', { name: /^Recipe/ })).toHaveValue(
+      'low-noise',
+    );
+    await expect(
+      page.getByLabel('Training steps', { exact: true }),
+    ).toHaveValue('2');
+    await expect(
+      page.getByLabel('Steps per expert before switching', { exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole('checkbox', { name: /^Save optimizer\/training state/ }),
+    ).not.toBeChecked();
+  } finally {
+    await app.close();
+  }
+});
+
 test('alternating Wan settings persist, train both experts and restore the paired schedule through the GUI', async ({
   page,
 }) => {

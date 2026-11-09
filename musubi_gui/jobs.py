@@ -246,6 +246,8 @@ MEASURED_PRESETS = {
 # Applying one replaces everything that decides how long the check takes, and keeps components, learning rate and seed.
 SMOKE_CONTROLS = (
     *MEASURED_CONTROLS,
+    "recipe",
+    "expert_interval",
     "steps",
     "save_every",
     "save_state",
@@ -257,6 +259,14 @@ SMOKE_PRESETS = {
     preset.id: preset
     for preset in [
         Preset(id="smoke-wan", name="Smoke test · Wan · 2 steps", family="wan", config=smoke_config("wan")),
+        Preset(
+            id="smoke-wan-paired",
+            name="Smoke test · Wan alternating · 4 steps",
+            family="wan",
+            config=smoke_config("wan").model_copy(
+                update={"recipe": PAIRED_RECIPE, "expert_interval": 1, "steps": 4, "save_state": True}
+            ),
+        ),
         Preset(id="smoke-h3", name="Smoke test · H3 · 2 steps", family="h3", config=smoke_config("h3")),
     ]
 }
