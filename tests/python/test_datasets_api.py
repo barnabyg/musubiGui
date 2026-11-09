@@ -265,6 +265,10 @@ def test_caption_editor_rejects_inside_root_junction_retarget_without_touching_e
     try:
         assert client.get(url).status_code == 422
         assert client.put(url, json={"text": "Wrong destination", "revision": revision}).status_code == 422
+        gallery = client.get(f"/api/datasets/{dataset_id}/items").json()
+        redirected = next(value for value in gallery if value["id"] == item["id"])
+        assert "Linked or redirected" in redirected["caption"]["error"]
+        assert client.get(f"/api/datasets/{dataset_id}/items/{item['id']}/thumbnail").status_code == 422
         assert (target / "item.txt").read_text(encoding="utf-8") == "Do not change this target"
         assert (original / "item.txt").read_text(encoding="utf-8") == "Original intended caption"
     finally:
@@ -293,6 +297,9 @@ def test_caption_editor_rejects_a_dataset_root_replaced_by_a_junction(tmp_path: 
         response = client.put(url, json={"text": "Wrong destination", "revision": revision})
         assert response.status_code == 422
         assert "Linked or redirected" in response.json()["detail"]
+        gallery_url = url.rsplit("/", 2)[0]
+        gallery = client.get(gallery_url).json()
+        assert all("Linked or redirected" in item["caption"]["error"] for item in gallery)
         assert (target / "red.txt").read_text(encoding="utf-8") == "Do not change this target"
         assert (original / "red.txt").read_text(encoding="utf-8") == "A red square"
     finally:

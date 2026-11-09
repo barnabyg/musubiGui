@@ -67,6 +67,13 @@ def regular_path(path: Path, root: Path) -> Path:
     return candidate
 
 
+def media_file(path: Path, folder: Path) -> Path:
+    path = regular_path(path, folder)
+    if not path.is_file():
+        raise KeyError("Source media is missing. Restore it and re-scan.")
+    return path
+
+
 class DatasetStore:
     def __init__(self, root: Path):
         self.root = root
@@ -143,6 +150,10 @@ class DatasetStore:
             "excluded": 0,
         }
         missing = not Path(row["path"]).is_dir()
+        try:
+            folder = self._folder(row["path"])
+        except (OSError, ValueError):
+            folder = None
         for item in rows:
             counts["valid"] += int(item["valid"])
             counts["excluded"] += int(item["excluded"])
@@ -150,8 +161,9 @@ class DatasetStore:
                 counts["included"] += 1
                 counts["images" if Path(item["relative"]).suffix.lower() in IMAGES else "videos"] += 1
             try:
-                caption = self._folder(row["path"]) / item["relative"]
-                caption = within_root(caption.with_suffix(".txt"), [self._folder(row["path"])])
+                if folder is None:
+                    continue
+                caption = within_root((folder / item["relative"]).with_suffix(".txt"), [folder])
                 counts["captioned"] += int(caption.is_file() and bool(caption.read_text(encoding="utf-8").strip()))
             except (OSError, ValueError):
                 pass
@@ -297,10 +309,7 @@ class DatasetStore:
             row = db.execute("SELECT relative FROM items WHERE dataset=? AND id=?", (dataset_id, item_id)).fetchone()
         if row is None:
             raise KeyError("Dataset item was not found.")
-        path = regular_path(folder / row["relative"], folder)
-        if not path.is_file():
-            raise KeyError("Source media is missing. Restore it and re-scan.")
-        return path
+        return media_file(folder / row["relative"], folder)
 
     def folder(self, dataset_id: str) -> Path:
         with self._db() as db:
@@ -398,18 +407,28 @@ class DatasetStore:
         return self.save_caption(dataset_id, item_id, before["text"], revision, before["exists"])
 
     def items(self, dataset_id: str) -> builtins.list[dict[str, Any]]:
-        dataset = self.get(dataset_id)
         with self._db() as db:
+            dataset = db.execute("SELECT path FROM datasets WHERE id=?", (dataset_id,)).fetchone()
+            if dataset is None:
+                raise KeyError("Dataset was not found.")
             rows = db.execute(
                 "SELECT * FROM items WHERE dataset=? ORDER BY relative COLLATE NOCASE", (dataset_id,)
             ).fetchall()
+        folder = Path(dataset["path"])
+        folder_error = ""
+        try:
+            # Resolve the location once, without computing library counts or rereading sidecars.
+            self._folder(str(folder))
+            regular_path(folder, folder)
+        except (OSError, ValueError) as error:
+            folder_error = str(error)
         result = []
         for row in rows:
             item = {
                 "id": row["id"],
                 "path": row["relative"],
                 "name": row["relative"],
-                "absolute_path": str(Path(dataset["path"]) / row["relative"]),
+                "absolute_path": str(folder / row["relative"]),
                 "kind": "image" if Path(row["relative"]).suffix.lower() in IMAGES else "video",
                 "valid": bool(row["valid"]),
                 "error": row["error"],
@@ -417,7 +436,11 @@ class DatasetStore:
                 "metadata": json.loads(row["metadata"]),
             }
             try:
-                item["caption"] = self.caption(dataset_id, row["id"])
+                if folder_error:
+                    raise ValueError(folder_error)
+                # Recheck each path, including the root, so a concurrent junction swap is rejected.
+                media = media_file(folder / row["relative"], folder)
+                item["caption"] = read_caption(regular_path(media.with_suffix(".txt"), folder))
             except (OSError, ValueError, KeyError) as error:
                 item["caption"] = {"text": "", "revision": "", "exists": False, "error": str(error)}
             result.append(item)

@@ -80,7 +80,7 @@ export function DatasetGallery({
   setScroll: (value: number) => void;
   active: DatasetItem | null;
   setActive: (item: DatasetItem | null) => void;
-  select: (item: DatasetItem | null) => Promise<void>;
+  select: (item: DatasetItem | null) => Promise<boolean>;
   selected: Set<string>;
   setSelected: Dispatch<SetStateAction<Set<string>>>;
   editing: CaptionEditing | null;
@@ -135,6 +135,17 @@ export function DatasetGallery({
     if (target !== element.scrollTop) element.scrollTop = target;
   });
   useLayoutEffect(() => keepActiveTile(), [columns, active?.id]);
+  const previousActive = useRef<string | undefined>(undefined);
+  useLayoutEffect(() => {
+    const previous = previousActive.current;
+    previousActive.current = active?.id;
+    if (!active?.id && previous) {
+      const tile = gallery.current?.querySelector<HTMLButtonElement>(
+        `[data-item-id="${CSS.escape(previous)}"]`,
+      );
+      (tile ?? gallery.current)?.focus();
+    }
+  }, [active?.id]);
   const focusedItem = visibleItems.find((item) => item.id === editing?.id);
   if (focusedItem && !renderedItems.includes(focusedItem))
     renderedItems.push(focusedItem);
@@ -212,6 +223,7 @@ export function DatasetGallery({
               >
                 <div className="media-card-content">
                   <button
+                    data-item-id={item.id}
                     className={`media-tile ${active?.id === item.id ? 'selected' : ''}`}
                     aria-label={`${item.name} ${item.kind} · ${hasCaption(item) ? 'caption' : 'missing caption'}${item.excluded ? ' · excluded' : ''}${item.valid ? '' : ' · invalid'}`}
                     aria-pressed={active?.id === item.id}

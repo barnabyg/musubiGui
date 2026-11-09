@@ -520,6 +520,10 @@ main.dataset-editor-shell {
   font-size: var(--text-base);
   line-height: 1.6;
 }
+.viewer-shortcuts {
+  font-size: var(--text-small);
+  margin: var(--space-4) 0;
+}
 .upload-drop-zone {
   border: 2px dashed var(--color-border-strong);
   border-radius: var(--radius-md);
@@ -568,6 +572,20 @@ main.dataset-editor-shell {
   }
 }
 @media (max-width: 550px) {
+  /* The selected media and its caption share one scroll pane on phone/zoomed widths. */
+  .dataset-workspace.has-viewer {
+    grid-template-rows: minmax(0, 1fr);
+  }
+  .dataset-workspace.has-viewer .dataset-gallery-area {
+    display: none;
+  }
+  .media-viewer > img,
+  .media-viewer video {
+    max-height: min(180px, 24dvh);
+  }
+  .media-viewer textarea {
+    min-height: 100px;
+  }
   .dataset-editor-active {
     display: flex;
     flex-direction: column;

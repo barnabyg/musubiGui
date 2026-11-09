@@ -10,6 +10,7 @@ import {
 } from './Outputs';
 import { formatRoute } from './route';
 import { RunJobLink } from './RunJobLink';
+import { refreshRunHistory, useRunHistory } from './runHistory';
 import { notificationsWanted, setNotificationsWanted } from './runSignals';
 import { readableTime, runStatus, sizeLabel } from './runStatus';
 import { StatusBadge } from './StatusBadge';
@@ -299,9 +300,20 @@ export function Runs({
   selectedId?: string;
   onSelect?: (id?: string, replace?: boolean) => void;
 }) {
-  const [runs, setRuns] = useState<Run[]>([]);
+  const history = useRunHistory();
+  const runs = history.runs ?? [];
+  const [detail, setDetail] = useState<Run>();
+  const [detailRefresh, setDetailRefresh] = useState(0);
   const selected = selectedId ?? '';
   const [error, setError] = useState('');
+  const [detailFailure, setDetailFailure] = useState<{
+    runId: string;
+    message: string;
+  }>();
+  const [logFailure, setLogFailure] = useState<{
+    runId: string;
+    message: string;
+  }>();
   const [notice, setNotice] = useState('');
   const [deleting, setDeleting] = useState('');
   const [busy, setBusy] = useState(false);
@@ -315,41 +327,105 @@ export function Runs({
   } | null>(null);
   // Deleted, perhaps from another tab, or never there: a stale link leaves nothing to show.
   const forgetRun = useEffectEvent(() => onSelect?.(undefined, true));
+  const summary = runs.find((record) => record.id === selected);
+  const changeKey = summary?.change_key;
   useEffect(() => {
-    let current = true;
+    const controller = new AbortController();
+    if (!selected) return;
+    let timer: number;
     async function refresh() {
       try {
-        const [records, capabilities] = await Promise.all([
-          request<Run[]>('/api/runs'),
-          request<{ fixture: boolean; gpu_owner: { run_id: string } | null }>(
-            '/api/runs/capabilities',
-          ),
-        ]);
-        if (!current) return;
-        setRuns(records);
-        setOwner(capabilities.gpu_owner);
-        setFixture(capabilities.fixture);
-        if (selected && !records.some((record) => record.id === selected)) {
-          forgetRun();
-        } else if (selected) {
-          const result = await request<{
-            text: string;
-            progress: Progress | null;
-          }>(`/api/runs/${selected}/logs`);
-          if (current) setLive({ runId: selected, ...result });
-        }
+        const record = await request<Run>(
+          `/api/runs/${selected}`,
+          'GET',
+          undefined,
+          controller.signal,
+        );
+        if (controller.signal.aborted) return;
+        setDetail(record);
+        setDetailFailure(undefined);
       } catch (reason) {
-        if (current) setError((reason as Error).message);
+        if (controller.signal.aborted) return;
+        const message = (reason as Error).message;
+        if (message === 'Run not found.') forgetRun();
+        else {
+          setDetailFailure({ runId: selected, message });
+          timer = window.setTimeout(() => void refresh(), 1000);
+        }
       }
     }
     void refresh();
-    const timer = window.setInterval(() => void refresh(), 1000);
     return () => {
-      current = false;
-      window.clearInterval(timer);
+      controller.abort();
+      window.clearTimeout(timer);
     };
-  }, [selected]);
-  const run = runs.find((record) => record.id === selected);
+  }, [selected, changeKey, detailRefresh]);
+  const run = detail?.id === selected ? detail : undefined;
+  useEffect(() => {
+    const controller = new AbortController();
+    let timer: number;
+    async function refresh() {
+      try {
+        const capabilities = await request<{
+          fixture: boolean;
+          gpu_owner: { run_id: string } | null;
+        }>('/api/runs/capabilities', 'GET', undefined, controller.signal);
+        if (controller.signal.aborted) return;
+        setOwner(capabilities.gpu_owner);
+        setFixture(capabilities.fixture);
+      } catch (reason) {
+        if (!controller.signal.aborted) setError((reason as Error).message);
+      } finally {
+        if (!controller.signal.aborted)
+          timer = window.setTimeout(() => void refresh(), 1000);
+      }
+    }
+    void refresh();
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, []);
+  const runId = run?.id;
+  const status = run?.status;
+  useEffect(() => {
+    if (!runId || !status || status === 'deleting') return;
+    const controller = new AbortController();
+    let timer: number;
+    const live = [
+      'preparing',
+      'training',
+      'generating',
+      'stopping',
+      'orphaned',
+      'uncertain',
+    ].includes(status);
+    async function refresh() {
+      let succeeded = false;
+      try {
+        const result = await request<{
+          text: string;
+          progress: Progress | null;
+        }>(`/api/runs/${runId}/logs`, 'GET', undefined, controller.signal);
+        if (!controller.signal.aborted) {
+          setLive({ runId: runId!, ...result });
+          setLogFailure(undefined);
+          succeeded = true;
+        }
+      } catch (reason) {
+        if (!controller.signal.aborted)
+          setLogFailure({ runId: runId!, message: (reason as Error).message });
+      } finally {
+        if ((live || !succeeded) && !controller.signal.aborted)
+          timer = window.setTimeout(() => void refresh(), 1000);
+      }
+    }
+    void refresh();
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [runId, status]);
   const queue = runs
     .filter((record) =>
       ['pending_preparation', 'pending_training'].includes(record.status),
@@ -357,6 +433,9 @@ export function Runs({
     .sort((a, b) => a.order - b.order);
   const ownerRun = runs.find((record) => record.id === owner?.run_id);
   const current = live?.runId === run?.id ? live : null;
+  const readError =
+    (detailFailure?.runId === selected ? detailFailure.message : '') ||
+    (logFailure && logFailure.runId === run?.id ? logFailure.message : '');
   const showFiles = run && run.status !== 'deleting' && run.id !== deleting;
   // Changes whenever the Run or one of its stages does, so finished work appears without a click.
   const outputs = useRunOutputs(
@@ -373,8 +452,11 @@ export function Runs({
         'POST',
         body,
       );
+      await refreshRunHistory();
       onSelect?.(result.id);
-      setRuns(await request<Run[]>('/api/runs'));
+      // A POST response may predate progress already read while it was in flight.
+      // Select its identity, then fetch authoritative detail even if its summary key stayed the same.
+      setDetailRefresh((value) => value + 1);
     } catch (reason) {
       setError((reason as Error).message);
     } finally {
@@ -406,7 +488,7 @@ export function Runs({
           : '',
       );
       if (result.deleted) onSelect?.();
-      setRuns(await request<Run[]>('/api/runs'));
+      await refreshRunHistory();
     } catch (reason) {
       setNotice('');
       setError((reason as Error).message);
@@ -428,7 +510,7 @@ export function Runs({
       await request('/api/runs/queue/order', 'POST', {
         run_ids: pending.map((record) => record.id),
       });
-      setRuns(await request<Run[]>('/api/runs'));
+      await refreshRunHistory();
     } catch (reason) {
       setError((reason as Error).message);
     }
@@ -448,9 +530,9 @@ export function Runs({
           support.
         </p>
       )}
-      {error && (
+      {(error || history.error || readError) && (
         <p role="alert" className="error">
-          {error}
+          {error || history.error || readError}
         </p>
       )}
       <p role="status">
@@ -542,6 +624,29 @@ export function Runs({
                 ['pending_preparation', 'preparing'].includes(run.status) && (
                   <p>Training starts by itself when preparation succeeds.</p>
                 )}
+              {run.status === 'pending_training' && (
+                <p>
+                  Remove this Run from the training queue. Training will not
+                  start; prepared files remain available.
+                </p>
+              )}
+              {['failed', 'cancelled', 'interrupted'].includes(run.status) && (
+                <div aria-label="Retry frozen inputs">
+                  <p>
+                    Retry creates a new Run using this Run’s frozen job revision
+                    and dataset inputs. Only verified matching latent and text
+                    caches are eligible for reuse. Training will not start
+                    automatically. Training and sampling run again after you
+                    start training (sampling only if enabled in the frozen job).
+                    It does not resume optimizer state.
+                  </p>
+                  <p>
+                    To change the build, edit the job, save and review it, then
+                    prepare from Jobs. For saved optimizer state, use Inspect
+                    saved states below.
+                  </p>
+                </div>
+              )}
               {run.status === 'deleting' && (
                 <div aria-label="Unfinished delete">
                   <p className="error">
@@ -660,14 +765,18 @@ export function Runs({
                   'preparing',
                 ].includes(run.status) && (
                   <button disabled={busy} onClick={() => void action('cancel')}>
-                    Cancel preparation
+                    {run.status === 'pending_training'
+                      ? 'Cancel queued training'
+                      : run.status === 'pending_preparation'
+                        ? 'Cancel queued preparation'
+                        : 'Cancel preparation'}
                   </button>
                 )}
                 {['failed', 'cancelled', 'interrupted'].includes(
                   run.status,
                 ) && (
                   <button disabled={busy} onClick={() => void action('retry')}>
-                    Retry preparation
+                    Prepare new Run from frozen inputs
                   </button>
                 )}
                 <button

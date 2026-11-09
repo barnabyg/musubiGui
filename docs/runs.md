@@ -4,6 +4,52 @@ Runs lists the queue and history beside the selected Run. Statuses read as label
 Preparing or Ready to start, and the stored values are unchanged. The GPU line names the job
 using the GPU and links to its Run.
 
+## History refresh and network traffic
+
+History, queue updates and completion notifications share lightweight Run summaries.
+The selected Run's frozen inputs are loaded separately, again only when its recorded
+details change or after an action. Action responses select the Run; a fresh detail
+request keeps a delayed response from replacing newer live progress. Logs refresh while work is running or needs recovery; a terminal Run's
+logs are fetched once on selection or a status transition. Slow responses finish before
+the next poll is scheduled, and leaving a selection cancels its outstanding requests.
+Failed detail/log requests retry after the response completes, even for an unchanged
+terminal Run. A successful retry clears that read's error and stops terminal log
+refreshes; unrelated action and capability errors remain visible.
+Output lists still refresh at stage transitions and through Refresh outputs.
+
+`GET /api/runs/summaries` returns Run ID, creation time, status, queue order, job
+identity, stage names/statuses and an opaque `change_key` for invalidating selected
+detail. It excludes frozen manifests, job configuration, settings, stage arguments
+and provenance. The existing `GET /api/runs` and `GET /api/runs/{id}` retain their full
+responses for API callers. Persisted Run formats are unchanged.
+
+In the isolated CPU fixture on 9 November 2026, a 3.25-second Edge observation with
+four completed Runs transferred five detailed history responses of 54,969 bytes each
+before this change (274,845 bytes, excluding logs/capabilities). Afterward, the same
+window transferred three summaries totalling 5,907 bytes and three capability responses
+totalling 420 bytes, with no repeated detail or terminal logs. With a fifth active Run
+while the completed Run stayed selected, three summary responses totalled 7,370 bytes
+and capabilities totalled 2,014 bytes; no unrelated detail or logs were fetched.
+These are uncompressed response-body bytes for synthetic single-item Runs, not a
+large-library latency benchmark. A response delayed by 1.5 seconds kept at most one
+history request in flight.
+Observation windows count requests when they start, then wait for those responses to
+finish measuring their bodies. A delayed response from opening the selected Run belongs
+to that initial load, even if its body arrives during a later idle window.
+
+To inspect this manually, run from the repository root in PowerShell 7:
+
+```powershell
+.\acceptance.cmd --workspace ".cache/ux-check-$([guid]::NewGuid().ToString('N'))"
+```
+
+Complete both model jobs, leave one finished Run open with Stage logs collapsed, and
+inspect Edge's Network panel. Only summaries and capabilities should keep refreshing.
+Start another Run from a saved revision: history and the completion title should update
+without repeatedly transferring the finished Run's inputs or logs. Select the active
+Run to see live step/loss updates and its outputs on completion. Refresh outputs should
+preserve a playing sample.
+
 ## Preparation
 
 Preparation reserves snapshot creation through a separate state-scoped SQLite gate.
@@ -148,6 +194,33 @@ Add prepared runs to the pending queue while another operation owns the GPU. Mov
 entries earlier or cancel pending entries without changing active work. Ordering
 and the exact enqueued revision survive service restarts. Preparation shares this
 same GPU lease, so it cannot overlap training. Failures remain visible in history.
+
+Waiting to train offers **Cancel queued training**: it removes that Run from the
+queue, leaves prepared files on disk and does not start training. Waiting to
+prepare offers **Cancel queued preparation**, separate from **Cancel preparation**
+while caching is active.
+
+Failed, cancelled and interrupted Runs offer **Prepare new Run from frozen inputs**.
+This creates a separate Run with the original saved job revision and dataset inputs.
+Only matching, hash-verified latent/text caches are eligible for reuse. Preparation
+stops at Ready to start, even if the original Run used Prepare and start. Training
+starts only when requested and runs again, followed by sampling if enabled; retry
+does not restore optimizer state. Recorded leftover processes must be reconciled
+first. To change inputs, open the editable job, save, review and prepare from Jobs.
+
+To verify these actions, run from the repository root in PowerShell 7:
+
+```powershell
+.\acceptance.cmd --workspace ".cache/ux-check-$([guid]::NewGuid().ToString('N'))"
+```
+
+Prepare both Wan jobs, start one and queue the other. Cancel queued training on the
+waiting Run and verify it becomes Cancelled. Prepare a new Run from its frozen
+inputs: the new Run should stop at Ready to start. In the fixture workspace, create
+an empty `checkout/fail-train` file, start training and inspect the failed Run's retry
+explanation. Retry should again prepare a new Run and wait for Start training. Remove
+the marker before trying a successful training run. The CPU fixture checks control
+flow, not GPU training quality.
 
 ## Stopping
 

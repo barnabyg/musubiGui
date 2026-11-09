@@ -95,6 +95,9 @@ class RunService:
     def list(self) -> list[dict[str, Any]]:
         return self.store.list()
 
+    def summaries(self) -> builtins.list[dict[str, Any]]:
+        return self.store.summaries()
+
     def get(self, run_id: str) -> dict[str, Any]:
         return self.store.get(run_id)
 
@@ -214,7 +217,8 @@ class RunService:
         previous = self.get(run_id)
         if previous["status"] not in {"failed", "cancelled", "interrupted"} or previous.get("processes"):
             raise ValueError(
-                "Only failed or cancelled preparation can be retried. Choose Check for leftover processes first."
+                "Only failed, cancelled or interrupted Runs without recorded processes can be retried. "
+                "Choose Check for leftover processes first if processes remain."
             )
         verify_inputs(previous)
         directory = Path(previous["directory"]).parent / ("retry-" + uuid.uuid4().hex)
@@ -333,7 +337,7 @@ class RunService:
             record.update(
                 status="interrupted",
                 processes=[],
-                error="The original processes are gone. Inspect outputs/state, then retry preparation or restore validated optimizer state as a new segment.",
+                error="The original processes are gone. Inspect outputs/state, then prepare a new Run from frozen inputs or restore validated optimizer state as a new segment.",
             )
 
         return self.store.update(run_id, finish)
@@ -366,7 +370,7 @@ class RunService:
         if run["status"] in {"pending_preparation", "pending_training"}:
             return self.store.update(run_id, lambda r: r.update(status="cancelled"))
         if run["status"] != "preparing":
-            raise ValueError("Only queued or active preparation can be cancelled.")
+            raise ValueError("Only queued preparation, queued training or active preparation can be cancelled.")
         return self.store.update(run_id, lambda r: r.update(cancel_requested=True))
 
     def stop(self, run_id: str, *, force: bool = False, confirmed: bool = False) -> dict[str, Any]:
@@ -655,7 +659,9 @@ class RunService:
                     if self.get(run_id).get("cancel_requested"):
                         self.store.update(run_id, lambda r: r.update(status="cancelled", processes=[]))
                         return
-                    raise ValueError(f"{stage['name']} exited {code}. Inspect logs and retry preparation.")
+                    raise ValueError(
+                        f"{stage['name']} exited {code}. Inspect logs, then prepare a new Run from frozen inputs."
+                    )
                 self._share_wan_tokenizer(run)
                 if preparing:
                     artifacts = self._cache_artifacts(run, stage["name"])

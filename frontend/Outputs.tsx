@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Download } from 'lucide-react';
 import { apiClient } from './api';
+import { useRunHistory } from './runHistory';
 import { sizeLabel } from './runStatus';
 import './outputs.css';
 
@@ -18,23 +19,23 @@ export type Output = {
 };
 type OutputList = {
   run_id: string;
-  job: { name: string; family: string; revision: number };
+  job: {
+    name: string;
+    family: string;
+    revision: number;
+    config?: { sample_prompt?: string; seed?: number };
+  };
   status: string;
   outputs: Output[];
   warnings: string[];
   note: string;
-};
-type RunChoice = {
-  id: string;
-  job: { name: string; family: string; revision: number };
-  created: string;
-  status: string;
 };
 type Comparison = {
   before: string;
   after: string;
   changes: { path: string; before: unknown; after: unknown }[];
   note: string;
+  samples: [OutputList, OutputList];
 };
 
 const read = apiClient('Output records could not be read. Refresh and retry.');
@@ -101,24 +102,97 @@ function MediaPreview({ output }: { output: Output }) {
   return null;
 }
 
+function ComparisonSamples({
+  result,
+  label,
+}: {
+  result: OutputList;
+  label: string;
+}) {
+  const { samples, preview, final } = grouped(result.outputs);
+  const [selected, setSelected] = useState('');
+  const sample =
+    samples.find((item) => item.id === selected) ?? preview ?? samples[0];
+  return (
+    <section className="comparison-samples" aria-label={label}>
+      <h4>{label}</h4>
+      <p>
+        <strong>{result.job.name}</strong> · {result.job.family.toUpperCase()} ·
+        revision {result.job.revision}
+      </p>
+      <p className="comparison-run-id">Run {result.run_id}</p>
+      <p>
+        Recorded sample prompt (Run settings):{' '}
+        {result.job.config?.sample_prompt ?? 'Not recorded'}
+      </p>
+      <p>Recorded seed: {result.job.config?.seed ?? 'Not recorded'}</p>
+      {result.warnings.map((warning) => (
+        <p className="error" key={warning}>
+          {warning}
+        </p>
+      ))}
+      {samples.length ? (
+        <>
+          <label className="field">
+            Sample
+            <select
+              aria-label="Sample"
+              value={sample?.id ?? ''}
+              onChange={(event) => setSelected(event.target.value)}
+            >
+              {samples.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name} · {item.status}
+                </option>
+              ))}
+            </select>
+          </label>
+          {sample && (
+            <>
+              <p>
+                {sample.name} · {sample.status}
+              </p>
+              {sample.error && <p className="error">{sample.error}</p>}
+              <MediaPreview key={sample.id} output={sample} />
+            </>
+          )}
+        </>
+      ) : (
+        <p>No generated samples recorded for this Run.</p>
+      )}
+      {final?.status === 'available' && final.file_url && (
+        <a
+          className="button-link"
+          href={`${final.file_url}?download=true`}
+          download
+        >
+          <Download /> Download final LoRA
+        </a>
+      )}
+    </section>
+  );
+}
+
 // Keeps one list of a Run's files for the result at the top and the inventory below it.
 export function useRunOutputs(runId: string | undefined, runState: string) {
   const [result, setResult] = useState<OutputList | null>(null);
-  const [runs, setRuns] = useState<RunChoice[]>([]);
+  const history = useRunHistory();
   const [failure, setFailure] = useState<{ runId?: string; message: string }>();
   const [busy, setBusy] = useState(false);
   const [refresh, setRefresh] = useState(0);
   useEffect(() => {
     if (!runId) return;
     let current = true;
-    void Promise.all([
-      read<OutputList>(`/api/runs/${runId}/outputs`),
-      read<RunChoice[]>('/api/runs'),
-    ])
-      .then(([outputs, records]) => {
+    const controller = new AbortController();
+    void read<OutputList>(
+      `/api/runs/${runId}/outputs`,
+      'GET',
+      undefined,
+      controller.signal,
+    )
+      .then((outputs) => {
         if (!current) return;
         setResult(outputs);
-        setRuns(records);
         setFailure(undefined);
       })
       .catch((reason: Error) => {
@@ -129,11 +203,12 @@ export function useRunOutputs(runId: string | undefined, runState: string) {
       });
     return () => {
       current = false;
+      controller.abort();
     };
   }, [runId, runState, refresh]);
   return {
     result: result?.run_id === runId ? result : null,
-    runs,
+    runs: history.runs ?? [],
     error: failure?.runId === runId ? failure?.message : '',
     busy,
     reload() {
@@ -260,9 +335,14 @@ export function Outputs({
     setComparing(true);
     setCompareError('');
     try {
-      setComparison(
-        await read<Comparison>(`/api/runs/${runId}/compare/${other}`),
-      );
+      const [changes, before, after] = await Promise.all([
+        read<Omit<Comparison, 'samples'>>(
+          `/api/runs/${runId}/compare/${other}`,
+        ),
+        read<OutputList>(`/api/runs/${runId}/outputs`),
+        read<OutputList>(`/api/runs/${other}/outputs`),
+      ]);
+      setComparison({ ...changes, samples: [before, after] });
     } catch (reason) {
       setCompareError((reason as Error).message);
     } finally {
@@ -400,6 +480,17 @@ export function Outputs({
       {comparison && comparison.before === runId && (
         <div className="output-comparison" aria-label="Run comparison">
           <p>{comparison.note}</p>
+          <div className="comparison-media">
+            {comparison.samples.map((result, index) => (
+              <ComparisonSamples
+                key={result.run_id}
+                result={result}
+                label={
+                  index === 0 ? 'Current Run samples' : 'Compared Run samples'
+                }
+              />
+            ))}
+          </div>
           {comparison.changes.length === 0 ? (
             <p>No differences in the recorded inputs.</p>
           ) : (
