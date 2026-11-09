@@ -24,13 +24,15 @@ test('comparison plays both Runs and keeps provenance and downloads when a sampl
       fixture,
     ]);
     let deadline: NodeJS.Timeout | undefined;
+    let termination: Promise<void> | undefined;
     try {
       await Promise.race([
         generation,
         new Promise<never>((_, reject) => {
           deadline = setTimeout(() => {
             const pid = generation.child.pid;
-            void (pid ? stopBackendTree(pid) : Promise.resolve()).then(
+            termination = pid ? stopBackendTree(pid) : Promise.resolve();
+            void termination.then(
               () =>
                 reject(
                   new Error('Output fixture generation exceeded five minutes.'),
@@ -42,6 +44,7 @@ test('comparison plays both Runs and keeps provenance and downloads when a sampl
       ]);
     } finally {
       clearTimeout(deadline);
+      await termination;
     }
     const { runs } = JSON.parse(
       await readFile(path.join(fixture, 'output-fixture.json'), 'utf8'),
