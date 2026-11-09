@@ -1,7 +1,12 @@
 export const screens = ['Datasets', 'Jobs', 'Runs', 'Settings'] as const;
 export type Screen = (typeof screens)[number];
 export type ItemView = 'caption' | 'audio' | 'preview';
-export type DatasetRepair = { jobId: string; itemId?: string; view: ItemView };
+export type DatasetRepair = {
+  jobId: string;
+  itemId?: string;
+  view: ItemView;
+  frames?: number;
+};
 export type Route = {
   screen: Screen;
   id?: string;
@@ -21,6 +26,7 @@ export function parseRoute(hash: string): Route {
   const jobId = params.get('job');
   if (id && screen === 'Datasets' && jobId && /^[\w-]+$/.test(jobId)) {
     const view = params.get('view');
+    const frames = Number(params.get('frames'));
     return {
       screen,
       id,
@@ -28,6 +34,10 @@ export function parseRoute(hash: string): Route {
         jobId,
         itemId,
         view: view === 'caption' || view === 'audio' ? view : 'preview',
+        frames:
+          params.has('frames') && Number.isSafeInteger(frames)
+            ? frames
+            : undefined,
       },
     };
   }
@@ -49,6 +59,8 @@ export function formatRoute({ screen, id, repair, review }: Route) {
       view: repair.view,
       job: repair.jobId,
     });
+    if (repair.frames !== undefined)
+      params.set('frames', String(repair.frames));
     return `${base}${repair.itemId ? `/items/${repair.itemId}` : ''}?${params}`;
   }
   return review ? `${base}?review=1` : base;
@@ -59,10 +71,11 @@ export function datasetItemRoute(
   itemId: string | undefined,
   view: ItemView,
   jobId: string,
+  frames?: number,
 ) {
   return formatRoute({
     screen: 'Datasets',
     id: datasetId,
-    repair: { jobId, itemId, view },
+    repair: { jobId, itemId, view, frames },
   });
 }

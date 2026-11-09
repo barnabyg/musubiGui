@@ -440,7 +440,7 @@ class DatasetStore:
         }
         return {**manifest, "digest": hashlib.sha256(json.dumps(manifest, sort_keys=True).encode()).hexdigest()}
 
-    def set_audio(self, dataset_id: str, item_id: str, path: str) -> dict[str, Any]:
+    def set_audio(self, dataset_id: str, item_id: str, path: str, frames: int = 124) -> dict[str, Any]:
         self.media_path(dataset_id, item_id)
         if path:
             if not Path(path).is_absolute():
@@ -448,7 +448,7 @@ class DatasetStore:
             within_root(Path(path), [self._folder(self.get(dataset_id)["path"])])
         with self._db() as db:
             db.execute("UPDATE items SET explicit_audio=? WHERE id=? AND dataset=?", (path, item_id, dataset_id))
-        return self.inspect_h3(dataset_id, item_id)
+        return self.inspect_h3(dataset_id, item_id, frames)
 
     def exclude(self, dataset_id: str, item_ids: builtins.list[str], excluded: bool) -> dict[str, Any]:
         known = {item["id"] for item in self.items(dataset_id)}

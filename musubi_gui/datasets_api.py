@@ -229,8 +229,8 @@ def dataset_router(root: Path) -> APIRouter:
         return result(lambda: store.inspect_h3(dataset_id, item_id, frames))
 
     @router.put("/{dataset_id}/items/{item_id}/audio")
-    def set_audio(dataset_id: str, item_id: str, request: AudioSource) -> dict[str, Any]:
-        return result(lambda: store.set_audio(dataset_id, item_id, request.path))
+    def set_audio(dataset_id: str, item_id: str, request: AudioSource, frames: int = 124) -> dict[str, Any]:
+        return result(lambda: store.set_audio(dataset_id, item_id, request.path, frames))
 
     @router.get("/{dataset_id}/items/{item_id}/audio")
     def audio(dataset_id: str, item_id: str) -> FileResponse:

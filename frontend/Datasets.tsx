@@ -94,6 +94,7 @@ export function Datasets({
         item?.id,
         'preview',
         repair.jobId,
+        repair.frames,
       );
     }
     setPreview(item);
@@ -536,6 +537,7 @@ export function Datasets({
                 repairView={
                   repair?.itemId === active.id ? repair.view : undefined
                 }
+                frames={repair?.frames}
                 onAudioBusy={setAudioBusy}
                 visibleItems={visibleItems}
                 select={select}

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { Fragment, useEffect, useRef } from 'react';
 import { focusField, type JobFields } from './jobFields';
 import type { Job, Review } from './jobTypes';
 import { plural } from './labels';
@@ -42,6 +42,7 @@ export function JobReview({
   prepareReason: string;
 }) {
   const reviewPanel = useRef<HTMLElement>(null);
+  const frames = job.family === 'h3' ? job.config.frames : undefined;
   useEffect(() => {
     if (review) reviewPanel.current?.scrollIntoView({ block: 'start' });
   }, [review]);
@@ -91,10 +92,33 @@ export function JobReview({
                           target.item_id,
                           target.view ?? 'preview',
                           job.id,
+                          frames,
                         )}
                       >
                         {message}
                       </a>
+                    ) : target && 'items' in target ? (
+                      <>
+                        {target.summary}:{' '}
+                        {target.items.map((item, index) => (
+                          <Fragment key={item.item_id}>
+                            {index > 0 && ', '}
+                            <a
+                              className="error-link"
+                              href={datasetItemRoute(
+                                item.dataset_id,
+                                item.item_id,
+                                'preview',
+                                job.id,
+                                frames,
+                              )}
+                            >
+                              {item.label}
+                            </a>
+                          </Fragment>
+                        ))}
+                        .
+                      </>
                     ) : field ? (
                       <button
                         className="error-link"

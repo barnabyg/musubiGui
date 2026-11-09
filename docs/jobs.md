@@ -350,6 +350,18 @@ for a message is indexed by its zero-based position in `error_targets` or
 A field target has a `field` key. A dataset target has a `dataset_id` and can
 include an `item_id` and a `view` of `caption`, `audio`, or `preview`.
 
+When identical files occur in multiple datasets, the warning links each copy
+to its own preview. The review API keeps the complete warning text and adds
+`summary` and `items` to its `warning_targets` entry. Each item includes the
+display `label`, `dataset_id` and `item_id`.
+
+Repair links from an H3 job carry its reviewed frame count in the `frames`
+query parameter. The audio inspector uses that window both when inspecting
+the clip and when applying a new audio source. The item API accepts the same
+optional parameter on `GET /api/datasets/{dataset_id}/items/{item_id}/h3`
+and `PUT /api/datasets/{dataset_id}/items/{item_id}/audio`. Both use 124 frames
+when the parameter is omitted.
+
 To try this from the repository root on Windows with the acceptance prerequisites:
 
 ```powershell
@@ -361,6 +373,12 @@ the **motion.mp4** supervised-audio error. The H3 inspector opens for that clip.
 Return to the job, choose the allow-missing audio policy and review again. The audio
 policy message now appears as a warning. Open the missing-caption warning for
 **blue.png**, enter a caption and return. That warning should disappear.
+
+To check a longer H3 window in the same fixture, open **H3 acceptance 1**,
+set **Frames** to 141 and review. Follow the `motion.mp4` short-audio error
+and choose **Inspect H3 media**. The inspector should identify the 141-frame
+window and report the audio shortfall. Choose **Apply audio source** with the
+path blank to check the existing sidecar against the same window.
 
 ## Checks
 

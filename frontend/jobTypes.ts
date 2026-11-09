@@ -58,6 +58,10 @@ export type ConversionPreview = {
 export type ReviewTarget =
   | { field: string }
   | {
+      summary: string;
+      items: { label: string; dataset_id: string; item_id: string }[];
+    }
+  | {
       dataset_id: string;
       item_id?: string;
       view?: ItemView;

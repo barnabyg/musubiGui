@@ -72,11 +72,13 @@ export function H3Inspector({
   datasetId,
   itemId,
   open,
+  frames,
   onBusy,
 }: {
   datasetId: string;
   itemId: string;
   open: boolean;
+  frames?: number;
   onBusy: (busy: boolean) => void;
 }) {
   const [inspection, setInspection] = useState<Inspection | null>(null);
@@ -97,9 +99,12 @@ export function H3Inspector({
     setError('');
     try {
       const item = `/api/datasets/${datasetId}/items/${itemId}`;
+      const query = frames === undefined ? '' : `?frames=${frames}`;
       const value = await (save
-        ? requestInspection<Inspection>(`${item}/audio`, 'PUT', { path })
-        : requestInspection<Inspection>(`${item}/h3`));
+        ? requestInspection<Inspection>(`${item}/audio${query}`, 'PUT', {
+            path,
+          })
+        : requestInspection<Inspection>(`${item}/h3${query}`));
       setInspection(value);
       setPath(value.source === 'explicit' ? (value.audio_path ?? '') : '');
     } catch (reason) {
@@ -113,8 +118,9 @@ export function H3Inspector({
     <details ref={inspector}>
       <summary ref={summary}>H3 audio and media inspector</summary>
       <p>
-        Inspect the selected 124-frame, 24 fps T2VA window. Explicit audio takes
-        precedence over one same-stem sidecar and then the embedded track.
+        Inspect the selected {frames ?? 124}-frame, 24 fps T2VA window. Explicit
+        audio takes precedence over one same-stem sidecar and then the embedded
+        track.
       </p>
       <button disabled={busy} onClick={() => void inspect(false)}>
         {busy ? 'Inspecting…' : 'Inspect H3 media'}
