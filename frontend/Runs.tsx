@@ -542,6 +542,29 @@ export function Runs({
                 ['pending_preparation', 'preparing'].includes(run.status) && (
                   <p>Training starts by itself when preparation succeeds.</p>
                 )}
+              {run.status === 'pending_training' && (
+                <p>
+                  Remove this Run from the training queue. Training will not
+                  start; prepared files remain available.
+                </p>
+              )}
+              {['failed', 'cancelled', 'interrupted'].includes(run.status) && (
+                <div aria-label="Retry frozen inputs">
+                  <p>
+                    Retry creates a new Run using this Run’s frozen job revision
+                    and dataset inputs. Only verified matching latent and text
+                    caches are eligible for reuse. Training will not start
+                    automatically. Training and sampling run again after you
+                    start training (sampling only if enabled in the frozen job).
+                    It does not resume optimizer state.
+                  </p>
+                  <p>
+                    To change the build, edit the job, save and review it, then
+                    prepare from Jobs. For saved optimizer state, use Inspect
+                    saved states below.
+                  </p>
+                </div>
+              )}
               {run.status === 'deleting' && (
                 <div aria-label="Unfinished delete">
                   <p className="error">
@@ -660,14 +683,18 @@ export function Runs({
                   'preparing',
                 ].includes(run.status) && (
                   <button disabled={busy} onClick={() => void action('cancel')}>
-                    Cancel preparation
+                    {run.status === 'pending_training'
+                      ? 'Cancel queued training'
+                      : run.status === 'pending_preparation'
+                        ? 'Cancel queued preparation'
+                        : 'Cancel preparation'}
                   </button>
                 )}
                 {['failed', 'cancelled', 'interrupted'].includes(
                   run.status,
                 ) && (
                   <button disabled={busy} onClick={() => void action('retry')}>
-                    Retry preparation
+                    Prepare new Run from frozen inputs
                   </button>
                 )}
                 <button

@@ -149,6 +149,33 @@ entries earlier or cancel pending entries without changing active work. Ordering
 and the exact enqueued revision survive service restarts. Preparation shares this
 same GPU lease, so it cannot overlap training. Failures remain visible in history.
 
+Waiting to train offers **Cancel queued training**: it removes that Run from the
+queue, leaves prepared files on disk and does not start training. Waiting to
+prepare offers **Cancel queued preparation**, separate from **Cancel preparation**
+while caching is active.
+
+Failed, cancelled and interrupted Runs offer **Prepare new Run from frozen inputs**.
+This creates a separate Run with the original saved job revision and dataset inputs.
+Only matching, hash-verified latent/text caches are eligible for reuse. Preparation
+stops at Ready to start, even if the original Run used Prepare and start. Training
+starts only when requested and runs again, followed by sampling if enabled; retry
+does not restore optimizer state. Recorded leftover processes must be reconciled
+first. To change inputs, open the editable job, save, review and prepare from Jobs.
+
+To verify these actions, run from the repository root in PowerShell 7:
+
+```powershell
+.\acceptance.cmd --workspace ".cache/ux-check-$([guid]::NewGuid().ToString('N'))"
+```
+
+Prepare both Wan jobs, start one and queue the other. Cancel queued training on the
+waiting Run and verify it becomes Cancelled. Prepare a new Run from its frozen
+inputs: the new Run should stop at Ready to start. In the fixture workspace, create
+an empty `checkout/fail-train` file, start training and inspect the failed Run's retry
+explanation. Retry should again prepare a new Run and wait for Start training. Remove
+the marker before trying a successful training run. The CPU fixture checks control
+flow, not GPU training quality.
+
 ## Stopping
 
 Request graceful stop first. Windows console signalling can be unavailable for
