@@ -48,7 +48,8 @@ Dataset exclusions belong to the dataset, not the job, so they apply to every jo
 Job & dataset lists the job's datasets in order. Each row shows the dataset, its contents
 (`12 images · 3 videos`), its repeats and Remove. Blank repeats use the job's Repeats, shown in
 the field. Add a dataset offers only those not already listed. A row whose dataset was deleted
-from the library says so and can be removed. Review's errors about a dataset link to its row.
+from the library says so and can be removed. Its review error focuses the row’s Remove
+button. If a dataset has no valid included items, its review error opens the dataset.
 
 Review's Training sections table has a row per section: dataset, type, items, repeats, samples
 per epoch and share of training. A cached video window counts as one sample, as does an image,
@@ -94,7 +95,10 @@ follow. The disk breakdown is collapsed, and Advanced holds the resolved compone
 paths, model provenance, native dataset TOML and each upstream argument array. Errors
 block preparation while the draft remains editable. Review configuration saves unsaved
 edits as a new revision first; if the save fails, the review stops and the edits stay on
-screen. Prepare run needs a current, passing review, and says what is missing until then. Component overrides must stay inside the configured
+screen. Prepare run and Prepare and start use the revision that passed review. If another
+tab saves a newer revision, preparation reports the old and new revision numbers and stops.
+Choose Review configuration to load the saved changes and review them before preparing.
+Component overrides must stay inside the configured
 model roots. The GUI's Wan recipe trains the low-noise expert. A separate
 [native-weight CLI acceptance scenario](reference/wan.md#native-weight-qualification)
 also passed high-noise-only training; that recipe is not exposed by the GUI.
@@ -330,6 +334,52 @@ defaults. Recognised credential strings are redacted on export/import and in
 presets. Review local filesystem paths before sharing a configuration. No model,
 dataset or training-state payload is embedded in the export.
 
+## Repairing reviewed dataset items
+
+In Configuration review, follow an item error or warning to open its media preview,
+caption editor or H3 audio inspector. The link identifies the dataset and item even
+when several datasets contain the same filename. Captions, audio sources and exclusions
+are shared by all jobs using that dataset. **Return to job and review** waits for
+caption saves, bulk changes, uploads and rescans, reopens the originating job and checks its current inputs again. Warnings
+allow preparation when all errors have been resolved.
+
+`POST /api/jobs/{job_id}/review` returns the reviewed `job_id` and `revision`.
+The `errors` and `warnings` arrays contain message strings. The optional target
+for a message is indexed by its zero-based position in `error_targets` or
+`warning_targets`. For example, `warning_targets["0"]` describes `warnings[0]`.
+A field target has a `field` key. A dataset target has a `dataset_id` and can
+include an `item_id` and a `view` of `caption`, `audio`, or `preview`.
+
+When identical files occur in multiple datasets, the warning links each copy
+to its own preview. The review API keeps the complete warning text and adds
+`summary` and `items` to its `warning_targets` entry. Each item includes the
+display `label`, `dataset_id` and `item_id`.
+
+Repair links from an H3 job carry its reviewed frame count in the `frames`
+query parameter. The audio inspector uses that window both when inspecting
+the clip and when applying a new audio source. The item API accepts the same
+optional parameter on `GET /api/datasets/{dataset_id}/items/{item_id}/h3`
+and `PUT /api/datasets/{dataset_id}/items/{item_id}/audio`. Both use 124 frames
+when the parameter is omitted.
+
+To try this from the repository root on Windows with the acceptance prerequisites:
+
+```powershell
+.\acceptance.cmd --workspace ".cache/ux-check-$([guid]::NewGuid().ToString('N'))"
+```
+
+Create an H3 job using **Mixed media and invalid item**, review it, and use Enter on
+the **motion.mp4** supervised-audio error. The H3 inspector opens for that clip.
+Return to the job, choose the allow-missing audio policy and review again. The audio
+policy message now appears as a warning. Open the missing-caption warning for
+**blue.png**, enter a caption and return. That warning should disappear.
+
+To check a longer H3 window in the same fixture, open **H3 acceptance 1**,
+set **Frames** to 141 and review. Follow the `motion.mp4` short-audio error
+and choose **Inspect H3 media**. The inspector should identify the 141-frame
+window and report the audio shortfall. Choose **Apply audio source** with the
+path blank to check the existing sidecar against the same window.
+
 ## Checks
 
 Focused checks: `npm.cmd run typecheck` and
@@ -341,6 +391,17 @@ the reviewed TOML and arguments with the controls, and verify reopening retains 
 Real preparation/training requires the compatible model files and environment described
 in [reference workflows](reference/README.md); fake acceptance fixtures do not prove
 model support.
+
+To check two-tab review in an isolated CPU fixture, run this from the repository root in PowerShell:
+
+```powershell
+.\acceptance.cmd --workspace ".cache/ux-check-$([guid]::NewGuid().ToString('N'))"
+```
+
+Open WAN acceptance 1 in two tabs. Review in A, rename and save in B, then choose
+Prepare and start in A. Expect the revision-change message and an empty Run history.
+In A, choose Review configuration, confirm the new name, then choose Prepare run.
+The Run in history shows the new name and the revision that passed review.
 
 Browser checks: `npm.cmd run test:browser -- tests/browser/jobs.spec.ts`. The scenarios
 cover restart persistence and generated configuration for both models, frame

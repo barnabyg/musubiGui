@@ -16,11 +16,15 @@ type Session = {
 type Entry = { file: File; progress: number; status: string; error?: string };
 type Props = {
   datasetId: string;
-  beforeAction: () => Promise<boolean>;
+  afterCaptionFlush: (action: () => Promise<void>) => Promise<boolean>;
   onChanged: () => Promise<void>;
 };
 
-export function DatasetUploads({ datasetId, beforeAction, onChanged }: Props) {
+export function DatasetUploads({
+  datasetId,
+  afterCaptionFlush,
+  onChanged,
+}: Props) {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [busy, setBusy] = useState(false);
@@ -70,8 +74,7 @@ export function DatasetUploads({ datasetId, beforeAction, onChanged }: Props) {
         Number(a.file.name.toLowerCase().endsWith('.txt')) -
         Number(b.file.name.toLowerCase().endsWith('.txt')),
     );
-    try {
-      if (!(await beforeAction()) || controller.signal.aborted) return;
+    async function send() {
       for (const entry of ordered) {
         if (entry.status === 'Uploaded') continue;
         if (controller.signal.aborted) break;
@@ -118,12 +121,8 @@ export function DatasetUploads({ datasetId, beforeAction, onChanged }: Props) {
             });
           }
           update(file, { status: 'Validating media', progress: 100 });
-          await request(
-            `${url}/${session.id}/complete`,
-            'POST',
-            {},
-            controller.signal,
-          );
+          // Once submitted, the server commits the file and scans it even if the user pauses.
+          await request(`${url}/${session.id}/complete`, 'POST', {});
           update(file, { status: 'Uploaded', progress: 100 });
           await onChanged();
         } catch (reason) {
@@ -135,6 +134,9 @@ export function DatasetUploads({ datasetId, beforeAction, onChanged }: Props) {
           });
         }
       }
+    }
+    try {
+      await afterCaptionFlush(send);
     } catch (reason) {
       setError((reason as Error).message);
     } finally {

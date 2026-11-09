@@ -9,7 +9,11 @@ import { ArrowLeft } from 'lucide-react';
 import './datasets.css';
 import { apiClient } from './api';
 import { confirmDialog } from './ConfirmDialog';
-import { type Caption, useCaptionSession } from './captionSession';
+import {
+  type Caption,
+  type CaptionSession,
+  useCaptionSessions,
+} from './captionSession';
 import { DatasetCreate } from './DatasetCreate';
 import { type CaptionEditing, DatasetGallery } from './DatasetGallery';
 import { matchingItems } from './datasetItems';
@@ -17,6 +21,7 @@ import { DatasetLibrary } from './DatasetLibrary';
 import { DatasetPanels } from './DatasetPanels';
 import { type DatasetPanel, DatasetTopbar } from './DatasetTopbar';
 import { MediaPreview } from './MediaPreview';
+import { datasetItemRoute, type DatasetRepair, formatRoute } from './route';
 
 export type Dataset = {
   id: string;
@@ -49,31 +54,70 @@ export type DatasetItem = {
 
 const api = apiClient((status) => `Request failed (${status}).`);
 
+async function loadDatasets(id?: string, signal?: AbortSignal) {
+  const list = await api<Dataset[]>('/api/datasets', 'GET', undefined, signal);
+  const requested = performance.now();
+  const contents = id
+    ? await api<DatasetItem[]>(
+        `/api/datasets/${id}/items`,
+        'GET',
+        undefined,
+        signal,
+      )
+    : [];
+  return { list, contents, requested, id };
+}
+
 export function Datasets({
   visible = true,
   selectedId,
+  repair,
   onSelect,
   defaultFolder = '',
   datasetRoots,
   onEditorChange,
+  onCaptionSessions,
 }: {
   visible?: boolean;
   selectedId?: string;
+  repair?: DatasetRepair;
   onSelect?: (id?: string, replace?: boolean) => void;
   defaultFolder?: string;
   datasetRoots?: string[];
   onEditorChange?: (editing: boolean) => void;
+  onCaptionSessions: (sessions: CaptionSession[]) => void;
 }) {
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [screen, setScreen] = useState<'library' | 'create' | 'edit'>(
     'library',
   );
-  const [busy, setBusy] = useState(false);
+  const [working, setBusy] = useState(false);
+  const [loadedRepair, setLoadedRepair] = useState<DatasetRepair>();
+  const loadingRepair = Boolean(repair && loadedRepair !== repair);
+  const busy = working || loadingRepair;
   const [loaded, setLoaded] = useState(false);
   const [panel, setPanel] = useState<DatasetPanel | null>(null);
   const [dataset, setDataset] = useState<Dataset | null>(null);
   const [items, setItems] = useState<DatasetItem[]>([]);
-  const [active, setActive] = useState<DatasetItem | null>(null);
+  const [audioBusy, setAudioBusy] = useState(false);
+  const [returning, setReturning] = useState(false);
+  const [preview, setPreview] = useState<DatasetItem | null>(null);
+  const active = repair
+    ? (!loadingRepair && items.find((item) => item.id === repair.itemId)) ||
+      null
+    : preview;
+  function setActive(item: DatasetItem | null) {
+    if (repair && dataset) {
+      window.location.hash = datasetItemRoute(
+        dataset.id,
+        item?.id,
+        'preview',
+        repair.jobId,
+        repair.frames,
+      );
+    }
+    setPreview(item);
+  }
   const [name, setName] = useState('');
   const [editedFolder, setFolder] = useState<string>();
   const folder = editedFolder ?? defaultFolder;
@@ -92,12 +136,16 @@ export function Datasets({
   );
   const onCaptionSaved = useCallback((id: string, caption: Caption) => {
     savedCaptions.current.set(id, { caption, at: performance.now() });
-    setActive((value) => (value?.id === id ? { ...value, caption } : value));
+    setPreview((value) => (value?.id === id ? { ...value, caption } : value));
     setItems((values) =>
       values.map((item) => (item.id === id ? { ...item, caption } : item)),
     );
   }, []);
-  const captions = useCaptionSession(dataset?.id ?? '', onCaptionSaved);
+  const sessions = useCaptionSessions(dataset?.id ?? '', onCaptionSaved);
+  const captions = sessions[0];
+  useEffect(() => {
+    onCaptionSessions(sessions);
+  }, [onCaptionSessions, sessions]);
   useEffect(() => {
     captions.sync(items);
   }, [captions, items]);
@@ -110,26 +158,41 @@ export function Datasets({
   useEffect(() => {
     onEditorChange?.(screen === 'edit');
   }, [screen, onEditorChange]);
-  const refresh = useCallback(async (id?: string) => {
-    const list = await api<Dataset[]>('/api/datasets');
-    const requested = performance.now();
-    const contents = id
-      ? await api<DatasetItem[]>(`/api/datasets/${id}/items`)
-      : [];
-    setDatasets(list);
-    if (id) {
-      setDataset(list.find((value) => value.id === id) ?? null);
-      setItems(
-        contents.map((item) => {
-          const saved = savedCaptions.current.get(item.id);
-          return saved && saved.at > requested
-            ? { ...item, caption: saved.caption }
-            : item;
-        }),
-      );
-    }
-    return list;
-  }, []);
+  const currentSelection = useRef(selectedId);
+  useEffect(() => {
+    currentSelection.current = selectedId;
+  }, [selectedId]);
+  const applyDatasets = useCallback(
+    ({
+      list,
+      contents,
+      requested,
+      id,
+    }: Awaited<ReturnType<typeof loadDatasets>>) => {
+      setDatasets(list);
+      if (id) {
+        setDataset(list.find((value) => value.id === id) ?? null);
+        setItems(
+          contents.map((item) => {
+            const saved = savedCaptions.current.get(item.id);
+            return saved && saved.at > requested
+              ? { ...item, caption: saved.caption }
+              : item;
+          }),
+        );
+      }
+    },
+    [],
+  );
+  const refresh = useCallback(
+    async (id?: string, signal?: AbortSignal) => {
+      const data = await loadDatasets(id, signal);
+      signal?.throwIfAborted();
+      applyDatasets(data);
+      return data.list;
+    },
+    [applyDatasets],
+  );
   useEffect(() => {
     void api<Dataset[]>('/api/datasets')
       .then(setDatasets)
@@ -137,8 +200,8 @@ export function Datasets({
       .finally(() => setLoaded(true));
   }, []);
   useEffect(() => {
-    if (visible) heading.current?.focus();
-  }, [screen, dataset?.id, visible]);
+    if (visible && !repair?.itemId) heading.current?.focus();
+  }, [screen, dataset?.id, visible, repair?.itemId]);
   useEffect(() => {
     if (!dataset || !['pending', 'scanning'].includes(dataset.scan.state))
       return;
@@ -167,41 +230,93 @@ export function Datasets({
     return () => window.clearInterval(timer);
   }, [visible, screen, datasets, refresh]);
   async function select(item: DatasetItem | null) {
-    if (!(await captions.flushAll())) return;
+    const origin = window.location.hash;
+    if (!(await captions.flushAll()) || window.location.hash !== origin) return;
     setActive(item);
   }
-  const followRoute = useEffectEvent(() => {
-    if (!loaded || selectedId === dataset?.id) return;
-    if (selectedId) void open(selectedId);
+  const followRoute = useEffectEvent((signal: AbortSignal) => {
+    if (!loaded || repair || selectedId === dataset?.id) return;
+    if (selectedId) void open(selectedId, true, signal);
     else if (screen === 'edit') void back();
   });
-  useEffect(() => followRoute(), [selectedId, loaded]);
-  async function open(id: string) {
+  useEffect(() => {
+    const request = new AbortController();
+    followRoute(request.signal);
+    return () => request.abort();
+  }, [selectedId, loaded, repair]);
+  const showRepair = useEffectEvent(
+    (id: string, data: Awaited<ReturnType<typeof loadDatasets>>) => {
+      applyDatasets(data);
+      if (id !== dataset?.id) showDataset(id, data.list);
+      setError('');
+    },
+  );
+  useEffect(() => {
+    if (!loaded || !repair || !selectedId) return;
+    const request = new AbortController();
+    void loadDatasets(selectedId, request.signal)
+      .then((data) => {
+        if (!request.signal.aborted) showRepair(selectedId, data);
+      })
+      .catch((reason: Error) => {
+        if (!request.signal.aborted) setError(reason.message);
+      })
+      .finally(() => {
+        if (!request.signal.aborted) setLoadedRepair(repair);
+      });
+    return () => request.abort();
+  }, [selectedId, loaded, repair]);
+  async function returnToJob() {
+    if (!repair) return;
+    const origin = window.location.hash;
+    setReturning(true);
+    try {
+      const saved = await captions.flushAll();
+      if (window.location.hash !== origin) return;
+      if (!saved) {
+        reviewFailed();
+        return;
+      }
+      window.location.hash = formatRoute({
+        screen: 'Jobs',
+        id: repair.jobId,
+        review: true,
+      });
+    } finally {
+      setReturning(false);
+    }
+  }
+  async function open(id: string, fromRoute = false, signal?: AbortSignal) {
     if (!(await captions.flushAll())) {
-      onSelect?.(dataset?.id, true);
+      if (!signal?.aborted) onSelect?.(dataset?.id, true);
       return;
     }
+    if (signal?.aborted) return;
     setBusy(true);
-    setActive(null);
+    try {
+      const list = await refresh(id, signal);
+      showDataset(id, list);
+      setError('');
+      if (!fromRoute) onSelect?.(id);
+    } catch (reason) {
+      if (signal?.aborted) return;
+      setError((reason as Error).message);
+      if (!repair) onSelect?.(dataset?.id, true);
+    } finally {
+      setBusy(false);
+    }
+  }
+  function showDataset(id: string, list: Dataset[]) {
+    setPreview(null);
     setSelected(new Set());
     setEditing(null);
     setQuery('');
     setFilter('all');
     setScroll(0);
-    setError('');
-    try {
-      const list = await refresh(id);
-      setName(list.find((value) => value.id === id)?.name ?? '');
-      setScreen('edit');
-      setPanel(null);
-      setStatus('');
-      onSelect?.(id);
-    } catch (reason) {
-      setError((reason as Error).message);
-      onSelect?.(dataset?.id, true);
-    } finally {
-      setBusy(false);
-    }
+    setName(list.find((value) => value.id === id)?.name ?? '');
+    setScreen('edit');
+    setPanel(null);
+    setStatus('');
   }
   async function back() {
     if (!(await captions.flushAll())) {
@@ -211,7 +326,7 @@ export function Datasets({
     setBusy(true);
     try {
       await refresh();
-      setActive(null);
+      setPreview(null);
       setDataset(null);
       setEditing(null);
       setScreen('library');
@@ -292,10 +407,14 @@ export function Datasets({
   }
   async function rescan() {
     if (!dataset) return;
-    if (!(await captions.flushAll())) return;
     setBusy(true);
     try {
-      await api(`/api/datasets/${dataset.id}/scan`, 'POST', {});
+      if (!(await captions.flushAll())) return;
+      await api(
+        `/api/datasets/${dataset.id}/scan${repair ? '?wait=true' : ''}`,
+        'POST',
+        {},
+      );
       await refresh(dataset.id);
     } catch (reason) {
       setError((reason as Error).message);
@@ -312,7 +431,7 @@ export function Datasets({
       })
     : matchingItems(items, query, filter, sort, selected);
   function reviewFailed() {
-    const failed = captions.firstFailed();
+    const failed = captions.firstFailed()?.item;
     if (failed) setActive(itemsById.get(failed.id) ?? failed);
   }
   return (
@@ -325,6 +444,26 @@ export function Datasets({
         }
       }}
     >
+      {repair && (
+        <div className="dataset-repair">
+          <button
+            disabled={
+              busy ||
+              audioBusy ||
+              returning ||
+              ['pending', 'scanning'].includes(dataset?.scan.state ?? '')
+            }
+            onClick={() => void returnToJob()}
+          >
+            <ArrowLeft /> Return to job and review
+          </button>
+          <span>
+            {returning
+              ? 'Waiting for dataset changes…'
+              : 'Caption edits, audio sources and exclusions apply to every job using this dataset.'}
+          </span>
+        </div>
+      )}
       {screen !== 'edit' && (
         <>
           {screen !== 'library' && (
@@ -389,6 +528,18 @@ export function Datasets({
           selected={selected}
         />
       )}
+      {repair?.itemId &&
+        dataset?.id === selectedId &&
+        !busy &&
+        !error &&
+        !active &&
+        screen === 'edit' && (
+          <p role="alert">
+            The reviewed item is no longer in this dataset. Return to the job to
+            review its current inputs.
+          </p>
+        )}
+      {loadingRepair && <p role="status">Loading reviewed dataset…</p>}
       {error && (
         <div role="alert" className="error">
           {error}
@@ -420,7 +571,7 @@ export function Datasets({
         />
       )}
       {screen === 'edit' && dataset && (
-        <section className="dataset-content">
+        <section className="dataset-content" inert={returning || loadingRepair}>
           {dataset.missing && (
             <p role="alert" className="error dataset-missing">
               Dataset folder is missing. Restore its original location and
@@ -440,8 +591,15 @@ export function Datasets({
             visibleItems={visibleItems}
             selected={selected}
             setSelected={setSelected}
-            setActive={setActive}
-            refresh={refresh}
+            onChanged={async () => {
+              // A background repair may finish after navigation. Keep the current URL.
+              if (currentSelection.current === dataset.id) {
+                setPreview(null);
+                const data = await loadDatasets(dataset.id);
+                if (currentSelection.current === dataset.id)
+                  applyDatasets(data);
+              }
+            }}
           />
           <div className={`dataset-workspace ${active ? 'has-viewer' : ''}`}>
             <DatasetGallery
@@ -470,6 +628,11 @@ export function Datasets({
                 key={active.id}
                 dataset={dataset}
                 active={active}
+                repairView={
+                  repair?.itemId === active.id ? repair.view : undefined
+                }
+                frames={repair?.frames}
+                onAudioBusy={setAudioBusy}
                 visibleItems={visibleItems}
                 select={select}
                 captions={captions}

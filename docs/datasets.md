@@ -38,7 +38,12 @@ changes the column count, but the active tile stays in view when it opens or clo
 managed dataset and stays open while files upload. Closing or switching panels keeps
 uploads and tool state intact. Panels and the preview overlay the gallery on narrow
 windows, each with its own close control. A registered folder is populated by adding
-files on disk and choosing **Re-scan** in **Dataset settings**.
+files on disk and choosing **Re-scan** in **Dataset settings**. When repairing job
+inputs, the editor requests `POST /api/datasets/{id}/scan?wait=true` so returning
+to the job uses the refreshed index. Omitting `wait` starts a background scan.
+
+**Pause uploads** pauses remaining files. A file already submitted for validation
+finishes publication and scanning before the job can review the dataset again.
 
 **Delete** requires confirmation naming the dataset and removes its library entry
 and indexed items only. Original and uploaded media, caption sidecars, thumbnails,
@@ -137,3 +142,24 @@ Dataset item paths and caption sidecars must remain regular local files/director
 rejects links/reparse-point redirection even when a target stays inside an allowed root, so replacing a
 folder with an inside-root junction cannot redirect an already opened item's caption to another file.
 Register the physical folder or restore regular files before continuing; linked targets are preserved.
+
+### Resolve a caption before preparing a Run
+
+Jobs waits for caption saves from this tab in any selected dataset. Both prepare actions
+stay disabled if a save fails. Follow **Resolve caption** to open the retained draft.
+**Review current sidecar** shows the disk text. Choose **Use current sidecar** to train on
+that text, or **Save my text over this revision** to save the draft. Jobs using other
+datasets remain available.
+
+From the repository root, start the isolated CPU fixture:
+
+```powershell
+.\acceptance.cmd --workspace ".cache/ux-check-$([guid]::NewGuid().ToString('N'))"
+```
+
+Open **WAN acceptance** in Datasets. After the gallery loads, change its
+`motion.txt` outside the browser, then edit the caption in the gallery.
+Open **WAN acceptance 1** in Jobs and review it. Expect both prepare actions
+to stay disabled and the repair link to reopen your draft. Resolve the conflict,
+return to the job, review and prepare. The Run’s frozen inputs should contain
+the text you chose.

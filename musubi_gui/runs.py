@@ -98,9 +98,11 @@ class RunService:
     def get(self, run_id: str) -> dict[str, Any]:
         return self.store.get(run_id)
 
-    def prepare(self, job_id: str, *, start: bool = False) -> dict[str, Any]:
+    def prepare(self, job_id: str, *, start: bool = False, reviewed_revision: int | None = None) -> dict[str, Any]:
         with preparation_transaction(self.root):
-            inputs = identify_snapshot(self.root, job_id, fixture_mode=self.fixture_mode)
+            inputs = identify_snapshot(
+                self.root, job_id, fixture_mode=self.fixture_mode, reviewed_revision=reviewed_revision
+            )
             for previous in self.list():
                 if blocks_revision(previous, inputs.fingerprint):
                     return {**(self._start_when_prepared(previous["id"]) if start else previous), "existing": True}

@@ -1,5 +1,6 @@
 """Dataset API; JSON mutations remain protected by the application's same-origin middleware."""
 
+import mimetypes
 from pathlib import Path
 from typing import Any, Callable, TypeVar
 
@@ -162,7 +163,9 @@ def dataset_router(root: Path) -> APIRouter:
         return result(lambda: uploads.cancel(dataset_id, upload_id))
 
     @router.post("/{dataset_id}/scan")
-    def scan(dataset_id: str, background: BackgroundTasks) -> dict[str, Any]:
+    def scan(dataset_id: str, background: BackgroundTasks, wait: bool = False) -> dict[str, Any]:
+        if wait:
+            return result(lambda: store.scan(dataset_id))
         dataset = result(lambda: store.get(dataset_id))
         background.add_task(store.scan, dataset_id)
         return dataset
@@ -218,7 +221,7 @@ def dataset_router(root: Path) -> APIRouter:
     @router.get("/{dataset_id}/items/{item_id}/media")
     def media(dataset_id: str, item_id: str) -> FileResponse:
         path = result(lambda: store.media_path(dataset_id, item_id))
-        return FileResponse(path, media_type=store.mime_type(dataset_id, item_id))
+        return FileResponse(path, media_type=mimetypes.guess_type(path.name)[0] or "application/octet-stream")
 
     @router.get("/{dataset_id}/items/{item_id}/caption")
     def caption(dataset_id: str, item_id: str) -> dict[str, Any]:
@@ -229,8 +232,8 @@ def dataset_router(root: Path) -> APIRouter:
         return result(lambda: store.inspect_h3(dataset_id, item_id, frames))
 
     @router.put("/{dataset_id}/items/{item_id}/audio")
-    def set_audio(dataset_id: str, item_id: str, request: AudioSource) -> dict[str, Any]:
-        return result(lambda: store.set_audio(dataset_id, item_id, request.path))
+    def set_audio(dataset_id: str, item_id: str, request: AudioSource, frames: int = 124) -> dict[str, Any]:
+        return result(lambda: store.set_audio(dataset_id, item_id, request.path, frames))
 
     @router.get("/{dataset_id}/items/{item_id}/audio")
     def audio(dataset_id: str, item_id: str) -> FileResponse:

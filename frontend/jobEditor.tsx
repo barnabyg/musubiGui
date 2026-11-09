@@ -1,6 +1,7 @@
-import { useEffect, useEffectEvent, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import { confirmDialog } from './ConfirmDialog';
 import { apiClient } from './api';
+import { type CaptionSession, useJobCaptionState } from './captionSession';
 import { jobFields } from './jobFields';
 import type {
   ConversionPreview,
@@ -15,7 +16,9 @@ import type { JobSummary } from './JobTable';
 import { plural } from './labels';
 
 export type JobsProps = {
+  captions: CaptionSession[];
   selectedId?: string;
+  reviewOnOpen?: boolean;
   onSelect?: (id?: string, replace?: boolean) => void;
   onRun?: (id: string) => void;
   onDirtyChange?: (dirty: boolean) => void;
@@ -25,7 +28,9 @@ const request = apiClient('Check the entered values and retry.');
 
 // All of the Jobs screen's state, and everything it does to a job.
 export function useJobEditor({
+  captions,
   selectedId,
+  reviewOnOpen,
   onSelect,
   onRun,
   onDirtyChange,
@@ -39,12 +44,38 @@ export function useJobEditor({
   const [models, setModels] = useState<Record<string, string>>({});
   const [modelRoots, setModelRoots] = useState<string[]>([]);
   const [job, setJob] = useState<Job | null>(null);
+  const datasetsInJob = job?.datasets;
+  const jobCaptions = useMemo(
+    () =>
+      captions.filter((session) =>
+        datasetsInJob?.some(
+          ({ dataset_id }) => dataset_id === session.datasetId,
+        ),
+      ),
+    [captions, datasetsInJob],
+  );
+  const captionState = useJobCaptionState(jobCaptions);
   const [dirty, setDirty] = useState(false);
   // Busy until the initial load lands, so it cannot replace drafts created meanwhile.
-  const [busy, setBusy] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [working, setBusy] = useState(false);
+  const busy = loading || working;
   const [status, setStatus] = useState('Loading jobs…');
   const [error, setError] = useState('');
-  const [review, setReview] = useState<Review | null>(null);
+  const [reviewResult, setReview] = useState<Review | null>(null);
+  const review =
+    job &&
+    reviewResult?.job_id === job.id &&
+    reviewResult.revision === job.revision
+      ? reviewResult
+      : null;
+  const reviewRequest = useRef(0);
+  useEffect(() => {
+    // Browser history can switch jobs while the server is inspecting media.
+    return () => {
+      reviewRequest.current += 1;
+    };
+  }, [selectedId]);
   const [presets, setPresets] = useState<Preset[]>([]);
   const [presetName, setPresetName] = useState('');
   const [presetId, setPresetId] = useState('');
@@ -74,14 +105,19 @@ export function useJobEditor({
         setStatus('Jobs loaded');
       })
       .catch((reason: Error) => setError(reason.message))
-      .finally(() => setBusy(false));
+      .finally(() => setLoading(false));
   }, []);
   // Follows the URL: a link, refresh or browser history can name a job that isn't open here.
   const followRoute = useEffectEvent((items: Job[]) => {
     if (selectedId === job?.id) return;
     const found = items.find((item) => item.id === selectedId);
     if (found) {
-      select(found);
+      if (reviewOnOpen) {
+        setJob(found);
+        setDirty(false);
+        onSelect?.(found.id, true);
+        void perform(() => reviewSaved(found));
+      } else select(found);
       return;
     }
     setJob(null);
@@ -93,6 +129,7 @@ export function useJobEditor({
     }
   });
   useEffect(() => {
+    if (loading) return;
     let stale = false;
     void request<Job[]>('/api/jobs')
       .then((items) => {
@@ -104,7 +141,7 @@ export function useJobEditor({
     return () => {
       stale = true;
     };
-  }, [selectedId]);
+  }, [selectedId, loading]);
   // A new draft's name is the first thing worth changing; the field is disabled until the request lands.
   useEffect(() => {
     if (focusName.current && !busy && nameField.current) {
@@ -228,31 +265,57 @@ export function useJobEditor({
       await persist(job);
     });
   }
+  async function reviewSaved(current: Job) {
+    const requestId = ++reviewRequest.current;
+    const result = await request<Review>(
+      `/api/jobs/${current.id}/review`,
+      'POST',
+      {},
+    );
+    if (requestId !== reviewRequest.current) return;
+    if (result.revision !== current.revision) {
+      // Display the exact saved draft that passed through review even if another save follows.
+      const reviewedJob = await request<Job>(
+        `/api/jobs/${current.id}/revisions/${result.revision}`,
+      );
+      await reloadJobs();
+      if (requestId !== reviewRequest.current) return;
+      select(reviewedJob);
+    }
+    setReview(result);
+    setStatus(
+      result.valid
+        ? `Review passed for revision ${result.revision}`
+        : `Review failed for revision ${result.revision}: ${plural(result.errors.length, 'error')}`,
+    );
+  }
   async function inspect() {
     if (!job) return;
     await perform(async () => {
       // A failed save throws here, so the review never describes something other than the edits on screen.
       const current = dirty ? await persist(job) : job;
-      const result = await request<Review>(
-        `/api/jobs/${current.id}/review`,
-        'POST',
-        {},
-      );
-      setReview(result);
-      setStatus(
-        result.valid
-          ? `Review passed for revision ${current.revision}`
-          : `Review failed for revision ${current.revision}: ${plural(result.errors.length, 'error')}`,
-      );
+      await reviewSaved(current);
     });
   }
   async function prepare(start = false) {
     if (!job || !review?.valid || dirty) return;
     await perform(async () => {
-      const run = await request<PreparedRun>('/api/runs/prepare', 'POST', {
-        job_id: job.id,
-        start,
-      });
+      const saved = await Promise.all(
+        jobCaptions.map((session) => session.flushAll()),
+      );
+      if (saved.includes(false)) return;
+      let run: PreparedRun;
+      try {
+        run = await request<PreparedRun>('/api/runs/prepare', 'POST', {
+          job_id: review.job_id,
+          reviewed_revision: review.revision,
+          start,
+        });
+      } catch (reason) {
+        setReview(null);
+        setStatus('Preparation failed');
+        throw reason;
+      }
       // Prepare returns the matching unfinished or completed run instead of duplicating it.
       if (run.existing && !(start && run.status !== 'completed')) {
         setExistingRun(run);
@@ -425,13 +488,17 @@ export function useJobEditor({
       setStatus('Configuration imported as an independent draft');
     });
   }
-  const prepareReason = dirty
-    ? 'Choose Review configuration to save these edits and check them before preparing.'
-    : !review
-      ? 'Choose Review configuration before preparing.'
-      : !review.valid
-        ? 'Resolve the review errors before preparing.'
-        : '';
+  function prepareReason() {
+    if (captionState && captionState !== 'pending')
+      return 'Resolve the unsaved captions in this job’s datasets before preparing.';
+    if (captionState === 'pending')
+      return 'Waiting for caption saves in this job’s datasets.';
+    if (dirty)
+      return 'Choose Review configuration to save these edits and check them before preparing.';
+    if (!review) return 'Choose Review configuration before preparing.';
+    if (!review.valid) return 'Resolve the review errors before preparing.';
+    return '';
+  }
   return {
     jobs,
     archived,
@@ -474,6 +541,7 @@ export function useJobEditor({
     convert,
     exportConfiguration,
     importConfiguration,
-    prepareReason,
+    prepareReason: prepareReason(),
+    failedCaption: captionState === 'pending' ? null : captionState,
   };
 }

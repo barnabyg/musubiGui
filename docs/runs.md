@@ -38,6 +38,12 @@ upstream revision and selected Python/package environment. Source media and capt
 are copied into a separate per-run directory under the configured output root.
 Source captions remain editable while caching runs against the frozen copies.
 
+`POST /api/runs/prepare` accepts `job_id`, optional `start`, and optional
+`reviewed_revision` (the integer `revision` returned by Job review). The GUI sends
+this revision for both prepare actions. A mismatch returns HTTP 409 before snapshot
+creation or matching-Run reuse. Callers that omit it still prepare the latest saved
+revision. Preparation always repeats backend validation.
+
 ## Caches
 
 Preparation executes the pinned latent/text cache commands in the selected existing

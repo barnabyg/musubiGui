@@ -1,4 +1,4 @@
-import type { RefObject } from 'react';
+import type { ReactNode, RefObject } from 'react';
 import { ActionMenu } from './ActionMenu';
 import { sections } from './jobSections';
 import type { Job, Review } from './jobTypes';
@@ -11,6 +11,7 @@ export function JobActionBar({
   busy,
   review,
   prepareReason,
+  captionRepair,
   error,
   section,
   goToSection,
@@ -30,6 +31,7 @@ export function JobActionBar({
   busy: boolean;
   review: Review | null;
   prepareReason: string;
+  captionRepair: ReactNode;
   error: string;
   section: string;
   goToSection: (id: string) => void;
@@ -122,7 +124,7 @@ export function JobActionBar({
       </div>
       {job && prepareReason && (
         <p id="prepare-reason" className="hint">
-          {prepareReason}
+          {prepareReason} {captionRepair}
         </p>
       )}
       {job && (

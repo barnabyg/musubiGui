@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import { apiClient } from './api';
 import type { DatasetItem } from './Datasets';
 
@@ -15,6 +21,7 @@ type Snapshot = {
   saving: boolean;
 };
 type Entry = {
+  datasetId: string;
   item: DatasetItem;
   snapshot: Snapshot;
   timer?: number;
@@ -28,6 +35,7 @@ export class CaptionSession {
   private entries = new Map<string, Entry>();
   private listeners = new Map<string, Set<() => void>>();
   private summaryListeners = new Set<() => void>();
+  private writes = new Set<Promise<boolean>>();
   private summary: Summary = { unsaved: 0, saving: 0, failed: 0 };
 
   constructor(
@@ -39,6 +47,7 @@ export class CaptionSession {
     let entry = this.entries.get(item.id);
     if (!entry) {
       entry = {
+        datasetId: this.datasetId,
         item,
         snapshot: {
           text: item.caption.text,
@@ -75,7 +84,14 @@ export class CaptionSession {
   private publish(entry: Entry, patch: Partial<Snapshot>) {
     entry.snapshot = { ...entry.snapshot, ...patch };
     this.listeners.get(entry.item.id)?.forEach((listener) => listener());
-    const summary = { unsaved: 0, saving: 0, failed: 0 };
+    this.publishSummary();
+  }
+  private publishSummary() {
+    const summary = {
+      unsaved: this.writes.size,
+      saving: this.writes.size,
+      failed: 0,
+    };
     for (const value of this.entries.values()) {
       summary.unsaved += Number(
         Boolean(value.pending) ||
@@ -196,7 +212,7 @@ export class CaptionSession {
       this.publish(entry, { saving: false });
     }
   }
-  async flushAll(): Promise<boolean> {
+  private async flushCaptions(): Promise<boolean> {
     for (;;) {
       const entries = [...this.entries.values()].filter(
         (entry) =>
@@ -211,6 +227,32 @@ export class CaptionSession {
       if (results.some((saved) => !saved)) return false;
     }
   }
+  // Register before flushing, so Jobs can see a bulk write even while it waits for an inline edit.
+  async afterCaptionFlush(action: () => Promise<void>): Promise<boolean> {
+    const result = Promise.allSettled(this.writes).then(async () => {
+      if (!(await this.flushCaptions())) return false;
+      await action();
+      return true;
+    });
+    this.writes.add(result);
+    this.publishSummary();
+    try {
+      return await result;
+    } finally {
+      this.writes.delete(result);
+      this.publishSummary();
+    }
+  }
+  async flushAll(): Promise<boolean> {
+    while (this.writes.size) {
+      const results = await Promise.allSettled(this.writes);
+      if (
+        results.some((result) => result.status === 'rejected' || !result.value)
+      )
+        return false;
+    }
+    return this.flushCaptions();
+  }
   replace(item: DatasetItem, caption: Caption, keepDraft = false) {
     const entry = this.entry(item);
     if (entry.pending || entry.snapshot.saving) return false;
@@ -224,34 +266,47 @@ export class CaptionSession {
     this.onSaved(item.id, caption);
     return true;
   }
-  firstFailed(): DatasetItem | undefined {
-    return [...this.entries.values()].find((entry) => entry.snapshot.error)
-      ?.item;
+  firstFailed(): Pick<Entry, 'datasetId' | 'item'> | undefined {
+    return [...this.entries.values()].find((entry) => entry.snapshot.error);
   }
   dispose() {
     this.entries.forEach((entry) => window.clearTimeout(entry.timer));
   }
 }
 
-export function useCaptionSession(
+export function useCaptionSessions(
   datasetId: string,
   onSaved: (id: string, caption: Caption) => void,
 ) {
-  const session = useMemo(
-    () => new CaptionSession(datasetId, onSaved),
-    [datasetId, onSaved],
-  );
+  const [sessions, setSessions] = useState(() => [
+    new CaptionSession(datasetId, onSaved),
+  ]);
+  if (sessions[0].datasetId !== datasetId) {
+    const active =
+      sessions.find((session) => session.datasetId === datasetId) ??
+      new CaptionSession(datasetId, onSaved);
+    setSessions([
+      active,
+      ...sessions.filter(
+        (session) => session !== active && session.getSummary().unsaved,
+      ),
+    ]);
+  }
   useEffect(() => {
     const protect = (event: BeforeUnloadEvent) => {
-      if (session.getSummary().unsaved) event.preventDefault();
+      if (sessions.some((session) => session.getSummary().unsaved))
+        event.preventDefault();
     };
     window.addEventListener('beforeunload', protect);
     return () => {
       window.removeEventListener('beforeunload', protect);
-      session.dispose();
     };
-  }, [session]);
-  return session;
+  }, [sessions]);
+  const dispose = useEffectEvent(() =>
+    sessions.forEach((session) => session.dispose()),
+  );
+  useEffect(() => () => dispose(), []);
+  return sessions;
 }
 
 export function useCaption(session: CaptionSession, item: DatasetItem) {
@@ -262,4 +317,31 @@ export function useCaption(session: CaptionSession, item: DatasetItem) {
     ),
     useCallback(() => session.get(item), [session, item]),
   );
+}
+
+export function useCaptionSummary(session: CaptionSession) {
+  return useSyncExternalStore(session.subscribeSummary, session.getSummary);
+}
+
+export function useJobCaptionState(sessions: CaptionSession[]) {
+  const subscribe = useCallback(
+    (listener: () => void) => {
+      const remove = sessions.map((session) =>
+        session.subscribeSummary(listener),
+      );
+      return () => remove.forEach((unsubscribe) => unsubscribe());
+    },
+    [sessions],
+  );
+  return useSyncExternalStore(subscribe, () => {
+    for (const session of sessions) {
+      if (session.getSummary().failed) {
+        const failed = session.firstFailed();
+        if (failed) return failed;
+      }
+    }
+    return sessions.some((session) => session.getSummary().unsaved)
+      ? 'pending'
+      : null;
+  });
 }

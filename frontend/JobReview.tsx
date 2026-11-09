@@ -1,7 +1,8 @@
-import { useEffect, useRef } from 'react';
+import { Fragment, useEffect, useRef } from 'react';
 import { focusField, type JobFields } from './jobFields';
 import type { Job, Review } from './jobTypes';
 import { plural } from './labels';
+import { datasetItemRoute } from './route';
 
 function rateLabel(fps: number | null) {
   return fps === null ? 'unknown fps' : `${Number(fps.toPrecision(6))} fps`;
@@ -33,12 +34,15 @@ export function JobReview({
   job,
   review,
   reviewField,
+  prepareReason,
 }: {
   job: Job;
   review: Review;
   reviewField: JobFields['reviewField'];
+  prepareReason: string;
 }) {
   const reviewPanel = useRef<HTMLElement>(null);
+  const frames = job.family === 'h3' ? job.config.frames : undefined;
   useEffect(() => {
     if (review) reviewPanel.current?.scrollIntoView({ block: 'start' });
   }, [review]);
@@ -54,7 +58,9 @@ export function JobReview({
       <div className={`review-verdict ${review.valid ? 'passed' : 'failed'}`}>
         <strong>
           {review.valid
-            ? 'Review passed. Ready for preparation.'
+            ? prepareReason
+              ? 'Review passed.'
+              : 'Review passed. Ready for preparation.'
             : `Review failed: resolve ${plural(review.errors.length, 'error')} before preparation.`}
         </strong>
         <span>
@@ -62,32 +68,74 @@ export function JobReview({
           {diskVerdict(review.disk)}
         </span>
       </div>
-      {review.errors.length > 0 && (
-        <ul className="error">
-          {review.errors.map((message, index) => {
-            const key = reviewField(message);
-            return (
-              <li key={index}>
-                {key ? (
-                  <button
-                    className="error-link"
-                    onClick={() => focusField(key)}
-                  >
-                    {message}
-                  </button>
-                ) : (
-                  message
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      )}
-      <ul>
-        {review.warnings.map((message, index) => (
-          <li key={index}>{message}</li>
-        ))}
-      </ul>
+      {(['errors', 'warnings'] as const).map((level) => {
+        const errors = level === 'errors';
+        return (
+          review[level].length > 0 && (
+            <ul
+              key={level}
+              className={errors ? 'error' : undefined}
+              aria-label={errors ? 'Review errors' : 'Review warnings'}
+            >
+              {review[level].map((message, index) => {
+                const target = (
+                  errors ? review.error_targets : review.warning_targets
+                )[index];
+                const field = errors && reviewField(message, index);
+                return (
+                  <li key={index}>
+                    {target && 'dataset_id' in target ? (
+                      <a
+                        className="error-link"
+                        href={datasetItemRoute(
+                          target.dataset_id,
+                          target.item_id,
+                          target.view ?? 'preview',
+                          job.id,
+                          frames,
+                        )}
+                      >
+                        {message}
+                      </a>
+                    ) : target && 'items' in target ? (
+                      <>
+                        {target.summary}:{' '}
+                        {target.items.map((item, index) => (
+                          <Fragment key={item.item_id}>
+                            {index > 0 && ', '}
+                            <a
+                              className="error-link"
+                              href={datasetItemRoute(
+                                item.dataset_id,
+                                item.item_id,
+                                'preview',
+                                job.id,
+                                frames,
+                              )}
+                            >
+                              {item.label}
+                            </a>
+                          </Fragment>
+                        ))}
+                        .
+                      </>
+                    ) : field ? (
+                      <button
+                        className="error-link"
+                        onClick={() => focusField(field)}
+                      >
+                        {message}
+                      </button>
+                    ) : (
+                      message
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )
+        );
+      })}
       <details data-testid="disk-estimate">
         <summary>Estimated disk use</summary>
         <ul>
