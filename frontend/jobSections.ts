@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 export const sections = [
   { id: 'job-section-job', label: 'Job & dataset' },
+  { id: 'job-section-essentials', label: 'Training & sample' },
   { id: 'job-section-dataset', label: 'Dataset preparation' },
   { id: 'job-section-training', label: 'LoRA & training' },
   { id: 'job-section-memory', label: 'Memory' },
@@ -43,12 +44,14 @@ export function useJobSections(hasJob: boolean) {
         window.scrollY + window.innerHeight >= root.scrollHeight - 2 &&
         window.scrollY > 0;
       let current = sections[0].id;
-      for (const { id } of sections)
+      for (const { id } of sections) {
+        const target = document.getElementById(id);
         if (
-          (document.getElementById(id)?.getBoundingClientRect().top ?? 0) <=
-          line
+          target?.checkVisibility() &&
+          target.getBoundingClientRect().top <= line
         )
           current = id;
+      }
       setSection(atEnd ? sections[sections.length - 1].id : current);
     };
     follow();
@@ -58,6 +61,12 @@ export function useJobSections(hasJob: boolean) {
   function goToSection(id: string) {
     const target = document.getElementById(id);
     if (!target) return;
+    for (
+      let parent = target.parentElement;
+      parent;
+      parent = parent.parentElement
+    )
+      if (parent instanceof HTMLDetailsElement) parent.open = true;
     target.scrollIntoView({ block: 'start' });
     target.focus({ preventScroll: true });
     chosen.current = { id, at: window.scrollY };

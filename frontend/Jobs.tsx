@@ -1,4 +1,5 @@
 import { JobActionBar } from './JobActionBar';
+import { JobEssentials } from './JobEssentials';
 import { useJobEditor, type JobsProps } from './jobEditor';
 import { JobPresets } from './JobPresets';
 import { JobReview } from './JobReview';
@@ -171,19 +172,37 @@ export function Jobs(props: JobsProps) {
             models={models}
             modelRoots={modelRoots}
           />
-          <JobPresets
+          <JobEssentials
             job={job}
             busy={busy}
-            dirty={dirty}
-            presets={presets}
-            presetName={presetName}
-            setPresetName={setPresetName}
-            presetId={presetId}
-            setPresetId={setPresetId}
-            savePreset={savePreset}
-            applyPreset={applyPreset}
+            fields={fields}
+            config={config}
           />
-          <JobControls job={job} busy={busy} fields={fields} config={config} />
+          <details className="job-advanced">
+            <summary>Advanced controls</summary>
+            <p>
+              Presets, preparation, LoRA, memory and checkpoints. Every saved
+              value is kept when these controls are closed.
+            </p>
+            <JobPresets
+              job={job}
+              busy={busy}
+              dirty={dirty}
+              presets={presets}
+              presetName={presetName}
+              setPresetName={setPresetName}
+              presetId={presetId}
+              setPresetId={setPresetId}
+              savePreset={savePreset}
+              applyPreset={applyPreset}
+            />
+            <JobControls
+              job={job}
+              busy={busy}
+              fields={fields}
+              config={config}
+            />
+          </details>
           {review && existingRun && (
             <p>
               This revision already has a Run with the same inputs (

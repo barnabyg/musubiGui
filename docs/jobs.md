@@ -5,6 +5,33 @@ such as multiples, frame formulas and ranges are flagged beside their field whil
 never block saving a draft. Review stays the authority: each of its errors about a field is
 a link that focuses that field.
 
+## Compact job setup
+
+Jobs opens with name, datasets, recipe, training steps and final sample choice together.
+Required choices names anything still missing, including the sample prompt when sampling
+is enabled. Turn sampling off explicitly if no final sample is needed. The compact view
+shows the draft's current size, frame count and rank; new drafts start from the measured
+target-PC defaults. Review still checks media, model files and every saved setting.
+
+Expand Advanced controls to use presets or change preparation, LoRA, memory and checkpoint
+settings. Collapsing the controls, reopening a saved job or importing a configuration
+preserves its values. Section jumps and review error links open hidden controls before
+focusing them. Generated configuration remains under Advanced in Configuration review.
+
+To verify manually, run this from the repository root in PowerShell 7:
+
+```powershell
+.\acceptance.cmd --workspace ".cache/ux-check-$([guid]::NewGuid().ToString('N'))"
+```
+
+Create a Wan job, choose a dataset, and enter a sample prompt or turn off the final sample.
+For the fixture's short WAN acceptance clip, expand Advanced controls and apply its Smoke
+test preset before review; normal 33-frame-or-longer clips use the new-job recipe directly.
+Repeat with H3 acceptance, which supports the default 124 frames. Review should pass without
+changing memory or optimizer settings. Change LoRA rank in Advanced controls, save, collapse
+and reopen the job, then expand it again: the saved rank should remain. Check keyboard
+operation and a window about 700 pixels wide; the form should stay within the window.
+
 ## Drafts and revisions
 
 Launch with `launch.cmd`, register a dataset, and open Jobs. Jobs are listed in a table
