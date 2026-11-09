@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { Fragment, useEffect, useRef } from 'react';
 import { focusField, type JobFields } from './jobFields';
 import type { Job, Review } from './jobTypes';
 import { plural } from './labels';
@@ -95,6 +95,27 @@ export function JobReview({
                       >
                         {message}
                       </a>
+                    ) : target && 'items' in target ? (
+                      <>
+                        {target.summary}:{' '}
+                        {target.items.map((item, index) => (
+                          <Fragment key={item.item_id}>
+                            {index > 0 && ', '}
+                            <a
+                              className="error-link"
+                              href={datasetItemRoute(
+                                item.dataset_id,
+                                item.item_id,
+                                'preview',
+                                job.id,
+                              )}
+                            >
+                              {item.label}
+                            </a>
+                          </Fragment>
+                        ))}
+                        .
+                      </>
                     ) : field ? (
                       <button
                         className="error-link"

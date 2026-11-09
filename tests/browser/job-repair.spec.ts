@@ -50,6 +50,22 @@ test('review opens the exact same-name media item for audio and caption repairs'
       .click();
     const review = page.getByRole('region', { name: 'Configuration review' });
     await expect(review).toContainText('Review failed', { timeout: 240_000 });
+    const back = page.getByRole('button', { name: /Return to job and review/ });
+    for (const name of ['H3 acceptance', 'Second']) {
+      const copy = review.getByRole('link', {
+        name: `motion.mp4 in "${name}"`,
+        exact: true,
+      });
+      await copy.press('Enter');
+      await expect(
+        page.getByRole('heading', { name, exact: true }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole('heading', { name: 'motion.mp4', exact: true }),
+      ).toBeVisible();
+      await back.click();
+      await expect(review).toContainText('Review failed', { timeout: 240_000 });
+    }
     const audio = review.getByRole('link', {
       name: /Second.*motion.mp4: audio policy requires/,
     });
@@ -67,7 +83,6 @@ test('review opens the exact same-name media item for audio and caption repairs'
       'Audio source: explicit',
       { timeout: 240_000 },
     );
-    const back = page.getByRole('button', { name: /Return to job and review/ });
     await back.click();
     await expect(page).toHaveURL(`${app.url}/#/jobs/${job.id}`);
     await expect(review).toContainText('Review passed', { timeout: 240_000 });

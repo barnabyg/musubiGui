@@ -342,6 +342,11 @@ are shared by all jobs using that dataset. **Return to job and review** waits fo
 caption saves, reopens the originating job and checks its current inputs again. Warnings
 allow preparation when all errors have been resolved.
 
+When identical files occur in multiple datasets, the warning links each copy
+to its own preview. The review API keeps the complete warning text and adds
+`summary` and `items` to its `warning_targets` entry. Each item includes the
+display `label`, `dataset_id` and `item_id`.
+
 To try this from the repository root on Windows with the acceptance prerequisites:
 
 ```powershell

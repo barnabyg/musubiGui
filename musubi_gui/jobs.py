@@ -708,9 +708,9 @@ class ReviewMessages(list[str]):
 
     def __init__(self, messages: list[str]) -> None:
         super().__init__(messages)
-        self.targets: dict[int, dict[str, str]] = {}
+        self.targets: dict[int, dict[str, str | list[dict[str, str]]]] = {}
 
-    def add(self, message: str, **target: str) -> None:
+    def add(self, message: str, **target: str | list[dict[str, str]]) -> None:
         self.targets[len(self)] = target
         self.append(message)
 
@@ -845,7 +845,9 @@ def _plan_job_windows(
     return merged
 
 
-def _duplicate_warnings(root: Path, datasets: list[dict[str, Any]], items: list[dict[str, Any]]) -> list[str]:
+def _add_duplicate_warnings(
+    datasets: list[dict[str, Any]], items: list[dict[str, Any]], warnings: ReviewMessages
+) -> None:
     """Name files that train twice because two listed datasets hold the same content."""
     names = {dataset["id"]: dataset["name"] for dataset in datasets}
     by_size: dict[int, list[dict[str, Any]]] = {}
@@ -862,13 +864,19 @@ def _duplicate_warnings(root: Path, datasets: list[dict[str, Any]], items: list[
         if len({item["dataset_id"] for item in group}) > 1:
             for item in group:
                 by_content.setdefault(content_hash(Path(item["absolute_path"])), []).append(item)
-    return [
-        "Identical files in several datasets train more than once: "
-        + ", ".join(f'{item["name"]} in "{names[item["dataset_id"]]}"' for item in group)
-        + "."
-        for group in by_content.values()
-        if len({item["dataset_id"] for item in group}) > 1
-    ]
+    for group in by_content.values():
+        if len({item["dataset_id"] for item in group}) < 2:
+            continue
+        summary = "Identical files in several datasets train more than once"
+        copies = [
+            {
+                "label": f'{item["name"]} in "{names[item["dataset_id"]]}"',
+                "dataset_id": item["dataset_id"],
+                "item_id": item["id"],
+            }
+            for item in group
+        ]
+        warnings.add(f"{summary}: " + ", ".join(copy["label"] for copy in copies) + ".", summary=summary, items=copies)
 
 
 def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool = False) -> dict[str, Any]:
@@ -971,7 +979,7 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
     output = Path(settings.output_root) / "jobs" / job.id
     cache = Path(settings.cache_root) / "jobs" / job.id
     snapshot = output / f"revision-{job.revision}"
-    warnings.extend(_duplicate_warnings(root, datasets, effective_items))
+    _add_duplicate_warnings(datasets, effective_items, warnings)
     if job.family == "h3" and any(item["kind"] == "image" for item in effective_items):
         warnings.extend(H3_IMAGE_WARNINGS)
     windows = _plan_job_windows(job, datasets, effective_items, errors, warnings)
