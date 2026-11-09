@@ -24,15 +24,18 @@ and provenance. The existing `GET /api/runs` and `GET /api/runs/{id}` retain the
 responses for API callers. Persisted Run formats are unchanged.
 
 In the isolated CPU fixture on 9 November 2026, a 3.25-second Edge observation with
-three completed Runs transferred five detailed history responses of 54,969 bytes each
+four completed Runs transferred five detailed history responses of 54,969 bytes each
 before this change (274,845 bytes, excluding logs/capabilities). Afterward, the same
 window transferred three summaries totalling 5,907 bytes and three capability responses
-totalling 420 bytes, with no repeated detail or terminal logs. With a fourth active Run
+totalling 420 bytes, with no repeated detail or terminal logs. With a fifth active Run
 while the completed Run stayed selected, three summary responses totalled 7,370 bytes
 and capabilities totalled 2,014 bytes; no unrelated detail or logs were fetched.
 These are uncompressed response-body bytes for synthetic single-item Runs, not a
 large-library latency benchmark. A response delayed by 1.5 seconds kept at most one
 history request in flight.
+Observation windows count requests when they start, then wait for those responses to
+finish measuring their bodies. A delayed response from opening the selected Run belongs
+to that initial load, even if its body arrives during a later idle window.
 
 To inspect this manually, run from the repository root in PowerShell 7:
 

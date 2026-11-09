@@ -1,5 +1,52 @@
 import { test, expect } from '@playwright/test';
 import { runWorkspace } from './runHarness';
+import { observeRunTraffic } from './runTraffic';
+
+test('the traffic window excludes an initial log request whose response arrives late', async ({
+  page,
+}) => {
+  const app = await runWorkspace();
+  let releaseLog = () => {};
+  let logSeen = () => {};
+  const logGate = new Promise<void>((resolve) => (releaseLog = resolve));
+  const firstLog = new Promise<void>((resolve) => (logSeen = resolve));
+  try {
+    const run = (await app.post('/api/runs/prepare', {
+      job_id: app.manifest.jobs[0].id,
+      start: true,
+    })) as { id: string };
+    await expect
+      .poll(
+        async () =>
+          (await app.records()).find((record) => record.id === run.id)?.status,
+        { timeout: 240_000 },
+      )
+      .toBe('completed');
+    await page.route(`**/api/runs/${run.id}/logs`, async (route) => {
+      logSeen();
+      await logGate;
+      await route.continue();
+    });
+    const observation = observeRunTraffic(page);
+    await page.goto(`${app.url}/#/runs/${run.id}`);
+    await expect(
+      page.getByText('State: Completed', { exact: true }),
+    ).toBeVisible();
+    await firstLog;
+    observation.start();
+    releaseLog();
+    await expect(page.getByLabel('Run logs')).toContainText('step');
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    const traffic = await observation.finish();
+    expect(
+      traffic.filter((entry) => entry.path.endsWith('/logs')),
+    ).toHaveLength(0);
+  } finally {
+    releaseLog();
+    await page.unrouteAll({ behavior: 'wait' });
+    await app.close();
+  }
+});
 
 test('a delayed history refresh cannot replace live training with the start response', async ({
   page,
@@ -135,24 +182,26 @@ test('finished Runs transfer summaries without repeating frozen inputs or termin
         .toBe('completed');
     }
     const [run] = await app.records();
-    const traffic: { path: string; bytes: number }[] = [];
-    page.on('response', async (response) => {
-      const url = new URL(response.url());
-      if (url.pathname.startsWith('/api/runs')) {
-        const body = await response.body().catch(() => Buffer.alloc(0));
-        traffic.push({ path: url.pathname, bytes: body.length });
-      }
-    });
+    const observation = observeRunTraffic(page);
     await page.goto(`${app.url}/#/runs/${run.id}`);
     await expect(
       page.getByText('State: Completed', { exact: true }),
     ).toBeVisible();
     await expect(page.getByLabel('Run logs')).toContainText('step');
-    traffic.length = 0;
+    observation.start();
     // A bounded observation window measures idle traffic, rather than waiting for app state.
     await new Promise((resolve) => setTimeout(resolve, 3250));
+    const traffic = await observation.finish();
     await testInfo.attach('steady-state-traffic', {
-      body: JSON.stringify(traffic, null, 2),
+      body: JSON.stringify(
+        {
+          completedRuns: app.manifest.jobs.length,
+          seconds: 3.25,
+          requests: traffic,
+        },
+        null,
+        2,
+      ),
       contentType: 'application/json',
     });
     expect(traffic.filter((entry) => entry.path === '/api/runs')).toHaveLength(
@@ -192,20 +241,30 @@ test('finished Runs transfer summaries without repeating frozen inputs or termin
       exact: true,
     });
     await expect(activeButton).toBeVisible();
-    traffic.length = 0;
+    observation.start();
     await new Promise((resolve) => setTimeout(resolve, 3250));
+    const activeTraffic = await observation.finish();
     await testInfo.attach('other-active-run-traffic', {
-      body: JSON.stringify(traffic, null, 2),
+      body: JSON.stringify(
+        {
+          completedRuns: app.manifest.jobs.length,
+          additionalRuns: 1,
+          seconds: 3.25,
+          requests: activeTraffic,
+        },
+        null,
+        2,
+      ),
       contentType: 'application/json',
     });
-    expect(traffic.filter((entry) => entry.path === '/api/runs')).toHaveLength(
-      0,
-    );
     expect(
-      traffic.filter((entry) => entry.path.endsWith('/logs')),
+      activeTraffic.filter((entry) => entry.path === '/api/runs'),
     ).toHaveLength(0);
     expect(
-      traffic.filter((entry) => entry.path === `/api/runs/${active.id}`),
+      activeTraffic.filter((entry) => entry.path.endsWith('/logs')),
+    ).toHaveLength(0);
+    expect(
+      activeTraffic.filter((entry) => entry.path === `/api/runs/${active.id}`),
     ).toHaveLength(0);
     await activeButton.click();
     await expect(page.getByLabel('Training progress')).toContainText(
