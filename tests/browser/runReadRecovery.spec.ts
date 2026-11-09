@@ -1,5 +1,32 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { runWorkspace } from './runHarness';
+
+async function failFirstRead(page: Page, url: string, message: string) {
+  let requests = 0;
+  let concurrent = 0;
+  let peak = 0;
+  await page.route(url, async (route) => {
+    requests += 1;
+    concurrent += 1;
+    peak = Math.max(peak, concurrent);
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      if (requests === 1)
+        await route.fulfill({ status: 503, json: { detail: message } });
+      else await route.continue();
+    } finally {
+      concurrent -= 1;
+    }
+  });
+  return {
+    get requests() {
+      return requests;
+    },
+    get peak() {
+      return peak;
+    },
+  };
+}
 
 test('an unchanged Run retries a failed first detail read and clears its read error', async ({
   page,
@@ -24,25 +51,11 @@ test('an unchanged Run retries a failed first detail read and clears its read er
       exact: true,
     });
     await expect(choice).toBeVisible();
-    let requests = 0;
-    let concurrent = 0;
-    let peak = 0;
-    await page.route(`**/api/runs/${run.id}`, async (route) => {
-      requests += 1;
-      concurrent += 1;
-      peak = Math.max(peak, concurrent);
-      try {
-        await new Promise((resolve) => setTimeout(resolve, 1500));
-        if (requests === 1)
-          await route.fulfill({
-            status: 503,
-            json: { detail: 'Run detail temporarily unavailable.' },
-          });
-        else await route.continue();
-      } finally {
-        concurrent -= 1;
-      }
-    });
+    const traffic = await failFirstRead(
+      page,
+      `**/api/runs/${run.id}`,
+      'Run detail temporarily unavailable.',
+    );
     await choice.click();
     await expect(page.getByRole('alert')).toContainText(
       'Run detail temporarily unavailable.',
@@ -52,8 +65,8 @@ test('an unchanged Run retries a failed first detail read and clears its read er
     ).toBeVisible();
     await expect(page.getByRole('alert')).toHaveCount(0);
     await new Promise((resolve) => setTimeout(resolve, 3250));
-    expect(requests).toBe(2);
-    expect(peak).toBe(1);
+    expect(traffic.requests).toBe(2);
+    expect(traffic.peak).toBe(1);
     await page.unrouteAll({ behavior: 'wait' });
   } finally {
     await app.close();
@@ -76,25 +89,11 @@ test('a terminal log retries a failed read then stops after success and clears i
         { timeout: 240_000 },
       )
       .toBe('completed');
-    let requests = 0;
-    let concurrent = 0;
-    let peak = 0;
-    await page.route(`**/api/runs/${run.id}/logs`, async (route) => {
-      requests += 1;
-      concurrent += 1;
-      peak = Math.max(peak, concurrent);
-      try {
-        await new Promise((resolve) => setTimeout(resolve, 1500));
-        if (requests === 1)
-          await route.fulfill({
-            status: 503,
-            json: { detail: 'Run log temporarily unavailable.' },
-          });
-        else await route.continue();
-      } finally {
-        concurrent -= 1;
-      }
-    });
+    const traffic = await failFirstRead(
+      page,
+      `**/api/runs/${run.id}/logs`,
+      'Run log temporarily unavailable.',
+    );
     await page.goto(`${app.url}/#/runs/${run.id}`);
     await expect(page.getByRole('alert')).toContainText(
       'Run log temporarily unavailable.',
@@ -102,8 +101,8 @@ test('a terminal log retries a failed read then stops after success and clears i
     await expect(page.getByLabel('Run logs')).toContainText('step');
     await expect(page.getByRole('alert')).toHaveCount(0);
     await new Promise((resolve) => setTimeout(resolve, 3250));
-    expect(requests).toBe(2);
-    expect(peak).toBe(1);
+    expect(traffic.requests).toBe(2);
+    expect(traffic.peak).toBe(1);
     await page.unrouteAll({ behavior: 'wait' });
   } finally {
     await app.close();
