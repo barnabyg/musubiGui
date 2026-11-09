@@ -54,6 +54,20 @@ export type DatasetItem = {
 
 const api = apiClient((status) => `Request failed (${status}).`);
 
+async function loadDatasets(id?: string, signal?: AbortSignal) {
+  const list = await api<Dataset[]>('/api/datasets', 'GET', undefined, signal);
+  const requested = performance.now();
+  const contents = id
+    ? await api<DatasetItem[]>(
+        `/api/datasets/${id}/items`,
+        'GET',
+        undefined,
+        signal,
+      )
+    : [];
+  return { list, contents, requested, id };
+}
+
 export function Datasets({
   visible = true,
   selectedId,
@@ -77,7 +91,10 @@ export function Datasets({
   const [screen, setScreen] = useState<'library' | 'create' | 'edit'>(
     'library',
   );
-  const [busy, setBusy] = useState(false);
+  const [working, setBusy] = useState(false);
+  const [loadedRepair, setLoadedRepair] = useState<DatasetRepair>();
+  const loadingRepair = Boolean(repair && loadedRepair !== repair);
+  const busy = working || loadingRepair;
   const [loaded, setLoaded] = useState(false);
   const [panel, setPanel] = useState<DatasetPanel | null>(null);
   const [dataset, setDataset] = useState<Dataset | null>(null);
@@ -85,7 +102,8 @@ export function Datasets({
   const [audioBusy, setAudioBusy] = useState(false);
   const [preview, setPreview] = useState<DatasetItem | null>(null);
   const active = repair
-    ? (items.find((item) => item.id === repair.itemId) ?? null)
+    ? (!loadingRepair && items.find((item) => item.id === repair.itemId)) ||
+      null
     : preview;
   function setActive(item: DatasetItem | null) {
     if (repair && dataset) {
@@ -138,26 +156,37 @@ export function Datasets({
   useEffect(() => {
     onEditorChange?.(screen === 'edit');
   }, [screen, onEditorChange]);
-  const refresh = useCallback(async (id?: string) => {
-    const list = await api<Dataset[]>('/api/datasets');
-    const requested = performance.now();
-    const contents = id
-      ? await api<DatasetItem[]>(`/api/datasets/${id}/items`)
-      : [];
-    setDatasets(list);
-    if (id) {
-      setDataset(list.find((value) => value.id === id) ?? null);
-      setItems(
-        contents.map((item) => {
-          const saved = savedCaptions.current.get(item.id);
-          return saved && saved.at > requested
-            ? { ...item, caption: saved.caption }
-            : item;
-        }),
-      );
-    }
-    return list;
-  }, []);
+  const applyDatasets = useCallback(
+    ({
+      list,
+      contents,
+      requested,
+      id,
+    }: Awaited<ReturnType<typeof loadDatasets>>) => {
+      setDatasets(list);
+      if (id) {
+        setDataset(list.find((value) => value.id === id) ?? null);
+        setItems(
+          contents.map((item) => {
+            const saved = savedCaptions.current.get(item.id);
+            return saved && saved.at > requested
+              ? { ...item, caption: saved.caption }
+              : item;
+          }),
+        );
+      }
+    },
+    [],
+  );
+  const refresh = useCallback(
+    async (id?: string, signal?: AbortSignal) => {
+      const data = await loadDatasets(id, signal);
+      signal?.throwIfAborted();
+      applyDatasets(data);
+      return data.list;
+    },
+    [applyDatasets],
+  );
   useEffect(() => {
     void api<Dataset[]>('/api/datasets')
       .then(setDatasets)
@@ -198,12 +227,38 @@ export function Datasets({
     if (!(await captions.flushAll())) return;
     setActive(item);
   }
-  const followRoute = useEffectEvent(() => {
-    if (!loaded || selectedId === dataset?.id) return;
-    if (selectedId) void open(selectedId, true);
+  const followRoute = useEffectEvent((signal: AbortSignal) => {
+    if (!loaded || repair || selectedId === dataset?.id) return;
+    if (selectedId) void open(selectedId, true, signal);
     else if (screen === 'edit') void back();
   });
-  useEffect(() => followRoute(), [selectedId, loaded]);
+  useEffect(() => {
+    const request = new AbortController();
+    followRoute(request.signal);
+    return () => request.abort();
+  }, [selectedId, loaded, repair]);
+  const showRepair = useEffectEvent(
+    (id: string, data: Awaited<ReturnType<typeof loadDatasets>>) => {
+      applyDatasets(data);
+      if (id !== dataset?.id) showDataset(id, data.list);
+      setError('');
+    },
+  );
+  useEffect(() => {
+    if (!loaded || !repair || !selectedId) return;
+    const request = new AbortController();
+    void loadDatasets(selectedId, request.signal)
+      .then((data) => {
+        if (!request.signal.aborted) showRepair(selectedId, data);
+      })
+      .catch((reason: Error) => {
+        if (!request.signal.aborted) setError(reason.message);
+      })
+      .finally(() => {
+        if (!request.signal.aborted) setLoadedRepair(repair);
+      });
+    return () => request.abort();
+  }, [selectedId, loaded, repair]);
   async function returnToJob() {
     if (!repair) return;
     if (!(await captions.flushAll())) {
@@ -216,33 +271,37 @@ export function Datasets({
       review: true,
     });
   }
-  async function open(id: string, fromRoute = false) {
-    // A job repair can visit another dataset while this draft remains available to resolve.
-    if (!(fromRoute && repair) && !(await captions.flushAll())) {
-      onSelect?.(dataset?.id, true);
+  async function open(id: string, fromRoute = false, signal?: AbortSignal) {
+    if (!(await captions.flushAll())) {
+      if (!signal?.aborted) onSelect?.(dataset?.id, true);
       return;
     }
+    if (signal?.aborted) return;
     setBusy(true);
+    try {
+      const list = await refresh(id, signal);
+      showDataset(id, list);
+      setError('');
+      if (!fromRoute) onSelect?.(id);
+    } catch (reason) {
+      if (signal?.aborted) return;
+      setError((reason as Error).message);
+      if (!repair) onSelect?.(dataset?.id, true);
+    } finally {
+      setBusy(false);
+    }
+  }
+  function showDataset(id: string, list: Dataset[]) {
     setPreview(null);
     setSelected(new Set());
     setEditing(null);
     setQuery('');
     setFilter('all');
     setScroll(0);
-    setError('');
-    try {
-      const list = await refresh(id);
-      setName(list.find((value) => value.id === id)?.name ?? '');
-      setScreen('edit');
-      setPanel(null);
-      setStatus('');
-      if (!fromRoute) onSelect?.(id);
-    } catch (reason) {
-      setError((reason as Error).message);
-      if (!repair) onSelect?.(dataset?.id, true);
-    } finally {
-      setBusy(false);
-    }
+    setName(list.find((value) => value.id === id)?.name ?? '');
+    setScreen('edit');
+    setPanel(null);
+    setStatus('');
   }
   async function back() {
     if (!(await captions.flushAll())) {
@@ -447,6 +506,7 @@ export function Datasets({
       {repair?.itemId &&
         dataset?.id === selectedId &&
         !busy &&
+        !error &&
         !active &&
         screen === 'edit' && (
           <p role="alert">
@@ -454,6 +514,7 @@ export function Datasets({
             review its current inputs.
           </p>
         )}
+      {loadingRepair && <p role="status">Loading reviewed dataset…</p>}
       {error && (
         <div role="alert" className="error">
           {error}
