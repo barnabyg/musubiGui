@@ -21,6 +21,7 @@ import { DatasetLibrary } from './DatasetLibrary';
 import { DatasetPanels } from './DatasetPanels';
 import { type DatasetPanel, DatasetTopbar } from './DatasetTopbar';
 import { MediaPreview } from './MediaPreview';
+import { DatasetJobImpact, loadDatasetUsage } from './datasetUsage';
 import { datasetItemRoute, type DatasetRepair, formatRoute } from './route';
 
 export type Dataset = {
@@ -342,26 +343,30 @@ export function Datasets({
     }
   }
   async function remove(value: Dataset) {
-    const confirmed = await confirmDialog({
-      title: `Delete "${value.name}" from the dataset library?`,
-      body: (
-        <p>
-          Only the library entry is removed. Media files, captions and recovery
-          history stay on disk, including uploaded files. Jobs using this
-          dataset will need a dataset selected again.
-        </p>
-      ),
-      confirmLabel: 'Delete from library',
-      danger: true,
-    });
-    if (!confirmed) return;
     setBusy(true);
     setError('');
     try {
+      const jobs = await loadDatasetUsage(value.id);
+      const confirmed = await confirmDialog({
+        title: `Remove "${value.name}" from the dataset library?`,
+        body: (
+          <>
+            <p>
+              Only the library entry is removed. Media files, captions and
+              recovery history stay on disk, including uploaded files. The
+              drafts below will need another dataset selected.
+            </p>
+            <DatasetJobImpact jobs={jobs} newTab />
+          </>
+        ),
+        confirmLabel: 'Remove from library',
+        danger: true,
+      });
+      if (!confirmed) return;
       await api(`/api/datasets/${value.id}`, 'DELETE', {});
       await refresh();
       setStatus(
-        `Deleted "${value.name}" from the library. Files are preserved.`,
+        `Removed "${value.name}" from the library. Files are preserved.`,
       );
       heading.current?.focus();
     } catch (reason) {

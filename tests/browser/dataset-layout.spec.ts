@@ -206,7 +206,7 @@ test('the active tile stays in view and panels keep the column count', async ({
   }
 });
 
-test('separate library and editor create, populate, rename, reopen and delete without removing files', async ({
+test('separate library and editor create, populate, rename, reopen and remove entries without removing files', async ({
   page,
 }) => {
   const app = await datasetHarness();
@@ -339,7 +339,7 @@ test('separate library and editor create, populate, rename, reopen and delete wi
     );
     await page.getByRole('button', { name: 'Back to datasets' }).click();
     await page
-      .getByRole('button', { name: 'Delete Portrait collection' })
+      .getByRole('button', { name: 'Remove Portrait collection from library' })
       .click();
     const question = page.getByRole('dialog');
     await expect(question).toContainText('Portrait collection');
@@ -359,9 +359,9 @@ test('separate library and editor create, populate, rename, reopen and delete wi
       else await route.continue();
     });
     await page
-      .getByRole('button', { name: 'Delete Portrait collection' })
+      .getByRole('button', { name: 'Remove Portrait collection from library' })
       .click();
-    await question.getByRole('button', { name: 'Delete from library' }).click();
+    await question.getByRole('button', { name: 'Remove from library' }).click();
     await expect(page.getByRole('alert')).toContainText(
       'Fixture deletion failed',
     );
@@ -370,9 +370,9 @@ test('separate library and editor create, populate, rename, reopen and delete wi
     ).toBeVisible();
     await page.unroute(`**/api/datasets/${stored.id}`);
     await page
-      .getByRole('button', { name: 'Delete Portrait collection' })
+      .getByRole('button', { name: 'Remove Portrait collection from library' })
       .click();
-    await question.getByRole('button', { name: 'Delete from library' }).click();
+    await question.getByRole('button', { name: 'Remove from library' }).click();
     await expect(page.getByText('Your library starts here')).toBeVisible();
     expect(await readFile(path.join(stored.path, 'red.png'))).toEqual(
       await readFile(path.join(app.media, 'red.png')),

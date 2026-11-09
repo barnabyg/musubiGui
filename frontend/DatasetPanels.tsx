@@ -6,6 +6,7 @@ import type { Dataset, DatasetItem } from './Datasets';
 import type { DatasetPanel } from './DatasetTopbar';
 import { DatasetUploads } from './DatasetUploads';
 import { H3Coverage } from './H3Inspector';
+import { DatasetJobImpact, useDatasetUsage } from './datasetUsage';
 
 export function DatasetPanels({
   dataset,
@@ -36,6 +37,10 @@ export function DatasetPanels({
   setSelected: Dispatch<SetStateAction<Set<string>>>;
   onChanged: () => Promise<void>;
 }) {
+  const usage = useDatasetUsage(
+    dataset.id,
+    panel === 'settings' || panel === 'tools',
+  );
   return (
     <>
       <section
@@ -75,6 +80,7 @@ export function DatasetPanels({
             : 'Registered local folder · add media in this folder, then re-scan.'}
         </p>
         <H3Coverage key={dataset.id} datasetId={dataset.id} />
+        {panel === 'settings' && <DatasetJobImpact {...usage} />}
         <button disabled={busy} onClick={() => void rescan()}>
           Re-scan
         </button>
@@ -153,12 +159,14 @@ export function DatasetPanels({
             </button>
           </div>
         </div>
+        {panel === 'tools' && <DatasetJobImpact {...usage} />}
         <DatasetBulkActions
           key={dataset.id}
           datasetId={dataset.id}
           selected={[...selected]}
           afterCaptionFlush={(action) => captions.afterCaptionFlush(action)}
           onChanged={onChanged}
+          impactReady={!!usage.jobs && !usage.error}
         />
       </section>
     </>

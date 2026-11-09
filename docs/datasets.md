@@ -6,7 +6,7 @@ explicitly empty list, are preserved; change them in Settings to use a different
 location.
 
 The Datasets library lists registered and managed datasets, their media/caption
-counts, storage locations and edit/delete actions. Choose **New dataset** to open
+counts, storage locations and edit/remove actions. Choose **New dataset** to open
 the creation screen. Choose **Upload files** or **Use existing folder** before
 entering a path. Uploads use the first configured root as their **Upload parent
 folder**, so a name is enough; inspect or change the parent before choosing
@@ -56,12 +56,36 @@ to the job uses the refreshed index. Omitting `wait` starts a background scan.
 **Pause uploads** pauses remaining files. A file already submitted for validation
 finishes publication and scanning before the job can review the dataset again.
 
-**Delete** requires confirmation naming the dataset and removes its library entry
+**Remove from library** requires confirmation naming the dataset and removes its library entry
 and indexed items only. Original and uploaded media, caption sidecars, thumbnails,
 caption history and bulk/upload recovery evidence remain on disk. Jobs referencing
-the deleted entry need a dataset selected again. Re-registering the preserved folder
+the removed entry need a dataset selected again. Re-registering the preserved folder
 creates a new entry with a new identity; prior exclusions and history are not attached
 to that new entry. Deletion waits for a pending or active scan to finish.
+
+**Dataset settings** and **Bulk actions** list the saved jobs using the dataset,
+including their family and revision, with links to active drafts and an explicit
+archived status. If no saved jobs use it, the list says so. Inclusion changes and
+caption edits affect these jobs' next review and preparation; prepared Runs keep
+their frozen media, captions and outputs. Exclude selection remains one click;
+keep the selection and choose **Include selection** to reverse it. Removal shows
+the same affected jobs in its confirmation, with links opening in a new tab so
+the confirmation stays available. A failed job lookup must be retried before
+changing inclusion or removing the entry.
+
+To verify the shared scope, run this from `C:/docs/git/musubiGui` in PowerShell 7:
+
+```powershell
+.\acceptance.cmd --workspace ".cache/ux-check-$([guid]::NewGuid().ToString('N'))"
+```
+
+Prepare WAN acceptance 1, then open WAN acceptance's **Bulk actions**. Both WAN
+acceptance jobs should be linked. Select motion.mp4, exclude it and review both
+drafts: neither has usable included media. Include it again to restore their
+input. Open **Remove from library**, inspect the named jobs and cancel. Removing
+the entry preserves motion.mp4 and its caption on disk, and the prepared Run can
+still start and provide its LoRA from the saved snapshot. This is a CPU fixture;
+it does not establish GPU model quality.
 
 After `npm.cmd run build`, run `.venv\Scripts\python.exe -m musubi_gui.dataset_fixture .cache\dataset-demo --launch`.
 Use a new destination each time; existing fixture directories are preserved. Open the printed loopback URL
