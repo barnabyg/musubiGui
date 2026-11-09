@@ -1,6 +1,46 @@
 import { expect, test } from '@playwright/test';
 import { runWorkspace } from './runHarness';
 
+test('a late review cannot authorize a different job at the same revision', async ({
+  page,
+}) => {
+  const app = await runWorkspace();
+  let release = () => {};
+  try {
+    const [first, second] = app.manifest.jobs;
+    await page.goto(`${app.url}/#/jobs/${first.id}`);
+    await page
+      .getByRole('button', { name: `${second.name} · WAN · r1` })
+      .click();
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const reviewing = page.waitForRequest(`**/${second.id}/review`);
+    await page.route(`**/${second.id}/review`, async (route) => {
+      const response = await route.fetch();
+      await held;
+      await route.fulfill({ response });
+    });
+    await page.getByRole('button', { name: 'Review configuration' }).click();
+    await reviewing;
+    await page.goBack();
+    await expect(page.getByLabel('Job name')).toHaveValue(first.name);
+    release();
+    await expect(
+      page.getByRole('button', { name: 'Review configuration' }),
+    ).toBeEnabled();
+    await expect(
+      page.getByRole('button', { name: 'Prepare run', exact: true }),
+    ).toBeDisabled();
+    await expect(
+      page.getByRole('region', { name: 'Configuration review' }),
+    ).toHaveCount(0);
+  } finally {
+    release();
+    await app.close();
+  }
+});
+
 test('a second tab changing a reviewed job blocks both prepare actions until the new revision is reviewed', async ({
   page,
   context,

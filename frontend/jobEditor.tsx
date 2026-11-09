@@ -59,7 +59,20 @@ export function useJobEditor({
   const busy = loading || working;
   const [status, setStatus] = useState('Loading jobs…');
   const [error, setError] = useState('');
-  const [review, setReview] = useState<Review | null>(null);
+  const [reviewResult, setReview] = useState<Review | null>(null);
+  const review =
+    job &&
+    reviewResult?.job_id === job.id &&
+    reviewResult.revision === job.revision
+      ? reviewResult
+      : null;
+  const reviewRequest = useRef(0);
+  useEffect(() => {
+    // Browser history can switch jobs while the server is inspecting media.
+    return () => {
+      reviewRequest.current += 1;
+    };
+  }, [selectedId]);
   const [presets, setPresets] = useState<Preset[]>([]);
   const [presetName, setPresetName] = useState('');
   const [presetId, setPresetId] = useState('');
@@ -250,17 +263,20 @@ export function useJobEditor({
     });
   }
   async function reviewSaved(current: Job) {
+    const requestId = ++reviewRequest.current;
     const result = await request<Review>(
       `/api/jobs/${current.id}/review`,
       'POST',
       {},
     );
+    if (requestId !== reviewRequest.current) return;
     if (result.revision !== current.revision) {
       // Display the exact saved draft that passed through review even if another save follows.
       const reviewedJob = await request<Job>(
         `/api/jobs/${current.id}/revisions/${result.revision}`,
       );
       await reloadJobs();
+      if (requestId !== reviewRequest.current) return;
       select(reviewedJob);
     }
     setReview(result);
@@ -285,7 +301,7 @@ export function useJobEditor({
       let run: PreparedRun;
       try {
         run = await request<PreparedRun>('/api/runs/prepare', 'POST', {
-          job_id: job.id,
+          job_id: review.job_id,
           reviewed_revision: review.revision,
           start,
         });

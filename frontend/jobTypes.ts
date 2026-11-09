@@ -64,6 +64,7 @@ export type ReviewTarget =
     };
 
 export type Review = {
+  job_id: string;
   revision: number;
   error_targets: Record<number, ReviewTarget>;
   warning_targets: Record<number, ReviewTarget>;
