@@ -56,6 +56,10 @@ To run one test case:
 `.venv\Scripts\python.exe -m pytest tests/python/test_settings_api.py::test_browser_cannot_change_settings_from_another_origin -q` and
 `npm.cmd run test:browser -- tests/browser/settings.spec.ts -g "diagnostic rows share one layout"`.
 
+The client-only Vite build omits Rolldown's `MODULE_LEVEL_DIRECTIVE` diagnostic
+for the `"use client"` directive in Lucide's `context.mjs` and `Icon.mjs`.
+Revisit this exception if the app adds server rendering or changes Lucide versions.
+
 Exceptions: subprocess calls have narrow Bandit `B603` annotations beside their fixed
 argument arrays or explicitly selected training executable. They never use a shell.
 The `B404` import exception permits those same controlled subprocess operations.
