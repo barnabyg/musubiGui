@@ -303,6 +303,7 @@ export function Runs({
   const history = useRunHistory();
   const runs = history.runs ?? [];
   const [detail, setDetail] = useState<Run>();
+  const [detailRefresh, setDetailRefresh] = useState(0);
   const selected = selectedId ?? '';
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -329,14 +330,16 @@ export function Runs({
       undefined,
       controller.signal,
     )
-      .then(setDetail)
+      .then((record) => {
+        if (!controller.signal.aborted) setDetail(record);
+      })
       .catch((reason: Error) => {
         if (controller.signal.aborted) return;
         if (reason.message === 'Run not found.') forgetRun();
         else setError(reason.message);
       });
     return () => controller.abort();
-  }, [selected, changeKey]);
+  }, [selected, changeKey, detailRefresh]);
   const run = detail?.id === selected ? detail : undefined;
   useEffect(() => {
     const controller = new AbortController();
@@ -421,8 +424,10 @@ export function Runs({
         body,
       );
       await refreshRunHistory();
-      setDetail(result);
       onSelect?.(result.id);
+      // A POST response may predate progress already read while it was in flight.
+      // Select its identity, then fetch authoritative detail even if its summary key stayed the same.
+      setDetailRefresh((value) => value + 1);
     } catch (reason) {
       setError((reason as Error).message);
     } finally {

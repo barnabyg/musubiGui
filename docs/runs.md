@@ -8,7 +8,8 @@ using the GPU and links to its Run.
 
 History, queue updates and completion notifications share lightweight Run summaries.
 The selected Run's frozen inputs are loaded separately, again only when its recorded
-details change. Logs refresh while work is running or needs recovery; a terminal Run's
+details change or after an action. Action responses select the Run; a fresh detail
+request keeps a delayed response from replacing newer live progress. Logs refresh while work is running or needs recovery; a terminal Run's
 logs are fetched once on selection or a status transition. Slow responses finish before
 the next poll is scheduled, and leaving a selection cancels its outstanding requests.
 Output lists still refresh at stage transitions and through Refresh outputs.
