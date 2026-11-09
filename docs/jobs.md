@@ -48,7 +48,8 @@ Dataset exclusions belong to the dataset, not the job, so they apply to every jo
 Job & dataset lists the job's datasets in order. Each row shows the dataset, its contents
 (`12 images · 3 videos`), its repeats and Remove. Blank repeats use the job's Repeats, shown in
 the field. Add a dataset offers only those not already listed. A row whose dataset was deleted
-from the library says so and can be removed. Review's errors about a dataset link to its row.
+from the library says so and can be removed. Its review error focuses the row’s Remove
+button. If a dataset has no valid included items, its review error opens the dataset.
 
 Review's Training sections table has a row per section: dataset, type, items, repeats, samples
 per epoch and share of training. A cached video window counts as one sample, as does an image,
@@ -341,6 +342,13 @@ when several datasets contain the same filename. Captions, audio sources and exc
 are shared by all jobs using that dataset. **Return to job and review** waits for
 caption saves, reopens the originating job and checks its current inputs again. Warnings
 allow preparation when all errors have been resolved.
+
+`POST /api/jobs/{job_id}/review` returns the reviewed `job_id` and `revision`.
+The `errors` and `warnings` arrays contain message strings. The optional target
+for a message is indexed by its zero-based position in `error_targets` or
+`warning_targets`. For example, `warning_targets["0"]` describes `warnings[0]`.
+A field target has a `field` key. A dataset target has a `dataset_id` and can
+include an `item_id` and a `view` of `caption`, `audio`, or `preview`.
 
 To try this from the repository root on Windows with the acceptance prerequisites:
 
