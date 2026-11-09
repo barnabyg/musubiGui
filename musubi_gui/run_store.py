@@ -1,6 +1,7 @@
 """Transactional run history and host-wide, durable GPU ownership."""
 
 import builtins
+import hashlib
 import json
 import os
 import sqlite3
@@ -108,6 +109,25 @@ class RunStore:
     def list(self) -> list[dict[str, Any]]:
         with database(self.path) as connection:
             return [json.loads(row[0]) for row in connection.execute("SELECT data FROM records ORDER BY rowid DESC")]
+
+    def summaries(self) -> builtins.list[dict[str, Any]]:
+        """History without frozen inputs; the content key invalidates selected detail after any update."""
+        with database(self.path) as connection:
+            result = []
+            for (raw,) in connection.execute("SELECT data FROM records ORDER BY rowid DESC"):
+                run = json.loads(raw)
+                result.append(
+                    {
+                        "id": run["id"],
+                        "created": run["created"],
+                        "status": run["status"],
+                        "order": run["order"],
+                        "job": {key: run["job"][key] for key in ("id", "name", "family", "revision")},
+                        "stages": [{"name": stage["name"], "status": stage["status"]} for stage in run["stages"]],
+                        "change_key": hashlib.sha256(raw.encode()).hexdigest(),
+                    }
+                )
+            return result
 
     def has_active_run(self, job_id: str) -> bool:
         return any(run["job"]["id"] == job_id and is_active(run) for run in self.list())

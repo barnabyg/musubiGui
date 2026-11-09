@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Download } from 'lucide-react';
 import { apiClient } from './api';
+import { useRunHistory } from './runHistory';
 import { sizeLabel } from './runStatus';
 import './outputs.css';
 
@@ -28,12 +29,6 @@ type OutputList = {
   outputs: Output[];
   warnings: string[];
   note: string;
-};
-type RunChoice = {
-  id: string;
-  job: { name: string; family: string; revision: number };
-  created: string;
-  status: string;
 };
 type Comparison = {
   before: string;
@@ -181,21 +176,23 @@ function ComparisonSamples({
 // Keeps one list of a Run's files for the result at the top and the inventory below it.
 export function useRunOutputs(runId: string | undefined, runState: string) {
   const [result, setResult] = useState<OutputList | null>(null);
-  const [runs, setRuns] = useState<RunChoice[]>([]);
+  const history = useRunHistory();
   const [failure, setFailure] = useState<{ runId?: string; message: string }>();
   const [busy, setBusy] = useState(false);
   const [refresh, setRefresh] = useState(0);
   useEffect(() => {
     if (!runId) return;
     let current = true;
-    void Promise.all([
-      read<OutputList>(`/api/runs/${runId}/outputs`),
-      read<RunChoice[]>('/api/runs'),
-    ])
-      .then(([outputs, records]) => {
+    const controller = new AbortController();
+    void read<OutputList>(
+      `/api/runs/${runId}/outputs`,
+      'GET',
+      undefined,
+      controller.signal,
+    )
+      .then((outputs) => {
         if (!current) return;
         setResult(outputs);
-        setRuns(records);
         setFailure(undefined);
       })
       .catch((reason: Error) => {
@@ -206,11 +203,12 @@ export function useRunOutputs(runId: string | undefined, runState: string) {
       });
     return () => {
       current = false;
+      controller.abort();
     };
   }, [runId, runState, refresh]);
   return {
     result: result?.run_id === runId ? result : null,
-    runs,
+    runs: history.runs ?? [],
     error: failure?.runId === runId ? failure?.message : '',
     busy,
     reload() {

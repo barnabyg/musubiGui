@@ -67,6 +67,11 @@ def runs_router(service: RunService) -> APIRouter:
             "resume": "Saved-state restoration needs recipe qualification; LoRA weights alone are not resumable state.",
         }
 
+    @router.get("/summaries")
+    def summaries() -> list[dict[str, Any]]:
+        with run_errors():
+            return service.summaries()
+
     @router.post("/prepare")
     def prepare(request: PrepareRequest) -> dict[str, Any]:
         with run_errors():

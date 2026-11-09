@@ -4,6 +4,45 @@ Runs lists the queue and history beside the selected Run. Statuses read as label
 Preparing or Ready to start, and the stored values are unchanged. The GPU line names the job
 using the GPU and links to its Run.
 
+## History refresh and network traffic
+
+History, queue updates and completion notifications share lightweight Run summaries.
+The selected Run's frozen inputs are loaded separately, again only when its recorded
+details change. Logs refresh while work is running or needs recovery; a terminal Run's
+logs are fetched once on selection or a status transition. Slow responses finish before
+the next poll is scheduled, and leaving a selection cancels its outstanding requests.
+Output lists still refresh at stage transitions and through Refresh outputs.
+
+`GET /api/runs/summaries` returns Run ID, creation time, status, queue order, job
+identity, stage names/statuses and an opaque `change_key` for invalidating selected
+detail. It excludes frozen manifests, job configuration, settings, stage arguments
+and provenance. The existing `GET /api/runs` and `GET /api/runs/{id}` retain their full
+responses for API callers. Persisted Run formats are unchanged.
+
+In the isolated CPU fixture on 9 November 2026, a 3.25-second Edge observation with
+three completed Runs transferred five detailed history responses of 54,969 bytes each
+before this change (274,845 bytes, excluding logs/capabilities). Afterward, the same
+window transferred three summaries totalling 5,907 bytes and three capability responses
+totalling 420 bytes, with no repeated detail or terminal logs. With a fourth active Run
+while the completed Run stayed selected, three summary responses totalled 7,370 bytes
+and capabilities totalled 2,014 bytes; no unrelated detail or logs were fetched.
+These are uncompressed response-body bytes for synthetic single-item Runs, not a
+large-library latency benchmark. A response delayed by 1.5 seconds kept at most one
+history request in flight.
+
+To inspect this manually, run from the repository root in PowerShell 7:
+
+```powershell
+.\acceptance.cmd --workspace ".cache/ux-check-$([guid]::NewGuid().ToString('N'))"
+```
+
+Complete both model jobs, leave one finished Run open with Stage logs collapsed, and
+inspect Edge's Network panel. Only summaries and capabilities should keep refreshing.
+Start another Run from a saved revision: history and the completion title should update
+without repeatedly transferring the finished Run's inputs or logs. Select the active
+Run to see live step/loss updates and its outputs on completion. Refresh outputs should
+preserve a playing sample.
+
 ## Preparation
 
 Preparation reserves snapshot creation through a separate state-scoped SQLite gate.

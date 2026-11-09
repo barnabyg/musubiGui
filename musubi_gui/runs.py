@@ -95,6 +95,9 @@ class RunService:
     def list(self) -> list[dict[str, Any]]:
         return self.store.list()
 
+    def summaries(self) -> builtins.list[dict[str, Any]]:
+        return self.store.summaries()
+
     def get(self, run_id: str) -> dict[str, Any]:
         return self.store.get(run_id)
 

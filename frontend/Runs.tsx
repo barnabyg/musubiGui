@@ -10,6 +10,7 @@ import {
 } from './Outputs';
 import { formatRoute } from './route';
 import { RunJobLink } from './RunJobLink';
+import { refreshRunHistory, useRunHistory } from './runHistory';
 import { notificationsWanted, setNotificationsWanted } from './runSignals';
 import { readableTime, runStatus, sizeLabel } from './runStatus';
 import { StatusBadge } from './StatusBadge';
@@ -299,7 +300,9 @@ export function Runs({
   selectedId?: string;
   onSelect?: (id?: string, replace?: boolean) => void;
 }) {
-  const [runs, setRuns] = useState<Run[]>([]);
+  const history = useRunHistory();
+  const runs = history.runs ?? [];
+  const [detail, setDetail] = useState<Run>();
   const selected = selectedId ?? '';
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -315,41 +318,85 @@ export function Runs({
   } | null>(null);
   // Deleted, perhaps from another tab, or never there: a stale link leaves nothing to show.
   const forgetRun = useEffectEvent(() => onSelect?.(undefined, true));
+  const summary = runs.find((record) => record.id === selected);
+  const changeKey = summary?.change_key;
   useEffect(() => {
-    let current = true;
+    const controller = new AbortController();
+    if (!selected) return;
+    void request<Run>(
+      `/api/runs/${selected}`,
+      'GET',
+      undefined,
+      controller.signal,
+    )
+      .then(setDetail)
+      .catch((reason: Error) => {
+        if (controller.signal.aborted) return;
+        if (reason.message === 'Run not found.') forgetRun();
+        else setError(reason.message);
+      });
+    return () => controller.abort();
+  }, [selected, changeKey]);
+  const run = detail?.id === selected ? detail : undefined;
+  useEffect(() => {
+    const controller = new AbortController();
+    let timer: number;
     async function refresh() {
       try {
-        const [records, capabilities] = await Promise.all([
-          request<Run[]>('/api/runs'),
-          request<{ fixture: boolean; gpu_owner: { run_id: string } | null }>(
-            '/api/runs/capabilities',
-          ),
-        ]);
-        if (!current) return;
-        setRuns(records);
+        const capabilities = await request<{
+          fixture: boolean;
+          gpu_owner: { run_id: string } | null;
+        }>('/api/runs/capabilities', 'GET', undefined, controller.signal);
+        if (controller.signal.aborted) return;
         setOwner(capabilities.gpu_owner);
         setFixture(capabilities.fixture);
-        if (selected && !records.some((record) => record.id === selected)) {
-          forgetRun();
-        } else if (selected) {
-          const result = await request<{
-            text: string;
-            progress: Progress | null;
-          }>(`/api/runs/${selected}/logs`);
-          if (current) setLive({ runId: selected, ...result });
-        }
       } catch (reason) {
-        if (current) setError((reason as Error).message);
+        if (!controller.signal.aborted) setError((reason as Error).message);
+      } finally {
+        if (!controller.signal.aborted)
+          timer = window.setTimeout(() => void refresh(), 1000);
       }
     }
     void refresh();
-    const timer = window.setInterval(() => void refresh(), 1000);
     return () => {
-      current = false;
-      window.clearInterval(timer);
+      controller.abort();
+      window.clearTimeout(timer);
     };
-  }, [selected]);
-  const run = runs.find((record) => record.id === selected);
+  }, []);
+  const runId = run?.id;
+  const status = run?.status;
+  useEffect(() => {
+    if (!runId || !status || status === 'deleting') return;
+    const controller = new AbortController();
+    let timer: number;
+    const live = [
+      'preparing',
+      'training',
+      'generating',
+      'stopping',
+      'orphaned',
+      'uncertain',
+    ].includes(status);
+    async function refresh() {
+      try {
+        const result = await request<{
+          text: string;
+          progress: Progress | null;
+        }>(`/api/runs/${runId}/logs`, 'GET', undefined, controller.signal);
+        if (!controller.signal.aborted) setLive({ runId: runId!, ...result });
+      } catch (reason) {
+        if (!controller.signal.aborted) setError((reason as Error).message);
+      } finally {
+        if (live && !controller.signal.aborted)
+          timer = window.setTimeout(() => void refresh(), 1000);
+      }
+    }
+    void refresh();
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [runId, status]);
   const queue = runs
     .filter((record) =>
       ['pending_preparation', 'pending_training'].includes(record.status),
@@ -373,8 +420,9 @@ export function Runs({
         'POST',
         body,
       );
+      await refreshRunHistory();
+      setDetail(result);
       onSelect?.(result.id);
-      setRuns(await request<Run[]>('/api/runs'));
     } catch (reason) {
       setError((reason as Error).message);
     } finally {
@@ -406,7 +454,7 @@ export function Runs({
           : '',
       );
       if (result.deleted) onSelect?.();
-      setRuns(await request<Run[]>('/api/runs'));
+      await refreshRunHistory();
     } catch (reason) {
       setNotice('');
       setError((reason as Error).message);
@@ -428,7 +476,7 @@ export function Runs({
       await request('/api/runs/queue/order', 'POST', {
         run_ids: pending.map((record) => record.id),
       });
-      setRuns(await request<Run[]>('/api/runs'));
+      await refreshRunHistory();
     } catch (reason) {
       setError((reason as Error).message);
     }
@@ -448,9 +496,9 @@ export function Runs({
           support.
         </p>
       )}
-      {error && (
+      {(error || history.error) && (
         <p role="alert" className="error">
-          {error}
+          {error || history.error}
         </p>
       )}
       <p role="status">
