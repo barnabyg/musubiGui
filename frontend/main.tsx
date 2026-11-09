@@ -134,7 +134,8 @@ function App() {
     () => !namesScreen(window.location.hash),
   );
   const landingPending = useRef(landing);
-  const [screen, setScreen] = useState<Screen>(initialRoute.screen);
+  const [route, setRoute] = useState(initialRoute);
+  const screen = route.screen;
   // Each screen's selection, kept while elsewhere so that returning reopens it.
   const [selection, setSelection] = useState<Partial<Record<Screen, string>>>(
     initialRoute.id ? { [initialRoute.screen]: initialRoute.id } : {},
@@ -157,8 +158,8 @@ function App() {
   useRunSignals(screen);
   const go = useCallback((target: Screen, id?: string, replace = false) => {
     currentScreen.current = target;
-    setScreen(target);
     setSelection((value) => ({ ...value, [target]: id }));
+    setRoute({ screen: target, id });
     const hash = formatRoute({ screen: target, id });
     if (hash === currentHash.current) return;
     currentHash.current = hash;
@@ -224,7 +225,7 @@ function App() {
     position.current = arrival;
     currentHash.current = window.location.hash;
     currentScreen.current = next.screen;
-    setScreen(next.screen);
+    setRoute(next);
     setSelection((value) => ({ ...value, [next.screen]: next.id }));
   });
   useEffect(() => {
@@ -409,6 +410,7 @@ function App() {
             onEditorChange={setDatasetEditor}
             visible={!landing && screen === 'Datasets'}
             selectedId={selection.Datasets}
+            repair={route.repair}
             onSelect={selectDataset}
             defaultFolder={settings?.dataset_roots[0] ?? ''}
             datasetRoots={settings?.dataset_roots}
@@ -417,6 +419,7 @@ function App() {
         {landing ? null : screen === 'Jobs' ? (
           <Jobs
             selectedId={selection.Jobs}
+            reviewOnOpen={route.review}
             onSelect={selectJob}
             onDirtyChange={setJobDirty}
             onRun={openRun}

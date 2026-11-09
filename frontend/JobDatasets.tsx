@@ -65,6 +65,7 @@ export function JobDatasets({
               (item) => item.id === entry.dataset_id,
             );
             const key = datasetField(entry.dataset_id);
+            const removeKey = `remove-${key}`;
             const name = dataset?.name ?? 'deleted dataset';
             return (
               <li key={`${entry.dataset_id}-${row}`}>
@@ -81,6 +82,7 @@ export function JobDatasets({
                     </small>
                   )}
                   {problemText(key)}
+                  {problemText(removeKey)}
                 </div>
                 {dataset && (
                   <label className="job-dataset-repeats">
@@ -99,7 +101,8 @@ export function JobDatasets({
                   </label>
                 )}
                 <button
-                  id={dataset ? undefined : fieldId(key)}
+                  id={fieldId(removeKey)}
+                  {...problemProps(removeKey)}
                   aria-label={`Remove ${name}`}
                   disabled={busy}
                   onClick={() => remove(row)}

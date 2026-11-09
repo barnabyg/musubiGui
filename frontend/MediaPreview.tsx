@@ -1,3 +1,5 @@
+import { useEffect, useRef } from 'react';
+import type { ItemView } from './route';
 import { CaptionEditor } from './CaptionEditor';
 import type { CaptionSession } from './captionSession';
 import type { Dataset, DatasetItem } from './Datasets';
@@ -9,15 +11,24 @@ export function MediaPreview({
   visibleItems,
   select,
   captions,
+  repairView,
+  onAudioBusy,
 }: {
   dataset: Dataset;
   active: DatasetItem;
   visibleItems: DatasetItem[];
   select: (item: DatasetItem | null) => Promise<void>;
   captions: CaptionSession;
+  repairView?: ItemView;
+  onAudioBusy: (busy: boolean) => void;
 }) {
+  const viewer = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (repairView === 'preview') viewer.current?.focus();
+  }, [repairView]);
   return (
     <div
+      ref={viewer}
       className="media-viewer"
       tabIndex={0}
       onKeyDown={(event) => {
@@ -83,9 +94,18 @@ export function MediaPreview({
           Next
         </button>
       </div>
-      <CaptionEditor session={captions} item={active} />
+      <CaptionEditor
+        session={captions}
+        item={active}
+        focus={repairView === 'caption'}
+      />
       {active.kind === 'video' && (
-        <H3Inspector datasetId={dataset.id} itemId={active.id} />
+        <H3Inspector
+          datasetId={dataset.id}
+          itemId={active.id}
+          open={repairView === 'audio'}
+          onBusy={onAudioBusy}
+        />
       )}
       <details>
         <summary>Media metadata</summary>

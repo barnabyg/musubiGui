@@ -4,7 +4,6 @@ import {
   errorField,
   fieldId,
   fieldProblems,
-  reviewDatasetField,
 } from './jobRules';
 import type { Job, JobConfig, Review, SetConfig } from './jobTypes';
 
@@ -30,19 +29,19 @@ export function jobFields(
   // Review errors about a field show beside it, unless the check while typing already says so.
   const problems: Record<string, string> = {};
   // Review reports size as one error, so the check while typing says which dimension it means.
-  const reviewField = (message: string) => {
-    const key =
-      reviewDatasetField(
-        message,
-        job?.datasets ?? [],
-        review?.datasets ?? [],
-      ) ?? errorField(message);
+  const reviewField = (message: string, index: number) => {
+    const target = review?.error_targets[index];
+    const key = target
+      ? 'field' in target
+        ? target.field
+        : undefined
+      : errorField(message);
     return key === 'width' && !liveProblems.width && liveProblems.height
       ? 'height'
       : key;
   };
-  for (const message of review?.errors ?? []) {
-    const key = reviewField(message);
+  for (const [index, message] of (review?.errors ?? []).entries()) {
+    const key = reviewField(message, index);
     if (key && !liveProblems[key] && !componentError(message))
       problems[key] = message.slice(message.indexOf(':') + 2);
   }

@@ -87,8 +87,8 @@ def plan_windows(
     sample: int = 1,
 ) -> dict[str, Any]:
     """Cached windows per included video, with the errors and warnings resampling causes for Wan."""
-    errors: list[str] = []
-    warnings: list[str] = []
+    errors: list[tuple[str, str]] = []
+    warnings: list[tuple[str | None, str]] = []
     planned: list[dict[str, Any]] = []
 
     def windows(frame_count: int) -> int | None:
@@ -117,12 +117,18 @@ def plan_windows(
             continue
         if rate is None:
             errors.append(
-                f"{name}: the frame rate is unknown, so it cannot be resampled to 16 fps. Re-encode it at a constant frame rate or exclude it."
+                (
+                    item["id"],
+                    f"{name}: the frame rate is unknown, so it cannot be resampled to 16 fps. Re-encode it at a constant frame rate or exclude it.",
+                )
             )
             continue
         if rate < WAN_FPS - RATE_TOLERANCE:
             errors.append(
-                f"{name}: {rate_label(rate)} is below Wan's 16 fps. The pinned loader cannot add frames, so it would train sped up. Re-encode at 16 fps or higher, or exclude it."
+                (
+                    item["id"],
+                    f"{name}: {rate_label(rate)} is below Wan's 16 fps. The pinned loader cannot add frames, so it would train sped up. Re-encode at 16 fps or higher, or exclude it.",
+                )
             )
             continue
         if count is None:
@@ -131,16 +137,25 @@ def plan_windows(
         entry.update(resampled_frames=resampled, windows=windows(resampled))
         if abs(rate - WAN_FPS) > RATE_TOLERANCE:
             warnings.append(
-                f"{name}: {rate_label(rate)} is resampled to 16 fps by dropping frames ({count} → {resampled} frames, {resampled / WAN_FPS:.2f} s)."
+                (
+                    item["id"],
+                    f"{name}: {rate_label(rate)} is resampled to 16 fps by dropping frames ({count} → {resampled} frames, {resampled / WAN_FPS:.2f} s).",
+                )
             )
         if entry["windows"] == 0:
             errors.append(
-                f"{name}: {count} frames at {rate_label(rate)} resample to {resampled} frames ({resampled / WAN_FPS:.2f} s at 16 fps); {frames} frames need {frames / WAN_FPS:.2f} s. Shorten the job or choose a longer video."
+                (
+                    item["id"],
+                    f"{name}: {count} frames at {rate_label(rate)} resample to {resampled} frames ({resampled / WAN_FPS:.2f} s at 16 fps); {frames} frames need {frames / WAN_FPS:.2f} s. Shorten the job or choose a longer video.",
+                )
             )
     rates = source_rates(items) if family == "wan" else []
     if len(rates) > 1:
         warnings.append(
-            f"Videos use {len(rates)} frame rates ({', '.join(rate_label(rate) for rate in rates)}); each rate gets its own dataset section so every clip resamples to 16 fps."
+            (
+                None,
+                f"Videos use {len(rates)} frame rates ({', '.join(rate_label(rate) for rate in rates)}); each rate gets its own dataset section so every clip resamples to 16 fps.",
+            )
         )
     total = sum(entry["windows"] or 0 for entry in planned)
     return {"errors": errors, "warnings": warnings, "items": planned, "total": total, "source_rates": rates}

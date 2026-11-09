@@ -17,6 +17,7 @@ import { DatasetLibrary } from './DatasetLibrary';
 import { DatasetPanels } from './DatasetPanels';
 import { type DatasetPanel, DatasetTopbar } from './DatasetTopbar';
 import { MediaPreview } from './MediaPreview';
+import { datasetItemRoute, type DatasetRepair, formatRoute } from './route';
 
 export type Dataset = {
   id: string;
@@ -52,6 +53,7 @@ const api = apiClient((status) => `Request failed (${status}).`);
 export function Datasets({
   visible = true,
   selectedId,
+  repair,
   onSelect,
   defaultFolder = '',
   datasetRoots,
@@ -59,6 +61,7 @@ export function Datasets({
 }: {
   visible?: boolean;
   selectedId?: string;
+  repair?: DatasetRepair;
   onSelect?: (id?: string, replace?: boolean) => void;
   defaultFolder?: string;
   datasetRoots?: string[];
@@ -73,7 +76,22 @@ export function Datasets({
   const [panel, setPanel] = useState<DatasetPanel | null>(null);
   const [dataset, setDataset] = useState<Dataset | null>(null);
   const [items, setItems] = useState<DatasetItem[]>([]);
-  const [active, setActive] = useState<DatasetItem | null>(null);
+  const [audioBusy, setAudioBusy] = useState(false);
+  const [preview, setPreview] = useState<DatasetItem | null>(null);
+  const active = repair
+    ? (items.find((item) => item.id === repair.itemId) ?? null)
+    : preview;
+  function setActive(item: DatasetItem | null) {
+    if (repair && dataset) {
+      window.location.hash = datasetItemRoute(
+        dataset.id,
+        item?.id,
+        'preview',
+        repair.jobId,
+      );
+    }
+    setPreview(item);
+  }
   const [name, setName] = useState('');
   const [editedFolder, setFolder] = useState<string>();
   const folder = editedFolder ?? defaultFolder;
@@ -92,7 +110,7 @@ export function Datasets({
   );
   const onCaptionSaved = useCallback((id: string, caption: Caption) => {
     savedCaptions.current.set(id, { caption, at: performance.now() });
-    setActive((value) => (value?.id === id ? { ...value, caption } : value));
+    setPreview((value) => (value?.id === id ? { ...value, caption } : value));
     setItems((values) =>
       values.map((item) => (item.id === id ? { ...item, caption } : item)),
     );
@@ -137,8 +155,8 @@ export function Datasets({
       .finally(() => setLoaded(true));
   }, []);
   useEffect(() => {
-    if (visible) heading.current?.focus();
-  }, [screen, dataset?.id, visible]);
+    if (visible && !repair?.itemId) heading.current?.focus();
+  }, [screen, dataset?.id, visible, repair?.itemId]);
   useEffect(() => {
     if (!dataset || !['pending', 'scanning'].includes(dataset.scan.state))
       return;
@@ -172,17 +190,29 @@ export function Datasets({
   }
   const followRoute = useEffectEvent(() => {
     if (!loaded || selectedId === dataset?.id) return;
-    if (selectedId) void open(selectedId);
+    if (selectedId) void open(selectedId, true);
     else if (screen === 'edit') void back();
   });
   useEffect(() => followRoute(), [selectedId, loaded]);
-  async function open(id: string) {
+  async function returnToJob() {
+    if (!repair) return;
+    if (!(await captions.flushAll())) {
+      reviewFailed();
+      return;
+    }
+    window.location.hash = formatRoute({
+      screen: 'Jobs',
+      id: repair.jobId,
+      review: true,
+    });
+  }
+  async function open(id: string, fromRoute = false) {
     if (!(await captions.flushAll())) {
       onSelect?.(dataset?.id, true);
       return;
     }
     setBusy(true);
-    setActive(null);
+    setPreview(null);
     setSelected(new Set());
     setEditing(null);
     setQuery('');
@@ -195,10 +225,10 @@ export function Datasets({
       setScreen('edit');
       setPanel(null);
       setStatus('');
-      onSelect?.(id);
+      if (!fromRoute) onSelect?.(id);
     } catch (reason) {
       setError((reason as Error).message);
-      onSelect?.(dataset?.id, true);
+      if (!repair) onSelect?.(dataset?.id, true);
     } finally {
       setBusy(false);
     }
@@ -211,7 +241,7 @@ export function Datasets({
     setBusy(true);
     try {
       await refresh();
-      setActive(null);
+      setPreview(null);
       setDataset(null);
       setEditing(null);
       setScreen('library');
@@ -325,6 +355,20 @@ export function Datasets({
         }
       }}
     >
+      {repair && (
+        <div className="dataset-repair">
+          <button
+            disabled={busy || audioBusy}
+            onClick={() => void returnToJob()}
+          >
+            <ArrowLeft /> Return to job and review
+          </button>
+          <span>
+            Caption edits, audio sources and exclusions apply to every job using
+            this dataset.
+          </span>
+        </div>
+      )}
       {screen !== 'edit' && (
         <>
           {screen !== 'library' && (
@@ -389,6 +433,16 @@ export function Datasets({
           selected={selected}
         />
       )}
+      {repair?.itemId &&
+        dataset?.id === selectedId &&
+        !busy &&
+        !active &&
+        screen === 'edit' && (
+          <p role="alert">
+            The reviewed item is no longer in this dataset. Return to the job to
+            review its current inputs.
+          </p>
+        )}
       {error && (
         <div role="alert" className="error">
           {error}
@@ -470,6 +524,10 @@ export function Datasets({
                 key={active.id}
                 dataset={dataset}
                 active={active}
+                repairView={
+                  repair?.itemId === active.id ? repair.view : undefined
+                }
+                onAudioBusy={setAudioBusy}
                 visibleItems={visibleItems}
                 select={select}
                 captions={captions}

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { apiClient } from './api';
 import type { DatasetItem } from './Datasets';
 import {
@@ -19,10 +19,16 @@ type Revision = {
 export function CaptionEditor({
   session,
   item,
+  focus = false,
 }: {
   session: CaptionSession;
   item: DatasetItem;
+  focus?: boolean;
 }) {
+  const editor = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    if (focus) editor.current?.focus();
+  }, [focus]);
   const state = useCaption(session, item);
   const { text, status } = state;
   const [error, setError] = useState('');
@@ -58,6 +64,7 @@ export function CaptionEditor({
       <label className="field">
         Caption
         <textarea
+          ref={editor}
           aria-label="Caption"
           value={text}
           disabled={Boolean(state.caption.error)}

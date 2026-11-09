@@ -554,3 +554,20 @@ main.dataset-editor-shell {
     justify-content: space-between;
   }
 }
+
+.dataset-repair {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--space-4) var(--space-7);
+}
+.dataset-repair button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.dataset-repair svg {
+  width: 1rem;
+  height: 1rem;
+}
