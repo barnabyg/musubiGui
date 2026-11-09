@@ -58,6 +58,20 @@ export function fieldProblems(family: Family, config: RuleConfig) {
     problems.learning_rate = 'Enter more than 0, up to 1.';
   if (config.batch_size !== 1)
     problems.batch_size = 'This recipe supports a batch size of one.';
+  if (family === 'wan' && config.recipe === 'alternating') {
+    const interval = config.expert_interval as number;
+    if (!Number.isInteger(interval) || interval < 1)
+      problems.expert_interval = 'Enter a positive whole number.';
+    else if (Math.ceil((config.steps as number) / interval) > 10_000)
+      problems.expert_interval =
+        'Increase the interval to stay within 10000 phases.';
+    else if ((config.steps as number) <= interval)
+      problems.steps =
+        'Train both experts: steps must exceed the expert interval.';
+    if (!config.save_state)
+      problems.save_state =
+        'Alternating training requires optimizer/training state.';
+  }
   for (const key of positive)
     if ((config[key] as number) < 1) problems[key] = 'Enter 1 or more.';
   if (config.frame_extraction === 'slide' && config.frame_stride < 1)
@@ -74,6 +88,8 @@ const errorFields: [RegExp, string][] = [
   [/^Name:/, 'name'],
   [/^Dataset:/, 'dataset_id'],
   [/^Recipe:/, 'recipe'],
+  [/^Expert interval:/, 'expert_interval'],
+  [/^Training state:/, 'save_state'],
   [/^Geometry:/, 'width'],
   [/^Frames:/, 'frames'],
   [/^Block swapping:/, 'blocks_to_swap'],

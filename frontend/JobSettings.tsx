@@ -84,10 +84,27 @@ export function JobIdentity({
           {...problemProps('recipe')}
           disabled={busy}
           value={job.config.recipe}
-          onChange={(event) => config('recipe', event.target.value)}
+          onChange={(event) =>
+            edit({
+              ...job,
+              config: {
+                ...job.config,
+                recipe: event.target.value,
+                save_state:
+                  event.target.value === 'alternating'
+                    ? true
+                    : job.config.save_state,
+              },
+            })
+          }
         >
           {job.family === 'wan' ? (
-            <option value="low-noise">Wan low-noise expert · T2V A14B</option>
+            <>
+              <option value="low-noise">Wan low-noise expert · T2V A14B</option>
+              <option value="alternating">
+                Wan alternating low/high experts · T2V A14B
+              </option>
+            </>
           ) : (
             <option value="guidance-loss">H3 guidance loss · T2VA</option>
           )}
@@ -95,10 +112,19 @@ export function JobIdentity({
         {problemText('recipe')}
         <small>
           {job.family === 'wan' ? (
-            <>
-              Native FP16 experts; one expert is trained and both experts are
-              used for sampling.
-            </>
+            job.config.recipe === 'alternating' ? (
+              <>
+                Both experts train in alternating phases and both trained LoRAs
+                are used for the final sample. Each switch restores that
+                expert’s optimizer, scheduler and RNG; Musubi starts a fresh
+                dataset pass.
+              </>
+            ) : (
+              <>
+                Native FP16 experts; one expert is trained and both experts are
+                used for sampling.
+              </>
+            )
           ) : (
             <>
               Released FL2VA base used for the T2VA task, joint video/audio
@@ -108,6 +134,13 @@ export function JobIdentity({
           )}
         </small>
       </label>
+      {job.family === 'wan' &&
+        job.config.recipe === 'alternating' &&
+        fields.number(
+          'Steps per expert before switching',
+          'expert_interval',
+          'Optimizer updates, after gradient accumulation. Starts with low-noise. Loading each expert again adds overhead. A fresh dataset pass can repeat examples before others are seen.',
+        )}
       <details>
         <summary>Model components</summary>
         <p>
@@ -274,7 +307,7 @@ export function JobControls({
             {toggle(
               'Offload inactive DiT',
               'offload_inactive_dit',
-              'Not supported by this single-expert recipe; review will explain conflicts.',
+              'Not supported by this recipe; experts load one at a time. Review will explain conflicts.',
             )}
             {job.config.block_swap_h2d_only &&
               toggle('H2D-only block swapping', 'block_swap_h2d_only')}

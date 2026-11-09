@@ -52,6 +52,33 @@ preserve a playing sample.
 
 ## Preparation
 
+### Alternating Wan runs
+
+Alternating Wan training is one Run and one GPU queue entry, with sequential low/high
+training phases inside it. Dataset caching runs once. Each phase keeps its own logs,
+checkpoint and optimizer state; neither expert is kept resident while the other trains.
+The GPU lease stays owned across phase switches and final paired sampling.
+Progress reports the active expert, phase updates, overall segment updates and both
+experts' cumulative updates. Phase-local ETA is not presented as the remaining time
+for the entire alternating Run.
+
+**Inspect saved states** lists paired schedule positions, including interval saves
+partway through a phase. Restoration freezes both available expert states as a new
+segment and continues the schedule at that position. Additional steps are total updates
+across both experts. An early save before high-noise first trains records high at zero;
+high starts fresh when its phase arrives. Restored checkpoints include a local copy
+of the inactive expert's source LoRA, so both downloads are available even if only one
+expert trains in the new segment.
+
+Stopping does not force a new save. Choose a complete saved schedule position and
+expect any unsaved updates after that position to be lost. Restoration validates the
+state files and their counters; missing or changed state blocks it. Retry after paired
+training has started directs you to inspect/restore paired state rather than silently
+restarting either expert. Preparing the Job again explicitly starts both experts over.
+Restoration retains source dependencies; active/queued segments prevent deleting their
+source Run. Musubi restores optimizer, scheduler and RNG but starts a fresh dataset
+pass at each phase, including restored phases; exact batch position is not preserved.
+
 Preparation reserves snapshot creation through a separate state-scoped SQLite gate.
 Duplicate requests from tabs or backend processes return the existing Run before
 allocating another media/cache directory. Content hashes, effective settings, source

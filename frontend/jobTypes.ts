@@ -1,6 +1,7 @@
 import type { ItemView } from './route';
 export type JobConfig = {
   recipe: string;
+  expert_interval: number;
   components: Record<string, string>;
   width: number;
   height: number;
@@ -92,6 +93,11 @@ export type Review = {
   paths: Record<string, string>;
   dataset_toml: string;
   stages: { name: string; args: string[] }[];
+  expert_schedule?: {
+    interval: number;
+    counts: { low: number; high: number };
+    phases: { expert: string; start: number; steps: number }[];
+  } | null;
   audio_coverage: {
     included: number;
     supervised: number;

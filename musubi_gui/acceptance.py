@@ -133,7 +133,9 @@ def synthetic_checkout(root: Path, sample: Path) -> dict[str, str]:
     return components
 
 
-def prepare(workspace: Path, mode: str, selected: Path | None, *, scan_library: bool = True) -> dict[str, Any]:
+def prepare(
+    workspace: Path, mode: str, selected: Path | None, *, scan_library: bool = True, wan_paired: bool = False
+) -> dict[str, Any]:
     workspace = workspace.resolve()
     if workspace.exists():
         raise ValueError("Choose a new, nonexistent directory; acceptance never overwrites an existing workspace.")
@@ -207,6 +209,8 @@ def prepare(workspace: Path, mode: str, selected: Path | None, *, scan_library: 
             store.scan(dataset["id"])
             for number in [1, 2]:
                 config = smoke_config(family).model_copy(update={"save_state": True})
+                if wan_paired and family == "wan":
+                    config = config.model_copy(update={"recipe": "alternating", "steps": 4, "expert_interval": 1})
                 job = jobs.create(
                     JobDraft(
                         name=f"{family.upper()} acceptance {number}",
@@ -237,12 +241,23 @@ def main() -> None:
     parser.add_argument("--prepare-only", action="store_true")
     parser.add_argument("--no-browser", action="store_true")
     parser.add_argument("--skip-library-scan", action="store_true")
+    parser.add_argument(
+        "--wan-paired",
+        action="store_true",
+        help="Prepare four Wan steps: low, high, low, high, with state saving and a paired sample.",
+    )
     parser.add_argument("--port", type=int, default=8767)
     args = parser.parse_args()
     if isinstance(sys.stdout, io.TextIOWrapper):
         sys.stdout.reconfigure(encoding="utf-8")
     try:
-        manifest = prepare(args.workspace, args.mode, args.settings, scan_library=not args.skip_library_scan)
+        manifest = prepare(
+            args.workspace,
+            args.mode,
+            args.settings,
+            scan_library=not args.skip_library_scan,
+            wan_paired=args.wan_paired,
+        )
     except (ValueError, OSError, subprocess.SubprocessError) as error:
         print(f"Acceptance preparation failed: {error}")
         raise SystemExit(2) from error

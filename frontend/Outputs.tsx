@@ -29,6 +29,10 @@ type OutputList = {
   outputs: Output[];
   warnings: string[];
   note: string;
+  lora_pair?: Record<
+    'low' | 'high',
+    { steps: number; output: Output | null }
+  > | null;
 };
 type Comparison = {
   before: string;
@@ -49,7 +53,10 @@ function grouped(outputs: Output[]) {
   const checkpoints = outputs
     .filter((item) => item.kind === 'checkpoint' && !stateFiles.includes(item))
     .map((item) => ({ item, step: checkpointStep(item.name) }));
-  const final = checkpoints.find(({ step }) => step === null)?.item;
+  const final = checkpoints.find(
+    ({ item, step }) =>
+      step === null && !/-(low|high)-(phase\d+|source)/.test(item.name),
+  )?.item;
   const preview =
     samples.find(
       (item) => item.kind === 'video' && item.status === 'available',
@@ -64,6 +71,14 @@ function grouped(outputs: Output[]) {
 function checkpointStep(name: string) {
   const match = /-step(\d+)\.[^.]+$/.exec(name);
   return match ? Number(match[1]) : null;
+}
+
+function checkpointLabel(item: Output, step: number | null) {
+  const phase = /-(low|high)-phase(\d+)/.exec(item.name);
+  if (phase)
+    return `${phase[1]}-noise · phase from ${Number(phase[2])} · ${step === null ? 'phase end' : `local step ${step}`}`;
+  const source = /-(low|high)-source/.exec(item.name);
+  return source ? `${source[1]}-noise · source checkpoint` : (step ?? 'Final');
 }
 
 function byteLabel(item: Output) {
@@ -228,7 +243,13 @@ export type RunOutputs = ReturnType<typeof useRunOutputs>;
 export function RunResult({ outputs }: { outputs: RunOutputs }) {
   const { result } = outputs;
   if (!result) return null;
-  const { samples, checkpoints, final, preview } = grouped(result.outputs);
+  const {
+    samples,
+    checkpoints,
+    final: singleFinal,
+    preview,
+  } = grouped(result.outputs);
+  const final = result.lora_pair ? undefined : singleFinal;
   // While a Run is working its files can legitimately be half-written.
   const settled = [
     'completed',
@@ -239,7 +260,7 @@ export function RunResult({ outputs }: { outputs: RunOutputs }) {
   ].includes(result.status);
   const problems = settled ? samples.filter((item) => item.error) : [];
   const latest =
-    settled && !final
+    settled && !final && !result.lora_pair
       ? checkpoints
           .filter(({ item }) => item.status === 'available')
           .sort((a, b) => (b.step ?? 0) - (a.step ?? 0))[0]
@@ -249,7 +270,8 @@ export function RunResult({ outputs }: { outputs: RunOutputs }) {
     !preview &&
     !latest &&
     !problems.length &&
-    !result.warnings.length
+    !result.warnings.length &&
+    !result.lora_pair
   )
     return null;
   return (
@@ -266,6 +288,38 @@ export function RunResult({ outputs }: { outputs: RunOutputs }) {
         </p>
       ))}
       {preview && <MediaPreview output={preview} />}
+      {result.lora_pair && (
+        <section aria-label="Paired LoRA outputs">
+          <h3>Paired LoRAs</h3>
+          {(['low', 'high'] as const).map((expert) => {
+            const selected = result.lora_pair![expert];
+            const output = selected.output;
+            return (
+              <div className="run-result-lora" key={expert}>
+                <span>
+                  <strong>
+                    {expert === 'low' ? 'Low' : 'High'}-noise LoRA
+                  </strong>{' '}
+                  · {selected.steps} optimizer steps
+                </span>
+                {output?.status === 'available' && output.file_url ? (
+                  <a
+                    className="button-link"
+                    href={`${output.file_url}?download=true`}
+                    download
+                  >
+                    <Download /> Download {expert}-noise LoRA
+                  </a>
+                ) : (
+                  <span className="error-text">
+                    {output?.error ?? 'No complete checkpoint available'}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </section>
+      )}
       {latest?.item.file_url && (
         <div className="run-result-lora">
           <span>
@@ -397,7 +451,7 @@ export function Outputs({
                 <tbody>
                   {groups.checkpoints.map(({ item, step }) => (
                     <tr key={item.id}>
-                      <td>{step ?? 'Final'}</td>
+                      <td>{checkpointLabel(item, step)}</td>
                       <td>{byteLabel(item)}</td>
                       <td>{chooser(item)}</td>
                     </tr>

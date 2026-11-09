@@ -85,6 +85,59 @@ expert and samples with both using lazy loading, applying the learned LoRA to lo
 High-noise-only CLI training has now passed the native-weight scenario below.
 Combined training has been evaluated from source, **not GPU-proven**.
 
+## Alternating high/low GUI workflow
+
+The GUI also offers sequential alternating expert training. It uses the same native
+FP16 sources, runtime FP8, block swapping and lazy generation loading as the original
+recipe. Low trains over 0–875 and high over 875–1000, preserving the distribution
+shape. A configurable N optimizer updates separates switches; the total budget spans
+both experts. Each expert has independent LoRA, AdamW, constant-scheduler and RNG state.
+Every phase saves state before the other expert loads, and later phases use `--resume`.
+Generation supplies both `--lora_weight` and `--lora_weight_high_noise`.
+
+At pinned revision `f8a1b03`, `training/trainer_base.py` loads Accelerate state at
+lines 492–499 and then sets `epoch_to_start = 0` and `global_step = 0` at lines
+2056–2060. Its training loop starts a new shuffled data traversal rather than skipping
+consumed batches. The alternating recipe intentionally uses these existing resume
+semantics: training state continues, but exact dataset position does not. The GUI
+tracks per-expert/schedule counters separately and exposes this limitation before launch.
+No trainer installation changes or upstream upgrade are required.
+
+See [Jobs](../jobs.md#alternating-wan-highlow-loras) for the single preparation/launch
+command, native-model prerequisites and a short stop/restoration scenario. This is
+sequential switching; simultaneous combined-expert residency/offload remains unqualified.
+
+### Native paired qualification, 9 November 2026
+
+Through the GUI on the RTX 3090/96 GB Windows PC, a 256×256, 17-frame, rank/alpha-eight
+run completed low 1 → high 1 → low 1 → high 1. Validated optimizer counters reached
+two for each expert, and each expert's tensor payload changed between its first and
+second phase. Generation loaded both trained LoRAs and produced a video that played in Edge.
+
+Restoration at schedule step four then completed low's next update and was gracefully
+stopped as high started. Restoring the saved schedule position five with three additional
+updates completed high → low → high, reaching four optimizer updates per expert and
+generating another paired sample. Both expert states, including FP16 scaler files,
+were revalidated with the final artifact validators. Evidence and exact arguments:
+[wan-paired.json](evidence/wan-paired.json).
+
+| Initial Run stage   | Wall time (s) | Sampled process RSS peak (GiB) | Sampled device VRAM peak (GiB) |
+| ------------------- | ------------: | -----------------------------: | -----------------------------: |
+| Latent cache        |        26.523 |                          1.492 |                          2.381 |
+| Text cache          |        26.013 |                         11.672 |                          8.431 |
+| Low, first phase    |        56.158 |                         16.797 |                          6.345 |
+| High, first phase   |        55.990 |                         16.784 |                          6.342 |
+| Low, resumed phase  |        29.708 |                         16.775 |                          6.342 |
+| High, resumed phase |        30.040 |                         16.606 |                          6.342 |
+| Paired generation   |        97.306 |                         18.573 |                          8.407 |
+
+Phase wall times include process startup, model loading and saving, so switching every
+single update is expensive. State validation between phases adds further time. These
+are smoke measurements, with gradient accumulation one, not an N=30 throughput preset,
+useful-learning result or production-size paired capacity qualification. Sampled RSS
+sums recorded stage processes and excludes short-lived validation probes; device VRAM
+includes desktop/browser use, and sampling can miss transient peaks.
+
 ## Production-size trial, 29 October 2026
 
 [Issue #26](https://github.com/barnabyg/musubiGui/issues/26) ran the GUI recipe at
