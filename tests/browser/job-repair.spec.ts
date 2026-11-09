@@ -106,3 +106,40 @@ test('review opens the exact same-name media item for audio and caption repairs'
     await app.close();
   }
 });
+
+test('H3 repair inspects and applies audio against the reviewed frame count', async ({
+  page,
+}) => {
+  const app = await runWorkspace();
+  try {
+    const job = app.manifest.jobs.find((entry) => entry.family === 'h3')!;
+    await page.goto(`${app.url}/#/jobs/${job.id}`);
+    await page
+      .getByRole('spinbutton', { name: 'Frames', exact: true })
+      .fill('141');
+    await page.getByRole('button', { name: 'Review configuration' }).click();
+    const missing = /Audio is materially short or misaligned/;
+    const problem = page.getByRole('link', { name: missing });
+    await problem.press('Enter');
+    await expect(
+      page.getByText(/Inspect the selected 141-frame/),
+    ).toBeVisible();
+    await page.getByRole('button', { name: 'Inspect H3 media' }).click();
+    const result = page.getByLabel('H3 inspection result');
+    await expect(result).toContainText(missing, { timeout: 240_000 });
+    await page
+      .getByLabel('Explicit audio path')
+      .fill(path.join(app.fixture, 'datasets', 'h3', 'motion.wav'));
+    await page.getByRole('button', { name: 'Apply audio source' }).click();
+    await expect(result).toContainText('Audio source: explicit', {
+      timeout: 240_000,
+    });
+    await expect(result).toContainText(missing);
+    await page
+      .getByRole('button', { name: /Return to job and review/ })
+      .click();
+    await expect(problem).toBeVisible({ timeout: 240_000 });
+  } finally {
+    await app.close();
+  }
+});

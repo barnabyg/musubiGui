@@ -12,6 +12,7 @@ export function MediaPreview({
   select,
   captions,
   repairView,
+  frames,
   onAudioBusy,
 }: {
   dataset: Dataset;
@@ -20,6 +21,7 @@ export function MediaPreview({
   select: (item: DatasetItem | null) => Promise<void>;
   captions: CaptionSession;
   repairView?: ItemView;
+  frames?: number;
   onAudioBusy: (busy: boolean) => void;
 }) {
   const viewer = useRef<HTMLDivElement>(null);
@@ -101,6 +103,8 @@ export function MediaPreview({
       />
       {active.kind === 'video' && (
         <H3Inspector
+          key={frames}
+          frames={frames}
           datasetId={dataset.id}
           itemId={active.id}
           open={repairView === 'audio'}

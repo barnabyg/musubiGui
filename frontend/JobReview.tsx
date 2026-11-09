@@ -42,6 +42,7 @@ export function JobReview({
   prepareReason: string;
 }) {
   const reviewPanel = useRef<HTMLElement>(null);
+  const frames = job.family === 'h3' ? job.config.frames : undefined;
   useEffect(() => {
     if (review) reviewPanel.current?.scrollIntoView({ block: 'start' });
   }, [review]);
@@ -91,6 +92,7 @@ export function JobReview({
                           target.item_id,
                           target.view ?? 'preview',
                           job.id,
+                          frames,
                         )}
                       >
                         {message}
@@ -108,6 +110,7 @@ export function JobReview({
                                 item.item_id,
                                 'preview',
                                 job.id,
+                                frames,
                               )}
                             >
                               {item.label}

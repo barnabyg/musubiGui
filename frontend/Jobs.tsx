@@ -127,6 +127,7 @@ export function Jobs(props: JobsProps) {
                 failedCaption.id,
                 'caption',
                 job.id,
+                job.family === 'h3' ? job.config.frames : undefined,
               )}
             >
               Resolve caption for {failedCaption.name}
