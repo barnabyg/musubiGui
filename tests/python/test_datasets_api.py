@@ -1,8 +1,10 @@
 import os
 import shutil
+import sqlite3
 import subprocess
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import closing
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +16,17 @@ from helpers import PNG, fixture
 from musubi_gui import datasets
 from musubi_gui.dataset_fixture import prepare
 from musubi_gui.datasets_api import dataset_router
+
+
+def test_gallery_serves_media_and_thumbnail_during_a_dataset_write(tmp_path: Path) -> None:
+    client, media, state = fixture(tmp_path)
+    dataset = client.post("/api/datasets", json={"name": "Gallery", "path": str(media)}).json()
+    items_url = f"/api/datasets/{dataset['id']}/items"
+    image = next(item for item in client.get(items_url).json() if item["name"] == "red.png")
+    with closing(sqlite3.connect(state / "datasets.sqlite3")) as writer:
+        writer.execute("BEGIN IMMEDIATE")
+        assert client.get(f"{items_url}/{image['id']}/media").content == PNG
+        assert client.get(f"{items_url}/{image['id']}/thumbnail").status_code == 200
 
 
 def test_rename_and_delete_library_entry_preserve_files_and_recovery_history(tmp_path: Path) -> None:

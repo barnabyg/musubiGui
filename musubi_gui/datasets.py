@@ -3,7 +3,6 @@
 import builtins
 import hashlib
 import json
-import mimetypes
 import os
 import sqlite3
 import stat
@@ -83,14 +82,16 @@ class DatasetStore:
                 raise ValueError(
                     "Unsupported dataset library version. Preserve datasets.sqlite3 and restore a compatible application."
                 )
-            db.execute(
-                "CREATE TABLE IF NOT EXISTS datasets (id TEXT PRIMARY KEY, name TEXT, path TEXT UNIQUE COLLATE NOCASE, managed INTEGER, scan TEXT)"
-            )
-            db.execute(
-                "CREATE TABLE IF NOT EXISTS items (id TEXT PRIMARY KEY, dataset TEXT, relative TEXT, stamp TEXT, metadata TEXT, valid INTEGER, error TEXT, excluded INTEGER DEFAULT 0, explicit_audio TEXT DEFAULT '', UNIQUE(dataset,relative))"
-            )
-            db.execute("PRAGMA user_version=1")
-            db.commit()
+            if version == 0:
+                with db:
+                    db.execute("BEGIN IMMEDIATE")
+                    db.execute(
+                        "CREATE TABLE IF NOT EXISTS datasets (id TEXT PRIMARY KEY, name TEXT, path TEXT UNIQUE COLLATE NOCASE, managed INTEGER, scan TEXT)"
+                    )
+                    db.execute(
+                        "CREATE TABLE IF NOT EXISTS items (id TEXT PRIMARY KEY, dataset TEXT, relative TEXT, stamp TEXT, metadata TEXT, valid INTEGER, error TEXT, excluded INTEGER DEFAULT 0, explicit_audio TEXT DEFAULT '', UNIQUE(dataset,relative))"
+                    )
+                    db.execute("PRAGMA user_version=1")
             with db:
                 yield db
         finally:
@@ -302,7 +303,11 @@ class DatasetStore:
         return path
 
     def folder(self, dataset_id: str) -> Path:
-        stored = Path(self.get(dataset_id)["path"])
+        with self._db() as db:
+            row = db.execute("SELECT path FROM datasets WHERE id=?", (dataset_id,)).fetchone()
+        if row is None:
+            raise KeyError("Dataset was not found.")
+        stored = Path(row["path"])
         self._folder(str(stored))
         return regular_path(stored, stored)
 
@@ -417,10 +422,6 @@ class DatasetStore:
                 item["caption"] = {"text": "", "revision": "", "exists": False, "error": str(error)}
             result.append(item)
         return result
-
-    def mime_type(self, dataset_id: str, item_id: str) -> str:
-        path = self.media_path(dataset_id, item_id)
-        return mimetypes.guess_type(path.name)[0] or "application/octet-stream"
 
     def manifest(self, dataset_id: str) -> dict[str, Any]:
         items = self.items(dataset_id)

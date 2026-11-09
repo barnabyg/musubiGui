@@ -1,5 +1,6 @@
 """Dataset API; JSON mutations remain protected by the application's same-origin middleware."""
 
+import mimetypes
 from pathlib import Path
 from typing import Any, Callable, TypeVar
 
@@ -220,7 +221,7 @@ def dataset_router(root: Path) -> APIRouter:
     @router.get("/{dataset_id}/items/{item_id}/media")
     def media(dataset_id: str, item_id: str) -> FileResponse:
         path = result(lambda: store.media_path(dataset_id, item_id))
-        return FileResponse(path, media_type=store.mime_type(dataset_id, item_id))
+        return FileResponse(path, media_type=mimetypes.guess_type(path.name)[0] or "application/octet-stream")
 
     @router.get("/{dataset_id}/items/{item_id}/caption")
     def caption(dataset_id: str, item_id: str) -> dict[str, Any]:
