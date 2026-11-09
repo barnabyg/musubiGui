@@ -216,3 +216,44 @@ Open **WAN acceptance 1** in Jobs and review it. Expect both prepare actions
 to stay disabled and the repair link to reopen your draft. Resolve the conflict,
 return to the job, review and prepare. The Run’s frozen inputs should contain
 the text you chose.
+
+### Gallery loading and sidecar checks
+
+Opening a gallery reads each item's current caption once, without computing library
+counts again. Location validation is shared within the request; each media and sidecar
+path is still checked for containment and link/junction redirection. Thumbnail access
+and saving one caption do not read other items' captions. External edits remain
+authoritative, and a stale save still requires conflict resolution.
+
+For a manual check, run this command from the repository root in PowerShell 7:
+
+```powershell
+.\acceptance.cmd --workspace ".cache/ux-check-$([guid]::NewGuid().ToString('N'))"
+```
+
+Copy the fixture's `blue.png` into a child folder under its configured dataset root
+using 64 distinct names, each with a matching nonempty `.txt` caption. Register that
+folder and wait for its scan to complete. Return to the library, reopen the gallery,
+and measure until the first caption is editable. Expect thumbnails and captions to
+appear together; edit one caption and verify its sidecar. Change another caption
+outside the application, reopen, and expect its new text. Repeat with 8 and 32 files.
+
+The real Edge test `tests/browser/dataset_gallery.spec.ts` repeats these sizes and
+prints three HTTP item-list timings and one library-click-to-caption timing per size.
+On Windows 11 on 9 November 2026, the measurements below compared base `eb7656c`
+with the request-local location change. Each cell is milliseconds; scans had already
+completed. The gallery timing includes library refresh and rendering, and the library
+accumulates the earlier test datasets. These are observations, not performance limits.
+
+| Items | API before (three requests) | API after (three requests) | Gallery before | Gallery after |
+| ----- | --------------------------- | -------------------------- | -------------- | ------------- |
+| 8     | 42 / 41 / 45                | 10 / 9 / 10                | 117            | 56            |
+| 32    | 172 / 171 / 165             | 25 / 25 / 27               | 343            | 103           |
+| 64    | 307 / 315 / 290             | 45 / 47 / 44               | 833            | 218           |
+
+The base already included direct location lookup, so it did not reproduce the older
+quadratic timings reported in #120. Removing the remaining redundant count pass and
+per-item location lookups reduced gallery sidecar reads from twice to once per item.
+The HTTP regression checks exact filesystem read counts at 8, 32 and 64 items instead
+of enforcing machine-specific time limits. The resulting item-list timings scale
+approximately linearly; browser timings also include fixed interaction costs.
