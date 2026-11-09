@@ -94,7 +94,10 @@ follow. The disk breakdown is collapsed, and Advanced holds the resolved compone
 paths, model provenance, native dataset TOML and each upstream argument array. Errors
 block preparation while the draft remains editable. Review configuration saves unsaved
 edits as a new revision first; if the save fails, the review stops and the edits stay on
-screen. Prepare run needs a current, passing review, and says what is missing until then. Component overrides must stay inside the configured
+screen. Prepare run and Prepare and start use the revision that passed review. If another
+tab saves a newer revision, preparation reports the old and new revision numbers and stops.
+Choose Review configuration to load the saved changes and review them before preparing.
+Component overrides must stay inside the configured
 model roots. The GUI's Wan recipe trains the low-noise expert. A separate
 [native-weight CLI acceptance scenario](reference/wan.md#native-weight-qualification)
 also passed high-noise-only training; that recipe is not exposed by the GUI.
@@ -341,6 +344,17 @@ the reviewed TOML and arguments with the controls, and verify reopening retains 
 Real preparation/training requires the compatible model files and environment described
 in [reference workflows](reference/README.md); fake acceptance fixtures do not prove
 model support.
+
+To check two-tab review in an isolated CPU fixture, run this from the repository root in PowerShell:
+
+```powershell
+.\acceptance.cmd --workspace ".cache/ux-check-$([guid]::NewGuid().ToString('N'))"
+```
+
+Open WAN acceptance 1 in two tabs. Review in A, rename and save in B, then choose
+Prepare and start in A. Expect the revision-change message and an empty Run history.
+In A, choose Review configuration, confirm the new name, then choose Prepare run.
+The Run in history shows the new name and the revision that passed review.
 
 Browser checks: `npm.cmd run test:browser -- tests/browser/jobs.spec.ts`. The scenarios
 cover restart persistence and generated configuration for both models, frame

@@ -173,8 +173,15 @@ class SnapshotIdentity:
     fingerprint: str
 
 
-def identify_snapshot(root: Path, job_id: str, *, fixture_mode: bool = False) -> SnapshotIdentity:
+def identify_snapshot(
+    root: Path, job_id: str, *, fixture_mode: bool = False, reviewed_revision: int | None = None
+) -> SnapshotIdentity:
     job = load_job(root, job_id)
+    if reviewed_revision is not None and job.revision != reviewed_revision:
+        raise ValueError(
+            f"The job changed from revision {reviewed_revision} to revision {job.revision}. "
+            "Choose Review configuration to load and review the latest revision."
+        )
     if JobStore(root).is_archived(job_id):
         raise ValueError("This job is archived. Restore it from Jobs before preparing a new Run.")
     settings = effective_settings(job, load_settings(root))

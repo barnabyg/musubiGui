@@ -55,6 +55,7 @@ export type ConversionPreview = {
   message: string;
 };
 export type Review = {
+  revision: number;
   valid: boolean;
   errors: string[];
   warnings: string[];

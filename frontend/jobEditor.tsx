@@ -238,21 +238,37 @@ export function useJobEditor({
         'POST',
         {},
       );
+      if (result.revision !== current.revision) {
+        // The server reviewed a newer revision. Display that exact saved draft even if another save follows.
+        const reviewedJob = await request<Job>(
+          `/api/jobs/${current.id}/revisions/${result.revision}`,
+        );
+        await reloadJobs();
+        select(reviewedJob);
+      }
       setReview(result);
       setStatus(
         result.valid
-          ? `Review passed for revision ${current.revision}`
-          : `Review failed for revision ${current.revision}: ${plural(result.errors.length, 'error')}`,
+          ? `Review passed for revision ${result.revision}`
+          : `Review failed for revision ${result.revision}: ${plural(result.errors.length, 'error')}`,
       );
     });
   }
   async function prepare(start = false) {
     if (!job || !review?.valid || dirty) return;
     await perform(async () => {
-      const run = await request<PreparedRun>('/api/runs/prepare', 'POST', {
-        job_id: job.id,
-        start,
-      });
+      let run: PreparedRun;
+      try {
+        run = await request<PreparedRun>('/api/runs/prepare', 'POST', {
+          job_id: job.id,
+          reviewed_revision: review.revision,
+          start,
+        });
+      } catch (reason) {
+        setReview(null);
+        setStatus('Preparation failed');
+        throw reason;
+      }
       // Prepare returns the matching unfinished or completed run instead of duplicating it.
       if (run.existing && !(start && run.status !== 'completed')) {
         setExistingRun(run);
