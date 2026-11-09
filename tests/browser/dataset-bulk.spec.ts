@@ -12,7 +12,13 @@ test('filters retain explicit selection, bulk previews report conflicts, restore
     await page.getByRole('button', { name: 'Datasets', exact: true }).click();
     await page.getByRole('button', { name: 'New dataset' }).click();
     await page.getByLabel('Dataset name', { exact: true }).fill('Bulk library');
+    await page
+      .getByRole('radio', { name: 'Use existing folder', exact: true })
+      .check();
     await page.getByLabel('Dataset folder', { exact: true }).fill(app.media);
+    await page
+      .getByRole('checkbox', { name: 'Index this entire dataset root' })
+      .check();
     await page.getByRole('button', { name: 'Use existing folder' }).click();
     await expect(page.getByText('Scan: complete 4/4')).toBeVisible({
       timeout: 240_000,

@@ -1,14 +1,25 @@
 # Dataset acceptance
 
 Dataset roots default to the `datasets` folder under the application project root
-(the working directory selected by `launch.cmd`). The Dataset folder
-field starts with the first configured root. Creating a managed dataset creates
-the root folder when needed. Saved custom roots, including an explicitly empty
-list, are preserved; change them in Settings to use a different location.
+(the working directory selected by `launch.cmd`). Saved custom roots, including an
+explicitly empty list, are preserved; change them in Settings to use a different
+location.
 
 The Datasets library lists registered and managed datasets, their media/caption
 counts, storage locations and edit/delete actions. Choose **New dataset** to open
-the creation screen, then choose **Use existing folder** to register a folder as it is, or **Create a new folder for uploads** to create a managed dataset.
+the creation screen. Choose **Upload files** or **Use existing folder** before
+entering a path. Uploads use the first configured root as their **Upload parent
+folder**, so a name is enough; inspect or change the parent before choosing
+**Create a new folder for uploads**. This creates a separate `managed-…` subfolder
+and shows its final path in the dataset editor. The parent is created if needed.
+
+**Use existing folder** starts with an empty **Dataset folder**. Enter or Browse
+to the exact folder to index, including its subfolders. Selecting an entire
+configured root requires an acknowledgement because it can include sibling
+datasets. If the folder is already registered, open the existing entry instead;
+its identity and indexed state are preserved. Existing valid root registrations
+remain usable. If no root is configured, **Set a dataset root in Settings** opens
+Settings; save a root, then use browser Back to return to the retained creation form.
 Both flows open the individual dataset editor. **Back to datasets** returns to
 the library after saving the active caption; a failed save keeps the draft open.
 
@@ -142,6 +153,24 @@ Dataset item paths and caption sidecars must remain regular local files/director
 rejects links/reparse-point redirection even when a target stays inside an allowed root, so replacing a
 folder with an inside-root junction cannot redirect an already opened item's caption to another file.
 Register the physical folder or restore regular files before continuing; linked targets are preserved.
+
+### Check upload and registration locations
+
+From the repository root in PowerShell 7, start an isolated CPU fixture:
+
+```powershell
+.\acceptance.cmd --workspace ".cache/ux-check-$([guid]::NewGuid().ToString('N'))"
+```
+
+Choose **New dataset**, enter a name and create an upload dataset using the
+default parent. Expect a separate managed subfolder, with its final path visible
+in **Dataset settings**. Start another dataset and select **Use existing folder**
+with the keyboard. Browse to a configured root; expect a warning and an explicit
+acknowledgement before registration. Try an already registered folder and expect
+an **Open existing dataset** link. Try a child folder and check that only its
+exact path and descendants are indexed. With an empty Dataset roots setting,
+follow the Settings link, save a root and use browser Back; expect the name and
+method to remain in the creation form.
 
 ### Resolve a caption before preparing a Run
 

@@ -370,14 +370,14 @@ export function Datasets({
       setBusy(false);
     }
   }
-  async function create(managed: boolean) {
+  async function create(managed: boolean, destination: string) {
     setBusy(true);
     setError('');
     try {
       const created = await api<Dataset>(
         managed ? '/api/datasets/managed' : '/api/datasets',
         'POST',
-        managed ? { name, root: folder } : { name, path: folder },
+        managed ? { name, root: destination } : { name, path: destination },
       );
       await open(created.id);
       setPanel(managed ? 'uploads' : null);
@@ -570,6 +570,7 @@ export function Datasets({
           folder={folder}
           setFolder={setFolder}
           datasetRoots={datasetRoots}
+          datasets={datasets}
           create={create}
         />
       )}

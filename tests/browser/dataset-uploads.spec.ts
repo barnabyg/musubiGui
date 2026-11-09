@@ -14,7 +14,9 @@ test('picked files publish media and captions, and a rejected upload can be canc
     await page
       .getByLabel('Dataset name', { exact: true })
       .fill('Uploads library');
-    await page.getByLabel('Dataset folder', { exact: true }).fill(app.media);
+    await page
+      .getByLabel('Upload parent folder', { exact: true })
+      .fill(app.media);
     await page
       .getByRole('button', { name: 'Create a new folder for uploads' })
       .click();

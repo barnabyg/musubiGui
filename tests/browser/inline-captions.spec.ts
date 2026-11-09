@@ -14,7 +14,13 @@ async function openDataset(
   await page
     .getByLabel('Dataset name', { exact: true })
     .fill('Inline captions');
+  await page
+    .getByRole('radio', { name: 'Use existing folder', exact: true })
+    .check();
   await page.getByLabel('Dataset folder', { exact: true }).fill(app.media);
+  await page
+    .getByRole('checkbox', { name: 'Index this entire dataset root' })
+    .check();
   await page.getByRole('button', { name: 'Use existing folder' }).click();
   await expect(page.locator('.dataset-identity [role="status"]')).toHaveText(
     `Scan: complete ${count}/${count}`,

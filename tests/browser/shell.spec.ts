@@ -61,7 +61,13 @@ test('the dataset editor uses icons with accessible names, not text glyphs', asy
     await page.getByRole('button', { name: 'Datasets', exact: true }).click();
     await page.getByRole('button', { name: 'New dataset' }).click();
     await page.getByLabel('Dataset name', { exact: true }).fill('Icons');
+    await page
+      .getByRole('radio', { name: 'Use existing folder', exact: true })
+      .check();
     await page.getByLabel('Dataset folder', { exact: true }).fill(app.media);
+    await page
+      .getByRole('checkbox', { name: 'Index this entire dataset root' })
+      .check();
     await page.getByRole('button', { name: 'Use existing folder' }).click();
     for (const name of ['Back to datasets', 'Dataset settings']) {
       const button = page.getByRole('button', { name, exact: true });

@@ -4,6 +4,32 @@
   justify-content: space-between;
   gap: var(--space-9);
 }
+.dataset-create-method {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-7);
+  border: 0;
+  padding: 0;
+  margin: var(--space-7) 0;
+}
+.dataset-create-method label,
+.dataset-root-warning label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+.dataset-create-method input,
+.dataset-root-warning input {
+  width: auto;
+  margin: 0;
+}
+.dataset-root-warning {
+  margin: var(--space-7) 0;
+  color: var(--color-warning);
+}
+.dataset-create > p {
+  overflow-wrap: anywhere;
+}
 .dataset-heading h1,
 .dataset-heading p {
   overflow-wrap: anywhere;

@@ -23,7 +23,7 @@ async function createDataset(page: Page, url: string, media: string) {
   await page.getByRole('button', { name: 'Datasets', exact: true }).click();
   await page.getByRole('button', { name: 'New dataset' }).click();
   await page.getByLabel('Dataset name', { exact: true }).fill('Dropped media');
-  await page.getByLabel('Dataset folder', { exact: true }).fill(media);
+  await page.getByLabel('Upload parent folder', { exact: true }).fill(media);
   await page
     .getByRole('button', { name: 'Create a new folder for uploads' })
     .click();
