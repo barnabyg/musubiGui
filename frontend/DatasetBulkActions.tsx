@@ -16,14 +16,14 @@ type Operation = {
 type Props = {
   datasetId: string;
   selected: string[];
-  beforeAction: () => Promise<boolean>;
+  afterCaptionFlush: (action: () => Promise<void>) => Promise<boolean>;
   onChanged: () => Promise<void>;
 };
 
 export function DatasetBulkActions({
   datasetId,
   selected,
-  beforeAction,
+  afterCaptionFlush,
   onChanged,
 }: Props) {
   const [fields, setFields] = useState({
@@ -40,11 +40,10 @@ export function DatasetBulkActions({
   const request = <T,>(path: string, data: object) =>
     batchRequest<T>(url + path, 'POST', data);
   async function action(work: () => Promise<void>) {
-    if (!(await beforeAction())) return;
     setBusy(true);
     setError('');
     try {
-      await work();
+      await afterCaptionFlush(work);
     } catch (reason) {
       setError((reason as Error).message);
     } finally {

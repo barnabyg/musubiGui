@@ -20,8 +20,7 @@ export function DatasetPanels({
   visibleItems,
   selected,
   setSelected,
-  setActive,
-  refresh,
+  onChanged,
 }: {
   dataset: Dataset;
   panel: DatasetPanel | null;
@@ -35,8 +34,7 @@ export function DatasetPanels({
   visibleItems: DatasetItem[];
   selected: Set<string>;
   setSelected: Dispatch<SetStateAction<Set<string>>>;
-  setActive: (item: DatasetItem | null) => void;
-  refresh: (id?: string) => Promise<Dataset[]>;
+  onChanged: () => Promise<void>;
 }) {
   return (
     <>
@@ -105,11 +103,8 @@ export function DatasetPanels({
           <DatasetUploads
             key={dataset.id}
             datasetId={dataset.id}
-            beforeAction={async () => captions.flushAll()}
-            onChanged={async () => {
-              setActive(null);
-              await refresh(dataset.id);
-            }}
+            afterCaptionFlush={(action) => captions.afterCaptionFlush(action)}
+            onChanged={onChanged}
           />
         </section>
       )}
@@ -162,11 +157,8 @@ export function DatasetPanels({
           key={dataset.id}
           datasetId={dataset.id}
           selected={[...selected]}
-          beforeAction={async () => captions.flushAll()}
-          onChanged={async () => {
-            setActive(null);
-            await refresh(dataset.id);
-          }}
+          afterCaptionFlush={(action) => captions.afterCaptionFlush(action)}
+          onChanged={onChanged}
         />
       </section>
     </>

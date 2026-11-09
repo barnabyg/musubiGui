@@ -1,7 +1,7 @@
-import { useEffect, useEffectEvent, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import { confirmDialog } from './ConfirmDialog';
 import { apiClient } from './api';
-import { type CaptionSession, useCaptionSummary } from './captionSession';
+import { type CaptionSession, useJobCaptionState } from './captionSession';
 import { jobFields } from './jobFields';
 import type {
   ConversionPreview,
@@ -16,7 +16,7 @@ import type { JobSummary } from './JobTable';
 import { plural } from './labels';
 
 export type JobsProps = {
-  captions: CaptionSession | null;
+  captions: CaptionSession[];
   selectedId?: string;
   reviewOnOpen?: boolean;
   onSelect?: (id?: string, replace?: boolean) => void;
@@ -44,14 +44,17 @@ export function useJobEditor({
   const [models, setModels] = useState<Record<string, string>>({});
   const [modelRoots, setModelRoots] = useState<string[]>([]);
   const [job, setJob] = useState<Job | null>(null);
-  // Dataset navigation already flushes the previous session before switching.
-  // Only the mounted dataset editor can hold in-flight writes or retained drafts.
-  const jobCaptions =
-    captions &&
-    job?.datasets.some(({ dataset_id }) => dataset_id === captions.datasetId)
-      ? captions
-      : null;
-  const captionSummary = useCaptionSummary(jobCaptions);
+  const datasetsInJob = job?.datasets;
+  const jobCaptions = useMemo(
+    () =>
+      captions.filter((session) =>
+        datasetsInJob?.some(
+          ({ dataset_id }) => dataset_id === session.datasetId,
+        ),
+      ),
+    [captions, datasetsInJob],
+  );
+  const captionState = useJobCaptionState(jobCaptions);
   const [dirty, setDirty] = useState(false);
   // Busy until the initial load lands, so it cannot replace drafts created meanwhile.
   const [loading, setLoading] = useState(true);
@@ -297,7 +300,10 @@ export function useJobEditor({
   async function prepare(start = false) {
     if (!job || !review?.valid || dirty) return;
     await perform(async () => {
-      if (jobCaptions && !(await jobCaptions.flushAll())) return;
+      const saved = await Promise.all(
+        jobCaptions.map((session) => session.flushAll()),
+      );
+      if (saved.includes(false)) return;
       let run: PreparedRun;
       try {
         run = await request<PreparedRun>('/api/runs/prepare', 'POST', {
@@ -483,9 +489,9 @@ export function useJobEditor({
     });
   }
   function prepareReason() {
-    if (captionSummary.failed)
+    if (captionState && captionState !== 'pending')
       return 'Resolve the unsaved captions in this job’s datasets before preparing.';
-    if (captionSummary.unsaved)
+    if (captionState === 'pending')
       return 'Waiting for caption saves in this job’s datasets.';
     if (dirty)
       return 'Choose Review configuration to save these edits and check them before preparing.';
@@ -536,8 +542,6 @@ export function useJobEditor({
     exportConfiguration,
     importConfiguration,
     prepareReason: prepareReason(),
-    failedCaption: captionSummary.failed
-      ? jobCaptions?.firstFailed()
-      : undefined,
+    failedCaption: captionState === 'pending' ? null : captionState,
   };
 }
