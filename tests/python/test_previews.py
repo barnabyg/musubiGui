@@ -56,14 +56,14 @@ def test_native_previews_are_frozen_discovered_and_do_not_require_final_sampling
         service.close()
 
 
-def test_preview_validation_preserves_old_defaults_and_blocks_misleading_paired_samples() -> None:
+def test_preview_validation_preserves_old_defaults_and_rejects_negative_intervals() -> None:
     assert JobConfig().preview_every == 0
     old = JobDraft(name="Old", family="wan")
     assert not any("Preview interval" in error for error in configuration_errors(old))
     paired = old.model_copy(
         update={"config": JobConfig(recipe="alternating", preview_every=100, steps=500, save_state=True)}
     )
-    assert any("paired previews" in error for error in configuration_errors(paired))
+    assert not any("Preview interval" in error for error in configuration_errors(paired))
     invalid = old.model_copy(update={"config": JobConfig(preview_every=-1)})
     assert any("Preview interval" in error for error in configuration_errors(invalid))
 

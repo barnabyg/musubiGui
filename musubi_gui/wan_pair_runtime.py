@@ -18,6 +18,8 @@ def is_paired(run: dict[str, Any]) -> bool:
 
 
 def stage_log(stage: dict[str, Any]) -> str:
+    if stage.get("preview_step") is not None:
+        return f"generate-preview-{stage['preview_step']:08d}.log"
     phase = stage.get("training")
     return f"train-{phase['expert']}-{phase['start']:08d}.log" if phase else f"{stage['name']}.log"
 
@@ -142,8 +144,16 @@ def paired_saved_states(run: dict[str, Any]) -> list[dict[str, Any]]:
 def sampling_pair(run: dict[str, Any], stage: dict[str, Any]) -> dict[str, Any]:
     result = {}
     for expert, flag in [("low", "--lora_weight"), ("high", "--lora_weight_high_noise")]:
-        path = argument(stage["args"], flag)
         state = run.get("expert_states", {}).get(expert) or run.get("pair_sources", {}).get(expert)
+        if flag not in stage["args"] and stage.get("preview_step") is not None and not state:
+            key = f"wan_{expert}"
+            result[expert] = {
+                "steps": 0,
+                "base": True,
+                "identity": run.get("provenance", {}).get("models", {}).get(key),
+            }
+            continue
+        path = argument(stage["args"], flag)
         checkpoint = state.get("checkpoint") if state else None
         if not checkpoint or checkpoint["path"] != path or digest_file(Path(path)) != checkpoint["sha256"]:
             raise ValueError(f"The trained {expert}-noise checkpoint is missing or changed; paired sampling stopped.")

@@ -17,9 +17,15 @@ class Stage:
     name: str
     args: list[str]
     training: dict[str, Any] | None = None
+    preview_step: int | None = None
 
     def record(self) -> dict[str, Any]:
-        return {"name": self.name, "args": self.args, **({"training": self.training} if self.training else {})}
+        return {
+            "name": self.name,
+            "args": self.args,
+            **({"training": self.training} if self.training else {}),
+            **({"preview_step": self.preview_step} if self.preview_step is not None else {}),
+        }
 
 
 def python_args(settings: Settings) -> list[str]:

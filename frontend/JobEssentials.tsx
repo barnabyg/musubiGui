@@ -86,8 +86,9 @@ export function JobEssentials({
       )}
       {job.config.preview_every > 0 && job.family === 'wan' && (
         <p className="hint">
-          In-run Wan previews use the low-noise expert only. The final sample
-          uses both experts. Alternating Wan previews are not yet supported.
+          {job.config.recipe === 'alternating'
+            ? 'Paired previews unload training, sample both experts, then reload training state. Extra boundaries restart the shuffled dataset pass. An expert without updates uses base weights.'
+            : 'In-run Wan previews use the low-noise expert only. The final sample uses both experts.'}
         </p>
       )}
       {(job.config.sample_enabled || job.config.preview_every > 0) && (

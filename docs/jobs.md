@@ -142,24 +142,37 @@ accumulation, independently of checkpoint saving. Previews share the sample prom
 seed, inference steps and geometry. The final sample checkbox is independent: previews
 can run with final sampling off. Review requires a prompt for either choice.
 
-The pinned trainer pauses training for native inference in the same process, caches
+For H3 and low-noise Wan, the pinned trainer pauses training for native inference in the same process, caches
 sample text before loading the training model, keeps VAEs on CPU between previews,
 and switches block swapping to inference and back. It restores Torch RNG state and
 retains the optimizer, scheduler and current dataset traversal. It does not restart or
 reshuffle training at each preview. Sampling and VAE decoding add time and GPU memory;
 the 24 GB capacity of this combination still needs hardware qualification (#129).
 
-H3 uses native joint audio/video sampling. Wan previews use only the trained low-noise
-expert throughout inference; they are diagnostic samples and differ from the final
-two-expert video. **Alternating Wan periodic previews are blocked in review** until
-full paired sampling is implemented (#128). Keep its interval at zero meanwhile.
-These are limits of the current implementation, not claims of paired-preview support.
+H3 uses native joint audio/video sampling. Single-expert Wan previews use only the
+trained low-noise expert throughout inference; they are diagnostic samples and differ
+from the final two-expert video.
+
+Alternating Wan previews use both experts at total schedule steps, independently of
+the expert-switch interval. Training saves and exits at each preview boundary, releasing
+its GPU process before the existing two-expert generator loads. The next phase restores
+the expert's optimizer, scheduler and RNG state. **Every extra preview boundary restarts
+the shuffled dataset pass**, just like an expert switch; it also adds model-loading time
+and retains another checkpoint/state. Review shows the split phases and estimates their
+disk use. The GPU lease remains held throughout, preventing another Run from overlapping.
+
+An expert with no updates yet uses its base weights. Each preview records and displays
+the low/high trained-step counts (zero for an untrained expert) and retains its own pair
+identity even after later updates. Final sampling is still independent. On restore,
+paired previews continue at absolute schedule multiples rather than resetting the cadence.
+Full paired-preview hardware qualification remains tracked in #129.
 
 Completed previews appear automatically on the active Run within about five seconds
 plus file inspection time. Run outputs labels their segment step and model scope; select
 a preview there to play it. New arrivals preserve the selected preview and playback.
-Restore starts a new segment whose preview counter begins at zero, matching the pinned
-trainer's reset counter. Frozen prompt JSON belongs to the Run and cannot be changed
+For native single-process previews, restore starts a new segment whose preview counter
+begins at zero, matching the pinned trainer's reset counter. Frozen prompt inputs belong
+to the Run and cannot be changed
 by editing its Job. Retry copies and seals that input like the dataset configuration.
 
 From `C:/docs/git/musubiGui`, in PowerShell 7, this command prepares and launches
@@ -181,6 +194,8 @@ the target RTX 3090/96 GB host, and enough free disk for model caches and checkp
 The 15 generated images establish execution and memory use, not useful learning.
 Record peak VRAM/RAM and preview overhead under #129; start with a short Run to establish
 capacity before running all 500 steps. Installed training packages are left untouched.
+Add `--wan-paired` to prepare the same 500-step Wan test with alternating experts,
+switching every 30 updates and generating paired previews every 100 total updates.
 
 Review configuration scrolls to its result, which opens with pass or fail, the error
 count, the included item count and whether the disk has room. Errors and warnings
@@ -227,8 +242,8 @@ some examples before others are seen; this is not equivalent to an uninterrupted
 dataset traversal. Existing saved low-noise jobs keep their original behaviour.
 
 Final sampling loads the trained low and high LoRAs into their respective experts,
-with both checkpoint identities and step counts recorded. Alternating Runs currently
-offer a final paired sample only; see [in-run preview limits](#previews-during-training).
+with both checkpoint identities and step counts recorded. Alternating Runs also support
+[periodic paired previews](#previews-during-training).
 
 From the repository root in PowerShell 7, this command prepares and launches an isolated
 four-step CPU demonstration at `http://127.0.0.1:8767`:

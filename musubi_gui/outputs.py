@@ -220,9 +220,21 @@ class OutputBrowser:
                     recorded_sample = next(
                         (sample for sample in run.get("samples", []) if sample["path"] == str(file)), None
                     )
+                    if recorded_sample and recorded_sample.get("preview_step") is not None:
+                        step = recorded_sample["preview_step"]
+                        pair = recorded_sample.get("lora_pair", {})
+                        scope = f"paired Wan · low {pair.get('low', {}).get('steps', 0)} / high {pair.get('high', {}).get('steps', 0)} trained steps"
+                        entry["metadata"]["preview"] = {
+                            "step": step,
+                            "scope": scope,
+                            "counter": "total schedule optimizer updates",
+                        }
+                        entry["name"] = f"Step {step} preview · {scope} · {file.name}"
                     if kind != "checkpoint" and recorded_sample and recorded_sample.get("lora_pair"):
                         if recorded_sample.get("sha256") and digest_file(file) != recorded_sample["sha256"]:
                             entry["metadata"].pop("lora_pair", None)
+                            entry["metadata"].pop("preview", None)
+                            entry["name"] = file.name
                             entry["metadata"]["provenance_note"] = (
                                 "Sample changed after generation; the recorded LoRA pair cannot be attributed to this file."
                             )

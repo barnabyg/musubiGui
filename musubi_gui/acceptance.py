@@ -142,8 +142,6 @@ def prepare(
     wan_paired: bool = False,
     preview_images: bool = False,
 ) -> dict[str, Any]:
-    if preview_images and wan_paired:
-        raise ValueError("Alternating Wan previews are not supported yet; choose --preview-images alone.")
     workspace = workspace.resolve()
     if workspace.exists():
         raise ValueError("Choose a new, nonexistent directory; acceptance never overwrites an existing workspace.")
@@ -235,7 +233,13 @@ def prepare(
                 if preview_images:
                     config = config.model_copy(update={"steps": 500, "preview_every": 100, "save_every": 100})
                 if wan_paired and family == "wan":
-                    config = config.model_copy(update={"recipe": "alternating", "steps": 4, "expert_interval": 1})
+                    config = config.model_copy(
+                        update={
+                            "recipe": "alternating",
+                            "steps": 500 if preview_images else 4,
+                            "expert_interval": 30 if preview_images else 1,
+                        }
+                    )
                 job = jobs.create(
                     JobDraft(
                         name=f"{family.upper()} acceptance {number}",

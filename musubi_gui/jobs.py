@@ -659,10 +659,11 @@ def configuration_errors(job: Job) -> list[str]:
         )
     if config.preview_every < 0:
         errors.append("Preview interval: enter zero (off) or a positive number of optimizer steps.")
-    if config.preview_every and config.recipe == PAIRED_RECIPE:
-        errors.append(
-            "Preview interval: alternating Wan needs paired previews, which are not yet supported. Set the interval to zero."
-        )
+    if config.preview_every > 0 and config.recipe == PAIRED_RECIPE and config.steps > 0 and config.expert_interval > 0:
+        try:
+            alternating_phases(config.steps, config.expert_interval, preview_every=config.preview_every)
+        except ValueError as error:
+            errors.append(str(error))
     if (config.sample_enabled or config.preview_every) and not config.sample_prompt.strip():
         errors.append("Sampling: enter a prompt or turn off both final sampling and in-run previews.")
     if any(key not in allowed_components for key in config.components):
@@ -702,7 +703,7 @@ def build_stages(job: Job, settings: Settings, run: Path, cache: Path, kinds: se
                 _set_argument(args, flag, str(value))
             if config.save_state:
                 args.extend(["--save_state", "--save_state_on_train_end"])
-            if config.preview_every:
+            if config.preview_every and config.recipe != PAIRED_RECIPE:
                 from musubi_gui.preview import preview_arguments
 
                 args.extend(preview_arguments(job, settings, run))
@@ -715,11 +716,24 @@ def build_stages(job: Job, settings: Settings, run: Path, cache: Path, kinds: se
             index = args.index("--video_size")
             args[index + 1 : index + 3] = [str(config.height), str(config.width)]
             _set_argument(args, "--lora_weight", str(run / "checkpoints" / f"{job.family}-{job.id}.safetensors"))
-    stages = [stage for stage in stages if stage.name != "generate" or config.sample_enabled]
+    stages = [
+        stage
+        for stage in stages
+        if stage.name != "generate"
+        or config.sample_enabled
+        or (config.recipe == PAIRED_RECIPE and config.preview_every > 0)
+    ]
     if job.family == "wan" and config.recipe == PAIRED_RECIPE:
         from musubi_gui.wan_pair_plan import paired_stages
 
-        return paired_stages(stages, settings.models, config.steps, config.expert_interval)
+        return paired_stages(
+            stages,
+            settings.models,
+            config.steps,
+            config.expert_interval,
+            preview_every=config.preview_every,
+            final_sample=config.sample_enabled,
+        )
     return stages
 
 
@@ -935,7 +949,7 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
             f"Training steps: {job.config.steps} steps can check that training runs, but expect no visible change "
             f"in samples below about {LOW_STEPS_WARNING} steps."
         )
-    if job.config.preview_every:
+    if job.config.preview_every and job.config.recipe != PAIRED_RECIPE:
         warnings.append(
             "In-run previews pause training for inference and decoding, retain the optimizer and dataset position, and need separate GPU capacity qualification. Text encoding happens before the training model loads; VAEs are kept on CPU between previews."
         )
@@ -944,6 +958,10 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
                 "Wan in-run previews use only the trained low-noise expert across all sampling timesteps; they are diagnostic previews and differ from the final two-expert sample."
             )
     if job.family == "wan" and job.config.recipe == PAIRED_RECIPE:
+        if job.config.preview_every:
+            warnings.append(
+                "Paired previews end a training phase, release its GPU process, sample both experts, then reload optimizer state. Extra boundaries restart the shuffled dataset pass. Experts without updates use their base weights, labelled with zero trained steps."
+            )
         warnings.append(
             "Alternating experts: native GPU qualification covers 256×256, 17 frames, rank 8 and N=1. Useful learning and production-size paired capacity remain unqualified."
         )
@@ -1084,7 +1102,10 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
                 "interval": job.config.expert_interval,
                 "counts": expert_steps(job.config.steps, job.config.expert_interval),
                 "phases": [
-                    phase.record() for phase in alternating_phases(job.config.steps, job.config.expert_interval)
+                    phase.record()
+                    for phase in alternating_phases(
+                        job.config.steps, job.config.expert_interval, preview_every=job.config.preview_every
+                    )
                 ],
             }
             if job.family == "wan"
@@ -1092,6 +1113,7 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
             and job.config.expert_interval > 0
             and job.config.steps > 0
             and math.ceil(job.config.steps / job.config.expert_interval) <= MAX_PHASES
+            and not any(message.startswith("Preview interval:") for message in errors)
             else None
         ),
     }
