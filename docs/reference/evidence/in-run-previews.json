@@ -1,0 +1,880 @@
+{
+  "version": 1,
+  "date": "2026-11-10",
+  "scenario": "In-run LoRA previews on 15 images: 500-step native H3/Wan runs and a paired Wan process-switching probe",
+  "gpu_evidence": true,
+  "application_revision": "571486322865c7fb7955101d2d0c4bcf6809a0a8",
+  "upstream_revision": "f8a1b03794a49239a3539015075f5123d6c07d66",
+  "source_note": "Native GPU trials used the #127 working tree subsequently committed as 3b16910; the paired GPU probe used 308a347. Later refinements changed display/selection ownership, one-frame PNG discovery and image-only browser fixtures. The frozen trainer/generator commands were compared byte-for-byte with the current builder. Full input and source identities remain in the local Run snapshots.",
+  "hardware": {
+    "gpu": "NVIDIA GeForce RTX 3090",
+    "vram_mib": 24576,
+    "host_ram_gb": 96,
+    "os": "Windows 11"
+  },
+  "measurement": {
+    "owner_gated_memory_sampling_seconds": 2,
+    "native_latency_poll_seconds": 1,
+    "native_latency_definition": "Observed sampling log marker to a decodable output file; approximately one-second timing resolution. Monitoring began after H3 step 200.",
+    "memory_note": "Whole-device VRAM and whole-host used physical RAM, including desktop/other applications. Owner-gated peaks exclude periods queued behind another Run; sampled peaks can miss transients. H3 owner-gated monitoring began after step 100; the separate full-run driver peak below includes its initial model loads.",
+    "artifact_identity_note": "Output checksums are retained in the local .cache/preview-artifact-identities.json validation record; source identities remain in each Run snapshot. This summary records paths, byte counts, decoded media and validated counters rather than duplicating those checksums."
+  },
+  "limitations": [
+    "Synthetic red-square images prove execution and capacity, not useful learning.",
+    "Only the listed smoke geometry/ranks are measured; production-size preview capacity is unqualified.",
+    "Native Wan previews use the low-noise expert throughout; final samples use both base experts with the trained low LoRA.",
+    "Full paired-preview evidence is a short 8-step run with a mismatched expert/preview cadence, not 500 paired steps.",
+    "Paired previews add trainer restarts, model reloads and fresh shuffled dataset passes at additional phase boundaries."
+  ],
+  "short_native_probes": [
+    {
+      "family": "h3",
+      "run_id": "7c7991abac87426b94413f10d42f210d",
+      "status": "completed",
+      "steps": 2,
+      "preview_every": 1,
+      "elapsed_seconds": 218.42,
+      "sampled_peak_vram_mib": 9699
+    },
+    {
+      "family": "wan",
+      "run_id": "ea318abdb5764cd6a12b4e0642ba1c36",
+      "status": "completed",
+      "steps": 2,
+      "preview_every": 1,
+      "elapsed_seconds": 170.58,
+      "sampled_peak_vram_mib": 8431
+    }
+  ],
+  "native_500_step_trials": [
+    {
+      "family": "h3",
+      "run_id": "7468c51a32c24ab7b13cf7e057e7b1e0",
+      "status": "completed",
+      "error": null,
+      "image_count": 15,
+      "config": {
+        "recipe": "guidance-loss",
+        "steps": 500,
+        "preview_every": 100,
+        "expert_interval": 30,
+        "width": 256,
+        "height": 256,
+        "frames": 124,
+        "rank": 4,
+        "alpha": 4,
+        "batch_size": 1,
+        "gradient_accumulation": 1,
+        "blocks_to_swap": 48,
+        "seed": 42,
+        "sample_steps": 4,
+        "sample_prompt": "A red square moves across a blue background. A steady sine tone plays.",
+        "sample_enabled": true,
+        "save_every": 100,
+        "save_state": true
+      },
+      "elapsed_including_queue_seconds": 2362.05,
+      "owner_gated_stage_memory": {
+        "train": {
+          "peak_vram_mib": 9617,
+          "peak_host_used_mib": 39092,
+          "observations": 713
+        },
+        "between stages": {
+          "peak_vram_mib": 425,
+          "peak_host_used_mib": 9347,
+          "observations": 1
+        },
+        "generate": {
+          "peak_vram_mib": 6478,
+          "peak_host_used_mib": 40649,
+          "observations": 22
+        }
+      },
+      "preview_overhead_seconds_approximate": {
+        "300": 12.26,
+        "400": 12.24,
+        "500": 12.2
+      },
+      "stages": [
+        {
+          "name": "latent_cache",
+          "status": "reused"
+        },
+        {
+          "name": "text_cache",
+          "status": "reused"
+        },
+        {
+          "name": "train",
+          "status": "completed",
+          "elapsed_seconds": 2310.0
+        },
+        {
+          "name": "generate",
+          "status": "completed",
+          "elapsed_seconds": 46.16
+        }
+      ],
+      "previews": [
+        {
+          "step": 100,
+          "scope": "H3",
+          "path": "checkpoints/sample/h3-f8f174d506f9415c826b5c9508865e0e_000100_00_20261110143306_42.mp4",
+          "bytes": 159881,
+          "status": "available",
+          "media": {
+            "width": 256,
+            "height": 256,
+            "frames": 124,
+            "fps": 24.0,
+            "audio": {
+              "sample_rate": 32000,
+              "channels": 2,
+              "duration": 5.167,
+              "start": 0.0,
+              "codec": "aac"
+            }
+          },
+          "pair_steps": {}
+        },
+        {
+          "step": 200,
+          "scope": "H3",
+          "path": "checkpoints/sample/h3-f8f174d506f9415c826b5c9508865e0e_000200_00_20261110144121_42.mp4",
+          "bytes": 118318,
+          "status": "available",
+          "media": {
+            "width": 256,
+            "height": 256,
+            "frames": 124,
+            "fps": 24.0,
+            "audio": {
+              "sample_rate": 32000,
+              "channels": 2,
+              "duration": 5.167,
+              "start": 0.0,
+              "codec": "aac"
+            }
+          },
+          "pair_steps": {}
+        },
+        {
+          "step": 300,
+          "scope": "H3",
+          "path": "checkpoints/sample/h3-f8f174d506f9415c826b5c9508865e0e_000300_00_20261110144845_42.mp4",
+          "bytes": 128537,
+          "status": "available",
+          "media": {
+            "width": 256,
+            "height": 256,
+            "frames": 124,
+            "fps": 24.0,
+            "audio": {
+              "sample_rate": 32000,
+              "channels": 2,
+              "duration": 5.167,
+              "start": 0.0,
+              "codec": "aac"
+            }
+          },
+          "pair_steps": {}
+        },
+        {
+          "step": 400,
+          "scope": "H3",
+          "path": "checkpoints/sample/h3-f8f174d506f9415c826b5c9508865e0e_000400_00_20261110145604_42.mp4",
+          "bytes": 145223,
+          "status": "available",
+          "media": {
+            "width": 256,
+            "height": 256,
+            "frames": 124,
+            "fps": 24.0,
+            "audio": {
+              "sample_rate": 32000,
+              "channels": 2,
+              "duration": 5.167,
+              "start": 0.0,
+              "codec": "aac"
+            }
+          },
+          "pair_steps": {}
+        },
+        {
+          "step": 500,
+          "scope": "H3",
+          "path": "checkpoints/sample/h3-f8f174d506f9415c826b5c9508865e0e_000500_00_20261110150307_42.mp4",
+          "bytes": 182707,
+          "status": "available",
+          "media": {
+            "width": 256,
+            "height": 256,
+            "frames": 124,
+            "fps": 24.0,
+            "audio": {
+              "sample_rate": 32000,
+              "channels": 2,
+              "duration": 5.167,
+              "start": 0.0,
+              "codec": "aac"
+            }
+          },
+          "pair_steps": {}
+        }
+      ],
+      "final_samples": [
+        {
+          "path": "<run>\\samples\\sample.mp4"
+        }
+      ],
+      "progress": {
+        "step": 500,
+        "total": 500,
+        "elapsed": "37:20",
+        "eta": "00:00",
+        "loss": "0.921"
+      },
+      "full_run_driver_peak_vram_mib": 9694,
+      "full_run_driver_peak_host_used_mib": 47694
+    },
+    {
+      "family": "wan",
+      "run_id": "4a1e288f10504c3e8d4776b959f835de",
+      "status": "completed",
+      "error": null,
+      "image_count": 15,
+      "config": {
+        "recipe": "low-noise",
+        "steps": 500,
+        "preview_every": 100,
+        "expert_interval": 30,
+        "width": 256,
+        "height": 256,
+        "frames": 17,
+        "rank": 8,
+        "alpha": 8,
+        "batch_size": 1,
+        "gradient_accumulation": 1,
+        "blocks_to_swap": 36,
+        "seed": 42,
+        "sample_steps": 4,
+        "sample_prompt": "A red square moves across a blue background.",
+        "sample_enabled": true,
+        "save_every": 100,
+        "save_state": true
+      },
+      "elapsed_including_queue_seconds": 2778.41,
+      "owner_gated_stage_memory": {
+        "between stages": {
+          "peak_vram_mib": 435,
+          "peak_host_used_mib": 10105,
+          "observations": 3
+        },
+        "train": {
+          "peak_vram_mib": 8134,
+          "peak_host_used_mib": 27941,
+          "observations": 990
+        },
+        "generate": {
+          "peak_vram_mib": 8146,
+          "peak_host_used_mib": 28341,
+          "observations": 49
+        }
+      },
+      "preview_overhead_seconds_approximate": {
+        "100": 19.38,
+        "200": 19.42,
+        "300": 19.34,
+        "400": 18.41,
+        "500": 18.39
+      },
+      "stages": [
+        {
+          "name": "latent_cache",
+          "status": "reused"
+        },
+        {
+          "name": "text_cache",
+          "status": "reused"
+        },
+        {
+          "name": "train",
+          "status": "completed",
+          "elapsed_seconds": 2062.58
+        },
+        {
+          "name": "generate",
+          "status": "completed",
+          "elapsed_seconds": 101.86
+        }
+      ],
+      "previews": [
+        {
+          "step": 100,
+          "scope": "low-noise expert only",
+          "path": "checkpoints/sample/wan-e56b2d1ca1454f05be7e869e6f8ee107_000100_00_20261110152138_42.mp4",
+          "bytes": 270113,
+          "status": "available",
+          "media": {
+            "width": 256,
+            "height": 256,
+            "frames": 17,
+            "fps": 24.0,
+            "audio": null
+          },
+          "pair_steps": {}
+        },
+        {
+          "step": 200,
+          "scope": "low-noise expert only",
+          "path": "checkpoints/sample/wan-e56b2d1ca1454f05be7e869e6f8ee107_000200_00_20261110152819_42.mp4",
+          "bytes": 244981,
+          "status": "available",
+          "media": {
+            "width": 256,
+            "height": 256,
+            "frames": 17,
+            "fps": 24.0,
+            "audio": null
+          },
+          "pair_steps": {}
+        },
+        {
+          "step": 300,
+          "scope": "low-noise expert only",
+          "path": "checkpoints/sample/wan-e56b2d1ca1454f05be7e869e6f8ee107_000300_00_20261110153503_42.mp4",
+          "bytes": 155501,
+          "status": "available",
+          "media": {
+            "width": 256,
+            "height": 256,
+            "frames": 17,
+            "fps": 24.0,
+            "audio": null
+          },
+          "pair_steps": {}
+        },
+        {
+          "step": 400,
+          "scope": "low-noise expert only",
+          "path": "checkpoints/sample/wan-e56b2d1ca1454f05be7e869e6f8ee107_000400_00_20261110154146_42.mp4",
+          "bytes": 235619,
+          "status": "available",
+          "media": {
+            "width": 256,
+            "height": 256,
+            "frames": 17,
+            "fps": 24.0,
+            "audio": null
+          },
+          "pair_steps": {}
+        },
+        {
+          "step": 500,
+          "scope": "low-noise expert only",
+          "path": "checkpoints/sample/wan-e56b2d1ca1454f05be7e869e6f8ee107_000500_00_20261110154827_42.mp4",
+          "bytes": 192752,
+          "status": "available",
+          "media": {
+            "width": 256,
+            "height": 256,
+            "frames": 17,
+            "fps": 24.0,
+            "audio": null
+          },
+          "pair_steps": {}
+        }
+      ],
+      "final_samples": [
+        {
+          "path": "<run>\\samples\\20261110-155016-857_42_.mp4"
+        }
+      ],
+      "progress": {
+        "step": 500,
+        "total": 500,
+        "elapsed": "33:41",
+        "eta": "00:00",
+        "loss": "0.00782"
+      }
+    }
+  ],
+  "paired_probe": [
+    {
+      "family": "wan",
+      "run_id": "7158e4a5a9e24c7dad9b2f9b544ef507",
+      "status": "completed",
+      "error": null,
+      "image_count": 15,
+      "config": {
+        "recipe": "alternating",
+        "steps": 8,
+        "preview_every": 2,
+        "expert_interval": 3,
+        "width": 256,
+        "height": 256,
+        "frames": 17,
+        "rank": 8,
+        "alpha": 8,
+        "batch_size": 1,
+        "gradient_accumulation": 1,
+        "blocks_to_swap": 36,
+        "seed": 42,
+        "sample_steps": 4,
+        "sample_prompt": "A red square moves across a blue background.",
+        "sample_enabled": true,
+        "save_every": 1,
+        "save_state": true
+      },
+      "elapsed_including_queue_seconds": 2195.08,
+      "owner_gated_stage_memory": {
+        "latent_cache": {
+          "peak_vram_mib": 1214,
+          "peak_host_used_mib": 10602,
+          "observations": 5
+        },
+        "text_cache": {
+          "peak_vram_mib": 8140,
+          "peak_host_used_mib": 21195,
+          "observations": 14
+        },
+        "train": {
+          "peak_vram_mib": 5194,
+          "peak_host_used_mib": 27761,
+          "observations": 86
+        },
+        "between stages": {
+          "peak_vram_mib": 505,
+          "peak_host_used_mib": 10701,
+          "observations": 16
+        },
+        "generate": {
+          "peak_vram_mib": 8186,
+          "peak_host_used_mib": 29590,
+          "observations": 170
+        }
+      },
+      "preview_overhead_seconds_approximate": {},
+      "stages": [
+        {
+          "name": "latent_cache",
+          "status": "completed",
+          "elapsed_seconds": 9.38
+        },
+        {
+          "name": "text_cache",
+          "status": "completed",
+          "elapsed_seconds": 28.6
+        },
+        {
+          "name": "train",
+          "status": "completed",
+          "training": {
+            "expert": "low",
+            "start": 0,
+            "steps": 2,
+            "low_before": 0,
+            "high_before": 0
+          },
+          "elapsed_seconds": 54.28
+        },
+        {
+          "name": "generate",
+          "status": "completed",
+          "preview_step": 2,
+          "elapsed_seconds": 94.8
+        },
+        {
+          "name": "train",
+          "status": "completed",
+          "training": {
+            "expert": "low",
+            "start": 2,
+            "steps": 1,
+            "low_before": 2,
+            "high_before": 0
+          },
+          "elapsed_seconds": 28.59
+        },
+        {
+          "name": "train",
+          "status": "completed",
+          "training": {
+            "expert": "high",
+            "start": 3,
+            "steps": 1,
+            "low_before": 3,
+            "high_before": 0
+          },
+          "elapsed_seconds": 28.65
+        },
+        {
+          "name": "generate",
+          "status": "completed",
+          "preview_step": 4,
+          "elapsed_seconds": 65.62
+        },
+        {
+          "name": "train",
+          "status": "completed",
+          "training": {
+            "expert": "high",
+            "start": 4,
+            "steps": 2,
+            "low_before": 3,
+            "high_before": 1
+          },
+          "elapsed_seconds": 33.26
+        },
+        {
+          "name": "generate",
+          "status": "completed",
+          "preview_step": 6,
+          "elapsed_seconds": 65.49
+        },
+        {
+          "name": "train",
+          "status": "completed",
+          "training": {
+            "expert": "low",
+            "start": 6,
+            "steps": 2,
+            "low_before": 3,
+            "high_before": 3
+          },
+          "elapsed_seconds": 33.31
+        },
+        {
+          "name": "generate",
+          "status": "completed",
+          "preview_step": 8,
+          "elapsed_seconds": 65.5
+        },
+        {
+          "name": "generate",
+          "status": "completed",
+          "elapsed_seconds": 65.71
+        }
+      ],
+      "previews": [
+        {
+          "step": 2,
+          "scope": "paired Wan · low 2 / high 0 trained steps",
+          "path": "samples/step00000002/20261110-150714-135_42_.mp4",
+          "bytes": 252160,
+          "status": "available",
+          "media": {
+            "width": 256,
+            "height": 256,
+            "frames": 17,
+            "fps": 16.0,
+            "audio": null
+          },
+          "pair_steps": {
+            "low": {
+              "steps": 2,
+              "base": false
+            },
+            "high": {
+              "steps": 0,
+              "base": true
+            }
+          }
+        },
+        {
+          "step": 4,
+          "scope": "paired Wan · low 3 / high 1 trained steps",
+          "path": "samples/step00000004/20261110-150928-686_42_.mp4",
+          "bytes": 248114,
+          "status": "available",
+          "media": {
+            "width": 256,
+            "height": 256,
+            "frames": 17,
+            "fps": 16.0,
+            "audio": null
+          },
+          "pair_steps": {
+            "low": {
+              "steps": 3,
+              "base": false
+            },
+            "high": {
+              "steps": 1,
+              "base": false
+            }
+          }
+        },
+        {
+          "step": 6,
+          "scope": "paired Wan · low 3 / high 3 trained steps",
+          "path": "samples/step00000006/20261110-151114-873_42_.mp4",
+          "bytes": 240167,
+          "status": "available",
+          "media": {
+            "width": 256,
+            "height": 256,
+            "frames": 17,
+            "fps": 16.0,
+            "audio": null
+          },
+          "pair_steps": {
+            "low": {
+              "steps": 3,
+              "base": false
+            },
+            "high": {
+              "steps": 3,
+              "base": false
+            }
+          }
+        },
+        {
+          "step": 8,
+          "scope": "paired Wan · low 5 / high 3 trained steps",
+          "path": "samples/step00000008/20261110-151301-211_42_.mp4",
+          "bytes": 235824,
+          "status": "available",
+          "media": {
+            "width": 256,
+            "height": 256,
+            "frames": 17,
+            "fps": 16.0,
+            "audio": null
+          },
+          "pair_steps": {
+            "low": {
+              "steps": 5,
+              "base": false
+            },
+            "high": {
+              "steps": 3,
+              "base": false
+            }
+          }
+        }
+      ],
+      "final_samples": [
+        {
+          "path": "<run>\\samples\\final\\20261110-151407-800_42_.mp4"
+        }
+      ],
+      "progress": null
+    }
+  ],
+  "saved_state_validation": [
+    {
+      "run_id": "7468c51a32c24ab7b13cf7e057e7b1e0",
+      "states": [
+        {
+          "name": "h3-f8f174d506f9415c826b5c9508865e0e-state",
+          "valid": true,
+          "optimizer_step": 500,
+          "schedule_step": null,
+          "counts": null
+        },
+        {
+          "name": "h3-f8f174d506f9415c826b5c9508865e0e-step00000100-state",
+          "valid": true,
+          "optimizer_step": 100,
+          "schedule_step": null,
+          "counts": null
+        },
+        {
+          "name": "h3-f8f174d506f9415c826b5c9508865e0e-step00000200-state",
+          "valid": true,
+          "optimizer_step": 200,
+          "schedule_step": null,
+          "counts": null
+        },
+        {
+          "name": "h3-f8f174d506f9415c826b5c9508865e0e-step00000300-state",
+          "valid": true,
+          "optimizer_step": 300,
+          "schedule_step": null,
+          "counts": null
+        },
+        {
+          "name": "h3-f8f174d506f9415c826b5c9508865e0e-step00000400-state",
+          "valid": true,
+          "optimizer_step": 400,
+          "schedule_step": null,
+          "counts": null
+        }
+      ],
+      "tensor_payload_changed_after_step_100": true,
+      "frozen_commands_match_current_builder": true
+    },
+    {
+      "run_id": "7158e4a5a9e24c7dad9b2f9b544ef507",
+      "states": [
+        {
+          "name": "Paired schedule step 1",
+          "valid": true,
+          "optimizer_step": 1,
+          "schedule_step": 1,
+          "counts": {
+            "low": 1,
+            "high": 0
+          }
+        },
+        {
+          "name": "Paired schedule step 2",
+          "valid": true,
+          "optimizer_step": 2,
+          "schedule_step": 2,
+          "counts": {
+            "low": 2,
+            "high": 0
+          }
+        },
+        {
+          "name": "Paired schedule step 3",
+          "valid": true,
+          "optimizer_step": 3,
+          "schedule_step": 3,
+          "counts": {
+            "low": 3,
+            "high": 0
+          }
+        },
+        {
+          "name": "Paired schedule step 4",
+          "valid": true,
+          "optimizer_step": 4,
+          "schedule_step": 4,
+          "counts": {
+            "low": 3,
+            "high": 1
+          }
+        },
+        {
+          "name": "Paired schedule step 5",
+          "valid": true,
+          "optimizer_step": 5,
+          "schedule_step": 5,
+          "counts": {
+            "low": 3,
+            "high": 2
+          }
+        },
+        {
+          "name": "Paired schedule step 6",
+          "valid": true,
+          "optimizer_step": 6,
+          "schedule_step": 6,
+          "counts": {
+            "low": 3,
+            "high": 3
+          }
+        },
+        {
+          "name": "Paired schedule step 7",
+          "valid": true,
+          "optimizer_step": 7,
+          "schedule_step": 7,
+          "counts": {
+            "low": 4,
+            "high": 3
+          }
+        },
+        {
+          "name": "Paired schedule step 8",
+          "valid": true,
+          "optimizer_step": 8,
+          "schedule_step": 8,
+          "counts": {
+            "low": 5,
+            "high": 3
+          }
+        }
+      ],
+      "frozen_commands_match_current_builder": true
+    },
+    {
+      "run_id": "4a1e288f10504c3e8d4776b959f835de",
+      "frozen_commands_match_current_builder": true,
+      "states": [
+        {
+          "name": "wan-e56b2d1ca1454f05be7e869e6f8ee107-state",
+          "valid": true,
+          "optimizer_step": 500,
+          "schedule_step": null,
+          "counts": null
+        },
+        {
+          "name": "wan-e56b2d1ca1454f05be7e869e6f8ee107-step00000100-state",
+          "valid": true,
+          "optimizer_step": 100,
+          "schedule_step": null,
+          "counts": null
+        },
+        {
+          "name": "wan-e56b2d1ca1454f05be7e869e6f8ee107-step00000200-state",
+          "valid": true,
+          "optimizer_step": 200,
+          "schedule_step": null,
+          "counts": null
+        },
+        {
+          "name": "wan-e56b2d1ca1454f05be7e869e6f8ee107-step00000300-state",
+          "valid": true,
+          "optimizer_step": 300,
+          "schedule_step": null,
+          "counts": null
+        },
+        {
+          "name": "wan-e56b2d1ca1454f05be7e869e6f8ee107-step00000400-state",
+          "valid": true,
+          "optimizer_step": 400,
+          "schedule_step": null,
+          "counts": null
+        }
+      ],
+      "tensor_payload_changed_after_step_100": true
+    }
+  ],
+  "real_browser_boundary_check": {
+    "h3": {
+      "state": "completed",
+      "available_preview_steps": [100, 200, 300, 400, 500],
+      "actual_preview_playback": true,
+      "run_id": "7468c51a32c24ab7b13cf7e057e7b1e0"
+    },
+    "paired": {
+      "first_preview_step": 2,
+      "next_preview_step": 6,
+      "next_preview_absent_before_wait": true,
+      "first_preview_pair_steps": {
+        "low": 2,
+        "high": 0
+      },
+      "next_preview_pair_steps": {
+        "low": 3,
+        "high": 3
+      },
+      "actual_preview_playback": true,
+      "selection_and_playback_preserved": true,
+      "run_id": "7158e4a5a9e24c7dad9b2f9b544ef507"
+    },
+    "wan": {
+      "state": "completed",
+      "available_preview_steps": [100, 200, 300, 400, 500],
+      "actual_preview_playback": true,
+      "playback_preserved_after_refresh": true,
+      "run_id": "4a1e288f10504c3e8d4776b959f835de"
+    }
+  },
+  "clean_startup_check": {
+    "application_revision": "571486322865c7fb7955101d2d0c4bcf6809a0a8",
+    "prepared_jobs": 4,
+    "image_datasets": 2,
+    "steps": 500,
+    "preview_every": 100,
+    "http_startup": "passed",
+    "isolated_application_environment": true,
+    "tracked_tree_clean": true,
+    "temporary_checkout_removed": true
+  }
+}

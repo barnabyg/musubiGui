@@ -27,6 +27,7 @@ export type JobConfig = {
   save_every: number;
   save_state: boolean;
   sample_enabled: boolean;
+  preview_every: number;
   sample_prompt: string;
   sample_steps: number;
   seed: number;

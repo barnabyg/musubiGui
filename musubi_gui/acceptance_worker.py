@@ -33,6 +33,8 @@ def main(stage: str | None = None) -> None:
     parser.add_argument("--output_name", default="fixture")
     parser.add_argument("--max_train_steps", type=int, default=2)
     parser.add_argument("--save_every_n_steps", type=int)
+    parser.add_argument("--sample_every_n_steps", type=int)
+    parser.add_argument("--sample_prompts", type=Path)
     parser.add_argument("--save_state", action="store_true")
     parser.add_argument("--resume", type=Path)
     parser.add_argument("--save_path", type=Path)
@@ -127,6 +129,23 @@ def main(stage: str | None = None) -> None:
                 f"steps: {step}/{args.max_train_steps} loss=0.0 (synthetic optimizer_step={previous + step})",
                 flush=True,
             )
+            if args.sample_every_n_steps and step % args.sample_every_n_steps == 0:
+                if args.sample_prompts is None:
+                    parser.error("--sample_prompts is required for previews")
+                prompt = json.loads(args.sample_prompts.read_text(encoding="utf-8"))[0]
+                stem = f"{args.output_name}_{step:06d}_00_20261110000000_{prompt['seed']}"
+                destination = (
+                    args.output_dir / "sample" / (f"{stem}_000.png" if prompt["frame_count"] == 1 else f"{stem}.mp4")
+                )
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                if prompt["frame_count"] == 1:
+                    from PIL import Image
+
+                    Image.new("RGB", (prompt["width"], prompt["height"]), "red").save(destination)
+                else:
+                    sample = "sample.mp4" if args.task == "t2va" else "sample-wan.mp4"
+                    shutil.copyfile(Path.cwd() / sample, destination)
+                print(f"SYNTHETIC preview complete at step {step}", flush=True)
             # Like upstream, interval saves stamp their own metadata and include the last step.
             if args.save_every_n_steps and step % args.save_every_n_steps == 0:
                 name = f"{args.output_name}-step{step:08d}"

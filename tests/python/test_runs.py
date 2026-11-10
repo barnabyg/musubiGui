@@ -1,6 +1,7 @@
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -36,6 +37,16 @@ def plan(root: Path, name: str = "one", delay: float = 0.05) -> ExecutionPlan:
         stages=[Stage("latent_cache", [sys.executable, str(script)])],
         fingerprint=name,
     )
+
+
+def wait_for_training_worker(service: RunService, run_id: str, child_ready: Path | None = None) -> None:
+    deadline = time.monotonic() + 180
+    while time.monotonic() < deadline:
+        if "training" in service.logs(run_id) and (child_ready is None or child_ready.is_file()):
+            return
+        assert service.get(run_id)["status"] != "failed", service.get(run_id)
+        time.sleep(0.02)
+    raise AssertionError(service.get(run_id))
 
 
 def test_preparation_persists_logs_and_deduplicates_requests(tmp_path: Path) -> None:
@@ -274,6 +285,7 @@ def test_force_stop_requires_confirmation_and_releases_only_the_owned_worker(tmp
         wait_for(service, run["id"], "prepared")
         service.start(run["id"])
         wait_for(service, run["id"], "training")
+        wait_for_training_worker(service, run["id"])
         with pytest.raises(ValueError, match="confirm"):
             service.stop(run["id"], force=True)
         service.stop(run["id"], force=True, confirmed=True)
@@ -294,7 +306,8 @@ def test_graceful_stop_waits_for_descendants_still_exiting_after_the_launcher(tm
         # and its child (like the Python child behind a venv launcher) finishes a second later.
         ignore = "import signal;signal.signal(getattr(signal,'SIGBREAK',signal.SIGINT),signal.SIG_IGN)\n"
         child = (
-            ignore + "import pathlib,time\nwhile not pathlib.Path('release').exists(): time.sleep(.02)\ntime.sleep(1)\n"
+            ignore + "import pathlib,time\npathlib.Path('child-ready').write_text('ready',encoding='utf-8')\n"
+            "while not pathlib.Path('release').exists(): time.sleep(.02)\ntime.sleep(1)\n"
         )
         (work / "child.py").write_text(child, encoding="utf-8")
         (work / "launcher.py").write_text(
@@ -309,6 +322,7 @@ def test_graceful_stop_waits_for_descendants_still_exiting_after_the_launcher(tm
         wait_for(service, run["id"], "prepared")
         service.start(run["id"])
         wait_for(service, run["id"], "training")
+        wait_for_training_worker(service, run["id"], work / "child-ready")
         service.stop(run["id"])
         (work / "release").write_text("", encoding="utf-8")
         stopped = wait_for(service, run["id"], "stopped", device_released=True)

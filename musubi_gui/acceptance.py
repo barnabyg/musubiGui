@@ -134,7 +134,13 @@ def synthetic_checkout(root: Path, sample: Path) -> dict[str, str]:
 
 
 def prepare(
-    workspace: Path, mode: str, selected: Path | None, *, scan_library: bool = True, wan_paired: bool = False
+    workspace: Path,
+    mode: str,
+    selected: Path | None,
+    *,
+    scan_library: bool = True,
+    wan_paired: bool = False,
+    preview_images: bool = False,
 ) -> dict[str, Any]:
     workspace = workspace.resolve()
     if workspace.exists():
@@ -184,6 +190,19 @@ def prepare(
             )
             if family == "h3":
                 synthetic_audio(folder / "motion.wav", frames)
+        if preview_images:
+            from PIL import Image, ImageDraw
+
+            for family in families:
+                folder = datasets / f"{family}-images"
+                folder.mkdir()
+                for index in range(15):
+                    image = Image.new("RGB", (256, 256), "blue")
+                    ImageDraw.Draw(image).rectangle((index * 10, 80, index * 10 + 48, 128), fill="red")
+                    image.save(folder / f"image{index:02d}.png")
+                    (folder / f"image{index:02d}.txt").write_text(
+                        "A red square on a blue background. No sound.", encoding="utf-8"
+                    )
         sample = workspace / "sample.mp4"
         synthetic_video(sample, 124, audio=True)
         if mode == "fixture":
@@ -205,12 +224,22 @@ def prepare(
         save_settings(workspace / "state", settings)
         store, jobs = DatasetStore(workspace / "state"), JobStore(workspace / "state")
         for family in families:
-            dataset = store.register(f"{family.upper()} acceptance", str(datasets / family))
+            dataset = store.register(
+                f"{family.upper()} acceptance", str(datasets / (f"{family}-images" if preview_images else family))
+            )
             store.scan(dataset["id"])
             for number in [1, 2]:
                 config = smoke_config(family).model_copy(update={"save_state": True})
+                if preview_images:
+                    config = config.model_copy(update={"steps": 500, "preview_every": 100, "save_every": 100})
                 if wan_paired and family == "wan":
-                    config = config.model_copy(update={"recipe": "alternating", "steps": 4, "expert_interval": 1})
+                    config = config.model_copy(
+                        update={
+                            "recipe": "alternating",
+                            "steps": 500 if preview_images else 4,
+                            "expert_interval": 30 if preview_images else 1,
+                        }
+                    )
                 job = jobs.create(
                     JobDraft(
                         name=f"{family.upper()} acceptance {number}",
@@ -247,6 +276,11 @@ def main() -> None:
         help="Prepare four Wan steps: low, high, low, high, with state saving and a paired sample.",
     )
     parser.add_argument("--port", type=int, default=8767)
+    parser.add_argument(
+        "--preview-images",
+        action="store_true",
+        help="15 synthetic captioned images, 500 steps and previews every 100 steps.",
+    )
     args = parser.parse_args()
     if isinstance(sys.stdout, io.TextIOWrapper):
         sys.stdout.reconfigure(encoding="utf-8")
@@ -257,6 +291,7 @@ def main() -> None:
             args.settings,
             scan_library=not args.skip_library_scan,
             wan_paired=args.wan_paired,
+            preview_images=args.preview_images,
         )
     except (ValueError, OSError, subprocess.SubprocessError) as error:
         print(f"Acceptance preparation failed: {error}")

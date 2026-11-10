@@ -59,6 +59,9 @@ function grouped(outputs: Output[]) {
   )?.item;
   const preview =
     samples.find(
+      (item) => item.path.startsWith('samples/') && item.status === 'available',
+    ) ??
+    samples.find(
       (item) => item.kind === 'video' && item.status === 'available',
     ) ??
     samples.find(
@@ -191,6 +194,7 @@ function ComparisonSamples({
 // Keeps one list of a Run's files for the result at the top and the inventory below it.
 export function useRunOutputs(runId: string | undefined, runState: string) {
   const [result, setResult] = useState<OutputList | null>(null);
+  const [selection, setSelection] = useState<{ runId: string; id: string }>();
   const history = useRunHistory();
   const [failure, setFailure] = useState<{ runId?: string; message: string }>();
   const [busy, setBusy] = useState(false);
@@ -198,30 +202,44 @@ export function useRunOutputs(runId: string | undefined, runState: string) {
   useEffect(() => {
     if (!runId) return;
     let current = true;
-    const controller = new AbortController();
-    void read<OutputList>(
-      `/api/runs/${runId}/outputs`,
-      'GET',
-      undefined,
-      controller.signal,
-    )
-      .then((outputs) => {
-        if (!current) return;
-        setResult(outputs);
-        setFailure(undefined);
-      })
-      .catch((reason: Error) => {
-        if (current) setFailure({ runId, message: reason.message });
-      })
-      .finally(() => {
-        if (current) setBusy(false);
-      });
+    let controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const active = ['training', 'generating', 'stopping'].some((state) =>
+      runState.includes(state),
+    );
+    const poll = () => {
+      controller = new AbortController();
+      void read<OutputList>(
+        `/api/runs/${runId}/outputs`,
+        'GET',
+        undefined,
+        controller.signal,
+      )
+        .then((outputs) => {
+          if (!current) return;
+          setResult(outputs);
+          setFailure(undefined);
+        })
+        .catch((reason: Error) => {
+          if (current) setFailure({ runId, message: reason.message });
+        })
+        .finally(() => {
+          if (current) setBusy(false);
+          if (current && active) timer = setTimeout(poll, 5000);
+        });
+    };
+    poll();
     return () => {
       current = false;
+      clearTimeout(timer);
       controller.abort();
     };
   }, [runId, runState, refresh]);
   return {
+    selected: selection && selection.runId === runId ? selection.id : '',
+    select(id: string) {
+      if (runId) setSelection({ runId, id });
+    },
     result: result?.run_id === runId ? result : null,
     runs: history.runs ?? [],
     error: failure?.runId === runId ? failure?.message : '',
@@ -247,8 +265,10 @@ export function RunResult({ outputs }: { outputs: RunOutputs }) {
     samples,
     checkpoints,
     final: singleFinal,
-    preview,
+    preview: availablePreview,
   } = grouped(result.outputs);
+  const preview =
+    availablePreview?.id === outputs.selected ? undefined : availablePreview;
   const final = result.lora_pair ? undefined : singleFinal;
   // While a Run is working its files can legitimately be half-written.
   const settled = [
@@ -364,8 +384,14 @@ export function Outputs({
   runId: string;
   outputs: RunOutputs;
 }) {
-  const { result: currentResult, runs, error: loadError, reload } = outputs;
-  const [selected, setSelected] = useState('');
+  const {
+    result: currentResult,
+    runs,
+    error: loadError,
+    reload,
+    selected,
+    select,
+  } = outputs;
   const [other, setOther] = useState('');
   const [comparison, setComparison] = useState<Comparison | null>(null);
   const [compareError, setCompareError] = useState('');
@@ -378,7 +404,7 @@ export function Outputs({
     return (
       <button
         aria-pressed={item.id === selected}
-        onClick={() => setSelected(item.id)}
+        onClick={() => select(item.id)}
       >
         {item.name} · {item.status}
       </button>
@@ -468,9 +494,7 @@ export function Outputs({
                 {output.run_id.slice(0, 8)}
               </p>
               {output.error && <p className="error">{output.error}</p>}
-              {output.id !== groups.preview?.id && (
-                <MediaPreview output={output} />
-              )}
+              <MediaPreview output={output} />
               {output.file_url &&
                 !['missing', 'blocked', 'unreadable'].includes(
                   output.status,

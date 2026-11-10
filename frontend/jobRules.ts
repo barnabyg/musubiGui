@@ -80,6 +80,11 @@ export function fieldProblems(family: Family, config: RuleConfig) {
     problems.frame_sample = 'Enter 2 or more.';
   for (const key of whole)
     if (!Number.isInteger(config[key])) problems[key] = 'Enter a whole number.';
+  if (
+    !Number.isInteger(config.preview_every ?? 0) ||
+    ((config.preview_every ?? 0) as number) < 0
+  )
+    problems.preview_every = 'Enter zero (off) or a positive whole number.';
   return problems;
 }
 
@@ -104,6 +109,7 @@ const errorFields: [RegExp, string][] = [
   [/^Gradient accumulation:/, 'gradient_accumulation'],
   [/^Checkpoint interval:/, 'save_every'],
   [/^Sample steps:/, 'sample_steps'],
+  [/^Preview interval:/, 'preview_every'],
   [/^Learning rate:/, 'learning_rate'],
   [/^Memory:.*FP8/, 'fp8_scaled'],
   [/^Memory:.*H2D/, 'block_swap_h2d_only'],

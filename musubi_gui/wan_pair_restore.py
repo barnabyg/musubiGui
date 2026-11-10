@@ -46,7 +46,17 @@ def restored_pair(original: dict[str, Any], state: dict[str, Any], steps: int) -
                 set_argument(args, "--save_path", str(directory / "samples"))
             templates.append(Stage(name, args))
     models = {**original["settings"]["models"], **original["job"]["config"].get("components", {})}
-    stages = paired_stages(templates, models, steps, state["interval"], start=state["schedule_step"], sources=sources)
+    config = original["job"]["config"]
+    stages = paired_stages(
+        templates,
+        models,
+        steps,
+        state["interval"],
+        start=state["schedule_step"],
+        sources=sources,
+        preview_every=config.get("preview_every", 0),
+        final_sample=config.get("sample_enabled", True),
+    )
     directory.mkdir()
     (directory / "checkpoints").mkdir()
     for source_path, target, expected_hash in copies:

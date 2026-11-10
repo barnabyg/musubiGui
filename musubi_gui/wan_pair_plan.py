@@ -27,6 +27,8 @@ def paired_stages(
     *,
     start: int = 0,
     sources: dict[str, Any] | None = None,
+    preview_every: int = 0,
+    final_sample: bool = True,
 ) -> list[Stage]:
     """Each phase has its own output name; no later phase can overwrite an earlier state."""
     template = next(stage for stage in stages if stage.name == "train")
@@ -35,7 +37,29 @@ def paired_stages(
     states = copy.deepcopy(sources or {})
     result = [copy.deepcopy(stage) for stage in stages if stage.name not in {"train", "generate"}]
     checkpoints: dict[str, dict[str, Any]] = {}
-    for phase in alternating_phases(steps, interval, start=start):
+    generation = next((stage for stage in stages if stage.name == "generate"), None)
+
+    def sample(step: int | None) -> None:
+        if generation is None:
+            return
+        generated = copy.deepcopy(generation)
+        generated.preview_step = step
+        for expert, flag in [("low", "--lora_weight"), ("high", "--lora_weight_high_noise")]:
+            selected = checkpoints.get(expert) or (sources or {}).get(expert, {}).get("checkpoint")
+            if not selected:
+                if step is None:
+                    raise ValueError("Sampling requires a trained checkpoint for both experts.")
+                if flag in generated.args:
+                    index = generated.args.index(flag)
+                    del generated.args[index : index + 2]
+            else:
+                set_argument(generated.args, flag, selected["path"])
+        if preview_every:
+            destination = output.parent / "samples" / (f"step{step:08d}" if step is not None else "final")
+            set_argument(generated.args, "--save_path", str(destination))
+        result.append(generated)
+
+    for phase in alternating_phases(steps, interval, start=start, preview_every=preview_every):
         args = list(template.args)
         name = f"{stem}-{phase.expert}-phase{phase.start:08d}"
         for flag, value in [
@@ -61,13 +85,9 @@ def paired_stages(
         checkpoints[phase.expert] = {"path": checkpoint, "steps": before + phase.steps}
         states[phase.expert] = {"path": str(output / f"{name}-state")}
         result.append(Stage("train", args, {**phase.record(), "interval": interval, "checkpoint": checkpoint}))
-    for stage in stages:
-        if stage.name == "generate":
-            generated = copy.deepcopy(stage)
-            for expert, flag in [("low", "--lora_weight"), ("high", "--lora_weight_high_noise")]:
-                selected = checkpoints.get(expert) or (sources or {}).get(expert, {}).get("checkpoint")
-                if not selected:
-                    raise ValueError("Sampling requires a trained checkpoint for both experts.")
-                set_argument(generated.args, flag, selected["path"])
-            result.append(generated)
+        end = phase.start + phase.steps
+        if preview_every and end % preview_every == 0:
+            sample(end)
+    if final_sample:
+        sample(None)
     return result

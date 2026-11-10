@@ -32,18 +32,26 @@ def expert_steps(step: int, interval: int) -> dict[str, int]:
     }
 
 
-def alternating_phases(steps: int, interval: int, *, start: int = 0) -> list[ExpertPhase]:
+def alternating_phases(steps: int, interval: int, *, start: int = 0, preview_every: int = 0) -> list[ExpertPhase]:
     """Plan additional updates, continuing any partially completed phase first."""
     if steps < 1:
         raise ValueError("Choose a positive number of optimizer steps.")
+    if preview_every < 0:
+        raise ValueError("Preview interval: enter zero (off) or a positive number of optimizer steps.")
     expert_steps(start, interval)
     if (start + steps - 1) // interval - start // interval + 1 > MAX_PHASES:
         raise ValueError(f"Expert interval: increase it to keep the Run within {MAX_PHASES} phases.")
-    phases = []
+    phases: list[ExpertPhase] = []
     position = start
     while position < start + steps:
+        if len(phases) >= MAX_PHASES:
+            raise ValueError(
+                f"Preview interval: increase it or the expert interval to stay within {MAX_PHASES} phases."
+            )
         counts = expert_steps(position, interval)
         phase_steps = min(interval - position % interval, start + steps - position)
+        if preview_every:
+            phase_steps = min(phase_steps, preview_every - position % preview_every)
         phases.append(
             ExpertPhase(
                 "low" if (position // interval) % 2 == 0 else "high",

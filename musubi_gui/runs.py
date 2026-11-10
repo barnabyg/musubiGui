@@ -260,7 +260,7 @@ class RunService:
         directory.mkdir(parents=True)
         # An H3 Run has one metadata file per video section.
         metadata = sorted(file.name for file in Path(previous["directory"]).glob("dataset*.jsonl"))
-        native_names = ["dataset.toml", *metadata, "samples.txt"]
+        native_names = ["dataset.toml", *metadata, "samples.txt", "previews.json"]
         old_native = {str(Path(previous["directory"]) / name) for name in native_names}
         input_files = {path: value for path, value in previous.get("input_files", {}).items() if path not in old_native}
         for name in native_names:
@@ -289,7 +289,7 @@ class RunService:
             training = copy.deepcopy(stage.get("training"))
             if training:
                 training["checkpoint"] = training["checkpoint"].replace(previous["directory"], str(directory))
-            stages.append(Stage(stage["name"], args, training))
+            stages.append(Stage(stage["name"], args, training, stage.get("preview_step")))
         plan = ExecutionPlan(
             copy.deepcopy(previous["job"]),
             Settings.model_validate(previous["settings"]),
@@ -611,6 +611,8 @@ class RunService:
                         pair = sampling_pair(fresh_run, stage)
                         self.store.update(run_id, lambda r: r.update(sample_pair=pair))
                     self.store.update(run_id, lambda r: r.update(status="generating"))
+                elif not preparing:
+                    self.store.update(run_id, lambda r: r.update(status="training"))
                 self.store.update(run_id, lambda r: r["stages"][index].update(status="running", started=utc_now()))
                 settings = Settings.model_validate(run["settings"])
                 if job_object:
@@ -736,6 +738,9 @@ class RunService:
                         raise ValueError(f"{stage['name']} returned success but produced no complete cache artifacts.")
                     self.store.update(run_id, lambda r: r["stages"][index].update(artifacts=artifacts))
                 elif stage["name"] == "train":
+                    from musubi_gui.preview import validate_previews
+
+                    validate_previews(stage["args"], run["job"]["family"])
                     removed = self._remove_final_duplicates(run, stage)
                     checkpoints = list((Path(run["directory"]) / "checkpoints").glob("*.safetensors"))
                     if not any(file.stat().st_size > 0 for file in checkpoints):
@@ -756,7 +761,8 @@ class RunService:
 
                         self.store.update(run_id, save_expert)
                 elif stage["name"] == "generate":
-                    samples = list((Path(run["directory"]) / "samples").rglob("*"))
+                    destination = Path(stage["args"][stage["args"].index("--save_path") + 1])
+                    samples = list(destination.rglob("*")) if destination.is_dir() else [destination]
                     media_files = [
                         file
                         for file in samples
@@ -776,9 +782,21 @@ class RunService:
                                 "metadata": metadata,
                                 "sha256": digest_file(file),
                                 **({"lora_pair": pair} if pair else {}),
+                                **(
+                                    {"preview_step": stage["preview_step"]}
+                                    if stage.get("preview_step") is not None
+                                    else {}
+                                ),
                             }
                         )
-                    self.store.update(run_id, lambda r: r.update(samples=inspected))
+                    paths = {sample["path"] for sample in inspected}
+                    self.store.update(
+                        run_id,
+                        lambda r: r.update(
+                            samples=[sample for sample in r.get("samples", []) if sample["path"] not in paths]
+                            + inspected
+                        ),
+                    )
 
             def finish(record: dict[str, Any]) -> None:
                 record.update(

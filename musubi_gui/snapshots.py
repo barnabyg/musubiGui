@@ -298,6 +298,12 @@ def materialize_snapshot(inputs: SnapshotIdentity) -> dict[str, Any]:
                 files[str(section.jsonl)] = digest_file(section.jsonl)
         native.write_text(native_text, encoding="utf-8")
         files[str(native)] = digest_file(native)
+        if job.config.preview_every:
+            from musubi_gui.preview import preview_prompt
+
+            prompts = directory / "previews.json"
+            atomic_json(prompts, preview_prompt(job))
+            files[str(prompts)] = digest_file(prompts)
         snapshot_record.update(status="materialized", input_files=files)
         atomic_json(directory / "snapshot.json", snapshot_record)
         return {

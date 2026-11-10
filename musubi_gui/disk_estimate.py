@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from musubi_gui.settings import Settings
-from musubi_gui.wan_pair import PAIRED_RECIPE
+from musubi_gui.wan_pair import PAIRED_RECIPE, alternating_phases
 
 if TYPE_CHECKING:
     from musubi_gui.jobs import JobConfig
@@ -66,15 +66,28 @@ def estimate_disk(family: str, config: "JobConfig", items: list[dict[str, Any]],
         saves = whole_phases * (config.expert_interval // config.save_every + 1)
         if remaining:
             saves += remaining // config.save_every + 1
+        if config.preview_every > 0:
+            try:
+                phases = alternating_phases(config.steps, config.expert_interval, preview_every=config.preview_every)
+            except ValueError:
+                pass  # Invalid, over-limit schedules are refused by review; retain the base estimate.
+            else:
+                saves = sum(phase.steps // config.save_every + 1 for phase in phases)
     offset, per_rank = CHECKPOINT_BYTES[family]
     checkpoint = offset + per_rank * max(0, config.rank)
     checkpoints = saves * checkpoint
     states = int(checkpoints * STATE_TO_CHECKPOINT) if config.save_state else 0
-    samples = (
-        int(max(0, config.width) * max(0, config.height) * max(0, config.frames) * SAMPLE_BYTES_PER_PIXEL_FRAME)
-        if config.sample_enabled
-        else 0
-    )
+    pixels = max(0, config.width) * max(0, config.height)
+    video_sample = int(pixels * max(0, config.frames) * SAMPLE_BYTES_PER_PIXEL_FRAME)
+    samples = video_sample if config.sample_enabled else 0
+    if config.preview_every > 0:
+        # Native one-frame Wan sampling writes lossless PNGs, not compressed video.
+        preview_bytes = (
+            4 * pixels + 4096
+            if family == "wan" and config.recipe != PAIRED_RECIPE and config.frames == 1
+            else video_sample
+        )
+        samples += max(0, config.steps) // config.preview_every * preview_bytes
     return {
         "media_snapshot": media_bytes,
         "caches": caches,
