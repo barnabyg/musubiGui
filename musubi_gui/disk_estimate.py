@@ -72,9 +72,10 @@ def estimate_disk(family: str, config: "JobConfig", items: list[dict[str, Any]],
     states = int(checkpoints * STATE_TO_CHECKPOINT) if config.save_state else 0
     samples = (
         int(max(0, config.width) * max(0, config.height) * max(0, config.frames) * SAMPLE_BYTES_PER_PIXEL_FRAME)
-        if config.sample_enabled
+        if config.sample_enabled or config.preview_every
         else 0
     )
+    samples *= int(config.sample_enabled) + (config.steps // config.preview_every if config.preview_every > 0 else 0)
     return {
         "media_snapshot": media_bytes,
         "caches": caches,

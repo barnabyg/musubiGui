@@ -59,6 +59,9 @@ function grouped(outputs: Output[]) {
   )?.item;
   const preview =
     samples.find(
+      (item) => item.path.startsWith('samples/') && item.status === 'available',
+    ) ??
+    samples.find(
       (item) => item.kind === 'video' && item.status === 'available',
     ) ??
     samples.find(
@@ -198,26 +201,36 @@ export function useRunOutputs(runId: string | undefined, runState: string) {
   useEffect(() => {
     if (!runId) return;
     let current = true;
-    const controller = new AbortController();
-    void read<OutputList>(
-      `/api/runs/${runId}/outputs`,
-      'GET',
-      undefined,
-      controller.signal,
-    )
-      .then((outputs) => {
-        if (!current) return;
-        setResult(outputs);
-        setFailure(undefined);
-      })
-      .catch((reason: Error) => {
-        if (current) setFailure({ runId, message: reason.message });
-      })
-      .finally(() => {
-        if (current) setBusy(false);
-      });
+    let controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const active = ['training', 'generating', 'stopping'].some((state) =>
+      runState.includes(state),
+    );
+    const poll = () => {
+      controller = new AbortController();
+      void read<OutputList>(
+        `/api/runs/${runId}/outputs`,
+        'GET',
+        undefined,
+        controller.signal,
+      )
+        .then((outputs) => {
+          if (!current) return;
+          setResult(outputs);
+          setFailure(undefined);
+        })
+        .catch((reason: Error) => {
+          if (current) setFailure({ runId, message: reason.message });
+        })
+        .finally(() => {
+          if (current) setBusy(false);
+          if (current && active) timer = setTimeout(poll, 5000);
+        });
+    };
+    poll();
     return () => {
       current = false;
+      clearTimeout(timer);
       controller.abort();
     };
   }, [runId, runState, refresh]);

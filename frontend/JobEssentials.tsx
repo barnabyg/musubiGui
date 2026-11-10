@@ -26,10 +26,16 @@ export function JobEssentials({
       field: 'steps',
       message: 'Enter a valid training step count',
     });
-  if (job.config.sample_enabled && !job.config.sample_prompt.trim())
+  if (
+    (job.config.sample_enabled || job.config.preview_every > 0) &&
+    !job.config.sample_prompt.trim()
+  )
     choices.push({
       field: 'sample_prompt',
-      message: 'Enter a sample prompt or turn off the final sample',
+      message:
+        job.config.preview_every > 0
+          ? 'Enter a sample prompt or turn off sampling and previews'
+          : 'Enter a sample prompt or turn off the final sample',
     });
   return (
     <section className="panel" id="job-section-essentials" tabIndex={-1}>
@@ -73,7 +79,18 @@ export function JobEssentials({
           : undefined,
       )}
       {fields.toggle('Generate a final sample', 'sample_enabled')}
-      {job.config.sample_enabled && (
+      {fields.number(
+        'Preview every N steps',
+        'preview_every',
+        '0 turns off in-run previews. Counts optimizer updates. Previews pause training while they render.',
+      )}
+      {job.config.preview_every > 0 && job.family === 'wan' && (
+        <p className="hint">
+          In-run Wan previews use the low-noise expert only. The final sample
+          uses both experts. Alternating Wan previews are not yet supported.
+        </p>
+      )}
+      {(job.config.sample_enabled || job.config.preview_every > 0) && (
         <label className="field">
           Sample prompt
           <textarea

@@ -134,6 +134,54 @@ only for files of the same size.
 
 ## Configuration review
 
+### Previews during training
+
+Set **Preview every N steps** in Training & sample. Zero (the default for new and
+existing jobs) disables previews. The interval counts optimizer updates after gradient
+accumulation, independently of checkpoint saving. Previews share the sample prompt,
+seed, inference steps and geometry. The final sample checkbox is independent: previews
+can run with final sampling off. Review requires a prompt for either choice.
+
+The pinned trainer pauses training for native inference in the same process, caches
+sample text before loading the training model, keeps VAEs on CPU between previews,
+and switches block swapping to inference and back. It restores Torch RNG state and
+retains the optimizer, scheduler and current dataset traversal. It does not restart or
+reshuffle training at each preview. Sampling and VAE decoding add time and GPU memory;
+the 24 GB capacity of this combination still needs hardware qualification (#129).
+
+H3 uses native joint audio/video sampling. Wan previews use only the trained low-noise
+expert throughout inference; they are diagnostic samples and differ from the final
+two-expert video. **Alternating Wan periodic previews are blocked in review** until
+full paired sampling is implemented (#128). Keep its interval at zero meanwhile.
+These are limits of the current implementation, not claims of paired-preview support.
+
+Completed previews appear automatically on the active Run within about five seconds
+plus file inspection time. Run outputs labels their segment step and model scope; select
+a preview there to play it. New arrivals preserve the selected preview and playback.
+Restore starts a new segment whose preview counter begins at zero, matching the pinned
+trainer's reset counter. Frozen prompt JSON belongs to the Run and cannot be changed
+by editing its Job. Retry copies and seals that input like the dataset configuration.
+
+From `C:/docs/git/musubiGui`, in PowerShell 7, this command prepares and launches
+an isolated 15-image, 500-step test with previews every 100 steps:
+
+```powershell
+.\acceptance.cmd --workspace ".cache/preview-images-$([guid]::NewGuid().ToString('N'))" --preview-images
+```
+
+Open WAN acceptance 1 or H3 acceptance 1 and choose Prepare and start. Expect previews
+at 100, 200, 300, 400 and 500, continuing progress after each, then a final LoRA and sample.
+Select the first preview while training continues and confirm it keeps playing as later
+previews appear. Try stopping a second Run; completed previews stay available. This
+default mode uses synthetic CPU workers and proves orchestration only.
+
+For a real GPU trial, add `--mode gpu --settings .state/settings.json` to that command.
+Prerequisites are the pinned musubi-tuner installation, configured compatible models,
+the target RTX 3090/96 GB host, and enough free disk for model caches and checkpoints.
+The 15 generated images establish execution and memory use, not useful learning.
+Record peak VRAM/RAM and preview overhead under #129; start with a short Run to establish
+capacity before running all 500 steps. Installed training packages are left untouched.
+
 Review configuration scrolls to its result, which opens with pass or fail, the error
 count, the included item count and whether the disk has room. Errors and warnings
 follow. The disk breakdown is collapsed, and Advanced holds the resolved component/output
@@ -179,8 +227,8 @@ some examples before others are seen; this is not equivalent to an uninterrupted
 dataset traversal. Existing saved low-noise jobs keep their original behaviour.
 
 Final sampling loads the trained low and high LoRAs into their respective experts,
-with both checkpoint identities and step counts recorded. The GUI currently offers
-a final sample only; this feature does not add periodic sampling.
+with both checkpoint identities and step counts recorded. Alternating Runs currently
+offer a final paired sample only; see [in-run preview limits](#previews-during-training).
 
 From the repository root in PowerShell 7, this command prepares and launches an isolated
 four-step CPU demonstration at `http://127.0.0.1:8767`:
@@ -294,7 +342,8 @@ and stay quick.
 
 Changing capacity controls requires capacity validation on the
 [target hardware](../README.md#target-hardware). Draft validation is not proof of successful GPU execution. Sampling runs
-after training and can be disabled; no checkpoint-on-stop guarantee is made. Saving
+after training by default, with opt-in in-run previews as described above, and can be disabled;
+no checkpoint-on-stop guarantee is made. Saving
 optimizer/training state is distinct from saving LoRA weights.
 
 ## H3 jobs

@@ -260,7 +260,7 @@ class RunService:
         directory.mkdir(parents=True)
         # An H3 Run has one metadata file per video section.
         metadata = sorted(file.name for file in Path(previous["directory"]).glob("dataset*.jsonl"))
-        native_names = ["dataset.toml", *metadata, "samples.txt"]
+        native_names = ["dataset.toml", *metadata, "samples.txt", "previews.json"]
         old_native = {str(Path(previous["directory"]) / name) for name in native_names}
         input_files = {path: value for path, value in previous.get("input_files", {}).items() if path not in old_native}
         for name in native_names:
@@ -736,6 +736,9 @@ class RunService:
                         raise ValueError(f"{stage['name']} returned success but produced no complete cache artifacts.")
                     self.store.update(run_id, lambda r: r["stages"][index].update(artifacts=artifacts))
                 elif stage["name"] == "train":
+                    from musubi_gui.preview import validate_previews
+
+                    validate_previews(stage["args"], run["job"]["family"])
                     removed = self._remove_final_duplicates(run, stage)
                     checkpoints = list((Path(run["directory"]) / "checkpoints").glob("*.safetensors"))
                     if not any(file.stat().st_size > 0 for file in checkpoints):

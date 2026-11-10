@@ -13,6 +13,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
 from musubi_gui.media_probe import inspect
+from musubi_gui.preview import preview_step
 from musubi_gui.redaction import redact
 from musubi_gui.run_deletion import output_index_file
 from musubi_gui.runs import RunService
@@ -199,6 +200,17 @@ class OutputBrowser:
                         raise ValueError("Output is empty; its producer may still be writing it.")
                     if entry.get("stamp") != stamp or entry.get("status") != "available":
                         metadata = checkpoint_metadata(file) if kind == "checkpoint" else inspect(file)
+                        if file.parent == directory / "checkpoints" / "sample" and kind != "checkpoint":
+                            step = preview_step(file)
+                            if step is not None:
+                                metadata["preview"] = {
+                                    "step": step,
+                                    "scope": "low-noise expert only" if run["job"]["family"] == "wan" else "H3",
+                                    "prompt": run["job"]["config"].get("sample_prompt", ""),
+                                    "seed": run["job"]["config"].get("seed"),
+                                    "counter": "segment optimizer updates",
+                                }
+                                entry["name"] = f"Step {step} preview · {metadata['preview']['scope']} · {file.name}"
                         entry.update(metadata=_scrub(metadata), stamp=stamp)
                         if kind == "video" and run["job"].get("family") == "h3" and not metadata.get("audio"):
                             raise ValueError(

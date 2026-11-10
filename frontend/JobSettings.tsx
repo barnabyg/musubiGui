@@ -336,7 +336,9 @@ export function JobControls({
           'save_state',
           'A LoRA checkpoint alone is not resumable optimizer state.',
         )}
-        {(job.config.sample_enabled || problems.sample_steps) &&
+        {(job.config.sample_enabled ||
+          job.config.preview_every > 0 ||
+          problems.sample_steps) &&
           number('Sample inference steps', 'sample_steps')}
       </section>
     </>

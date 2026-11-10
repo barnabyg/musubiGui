@@ -85,6 +85,7 @@ class JobConfig(BaseModel):
     save_every: int = 1
     save_state: bool = False
     sample_enabled: bool = True
+    preview_every: int = 0
     sample_prompt: str = CAPTION
     sample_steps: int = 4
     seed: int = 42
@@ -252,6 +253,7 @@ SMOKE_CONTROLS = (
     "save_every",
     "save_state",
     "sample_enabled",
+    "preview_every",
     "sample_prompt",
     "sample_steps",
 )
@@ -321,6 +323,7 @@ def conversion_draft(job: Job, family: Literal["wan", "h3"]) -> JobDraft:
             "save_every",
             "save_state",
             "sample_enabled",
+            "preview_every",
             "sample_prompt",
             "sample_steps",
             "seed",
@@ -654,8 +657,14 @@ def configuration_errors(job: Job) -> list[str]:
         errors.append(
             "Memory: inactive-DiT offload is outside this single-expert recipe and conflicts with block swapping."
         )
-    if config.sample_enabled and not config.sample_prompt.strip():
-        errors.append("Sampling: enter a prompt or disable the final sample.")
+    if config.preview_every < 0:
+        errors.append("Preview interval: enter zero (off) or a positive number of optimizer steps.")
+    if config.preview_every and config.recipe == PAIRED_RECIPE:
+        errors.append(
+            "Preview interval: alternating Wan needs paired previews, which are not yet supported. Set the interval to zero."
+        )
+    if (config.sample_enabled or config.preview_every) and not config.sample_prompt.strip():
+        errors.append("Sampling: enter a prompt or turn off both final sampling and in-run previews.")
     if any(key not in allowed_components for key in config.components):
         errors.append("Components: only the four supported component keys for the selected model are accepted.")
     return errors
@@ -693,6 +702,10 @@ def build_stages(job: Job, settings: Settings, run: Path, cache: Path, kinds: se
                 _set_argument(args, flag, str(value))
             if config.save_state:
                 args.extend(["--save_state", "--save_state_on_train_end"])
+            if config.preview_every:
+                from musubi_gui.preview import preview_arguments
+
+                args.extend(preview_arguments(job, settings, run))
         if stage.name == "generate":
             _set_argument(args, "--prompt", config.sample_prompt)
             _set_argument(args, "--infer_steps", str(config.sample_steps))
@@ -922,6 +935,14 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
             f"Training steps: {job.config.steps} steps can check that training runs, but expect no visible change "
             f"in samples below about {LOW_STEPS_WARNING} steps."
         )
+    if job.config.preview_every:
+        warnings.append(
+            "In-run previews pause training for inference and decoding, retain the optimizer and dataset position, and need separate GPU capacity qualification. Text encoding happens before the training model loads; VAEs are kept on CPU between previews."
+        )
+        if job.family == "wan":
+            warnings.append(
+                "Wan in-run previews use only the trained low-noise expert across all sampling timesteps; they are diagnostic previews and differ from the final two-expert sample."
+            )
     if job.family == "wan" and job.config.recipe == PAIRED_RECIPE:
         warnings.append(
             "Alternating experts: native GPU qualification covers 256×256, 17 frames, rank 8 and N=1. Useful learning and production-size paired capacity remain unqualified."
