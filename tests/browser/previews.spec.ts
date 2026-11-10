@@ -40,6 +40,15 @@ test('paired Wan previews show total steps and their own expert counts', async (
     });
     await expect(first).toBeVisible({ timeout: 240_000 });
     await first.click();
+    const playing = page.getByLabel('Output video', { exact: true });
+    const firstSource = await playing.getAttribute('src');
+    await playing.evaluate(async (element) => {
+      element.setAttribute('data-preview-kept', 'yes');
+      const media = element as HTMLVideoElement;
+      media.muted = true;
+      media.loop = true;
+      await media.play();
+    });
     await expect(
       page.getByRole('button', {
         name: /^Step 12 preview · paired Wan · low 7 \/ high 5 trained steps.*available$/,
@@ -49,6 +58,13 @@ test('paired Wan previews show total steps and their own expert counts', async (
     await expect(
       page.getByText('State: Completed', { exact: true }),
     ).toBeVisible({ timeout: 240_000 });
+    const retained = page.locator(`video[src="${firstSource}"]`);
+    await expect(retained).toHaveAttribute('data-preview-kept', 'yes');
+    await expect
+      .poll(() =>
+        retained.evaluate((element) => !(element as HTMLVideoElement).paused),
+      )
+      .toBe(true);
     await expect(
       page.getByRole('button', {
         name: /^Step 24 preview · paired Wan · low 14 \/ high 10 trained steps.*available$/,
