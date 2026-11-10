@@ -187,7 +187,7 @@ an isolated 15-image, 500-step test with previews every 100 steps:
 Open WAN acceptance 1 or H3 acceptance 1 and choose Prepare and start. Expect previews
 at 100, 200, 300, 400 and 500, continuing progress after each, then a final LoRA and sample.
 Select the first preview while training continues and confirm it keeps playing as later
-previews appear. Try stopping a second Run; completed previews stay available. This
+previews and the final sample appear. Try stopping a second Run; completed previews stay available. This
 default mode uses synthetic CPU workers and proves orchestration only.
 
 For a real GPU trial, add `--mode gpu --settings .state/settings.json` to that command.
@@ -198,6 +198,11 @@ Record peak VRAM/RAM and preview overhead under #129; start with a short Run to 
 capacity before running all 500 steps. Installed training packages are left untouched.
 Add `--wan-paired` to prepare the same 500-step Wan test with alternating experts,
 switching every 30 updates and generating paired previews every 100 total updates.
+
+The [GPU evidence](reference/evidence/in-run-previews.json) records completed 500-step
+native H3 and low-noise Wan image trials and a short paired Wan trial. These small
+recipes establish execution and measured capacity; larger settings and useful learning
+remain unqualified.
 
 Review configuration scrolls to its result, which opens with pass or fail, the error
 count, the included item count and whether the disk has room. Errors and warnings

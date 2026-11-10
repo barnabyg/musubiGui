@@ -19,7 +19,9 @@ export type RunRecord = {
   stages: { name: string; status: string }[];
 };
 
-export async function runWorkspace(options: { freeBytes?: number } = {}) {
+export async function runWorkspace(
+  options: { freeBytes?: number; previewImages?: boolean } = {},
+) {
   const parent = await mkdtemp(path.join(tmpdir(), 'musubi-runs-'));
   const fixture = path.join(parent, 'fixture');
   await execute(python, [
@@ -29,6 +31,7 @@ export async function runWorkspace(options: { freeBytes?: number } = {}) {
     fixture,
     '--prepare-only',
     '--skip-library-scan',
+    ...(options.previewImages ? ['--preview-images'] : []),
   ]);
   const manifest = JSON.parse(
     await readFile(path.join(fixture, 'acceptance.json'), 'utf8'),
