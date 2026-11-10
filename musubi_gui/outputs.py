@@ -210,7 +210,7 @@ class OutputBrowser:
                                     "seed": run["job"]["config"].get("seed"),
                                     "counter": "segment optimizer updates",
                                 }
-                                entry["name"] = f"Step {step} preview · {metadata['preview']['scope']} · {file.name}"
+                                entry["name"] = f"Step {step} preview · {metadata['preview']['scope']}"
                         entry.update(metadata=_scrub(metadata), stamp=stamp)
                         if kind == "video" and run["job"].get("family") == "h3" and not metadata.get("audio"):
                             raise ValueError(
@@ -229,7 +229,7 @@ class OutputBrowser:
                             "scope": scope,
                             "counter": "total schedule optimizer updates",
                         }
-                        entry["name"] = f"Step {step} preview · {scope} · {file.name}"
+                        entry["name"] = f"Step {step} preview · {scope}"
                     if kind != "checkpoint" and recorded_sample and recorded_sample.get("lora_pair"):
                         if recorded_sample.get("sha256") and digest_file(file) != recorded_sample["sha256"]:
                             entry["metadata"].pop("lora_pair", None)
