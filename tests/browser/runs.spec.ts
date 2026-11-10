@@ -296,6 +296,7 @@ test('Prepare and start keeps going with the tab closed, and the tab title signa
   page,
 }) => {
   const app = await runWorkspace();
+  let held = false;
   try {
     const [first, second] = app.manifest.jobs.filter(
       (item) => item.family === 'wan',
@@ -326,6 +327,10 @@ test('Prepare and start keeps going with the tab closed, and the tab title signa
     await expect(page).not.toHaveTitle(/Ready/);
 
     await openJob(second.name);
+    // Keep preparation queued until the tab closes; a fast fixture can otherwise finish
+    // before the browser ever observes the transient waiting state.
+    await app.leaseGpu('acquire');
+    held = true;
     await page
       .getByRole('button', { name: 'Prepare and start', exact: true })
       .click();
@@ -333,6 +338,8 @@ test('Prepare and start keeps going with the tab closed, and the tab title signa
       page.getByText('State: Waiting to prepare', { exact: true }),
     ).toBeVisible();
     await page.close();
+    await app.leaseGpu('release');
+    held = false;
     await expect
       .poll(
         async () =>
@@ -363,6 +370,7 @@ test('Prepare and start keeps going with the tab closed, and the tab title signa
       'pending',
     );
   } finally {
+    if (held) await app.leaseGpu('release');
     await app.close();
   }
 });
