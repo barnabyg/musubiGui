@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 from helpers import acceptance_workspace, wait_for
 
+from musubi_gui.disk_estimate import estimate_disk
 from musubi_gui.jobs import JobConfig, JobDraft, JobStore, configuration_errors
 from musubi_gui.outputs import OutputBrowser
 from musubi_gui.preview import validate_previews
@@ -11,8 +12,10 @@ from musubi_gui.runs import RunService
 from musubi_gui.snapshots import verify_inputs
 
 
-@pytest.mark.parametrize("family", ["wan", "h3"])
-def test_native_previews_are_frozen_discovered_and_do_not_require_final_sampling(tmp_path: Path, family: str) -> None:
+@pytest.mark.parametrize(("family", "frames"), [("wan", 17), ("wan", 1), ("h3", 124)])
+def test_native_previews_are_frozen_discovered_and_do_not_require_final_sampling(
+    tmp_path: Path, family: str, frames: int
+) -> None:
     fixture = acceptance_workspace(tmp_path)
     root = Path(fixture["state"])
     jobs = JobStore(root)
@@ -20,6 +23,7 @@ def test_native_previews_are_frozen_discovered_and_do_not_require_final_sampling
     config = job.config.model_copy(
         update={
             "steps": 6,
+            "frames": frames,
             "preview_every": 2,
             "sample_enabled": False,
             "sample_prompt": "First line\nSecond --w 999 # literal prompt",
@@ -42,6 +46,7 @@ def test_native_previews_are_frozen_discovered_and_do_not_require_final_sampling
         previews = [output for output in outputs if "preview" in output.get("metadata", {})]
         assert [output["metadata"]["preview"]["step"] for output in previews] == [2, 4, 6]
         assert all(output["status"] == "available" for output in previews)
+        assert all(output["kind"] == ("image" if frames == 1 else "video") for output in previews)
         assert completed["checkpoints"]
         assert all(output["metadata"]["preview"]["prompt"] == config.sample_prompt for output in previews)
         last = Path(completed["directory"]) / previews[-1]["path"]
@@ -96,3 +101,9 @@ def test_retry_owns_a_separate_sealed_prompt_file(tmp_path: Path) -> None:
         verify_inputs(retried)
     finally:
         service.close()
+
+
+def test_one_frame_preview_budget_covers_uncompressed_rgb_images() -> None:
+    config = JobConfig(frames=1, steps=500, preview_every=100, sample_enabled=False)
+    estimate = estimate_disk("wan", config, [], media_bytes=0)
+    assert estimate["samples"] >= 5 * config.width * config.height * 3

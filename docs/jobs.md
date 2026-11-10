@@ -137,7 +137,8 @@ only for files of the same size.
 ### Previews during training
 
 Set **Preview every N steps** in Training & sample. Zero (the default for new and
-existing jobs) disables previews. The interval counts optimizer updates after gradient
+existing jobs) disables previews. Exports store this as `config.preview_every`; older
+files that omit it keep previews off. The interval counts optimizer updates after gradient
 accumulation, independently of checkpoint saving. Previews share the sample prompt,
 seed, inference steps and geometry. The final sample checkbox is independent: previews
 can run with final sampling off. Review requires a prompt for either choice.
@@ -147,11 +148,12 @@ sample text before loading the training model, keeps VAEs on CPU between preview
 and switches block swapping to inference and back. It restores Torch RNG state and
 retains the optimizer, scheduler and current dataset traversal. It does not restart or
 reshuffle training at each preview. Sampling and VAE decoding add time and GPU memory;
-the 24 GB capacity of this combination still needs hardware qualification (#129).
+the 24 GB capacity beyond the small measured recipes still needs hardware qualification (#129).
 
 H3 uses native joint audio/video sampling. Single-expert Wan previews use only the
 trained low-noise expert throughout inference; they are diagnostic samples and differ
 from the final two-expert video.
+With Wan Frames set to 1, native periodic previews are still PNG images.
 
 Alternating Wan previews use both experts at total schedule steps, independently of
 the expert-switch interval. Training saves and exits at each preview boundary, releasing
@@ -299,7 +301,8 @@ Its limits:
   16 are extrapolated.
 - Text caches use the mean per-item size measured in the #26 trial, so long captions use
   more. Samples use the largest measured bytes per pixel-frame, and video content changes
-  the real size.
+  the real size. One-frame native Wan PNG previews instead reserve four bytes per pixel
+  plus 4 kB per image, so lossless images do not inherit the compressed-video estimate.
 - Bucketing can change latent sizes.
 - Compiler caches are left to the margin.
 - Free space is read at review. It is not checked again at Prepare or Start, so a Run can

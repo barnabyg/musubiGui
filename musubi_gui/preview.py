@@ -48,7 +48,8 @@ def preview_arguments(job: "Job", settings: Settings, run: Path) -> list[str]:
 
 
 def preview_step(file: Path) -> int | None:
-    match = re.search(r"_(\d{6,})_\d{2}_\d{14}(?:_-?\d+)?$", file.stem)
+    # save_images_grid appends a three-digit frame index to one-frame PNG samples.
+    match = re.search(r"_(\d{6,})_\d{2}_\d{14}(?:_-?\d+)?(?:_\d{3})?$", file.stem)
     return int(match[1]) if match else None
 
 
