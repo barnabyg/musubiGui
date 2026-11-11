@@ -56,6 +56,7 @@ def test_review_training_both_experts_and_sampling_the_exact_pair(tmp_path: Path
         assert completed["samples"][0]["lora_pair"] == completed["sample_pair"]
         assert service.progress(run["id"])["expert_steps"] == {"low": 4, "high": 4}
         outputs = OutputBrowser(service).scan(run["id"])
+        assert not outputs["warnings"]
         assert outputs["lora_pair"]["low"]["output"]["status"] == "available"
         assert outputs["lora_pair"]["high"]["output"]["status"] == "available"
         states = service.saved_states(run["id"])

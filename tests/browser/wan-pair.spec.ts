@@ -103,7 +103,20 @@ test('alternating Wan settings persist, train both experts and restore the paire
     await expect(schedule).toContainText('High-noise: 4 steps');
     await expect(schedule).toContainText('fresh dataset pass');
     await page
-      .getByRole('button', { name: 'Prepare and start', exact: true })
+      .getByRole('button', { name: 'Prepare run', exact: true })
+      .click();
+    await expect(
+      page.getByRole('button', { name: 'Start training', exact: true }),
+    ).toBeEnabled({ timeout: 240_000 });
+    const pendingPair = page.getByLabel('Paired LoRA outputs');
+    await expect(
+      pendingPair.getByText('Checkpoint pending', { exact: true }),
+    ).toHaveCount(2);
+    await expect(
+      page.getByText(/The paired LoRA outputs are incomplete/),
+    ).toHaveCount(0);
+    await page
+      .getByRole('button', { name: 'Start training', exact: true })
       .click();
     await expect(page.getByLabel('Paired LoRA outputs')).toContainText(
       '4 optimizer steps',
