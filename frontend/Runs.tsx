@@ -37,6 +37,7 @@ type Run = {
     status: string;
     exit_code?: number;
     reused_from?: string;
+    cache_reason?: string;
     started?: string;
     finished?: string;
   }[];
@@ -652,6 +653,31 @@ export function Runs({
                 </strong>
               </p>
               {run.error && <p className="error">{run.error}</p>}
+              <section aria-label="Cache preparation results">
+                <h3>Caching</h3>
+                <ul>
+                  {run.stages
+                    .filter((stage) =>
+                      ['latent_cache', 'text_cache'].includes(stage.name),
+                    )
+                    .map((stage) => (
+                      <li key={stage.name}>
+                        {stage.name === 'latent_cache'
+                          ? 'Latents'
+                          : 'Text embeddings'}
+                        :{' '}
+                        {stage.status === 'reused'
+                          ? 'Verified compatible cache reused'
+                          : stage.status === 'completed'
+                            ? 'Cache rebuilt'
+                            : stage.status}
+                        {stage.cache_reason && (
+                          <small> · {stage.cache_reason}</small>
+                        )}
+                      </li>
+                    ))}
+                </ul>
+              </section>
               {run.start_after_prepare &&
                 ['pending_preparation', 'preparing'].includes(run.status) && (
                   <p>Training starts by itself when preparation succeeds.</p>

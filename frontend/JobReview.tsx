@@ -164,6 +164,25 @@ export function JobReview({
           </details>
         </section>
       )}
+      <section aria-label="Cache preparation policy">
+        <h3>Caching</h3>
+        <p>
+          Latents:{' '}
+          {review.cache_policy.latent_cache === 'rebuild'
+            ? 'Rebuild cache'
+            : 'Reuse compatible cache'}
+          . Text embeddings:{' '}
+          {review.cache_policy.text_cache === 'rebuild'
+            ? 'Rebuild cache'
+            : 'Reuse compatible cache'}
+          .
+        </p>
+        <p className="hint">
+          Both cache stages are required. Preparation verifies compatible
+          artifacts before reuse; otherwise it rebuilds them. Run stages show
+          the actual result. Other Runs’ caches are preserved.
+        </p>
+      </section>
       <details data-testid="disk-estimate">
         <summary>Estimated disk use</summary>
         <ul>

@@ -946,6 +946,12 @@ class RunService:
         return [{"path": str(file.relative_to(cache)), "sha256": digest_file(file)} for file in files]
 
     def _reuse(self, run: dict[str, Any], stage_name: str, index: int) -> bool:
+        policy = "latent_cache_policy" if stage_name == "latent_cache" else "text_cache_policy"
+        rebuild = run["job"].get("config", {}).get(policy, "reuse") == "rebuild"
+        reason = "Rebuild requested by this Run." if rebuild else "No verified compatible cache found."
+        self.store.update(run["id"], lambda r: r["stages"][index].update(cache_reason=reason))
+        if rebuild:
+            return False
         key = run.get("stage_keys", {}).get(stage_name)
         if not key:
             return False
@@ -973,7 +979,11 @@ class RunService:
             self.store.update(
                 run["id"],
                 lambda r: r["stages"][index].update(
-                    status="reused", artifacts=artifacts, reused_from=previous["id"], exit_code=0
+                    status="reused",
+                    artifacts=artifacts,
+                    reused_from=previous["id"],
+                    cache_reason="Compatible identity and artifact hashes verified.",
+                    exit_code=0,
                 ),
             )
             return True

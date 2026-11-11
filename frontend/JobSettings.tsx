@@ -283,6 +283,34 @@ export function JobControls({
         )}
         {toggle('Enable bucketing', 'enable_bucket')}
         {toggle('Do not upscale buckets', 'bucket_no_upscale')}
+        <h3>Caching</h3>
+        <p className="hint">
+          Latents and text embeddings are required. Compatible caches are copied
+          into each Run’s private storage. Rebuilding leaves other Runs
+          unchanged.
+        </p>
+        <div className="columns">
+          {(
+            [
+              ['Latent caching', 'latent_cache_policy'],
+              ['Text embedding caching', 'text_cache_policy'],
+            ] as const
+          ).map(([label, key]) => (
+            <label className="field" key={key}>
+              {label}
+              <select
+                value={job.config[key]}
+                disabled={busy}
+                onChange={(event) =>
+                  config(key, event.target.value as 'reuse' | 'rebuild')
+                }
+              >
+                <option value="reuse">Reuse compatible cache</option>
+                <option value="rebuild">Rebuild cache</option>
+              </select>
+            </label>
+          ))}
+        </div>
         {job.family === 'h3' && !media.imageOnly && (
           <label className="field">
             Audio policy

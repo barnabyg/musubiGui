@@ -201,6 +201,18 @@ only for files of the same size.
 
 ## Configuration review
 
+### Caching
+
+Under Advanced controls, Dataset preparation offers separate latent and text
+embedding cache policies. **Reuse compatible cache** is the default; preparation
+copies verified compatible artifacts into the new Run's private cache, or builds
+them when none are usable. **Rebuild cache** always runs that encoder for the new
+Run. Both stages are required by the Wan/H3 recipes. Other Runs' caches remain
+untouched. Review shows the policies; the Run shows each stage's actual result.
+Saved drafts, presets and exports retain the choices. Retry retains its frozen
+choices; Restore continues from the frozen prepared inputs without recaching.
+See [the pinned upstream investigation and manual test](reference/caching.md).
+
 ### Previews during training
 
 Set **Preview every N steps** in Training & sample. Zero (the default for new and

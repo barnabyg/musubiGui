@@ -13,6 +13,8 @@ export type JobConfig = {
   repeats: number;
   enable_bucket: boolean;
   bucket_no_upscale: boolean;
+  latent_cache_policy: 'reuse' | 'rebuild';
+  text_cache_policy: 'reuse' | 'rebuild';
   rank: number;
   alpha: number;
   learning_rate: number;
@@ -104,6 +106,10 @@ export type Review = {
   model_provenance: Record<string, Record<string, string>>;
   paths: Record<string, string>;
   dataset_toml: string;
+  cache_policy: {
+    latent_cache: 'reuse' | 'rebuild';
+    text_cache: 'reuse' | 'rebuild';
+  };
   stages: { name: string; args: string[] }[];
   expert_schedule?: {
     interval: number;

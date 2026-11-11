@@ -71,6 +71,8 @@ class JobConfig(BaseModel):
     repeats: int = 1
     enable_bucket: bool = False
     bucket_no_upscale: bool = False
+    latent_cache_policy: Literal["reuse", "rebuild"] = "reuse"
+    text_cache_policy: Literal["reuse", "rebuild"] = "reuse"
     rank: int = 8
     alpha: int = 8
     learning_rate: float = 0.0001
@@ -1150,6 +1152,7 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
         "effective_count": len(effective_items),
         "audio_coverage": audio_coverage,
         "video_windows": windows,
+        "cache_policy": {"latent_cache": job.config.latent_cache_policy, "text_cache": job.config.text_cache_policy},
         "disk": disk,
         "models": {key: value for key, value in settings.models.items() if key.startswith(job.family + "_")},
         "model_provenance": model_provenance,
