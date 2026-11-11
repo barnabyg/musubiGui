@@ -28,8 +28,11 @@ These controls follow the pinned upstream
 [parser](https://github.com/kohya-ss/musubi-tuner/blob/f8a1b03794a49239a3539015075f5123d6c07d66/src/musubi_tuner/training/parser_common.py#L444-L474),
 [sampling and range mapping](https://github.com/kohya-ss/musubi-tuner/blob/f8a1b03794a49239a3539015075f5123d6c07d66/src/musubi_tuner/training/trainer_base.py#L635-L760)
 and [H3 restrictions](https://github.com/kohya-ss/musubi-tuner/blob/f8a1b03794a49239a3539015075f5123d6c07d66/src/musubi_tuner/minimax_h3_train_network.py#L707-L720).
-Configurable distributions have orchestration coverage; their GPU capacity and
-training quality remain unqualified.
+Short target-PC GPU checks exercised the original Shift recipe and Sigmoid with
+scale 1.5 in alternating Wan training, plus H3's Uniform strategy, including state
+restoration. See the [execution evidence](reference/evidence/training-settings-gpu.json).
+Other custom parameter values and Wan Uniform have command/orchestration coverage.
+Production-size capacity and training quality remain unqualified.
 
 From `C:/docs/git/musubiGui` in PowerShell 7:
 
@@ -58,9 +61,15 @@ the Job has since changed. A conflicting frozen optimizer/command is rejected.
 
 The supported subset comes from the pinned upstream
 [optimizer implementation](https://github.com/kohya-ss/musubi-tuner/blob/f8a1b03794a49239a3539015075f5123d6c07d66/src/musubi_tuner/training/trainer_base.py#L225-L307).
-The target Windows environment has bitsandbytes 0.50.1 with a CUDA-enabled
-extension; import and CPU optimizer construction succeeded. This establishes
-availability, not GPU training, memory capacity or quality for AdamW8bit.
+The target RTX 3090 Windows environment has bitsandbytes 0.50.1 with a CUDA-enabled
+extension. Both optimizers completed preparation, training, checkpoint saving and
+restoration for Wan and H3 on two synthetic images at 256 × 256. Wan trained both
+experts for one update each, then restored for another update each; H3 trained two
+updates and restored for one more, with its saved optimizer counter reaching three.
+The [GPU evidence](reference/evidence/training-settings-gpu.json) records the
+configuration, commands, package/model identities, checkpoint hashes and restored
+counters. Final sampling was off. These checks establish execution for the recorded
+settings, not production capacity or useful learning.
 
 From `C:/docs/git/musubiGui` in PowerShell 7:
 

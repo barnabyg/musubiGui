@@ -71,7 +71,7 @@ the public Hub commit and tokenizer file hashes in `wan_tokenizer.py`, and the f
 digests of made-up inputs in `test_job_datasets.py`, and the fixed digest of made-up H3 arguments in
 `test_training_sections.py`. Neither is a credential; review them if the digest inputs change.
 An exact JSON-field regex also exempts 40/64-character hexadecimal `expected_upstream` / `upstream_revision`,
-`application_revision` and `header_sha256` values in reference evidence: these are public Git revisions/content hashes,
+`application_revision`, `header_sha256` and `checkpoint_sha256` values in reference evidence: these are public Git revisions/content hashes,
 not credentials. Re-review both exceptions whenever the identity schema or recipe pin changes.
 The scanner checks tracked and new
 non-ignored repository files. Generated bundles and local training assets are ignored,
