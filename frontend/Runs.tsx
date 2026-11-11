@@ -19,6 +19,7 @@ import './runs.css';
 type Run = {
   id: string;
   created: string;
+  finished?: string;
   status: string;
   error: string | null;
   retention?: {
@@ -152,7 +153,14 @@ function TrainingProgress({
     (stage) => stage.name === 'train' && stage.started,
   );
   const train = training.at(-1);
-  const trainingActive = Boolean(train && !train.finished);
+  const ended =
+    train?.finished ??
+    (['completed', 'failed', 'stopped', 'cancelled', 'interrupted'].includes(
+      run.status,
+    )
+      ? run.finished
+      : undefined);
+  const trainingActive = Boolean(train && !ended);
   const [, tick] = useState(0);
   useEffect(() => {
     if (!trainingActive) return;
@@ -161,7 +169,7 @@ function TrainingProgress({
   }, [trainingActive]);
   if (!train) return null;
   const elapsed = training[0].started
-    ? duration(training[0].started, train.finished)
+    ? duration(training[0].started, ended)
     : 'unknown';
   if (!progress)
     return (

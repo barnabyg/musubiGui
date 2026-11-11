@@ -10,13 +10,15 @@ test('training elapsed spans expert switches and survives reload independently o
     const run = (await app.post('/api/runs/prepare', { job_id: job.id })) as {
       id: string;
     };
+    let failedDuringLaunch = false;
     await page.route(`**/api/runs/${run.id}`, async (route) => {
       const response = await route.fetch();
       const record = await response.json();
       await route.fulfill({
         json: {
           ...record,
-          status: 'completed',
+          status: failedDuringLaunch ? 'failed' : 'completed',
+          finished: '2026-11-11T10:01:30Z',
           stages: [
             {
               name: 'train',
@@ -28,7 +30,7 @@ test('training elapsed spans expert switches and survives reload independently o
               name: 'train',
               status: 'completed',
               started: '2026-11-11T10:01:10Z',
-              finished: '2026-11-11T10:01:30Z',
+              finished: failedDuringLaunch ? undefined : '2026-11-11T10:01:30Z',
             },
           ],
         },
@@ -67,6 +69,9 @@ test('training elapsed spans expert switches and survives reload independently o
     await page.reload();
     await expect(progress).toContainText('Training elapsed 01:30');
     await expect(progress).toContainText('Training ETA unknown');
+    failedDuringLaunch = true;
+    await page.reload();
+    await expect(progress).toContainText('Training elapsed 01:30');
   } finally {
     await app.close();
   }
