@@ -211,6 +211,10 @@ test('registration starts empty and requires acknowledgement of a whole root bef
     const browser = page.getByRole('dialog', { name: 'Choose Dataset folder' });
     await expect(browser.locator('.path-location')).toHaveText(app.media);
     await browser.getByRole('button', { name: 'Choose this folder' }).click();
+    await expect(browser).toHaveCount(0);
+    await expect(
+      page.getByRole('button', { name: 'Browse for Dataset folder' }),
+    ).toBeFocused();
     await expect(
       page.getByText(
         `Index this exact folder and all its subfolders: ${app.media}. Source media and captions stay in place.`,
@@ -227,6 +231,7 @@ test('registration starts empty and requires acknowledgement of a whole root bef
     await expect(acknowledge).toBeVisible();
     await acknowledge.focus();
     await page.keyboard.press('Space');
+    await expect(acknowledge).toBeChecked();
     await expect(submit).toBeEnabled();
     await submit.focus();
     await page.keyboard.press('Enter');

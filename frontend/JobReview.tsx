@@ -68,6 +68,28 @@ export function JobReview({
           {diskVerdict(review.disk)}
         </span>
       </div>
+      {(job.config.sample_enabled || job.config.preview_every > 0) &&
+        review.sample && (
+          <p>
+            Sample output: {review.sample.width} × {review.sample.height} ·{' '}
+            {review.sample.frames} frames ·{' '}
+            {review.sample.frames === 1
+              ? 'image sample'
+              : `${review.sample.fps} fps · ${Number(review.sample.duration.toFixed(6))} seconds`}
+            .
+          </p>
+        )}
+      {job.family === 'wan' &&
+        job.config.recipe !== 'alternating' &&
+        job.config.preview_every > 0 &&
+        review.sample?.frames > 1 && (
+          <p>
+            Native preview: {review.sample.width} × {review.sample.height} ·{' '}
+            {review.sample.native_preview_frames} frames · 24 fps ·{' '}
+            {Number((review.sample.native_preview_frames / 24).toFixed(6))}{' '}
+            seconds. Native previews use the pinned trainer's 24 fps frame grid.
+          </p>
+        )}
       {(['errors', 'warnings'] as const).map((level) => {
         const errors = level === 'errors';
         return (
@@ -306,6 +328,10 @@ export function JobReview({
       <details>
         <summary>Advanced</summary>
         <h3>Resolved paths</h3>
+        <p>
+          The Run/output folder uses the Job name. A unique suffix is allocated
+          when preparing.
+        </p>
         <pre>
           {JSON.stringify({ ...review.paths, models: review.models }, null, 2)}
         </pre>

@@ -4,6 +4,12 @@ Runs lists the queue and history beside the selected Run. Statuses read as label
 Preparing or Ready to start, and the stored values are unchanged. The GPU line names the job
 using the GPU and links to its Run.
 
+Each Run opens on **Overview**, with progress, controls, diagnostics and LoRA
+downloads. **Samples** holds generated media and periodic previews. Use the tabs
+or arrow keys to switch views. Switching views keeps the selected sample and its
+player mounted, so returning preserves playback. New previews do not replace a
+selected sample. LoRA downloads remain visible on both tabs.
+
 ## History refresh and network traffic
 
 History, queue updates and completion notifications share lightweight Run summaries.
@@ -59,8 +65,14 @@ training phases inside it. Dataset caching runs once. Each phase keeps its own l
 checkpoint and optimizer state; neither expert is kept resident while the other trains.
 The GPU lease stays owned across phase switches and final paired sampling.
 Progress reports the active expert, phase updates, overall segment updates and both
-experts' cumulative updates. Phase-local ETA is not presented as the remaining time
-for the entire alternating Run.
+experts' cumulative updates. **Phase ETA** retains the upstream estimate for the active
+expert phase; **Training ETA** applies to single-process training. Neither includes
+later sampling. Missing upstream estimates stay unknown. **Training elapsed** uses
+recorded timestamps from the first training stage through the latest training stage,
+including expert-switch overhead, rather than the resetting progress-bar clock. It
+survives browser reloads and stops advancing when training ends.
+The logs API keeps `progress.eta` in its upstream time format and adds
+`progress.eta_scope: "phase"` for alternating Wan; callers must preserve that scope.
 
 **Inspect saved states** lists paired schedule positions, including interval saves
 partway through a phase. Restoration freezes both available expert states as a new
@@ -98,6 +110,14 @@ outputs and saved states until you delete it. After Delete run, Prepare creates 
 new Run of the same revision.
 
 ## Immutable inputs
+
+New Run/output folders use the frozen Job name plus a unique suffix under the
+configured output root's `runs` folder. Names replace Windows-invalid characters
+and whitespace with hyphens, protect reserved names and limit the readable part
+to 60 characters. Repeated Runs and same-name Jobs never share a folder. Review
+shows `{unique}` until preparation allocates the suffix; Run details show the
+actual output path. Retries and restored segments also keep the frozen name.
+Renaming a Job never moves older Runs, and existing folder layouts stay readable.
 
 Before copying media, each new snapshot writes a versioned `snapshot.json` containing
 its source manifest, settings and provenance. A directory with no published Run remains

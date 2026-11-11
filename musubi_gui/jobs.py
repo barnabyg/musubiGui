@@ -21,8 +21,10 @@ from musubi_gui.disk_estimate import check_volumes, estimate_disk, free_space_re
 from musubi_gui.h3 import add_image_flags, h3_stages, validate_h3
 from musubi_gui.recipe import CAPTION, UPSTREAM, Stage
 from musubi_gui.redaction import redact
+from musubi_gui.run_paths import job_folder
 from musubi_gui.run_store import RunStore, preparation_transaction
 from musubi_gui.safetensors_file import safetensors_header
+from musubi_gui.sampling import native_preview_frames, sample_geometry
 from musubi_gui.settings import Settings, atomic_json, validate_paths, within_root
 from musubi_gui.training_sections import dataset_resolution, dataset_toml, plan_sections, section_balance
 from musubi_gui.video_sampling import plan_windows
@@ -95,6 +97,10 @@ class JobConfig(BaseModel):
     preview_every: int = 0
     sample_prompt: str = CAPTION
     sample_steps: int = 4
+    # None preserves the resolved geometry of released version-one Jobs and exports.
+    sample_width: int | None = Field(default=None, exclude_if=lambda value: value is None)
+    sample_height: int | None = Field(default=None, exclude_if=lambda value: value is None)
+    sample_frames: int | None = Field(default=None, exclude_if=lambda value: value is None)
     seed: int = 42
 
 
@@ -285,6 +291,9 @@ SMOKE_CONTROLS = (
     "preview_every",
     "sample_prompt",
     "sample_steps",
+    "sample_width",
+    "sample_height",
+    "sample_frames",
 )
 SMOKE_PRESETS = {
     preset.id: preset
@@ -619,8 +628,23 @@ def effective_settings(job: Job, settings: Settings) -> Settings:
 
 def configuration_errors(job: Job, *, has_videos: bool = True) -> list[str]:
     config = job.config
-    needs_frames = has_videos or config.sample_enabled or config.preview_every > 0
+    sampling = config.sample_enabled or config.preview_every > 0
+    needs_frames = has_videos
     errors: list[str] = []
+    if sampling:
+        multiple = 16 if job.family == "wan" else 32
+        for dimension in ("width", "height"):
+            value = getattr(config, "sample_" + dimension)
+            if value is not None and (value < 64 or value % multiple):
+                errors.append(f"Sample {dimension}: enter at least 64, in multiples of {multiple}.")
+        frames = (
+            config.sample_frames if config.sample_frames is not None else (config.frames if not has_videos else None)
+        )
+        if frames is not None:
+            if job.family == "wan" and (frames < 1 or (frames - 1) % 4):
+                errors.append("Sample duration: Wan requires 4*n+1 frames, or one frame for an image sample.")
+            elif job.family == "h3" and (not 124 <= frames <= 345 or (frames - 5) % 17):
+                errors.append("Sample duration: H3 requires 17*n+5 frames between 124 and 345 (24 fps).")
     if job.family == "h3" and config.timestep_sampling != "uniform":
         errors.append("Timestep strategy: the pinned H3 trainer supports uniform sampling only.")
     if job.family == "wan":
@@ -743,6 +767,7 @@ def build_stages(job: Job, settings: Settings, run: Path, cache: Path, kinds: se
     settings = effective_settings(job, settings)
     config = job.config
     recipe_stages = wan_stages if job.family == "wan" else h3_stages
+    sample_width, sample_height, sample_frames = sample_geometry(config)
     stages = [stage for stage in recipe_stages(settings, run, cache) if stage.name != "fixture"]
     if job.family == "h3":
         add_image_flags(stages, kinds)
@@ -782,13 +807,15 @@ def build_stages(job: Job, settings: Settings, run: Path, cache: Path, kinds: se
 
                 args.extend(preview_arguments(job, settings, run))
         if stage.name == "generate":
+            if job.family == "wan" and config.sample_frames == 1:
+                _set_argument(args, "--output_type", "images")
             _set_argument(args, "--prompt", config.sample_prompt)
             _set_argument(args, "--infer_steps", str(config.sample_steps))
             _set_argument(args, "--seed", str(config.seed))
             _set_argument(args, "--blocks_to_swap", str(config.blocks_to_swap))
-            _set_argument(args, "--video_length", str(config.frames))
+            _set_argument(args, "--video_length", str(sample_frames))
             index = args.index("--video_size")
-            args[index + 1 : index + 3] = [str(config.height), str(config.width)]
+            args[index + 1 : index + 3] = [str(sample_height), str(sample_width)]
             _set_argument(args, "--lora_weight", str(run / "checkpoints" / f"{job.family}-{job.id}.safetensors"))
     stages = [
         stage
@@ -1150,9 +1177,9 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
             job, has_videos=not effective_items or any(item["kind"] == "video" for item in effective_items)
         )
     )
-    output = Path(settings.output_root) / "jobs" / job.id
+    output = Path(settings.output_root) / "runs" / f"{job_folder(job.name)}-{{unique}}"
     cache = Path(settings.cache_root) / "jobs" / job.id
-    snapshot = output / f"revision-{job.revision}"
+    snapshot = output
     _add_duplicate_warnings(datasets, effective_items, warnings)
     if job.family == "h3" and any(item["kind"] == "image" for item in effective_items):
         warnings.extend(H3_IMAGE_WARNINGS)
@@ -1208,6 +1235,14 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
         "expected_upstream": UPSTREAM,
         "upstream_revision": actual_revision,
         "paths": {"output": str(output), "cache": str(cache), "snapshot": str(snapshot)},
+        "sample": {
+            "width": sample_geometry(job.config)[0],
+            "height": sample_geometry(job.config)[1],
+            "frames": sample_geometry(job.config)[2],
+            "fps": 16 if job.family == "wan" else 24,
+            "duration": sample_geometry(job.config)[2] / (16 if job.family == "wan" else 24),
+            "native_preview_frames": native_preview_frames(job.family, job.config),
+        },
         "sections": balance,
         "dataset_toml": dataset_toml(job, sections),
         "stages": [stage.record() for stage in stages],

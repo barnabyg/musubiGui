@@ -198,7 +198,7 @@ export function JobControls({
   media: JobMedia;
   trainingOptions: TrainingOptions;
 }) {
-  const { problems, problemProps, problemText, number, toggle } = fields;
+  const { problemProps, problemText, number, toggle } = fields;
   return (
     <>
       <section className="panel" id="job-section-dataset" tabIndex={-1}>
@@ -206,15 +206,11 @@ export function JobControls({
         <div className="number-row">
           {number('Width', 'width')}
           {number('Height', 'height')}
-          {(!media.imageOnly ||
-            job.config.sample_enabled ||
-            job.config.preview_every > 0) &&
+          {!media.imageOnly &&
             number(
-              media.imageOnly ? 'Sample frames' : 'Frames',
+              'Frames',
               'frames',
-              media.imageOnly
-                ? 'Only generated samples and previews use this length. Training images each use one frame.'
-                : 'Frames per training video window and generated sample. Images each use one frame.',
+              'Frames per training video window. Images each use one frame; sample duration is configured in Samples.',
             )}
           {number(
             'Repeats',
@@ -436,7 +432,6 @@ export function JobControls({
           {number('LoRA alpha', 'alpha')}
           {number('Learning rate', 'learning_rate')}
           {number('Gradient accumulation', 'gradient_accumulation')}
-          {number('Seed', 'seed')}
         </div>
       </section>
       <section className="panel" id="job-section-memory" tabIndex={-1}>
@@ -479,7 +474,7 @@ export function JobControls({
         )}
       </section>
       <section className="panel" id="job-section-checkpoints" tabIndex={-1}>
-        <h2>Checkpoints & final sample</h2>
+        <h2>Checkpoints</h2>
         <div className="number-row">
           {number('Save every N steps', 'save_every')}
           {number(
@@ -493,10 +488,6 @@ export function JobControls({
           'save_state',
           'A LoRA checkpoint alone is not resumable optimizer state.',
         )}
-        {(job.config.sample_enabled ||
-          job.config.preview_every > 0 ||
-          problems.sample_steps) &&
-          number('Sample inference steps', 'sample_steps')}
       </section>
     </>
   );

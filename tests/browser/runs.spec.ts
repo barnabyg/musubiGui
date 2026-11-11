@@ -172,6 +172,7 @@ test('outputs appear when a Run completes and a playing preview survives a refre
       name: 'sample.mp4 · available',
       exact: true,
     });
+    await page.getByRole('tab', { name: 'Samples', exact: true }).click();
     await expect(sample).toBeVisible({ timeout: 240_000 });
     await expect(page.getByText(/^No supported outputs found yet/)).toHaveCount(
       0,
@@ -654,6 +655,7 @@ test('Wan and H3 prepare and train through the GUI with frozen captions cache re
       await expect(
         page.getByText('State: Completed', { exact: true }),
       ).toBeVisible({ timeout: 240_000 });
+      await page.getByRole('tab', { name: 'Samples', exact: true }).click();
       await page
         .getByRole('button', {
           name: 'sample.mp4 · available',
@@ -673,6 +675,7 @@ test('Wan and H3 prepare and train through the GUI with frozen captions cache re
           ),
         )
         .toBeGreaterThan(0);
+      await page.getByRole('tab', { name: 'Overview', exact: true }).click();
       const inspect = page.getByRole('button', {
         name: 'Inspect saved states',
         exact: true,
@@ -1089,7 +1092,7 @@ test('Runs read as labels and local times, and the GPU line links to the Run usi
   }
 });
 
-test('a finished Run leads with its sample and final LoRA, and groups the other files', async ({
+test('a finished Run keeps its final LoRA prominent and samples in a separate tab', async ({
   page,
 }) => {
   const app = await runWorkspace();
@@ -1108,9 +1111,10 @@ test('a finished Run leads with its sample and final LoRA, and groups the other 
     await page.goto(`${app.url}/#/runs/${run.id}`);
 
     const result = page.getByRole('region', { name: 'Run result' });
-    const video = result.getByLabel('Output video', { exact: true });
+    await expect(page.getByLabel('Output video', { exact: true })).toHaveCount(
+      0,
+    );
     const lora = result.getByRole('link', { name: 'Download final LoRA' });
-    await expect(video).toBeInViewport({ ratio: 1 });
     await expect(lora).toBeInViewport({ ratio: 1 });
     await expect(result).toContainText(/Final LoRA \d+ (KB|MB|GB)/);
 
@@ -1130,6 +1134,30 @@ test('a finished Run leads with its sample and final LoRA, and groups the other 
     await expect(states.locator('.state-files')).toContainText(
       'model.safetensors',
     );
+    await page.getByRole('tab', { name: 'Samples', exact: true }).click();
+    await page
+      .getByRole('button', { name: 'sample.mp4 · available', exact: true })
+      .click();
+    const video = page.getByLabel('Output video', { exact: true });
+    await expect(video).toBeVisible();
+    await video.evaluate((element) =>
+      element.setAttribute('data-tab-kept', 'yes'),
+    );
+    await page.getByRole('tab', { name: 'Overview', exact: true }).click();
+    await expect(video).toBeHidden();
+    await page
+      .getByRole('tab', { name: 'Overview', exact: true })
+      .press('ArrowRight');
+    await expect(
+      page.getByRole('tab', { name: 'Samples', exact: true }),
+    ).toBeFocused();
+    await expect(video).toHaveAttribute('data-tab-kept', 'yes');
+    await page.setViewportSize({ width: 700, height: 900 });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
   } finally {
     await app.close();
   }

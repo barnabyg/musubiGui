@@ -13,6 +13,7 @@ from typing import Any
 
 from musubi_gui.diagnostics import training_environment, upstream_revision
 from musubi_gui.jobs import Job, JobStore, build_stages, effective_settings, load_job, review_job
+from musubi_gui.run_paths import job_folder
 from musubi_gui.safetensors_file import safetensors_header
 from musubi_gui.settings import Settings, atomic_json, load_settings, within_root
 from musubi_gui.training_sections import dataset_toml, layout_identity, plan_sections, section_folders
@@ -235,7 +236,9 @@ def materialize_snapshot(inputs: SnapshotIdentity) -> dict[str, Any]:
     provenance, keys, identity = inputs.provenance, inputs.stage_keys, inputs.fingerprint
     store: Any = import_module("musubi_gui.datasets").DatasetStore(inputs.root)
     token = uuid.uuid4().hex
-    directory = within_root(Path(settings.output_root) / "runs" / token, [Path(settings.output_root)])
+    directory = within_root(
+        Path(settings.output_root) / "runs" / f"{job_folder(job.name)}-{token}", [Path(settings.output_root)]
+    )
     cache = within_root(Path(settings.cache_root) / "runs" / token, [Path(settings.cache_root)])
     directory.mkdir(parents=True)
     snapshot_record: dict[str, Any] = {

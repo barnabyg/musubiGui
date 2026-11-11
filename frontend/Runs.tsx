@@ -19,6 +19,7 @@ import './runs.css';
 type Run = {
   id: string;
   created: string;
+  finished?: string;
   status: string;
   error: string | null;
   retention?: {
@@ -68,6 +69,7 @@ type Progress = {
   total: number;
   elapsed: string | null;
   eta: string | null;
+  eta_scope?: 'phase';
   loss: string | null;
   expert?: string;
   phase_step?: number;
@@ -147,17 +149,35 @@ function TrainingProgress({
   run: Run;
   progress: Progress | null;
 }) {
-  const train = run.stages.find((stage) => stage.name === 'train');
-  if (!train || train.status === 'pending') return null;
+  const training = run.stages.filter(
+    (stage) => stage.name === 'train' && stage.started,
+  );
+  const train = training.at(-1);
+  const ended =
+    train?.finished ??
+    (['completed', 'failed', 'stopped', 'cancelled', 'interrupted'].includes(
+      run.status,
+    )
+      ? run.finished
+      : undefined);
+  const trainingActive = Boolean(train && !ended);
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (!trainingActive) return;
+    const timer = setInterval(() => tick((value) => value + 1), 1000);
+    return () => clearInterval(timer);
+  }, [trainingActive]);
+  if (!train) return null;
+  const elapsed = training[0].started
+    ? duration(training[0].started, ended)
+    : 'unknown';
   if (!progress)
     return (
       <div className="run-progress" aria-label="Training progress">
+        <p>Training elapsed {elapsed}</p>
         <p>Step progress unknown: training has not reported a step yet.</p>
       </div>
     );
-  const elapsed =
-    progress.elapsed ??
-    (train.started ? duration(train.started, train.finished) : 'unknown');
   return (
     <div className="run-progress" aria-label="Training progress">
       <p>
@@ -178,8 +198,9 @@ function TrainingProgress({
         value={progress.step}
       />
       <p>
-        Elapsed {elapsed} · ETA {progress.eta ?? 'unknown'} · Loss{' '}
-        {progress.loss ?? 'unknown'}
+        Training elapsed {elapsed} ·{' '}
+        {progress.eta_scope === 'phase' ? 'Phase ETA' : 'Training ETA'}{' '}
+        {progress.eta ?? 'unknown'} · Loss {progress.loss ?? 'unknown'}
       </p>
     </div>
   );
@@ -338,6 +359,11 @@ export function Runs({
   const [detail, setDetail] = useState<Run>();
   const [detailRefresh, setDetailRefresh] = useState(0);
   const selected = selectedId ?? '';
+  const [view, setView] = useState<{
+    runId: string;
+    tab: 'overview' | 'samples';
+  }>();
+  const tab = view?.runId === selected ? view.tab : 'overview';
   const [error, setError] = useState('');
   const [detailFailure, setDetailFailure] = useState<{
     runId: string;
@@ -647,6 +673,42 @@ export function Runs({
         </div>
         <div>
           {!run && runs.length > 0 && <p>Choose a Run to see its details.</p>}
+          {run && (
+            <div role="tablist" aria-label="Run views" className="run-tabs">
+              {(['overview', 'samples'] as const).map((value) => (
+                <button
+                  key={value}
+                  role="tab"
+                  id={`run-tab-${value}`}
+                  aria-controls={`run-panel-${value}`}
+                  aria-selected={tab === value}
+                  tabIndex={tab === value ? 0 : -1}
+                  onClick={() => setView({ runId: selected, tab: value })}
+                  onKeyDown={(event) => {
+                    if (
+                      !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(
+                        event.key,
+                      )
+                    )
+                      return;
+                    event.preventDefault();
+                    const next =
+                      event.key === 'Home'
+                        ? 'overview'
+                        : event.key === 'End'
+                          ? 'samples'
+                          : value === 'overview'
+                            ? 'samples'
+                            : 'overview';
+                    setView({ runId: selected, tab: next });
+                    document.getElementById(`run-tab-${next}`)?.focus();
+                  }}
+                >
+                  {value === 'overview' ? 'Overview' : 'Samples'}
+                </button>
+              ))}
+            </div>
+          )}
           {showFiles && <RunResult outputs={outputs} />}
           {run && (
             <section className="panel">
@@ -654,10 +716,22 @@ export function Runs({
               <p title={run.id}>Run {run.id.slice(0, 8)}</p>
               <RunJobLink key={run.id} frozen={run.job} />
               <p>
-                <strong>
-                  State: <RunBadge status={run.status} />
-                </strong>
+                State: <RunBadge status={run.status} />
               </p>
+              <TrainingProgress
+                run={run}
+                progress={current?.progress ?? null}
+              />
+            </section>
+          )}
+          {run && (
+            <section
+              className="panel"
+              role="tabpanel"
+              id="run-panel-overview"
+              aria-labelledby="run-tab-overview"
+              hidden={tab !== 'overview'}
+            >
               {run.error && <p className="error">{run.error}</p>}
               <section aria-label="Cache preparation results">
                 <h3>Caching</h3>
@@ -917,10 +991,6 @@ export function Runs({
                   ))}
                 </ol>
               )}
-              <TrainingProgress
-                run={run}
-                progress={current?.progress ?? null}
-              />
               <details>
                 <summary>
                   Inputs saved with this Run ({run.manifest.items.length}{' '}
@@ -936,7 +1006,11 @@ export function Runs({
             </section>
           )}
           {run && (
-            <details className="panel" open={run.status === 'failed'}>
+            <details
+              className="panel"
+              open={run.status === 'failed'}
+              hidden={tab !== 'overview'}
+            >
               <summary>Stage logs</summary>
               <pre aria-label="Run logs">
                 {current?.text || 'Waiting for stage output…'}
@@ -944,25 +1018,36 @@ export function Runs({
             </details>
           )}
           {showFiles && (
-            <SavedStates
-              key={`states-${run.id}`}
-              runId={run.id}
-              files={stateFiles(outputs)}
-              onRestore={(stateId, steps) =>
-                action('restore-state', {
-                  state_id: stateId,
-                  additional_steps: steps,
-                  confirmed: true,
-                })
-              }
-            />
+            <div hidden={tab !== 'overview'}>
+              <SavedStates
+                key={`states-${run.id}`}
+                runId={run.id}
+                files={stateFiles(outputs)}
+                onRestore={(stateId, steps) =>
+                  action('restore-state', {
+                    state_id: stateId,
+                    additional_steps: steps,
+                    confirmed: true,
+                  })
+                }
+              />
+            </div>
           )}
           {showFiles && (
-            <Outputs
-              key={`outputs-${run.id}`}
-              runId={run.id}
-              outputs={outputs}
-            />
+            <div
+              role={tab === 'samples' ? 'tabpanel' : undefined}
+              id="run-panel-samples"
+              aria-labelledby={
+                tab === 'samples' ? 'run-tab-samples' : undefined
+              }
+            >
+              <Outputs
+                key={`outputs-${run.id}`}
+                runId={run.id}
+                outputs={outputs}
+                tab={tab}
+              />
+            </div>
           )}
         </div>
       </div>

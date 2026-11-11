@@ -142,8 +142,8 @@ test('the action bar stays visible, identity comes first and rare actions are in
       .allInnerTexts();
     expect(headings.slice(0, 3)).toEqual([
       'Job & dataset',
-      'Training & sample',
-      'Presets',
+      'Training',
+      'Samples',
     ]);
 
     const menu = page.getByRole('button', { name: 'More job actions' });
@@ -467,7 +467,7 @@ test('Wan draft controls, validation and reviewed native configuration survive s
       page.getByRole('button', { name: 'Prepare run', exact: true }),
     ).toBeDisabled();
     await page.getByRole('spinbutton', { name: /^Frames\b/ }).fill('33');
-    await page.getByLabel('Width', { exact: false }).fill('320');
+    await page.getByLabel('Width', { exact: true }).fill('320');
     await page.getByRole('button', { name: 'Save draft', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('Draft saved');
     await page
@@ -673,7 +673,7 @@ test('H3 editor keeps T2VA guidance stages and identifies invalid geometry', asy
       page.getByLabel('Runtime FP8 scaling', { exact: false }),
     ).toHaveCount(0);
     await expect(page.getByLabel(/negative prompt/i)).toHaveCount(0);
-    await page.getByLabel('Width', { exact: false }).fill('272');
+    await page.getByLabel('Width', { exact: true }).fill('272');
     await page.getByRole('button', { name: 'Save draft', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('Draft saved');
     await page
@@ -880,11 +880,12 @@ test('the section menu reaches every section, marks the current one and keeps un
       menu.getByRole('button', { name, exact: true }).click();
     const current = menu.locator('[aria-current="true"]');
     const headings: [string, string][] = [
-      ['Training & sample', 'Training & sample'],
+      ['Training', 'Training'],
+      ['Samples', 'Samples'],
       ['Dataset preparation', 'Dataset preparation'],
       ['LoRA & training', 'LoRA & training'],
       ['Memory', 'Memory'],
-      ['Checkpoints & sample', 'Checkpoints & final sample'],
+      ['Checkpoints', 'Checkpoints'],
       ['Review', 'Review'],
       ['Job & dataset', 'Job & dataset'],
     ];

@@ -19,19 +19,21 @@ from musubi_gui.acceptance_worker import tensor
 from musubi_gui.settings import Settings, atomic_json, save_settings, validate_paths
 
 
-def synthetic_video(file: Path, frames: int, audio: bool = False, rate: Fraction | int = 24) -> None:
+def synthetic_video(
+    file: Path, frames: int, audio: bool = False, rate: Fraction | int = 24, *, width: int = 256, height: int = 256
+) -> None:
     import av
 
     file.parent.mkdir(parents=True, exist_ok=True)
     with av.open(str(file), "w") as container:
         video: Any = container.add_stream("libx264", rate=rate)
-        video.width, video.height, video.pix_fmt = 256, 256, "yuv420p"
+        video.width, video.height, video.pix_fmt = width, height, "yuv420p"
         video.options = {"preset": "ultrafast", "crf": "24"}
         sound: Any = container.add_stream("aac", rate=48000) if audio else None
         if sound:
             sound.layout = "mono"
         for index in range(frames):
-            frame = av.VideoFrame(256, 256, "yuv420p")
+            frame = av.VideoFrame(width, height, "yuv420p")
             for plane_index, plane in enumerate(frame.planes):
                 plane.update(bytes([48 + index // 4 if plane_index == 0 else 128]) * plane.buffer_size)
             for packet in video.encode(frame):

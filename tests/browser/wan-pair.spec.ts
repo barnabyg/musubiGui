@@ -202,6 +202,8 @@ test('alternating Wan settings persist, train both experts and restore the paire
     await expect(page.getByLabel('Paired LoRA outputs')).toContainText(
       '4 optimizer steps',
     );
+    await page.getByRole('tab', { name: 'Samples', exact: true }).click();
+    await page.getByRole('button', { name: /sample.mp4.*available/ }).click();
     await expect(page.getByLabel('Output video')).toBeVisible();
     const video = page.getByLabel('Output video');
     await video.evaluate(async (element) => {

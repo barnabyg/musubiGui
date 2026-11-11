@@ -257,18 +257,11 @@ export function stateFiles(outputs: RunOutputs) {
 
 export type RunOutputs = ReturnType<typeof useRunOutputs>;
 
-// What the Run was for, first: the sample and the final LoRA, plus any warnings about them.
+// Keep LoRA downloads and artifact warnings visible outside the Samples tab.
 export function RunResult({ outputs }: { outputs: RunOutputs }) {
   const { result } = outputs;
   if (!result) return null;
-  const {
-    samples,
-    checkpoints,
-    final: singleFinal,
-    preview: availablePreview,
-  } = grouped(result.outputs);
-  const preview =
-    availablePreview?.id === outputs.selected ? undefined : availablePreview;
+  const { samples, checkpoints, final: singleFinal } = grouped(result.outputs);
   const final = result.lora_pair ? undefined : singleFinal;
   // While a Run is working its files can legitimately be half-written.
   const settled = [
@@ -287,7 +280,6 @@ export function RunResult({ outputs }: { outputs: RunOutputs }) {
       : undefined;
   if (
     !final &&
-    !preview &&
     !latest &&
     !problems.length &&
     !result.warnings.length &&
@@ -307,7 +299,6 @@ export function RunResult({ outputs }: { outputs: RunOutputs }) {
           {item.name}: {item.error}
         </p>
       ))}
-      {preview && <MediaPreview output={preview} />}
       {result.lora_pair && (
         <section aria-label="Paired LoRA outputs">
           <h3>Paired LoRAs</h3>
@@ -382,9 +373,11 @@ export function RunResult({ outputs }: { outputs: RunOutputs }) {
 export function Outputs({
   runId,
   outputs,
+  tab,
 }: {
   runId: string;
   outputs: RunOutputs;
+  tab: 'overview' | 'samples';
 }) {
   const {
     result: currentResult,
@@ -434,7 +427,11 @@ export function Outputs({
   return (
     <section className="panel" aria-label="Run outputs">
       <h2>Run outputs</h2>
-      <p>Checkpoints and samples from this Run.</p>
+      <p>
+        {tab === 'samples'
+          ? 'Samples and periodic previews from this Run.'
+          : 'Checkpoints from this Run. Open the Samples tab for generated media.'}
+      </p>
       <button disabled={busy} onClick={reload}>
         Refresh outputs
       </button>
@@ -455,18 +452,24 @@ export function Outputs({
               or sample stage finishes.
             </p>
           )}
+          {groups.samples.length === 0 && tab === 'samples' && (
+            <p>
+              No generated samples recorded for this Run. Samples appear here
+              when available.
+            </p>
+          )}
           {groups.samples.length > 0 && (
-            <>
+            <div hidden={tab !== 'samples'}>
               <h3>Samples</h3>
               <div className="job-library" aria-label="Output files">
                 {groups.samples.map((item) => (
                   <span key={item.id}>{chooser(item)}</span>
                 ))}
               </div>
-            </>
+            </div>
           )}
           {groups.checkpoints.length > 0 && (
-            <details className="output-checkpoints">
+            <details className="output-checkpoints" hidden={tab === 'samples'}>
               <summary>LoRA checkpoints ({groups.checkpoints.length})</summary>
               <table>
                 <thead>
@@ -489,7 +492,11 @@ export function Outputs({
             </details>
           )}
           {output && (
-            <div className="output-detail" aria-label="Selected output">
+            <div
+              className="output-detail"
+              aria-label="Selected output"
+              hidden={(output.kind === 'checkpoint') === (tab === 'samples')}
+            >
               <h3>{output.name}</h3>
               <p>
                 {output.status} · {byteLabel(output)} · from Run{' '}

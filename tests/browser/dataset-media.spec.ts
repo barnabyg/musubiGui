@@ -182,8 +182,10 @@ test('image sample length and video controls return when needed without changing
     )!;
     await page.goto(`${app.url}/#/jobs/${images.id}`);
     await page.getByText('Advanced controls', { exact: true }).click();
-    const frames = page.getByLabel('Sample frames', { exact: true });
-    await expect(frames).toHaveValue('124');
+    const frames = page.getByLabel('Sample duration (seconds)', {
+      exact: true,
+    });
+    await expect(frames).toHaveValue('5.166667');
     await frames.fill('1');
     const inspect = page.getByRole('button', {
       name: 'Review configuration',
@@ -191,8 +193,8 @@ test('image sample length and video controls return when needed without changing
     });
     await inspect.click();
     const review = page.getByRole('region', { name: 'Configuration review' });
-    await expect(review).toContainText('Frames: H3 requires');
-    await review.getByRole('button', { name: /^Frames:/ }).click();
+    await expect(review).toContainText('Sample duration: H3 requires');
+    await review.getByRole('button', { name: /^Sample duration:/ }).click();
     await expect(frames).toBeFocused();
     await page
       .getByRole('checkbox', { name: 'Generate a final sample', exact: true })
@@ -212,10 +214,7 @@ test('image sample length and video controls return when needed without changing
     await expect(
       page.getByRole('combobox', { name: 'Audio policy' }),
     ).toBeVisible();
-    await expect(page.getByLabel('Frames', { exact: true })).toHaveValue('1');
-    await inspect.click();
-    await expect(review).toContainText('Frames: H3 requires');
-    await page.getByLabel('Frames', { exact: true }).fill('124');
+    await expect(page.getByLabel('Frames', { exact: true })).toHaveValue('124');
     await inspect.click();
     await expect(review).toContainText('Review passed', { timeout: 240_000 });
     await expect(review).toContainText('1 supervised / 1 included');

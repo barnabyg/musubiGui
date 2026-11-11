@@ -37,6 +37,9 @@ export type JobConfig = {
   preview_every: number;
   sample_prompt: string;
   sample_steps: number;
+  sample_width?: number | null;
+  sample_height?: number | null;
+  sample_frames?: number | null;
   seed: number;
 };
 export type JobDataset = {
@@ -85,6 +88,14 @@ export type ReviewTarget =
     };
 
 export type Review = {
+  sample: {
+    width: number;
+    height: number;
+    frames: number;
+    fps: number;
+    duration: number;
+    native_preview_frames: number;
+  };
   optimizer: JobConfig['optimizer'];
   timestep_sampling: JobConfig['timestep_sampling'];
   timestep_parameters: Record<string, number>;

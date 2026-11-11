@@ -1,19 +1,16 @@
 import { focusField, type JobFields } from './jobFields';
-import { fieldId } from './jobRules';
-import type { Job, SetConfig } from './jobTypes';
+import type { Job } from './jobTypes';
 import type { JobMedia } from './jobMedia';
 
 export function JobEssentials({
   job,
   busy,
   fields,
-  config,
   media,
 }: {
   job: Job;
   busy: boolean;
   fields: JobFields;
-  config: SetConfig;
   media: JobMedia;
 }) {
   const choices: { field: string; message: string }[] = [];
@@ -42,7 +39,7 @@ export function JobEssentials({
     });
   return (
     <section className="panel" id="job-section-essentials" tabIndex={-1}>
-      <h2>Training & sample</h2>
+      <h2>Training</h2>
       <section aria-label="Required choices">
         {choices.length ? (
           <>
@@ -91,32 +88,6 @@ export function JobEssentials({
         job.config.recipe === 'alternating'
           ? 'Total optimizer updates across both experts, not steps per expert.'
           : undefined,
-      )}
-      {fields.toggle('Generate a final sample', 'sample_enabled')}
-      {fields.number(
-        'Preview every N steps',
-        'preview_every',
-        '0 turns off in-run previews. Counts optimizer updates. Previews pause training while they render.',
-      )}
-      {job.config.preview_every > 0 && job.family === 'wan' && (
-        <p className="hint">
-          {job.config.recipe === 'alternating'
-            ? 'Paired previews unload training, sample both experts, then reload training state. Extra boundaries restart the shuffled dataset pass. An expert without updates uses base weights.'
-            : 'In-run Wan previews use the low-noise expert only. The final sample uses both experts.'}
-        </p>
-      )}
-      {(job.config.sample_enabled || job.config.preview_every > 0) && (
-        <label className="field">
-          Sample prompt
-          <textarea
-            id={fieldId('sample_prompt')}
-            {...fields.problemProps('sample_prompt')}
-            disabled={busy}
-            value={job.config.sample_prompt}
-            onChange={(event) => config('sample_prompt', event.target.value)}
-          />
-          {fields.problemText('sample_prompt')}
-        </label>
       )}
     </section>
   );
