@@ -331,8 +331,10 @@ export function RunResult({ outputs }: { outputs: RunOutputs }) {
                     <Download /> Download {expert}-noise LoRA
                   </a>
                 ) : (
-                  <span className="error-text">
-                    {output?.error ?? 'No complete checkpoint available'}
+                  <span className={settled ? 'error-text' : undefined}>
+                    {settled
+                      ? (output?.error ?? 'No complete checkpoint available')
+                      : 'Checkpoint pending'}
                   </span>
                 )}
               </div>

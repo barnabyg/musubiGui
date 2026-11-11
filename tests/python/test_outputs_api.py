@@ -54,6 +54,44 @@ def checkpoint(file: Path) -> None:
     file.write_bytes(len(header).to_bytes(8, "little") + header + struct.pack("<f", 1.0))
 
 
+@pytest.mark.parametrize(
+    "status",
+    [
+        "pending_preparation",
+        "preparing",
+        "prepared",
+        "pending_training",
+        "training",
+        "generating",
+        "stopping",
+        "orphaned",
+        "uncertain",
+        "completed",
+        "failed",
+        "stopped",
+        "cancelled",
+        "interrupted",
+    ],
+)
+@pytest.mark.parametrize("has_low_checkpoint", [False, True])
+def test_paired_outputs_warn_about_missing_experts_only_after_the_run_finishes(
+    tmp_path: Path, status: str, has_low_checkpoint: bool
+) -> None:
+    client, service = output_client(tmp_path)
+    run = submit_run(service, tmp_path, "new-pair")
+    stored = service.store.get(str(run["id"]))
+    stored["job"]["config"]["recipe"] = "alternating"
+    stored["status"] = status
+    if has_low_checkpoint:
+        file = tmp_path / "output" / "new-pair" / "checkpoints" / "low.safetensors"
+        checkpoint(file)
+        stored["expert_states"] = {"low": {"checkpoint": {"path": str(file), "steps": 2}}}
+    service.store.update(str(run["id"]), lambda record: record.update(stored))
+    result = client.get(f"/api/runs/{run['id']}/outputs").json()
+    assert result["lora_pair"] is not None
+    assert bool(result["warnings"]) == (status in {"completed", "failed", "stopped", "cancelled", "interrupted"})
+
+
 def test_outputs_keep_run_association_checkpoint_metadata_and_missing_history_after_restart(tmp_path: Path) -> None:
     client, service = output_client(tmp_path)
     run = submit_run(service, tmp_path, "first")

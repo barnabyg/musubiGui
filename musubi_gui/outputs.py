@@ -281,7 +281,8 @@ class OutputBrowser:
                     "output": match,
                     "source_path": checkpoint.get("path"),
                 }
-            if not all(
+            # Missing experts are expected until training has ended.
+            if run["status"] in {"completed", "failed", "stopped", "cancelled", "interrupted"} and not all(
                 pair[expert]["output"] and pair[expert]["output"]["status"] == "available" for expert in ("low", "high")
             ):
                 warnings = [

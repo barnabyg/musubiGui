@@ -14,7 +14,9 @@ Alternating Wan Runs show **Paired LoRAs** with separate low/high download links
 each expert's cumulative optimizer steps. Download names include the expert and phase
 (or `source` for a checkpoint copied into a restored segment), so the two files do not
 share a download name. Earlier phase and interval checkpoints remain in Run outputs.
-An incomplete pair is labelled explicitly. Saved-state weights remain separate from
+While a Run is preparing, ready or active, missing expert checkpoints show as
+pending. An incomplete pair is labelled explicitly once the Run has completed,
+failed, stopped, been cancelled or been interrupted. Saved-state weights remain separate from
 the downloadable LoRAs. Paired sample metadata records both exact checkpoint paths,
 SHA-256 digests and step counts; sampling refuses missing or changed trained checkpoints.
 
@@ -73,6 +75,19 @@ All fixture media is original CC0 synthetic content and its tiny checkpoint is
 labelled synthetic, not trained.
 
 Focused verification:
+
+To check pending paired checkpoints manually, run from the repository root in
+PowerShell 7:
+
+```powershell
+.\acceptance.cmd --workspace ".cache/pair-pending-$([guid]::NewGuid().ToString('N'))"
+```
+
+Open a Wan job, apply **Smoke test · Wan alternating · 4 steps**, save and review,
+then choose **Prepare run**. Both expert checkpoints should say **Checkpoint pending**
+without an incomplete-pair warning. Choose **Start training**; after completion,
+both expert download links should appear. This synthetic fixture checks the UI and
+orchestration without model weights or GPU training.
 
 ```powershell
 .venv\Scripts\python.exe -m pytest tests/python/test_outputs_api.py -q
