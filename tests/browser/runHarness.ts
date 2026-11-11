@@ -17,6 +17,7 @@ export type RunRecord = {
   directory: string;
   manifest: { items: { caption: { text: string }; absolute_path: string }[] };
   stages: { name: string; status: string }[];
+  processes?: unknown[];
 };
 
 export async function runWorkspace(
@@ -72,21 +73,42 @@ export async function runWorkspace(
   };
   const records = async () =>
     (await (await fetch(`${url}/api/runs`)).json()) as RunRecord[];
+  const cleanupAction = async (run: RunRecord, action: 'stop' | 'cancel') => {
+    const response = await fetch(`${url}/api/runs/${run.id}/${action}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(
+        action === 'stop' ? { force: true, confirmed: true } : {},
+      ),
+    });
+    if (response.ok) return;
+    if (response.status === 409) {
+      const refreshed = await fetch(`${url}/api/runs/${run.id}`);
+      if (refreshed.ok) {
+        const current = (await refreshed.json()) as RunRecord;
+        if (
+          ['prepared', 'completed', 'cancelled', 'failed', 'stopped'].includes(
+            current.status,
+          ) &&
+          !current.processes?.length
+        )
+          return;
+      }
+    }
+    throw new Error(JSON.stringify(await response.json()));
+  };
   const close = async () => {
     try {
       if (!backend.running()) await start();
       for (const run of await records()) {
         if (['training', 'generating', 'stopping'].includes(run.status))
-          await post(`/api/runs/${run.id}/stop`, {
-            force: true,
-            confirmed: true,
-          });
+          await cleanupAction(run, 'stop');
         if (
           ['preparing', 'pending_preparation', 'pending_training'].includes(
             run.status,
           )
         )
-          await post(`/api/runs/${run.id}/cancel`);
+          await cleanupAction(run, 'cancel');
         if (['interrupted', 'orphaned', 'uncertain'].includes(run.status)) {
           const current = (await post(
             `/api/runs/${run.id}/reconcile`,
