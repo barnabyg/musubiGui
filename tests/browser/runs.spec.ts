@@ -1348,12 +1348,28 @@ test('a Wan job combines an image dataset and a video dataset through review, re
       .click();
     const sections = page.getByRole('table', { name: 'Training sections' });
     await expect(sections.locator('tbody tr')).toHaveCount(2);
-    await expect(sections.locator('tbody tr').first()).toContainText(
-      /Susan images\s*Images\s*2\s*2\s*4\s*80\.0%/,
-    );
-    await expect(sections.locator('tbody tr').last()).toContainText(
-      /Susan videos\s*Videos, 16 fps\s*1\s*1\s*1\s*20\.0%/,
-    );
+    await expect(
+      sections.locator('tbody tr').first().locator('th, td'),
+    ).toHaveText([
+      'Susan images',
+      'Images',
+      '256 × 256',
+      '2',
+      '2',
+      '4',
+      '80.0%',
+    ]);
+    await expect(
+      sections.locator('tbody tr').last().locator('th, td'),
+    ).toHaveText([
+      'Susan videos',
+      'Videos, 16 fps',
+      '256 × 256',
+      '1',
+      '1',
+      '1',
+      '20.0%',
+    ]);
     await page.setViewportSize({ width: 760, height: 900 });
     expect(
       await page.evaluate(
