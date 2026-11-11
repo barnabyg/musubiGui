@@ -239,7 +239,7 @@ class RunService:
                 step=absolute - run.get("segment", {}).get("schedule_start", 0),
                 total=run.get("segment", {}).get("additional_steps", run["job"]["config"]["steps"]),
                 expert_steps=expert_steps(absolute, phase["interval"]),
-                eta=None,
+                eta_scope="phase",
             )
         return progress
 

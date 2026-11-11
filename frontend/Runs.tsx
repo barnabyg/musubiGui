@@ -68,6 +68,7 @@ type Progress = {
   total: number;
   elapsed: string | null;
   eta: string | null;
+  eta_scope?: 'phase';
   loss: string | null;
   expert?: string;
   phase_step?: number;
@@ -147,17 +148,28 @@ function TrainingProgress({
   run: Run;
   progress: Progress | null;
 }) {
-  const train = run.stages.find((stage) => stage.name === 'train');
-  if (!train || train.status === 'pending') return null;
+  const training = run.stages.filter(
+    (stage) => stage.name === 'train' && stage.started,
+  );
+  const train = training.at(-1);
+  const trainingActive = Boolean(train && !train.finished);
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (!trainingActive) return;
+    const timer = setInterval(() => tick((value) => value + 1), 1000);
+    return () => clearInterval(timer);
+  }, [trainingActive]);
+  if (!train) return null;
+  const elapsed = training[0].started
+    ? duration(training[0].started, train.finished)
+    : 'unknown';
   if (!progress)
     return (
       <div className="run-progress" aria-label="Training progress">
+        <p>Training elapsed {elapsed}</p>
         <p>Step progress unknown: training has not reported a step yet.</p>
       </div>
     );
-  const elapsed =
-    progress.elapsed ??
-    (train.started ? duration(train.started, train.finished) : 'unknown');
   return (
     <div className="run-progress" aria-label="Training progress">
       <p>
@@ -178,8 +190,9 @@ function TrainingProgress({
         value={progress.step}
       />
       <p>
-        Elapsed {elapsed} · ETA {progress.eta ?? 'unknown'} · Loss{' '}
-        {progress.loss ?? 'unknown'}
+        Training elapsed {elapsed} ·{' '}
+        {progress.eta_scope === 'phase' ? 'Phase ETA' : 'Training ETA'}{' '}
+        {progress.eta ?? 'unknown'} · Loss {progress.loss ?? 'unknown'}
       </p>
     </div>
   );

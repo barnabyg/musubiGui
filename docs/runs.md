@@ -59,8 +59,12 @@ training phases inside it. Dataset caching runs once. Each phase keeps its own l
 checkpoint and optimizer state; neither expert is kept resident while the other trains.
 The GPU lease stays owned across phase switches and final paired sampling.
 Progress reports the active expert, phase updates, overall segment updates and both
-experts' cumulative updates. Phase-local ETA is not presented as the remaining time
-for the entire alternating Run.
+experts' cumulative updates. **Phase ETA** retains the upstream estimate for the active
+expert phase; **Training ETA** applies to single-process training. Neither includes
+later sampling. Missing upstream estimates stay unknown. **Training elapsed** uses
+recorded timestamps from the first training stage through the latest training stage,
+including expert-switch overhead, rather than the resetting progress-bar clock. It
+survives browser reloads and stops advancing when training ends.
 
 **Inspect saved states** lists paired schedule positions, including interval saves
 partway through a phase. Restoration freezes both available expert states as a new

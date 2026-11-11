@@ -63,3 +63,39 @@ def test_logs_route_reports_progress_from_the_training_log_only(tmp_path: Path) 
     assert client.get(f"/api/runs/{run['id']}/logs").json()["progress"] is None
     (tmp_path / "run" / "train.log").write_text("x" * 100_000 + "\nsteps: 1/2 loss=0.5\n", encoding="utf-8")
     assert client.get(f"/api/runs/{run['id']}/logs").json()["progress"]["step"] == 1
+
+
+def test_paired_progress_keeps_reported_eta_with_phase_scope(tmp_path: Path) -> None:
+    service = RunService(tmp_path / "state", device_path=tmp_path / "device.sqlite3", autostart=False)
+    run = service.submit(
+        ExecutionPlan(
+            job={"id": "job", "name": "Job", "family": "wan", "revision": 1, "config": {"steps": 8}},
+            settings=Settings(),
+            manifest={"items": []},
+            directory=tmp_path / "run",
+            cache=tmp_path / "cache",
+            stages=[],
+            fingerprint="fingerprint",
+        )
+    )
+    service.store.update(
+        run["id"],
+        lambda r: r.update(
+            stages=[
+                {
+                    "name": "train",
+                    "status": "running",
+                    "log": "train.log",
+                    "training": {"expert": "high", "start": 4, "interval": 4},
+                }
+            ]
+        ),
+    )
+    (tmp_path / "run" / "train-high-00000004.log").write_text(
+        "steps: 50%| | 2/4 [00:20<00:20, 10s/it, loss=0.5]\n", encoding="utf-8"
+    )
+    progress = service.progress(run["id"])
+    assert progress is not None
+    assert progress["step"] == 6
+    assert progress["eta"] == "00:20"
+    assert progress["eta_scope"] == "phase"
