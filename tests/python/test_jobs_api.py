@@ -188,6 +188,7 @@ def test_duplicate_presets_and_model_conversion_preserve_original_revisions(tmp_
     copied_review = client.post(f"/api/jobs/{copied['id']}/review", json={}).json()
     assert original_review["paths"]["output"] != copied_review["paths"]["output"]
     preset = client.post(f"/api/jobs/{original['id']}/presets", json={"name": "Rank sixteen"}).json()
+    assert preset["id"] not in {item["id"] for item in client.get("/api/jobs/presets").json()}
     other = client.post("/api/jobs", json={"name": "Other", "family": "wan"}).json()
     applied = client.post(
         f"/api/jobs/{other['id']}/apply-preset", json={"preset_id": preset["id"], "revision": 1}
@@ -257,6 +258,7 @@ def test_new_draft_defaults_are_realistic_and_leave_the_prompt_empty(tmp_path: P
     wan = client.get("/api/jobs/defaults/wan").json()
     h3 = client.get("/api/jobs/defaults/h3").json()
     assert (wan["width"], wan["height"], wan["frames"], wan["rank"], wan["alpha"]) == (832, 480, 33, 16, 16)
+    assert (wan["recipe"], wan["expert_interval"]) == ("alternating", 30)
     assert (h3["width"], h3["height"], h3["frames"], h3["rank"], h3["alpha"]) == (640, 352, 124, 8, 8)
     for config in [wan, h3]:
         assert (config["steps"], config["save_every"], config["save_state"]) == (600, 100, True)
@@ -294,7 +296,8 @@ def test_existing_data_keeps_its_values_when_fields_are_missing(tmp_path: Path) 
 def test_smoke_presets_restore_the_quick_check_and_keep_components(tmp_path: Path) -> None:
     client = client_for(tmp_path)
     presets = {preset["id"]: preset for preset in client.get("/api/jobs/presets").json()}
-    assert presets["smoke-wan"]["name"] == "Smoke test · Wan · 2 steps"
+    assert "smoke-wan" not in presets
+    assert presets["smoke-wan-paired"]["config"]["recipe"] == "alternating"
     assert presets["smoke-h3"]["family"] == "h3"
     job = client.post(
         "/api/jobs",
@@ -304,13 +307,27 @@ def test_smoke_presets_restore_the_quick_check_and_keep_components(tmp_path: Pat
             "config": {**client.get("/api/jobs/defaults/wan").json(), "components": {"wan_low": "kept"}, "seed": 7},
         },
     ).json()
-    config = client.post(f"/api/jobs/{job['id']}/apply-preset", json={"preset_id": "smoke-wan", "revision": 1}).json()[
-        "config"
-    ]
-    assert (config["width"], config["frames"], config["steps"], config["save_every"]) == (256, 17, 2, 1)
-    assert (config["sample_steps"], config["save_state"]) == (4, False)
+    config = client.post(
+        f"/api/jobs/{job['id']}/apply-preset", json={"preset_id": "smoke-wan-paired", "revision": 1}
+    ).json()["config"]
+    assert (config["width"], config["frames"], config["steps"], config["save_every"]) == (256, 17, 4, 1)
+    assert (config["sample_steps"], config["save_state"], config["recipe"]) == (4, True, "alternating")
     assert config["sample_prompt"].startswith("A red square")
     assert (config["components"], config["seed"]) == ({"wan_low": "kept"}, 7)
+
+
+def test_conversion_to_wan_enables_both_experts_and_optimizer_state(tmp_path: Path) -> None:
+    client = client_for(tmp_path)
+    job = client.post("/api/jobs", json={"name": "Short H3", "family": "h3"}).json()
+    converted = client.post(
+        f"/api/jobs/{job['id']}/convert", json={"family": "wan", "revision": 1, "confirmed": True}
+    ).json()["config"]
+    assert (converted["recipe"], converted["save_state"], converted["expert_interval"], converted["steps"]) == (
+        "alternating",
+        True,
+        1,
+        2,
+    )
 
 
 def test_conversion_moves_default_capacity_to_the_target_model_and_keeps_chosen_values(tmp_path: Path) -> None:

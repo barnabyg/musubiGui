@@ -101,7 +101,11 @@ export function JobIdentity({
         >
           {job.family === 'wan' ? (
             <>
-              <option value="low-noise">Wan low-noise expert · T2V A14B</option>
+              {job.config.recipe === 'low-noise' && (
+                <option value="low-noise" disabled>
+                  Choose alternating high/low training
+                </option>
+              )}
               <option value="alternating">
                 Wan alternating low/high experts · T2V A14B
               </option>
@@ -122,8 +126,8 @@ export function JobIdentity({
               </>
             ) : (
               <>
-                Native FP16 experts; one expert is trained and both experts are
-                used for sampling.
+                Select alternating low/high experts to train both models.
+                Optimizer state saving will be enabled.
               </>
             )
           ) : (

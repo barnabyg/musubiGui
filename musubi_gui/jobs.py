@@ -118,7 +118,14 @@ def default_config(family: str) -> JobConfig:
         else {"width": 832, "height": 480, "frames": 33, "rank": 16, "alpha": 16, "sample_steps": 20}
     )
     return smoke_config(family).model_copy(
-        update={**size, "steps": NEW_DRAFT_STEPS, "save_every": 100, "save_state": True, "sample_prompt": ""}
+        update={
+            **size,
+            **({"recipe": PAIRED_RECIPE} if family == "wan" else {}),
+            "steps": NEW_DRAFT_STEPS,
+            "save_every": 100,
+            "save_state": True,
+            "sample_prompt": "",
+        }
     )
 
 
@@ -260,7 +267,6 @@ SMOKE_CONTROLS = (
 SMOKE_PRESETS = {
     preset.id: preset
     for preset in [
-        Preset(id="smoke-wan", name="Smoke test · Wan · 2 steps", family="wan", config=smoke_config("wan")),
         Preset(
             id="smoke-wan-paired",
             name="Smoke test · Wan alternating · 4 steps",
@@ -341,6 +347,10 @@ def conversion_draft(job: Job, family: Literal["wan", "h3"]) -> JobDraft:
             if value >= 64 and value % (32 if family == "h3" else 16) == 0:
                 shared[key] = value
     config = default_config(family).model_copy(update=shared)
+    if family == "wan":
+        config = config.model_copy(
+            update={"save_state": True, "expert_interval": min(config.expert_interval, max(1, config.steps // 2))}
+        )
     return JobDraft(name=job.name, family=family, datasets=job.datasets, config=config)
 
 
@@ -516,9 +526,14 @@ class JobStore:
             return job
 
     def presets(self) -> builtins.list[Preset]:
-        return [*MEASURED_PRESETS.values(), *SMOKE_PRESETS.values()] + [
+        saved = [
             Preset.model_validate_json(file.read_text(encoding="utf-8"))
             for file in sorted((self.root.parent / "presets").glob("*.json"))
+        ]
+        return [
+            *MEASURED_PRESETS.values(),
+            *SMOKE_PRESETS.values(),
+            *(preset for preset in saved if preset.family != "wan" or preset.config.recipe == PAIRED_RECIPE),
         ]
 
     def create_preset(self, job_id: str, name: str) -> Preset:
@@ -582,7 +597,7 @@ def configuration_errors(job: Job, *, has_videos: bool = True) -> list[str]:
         errors.append("Dataset: the same dataset is listed more than once; remove the extra row.")
     if job.family == "wan":
         if config.recipe not in {"low-noise", PAIRED_RECIPE}:
-            errors.append("Recipe: choose low-noise or alternating high/low Wan training.")
+            errors.append("Recipe: choose alternating high/low Wan training.")
         if config.recipe == PAIRED_RECIPE:
             if config.expert_interval < 1:
                 errors.append("Expert interval: enter a positive integer.")

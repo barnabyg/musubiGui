@@ -447,12 +447,13 @@ test('Wan draft controls, validation and reviewed native configuration survive s
       'target_frames = [33]',
     );
     await page.getByText('Advanced', { exact: true }).click();
-    await page.getByText('train arguments', { exact: true }).click();
+    await page.getByText('train arguments', { exact: true }).first().click();
     await expect(
       page
         .locator('details details')
         .filter({ has: page.getByText('train arguments', { exact: true }) })
-        .locator('pre'),
+        .locator('pre')
+        .first(),
     ).toContainText('"--network_dim",\n  "16"');
     const jobs = (await (
       await page.request.get(`${app.url}/api/jobs`)
@@ -515,7 +516,7 @@ test('a new draft starts realistic, warns about low steps and offers the smoke-t
     await expect(page.getByText(/^Sampling: enter a prompt/)).toBeVisible();
     await page
       .getByRole('combobox', { name: 'Compatible preset', exact: true })
-      .selectOption({ label: 'Smoke test · Wan · 2 steps' });
+      .selectOption({ label: 'Smoke test · Wan alternating · 4 steps' });
     await page
       .getByRole('button', { name: 'Apply preset', exact: true })
       .click();
@@ -730,7 +731,7 @@ test('duplication presets cancelled conversion and versioned export import keep 
       .getByRole('button', { name: 'Cancel conversion', exact: true })
       .click();
     await expect(page.getByRole('combobox', { name: /^Recipe/ })).toHaveValue(
-      'low-noise',
+      'alternating',
     );
     await jobAction(page, 'Import / export configuration');
     const download = page.waitForEvent('download');
