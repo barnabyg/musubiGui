@@ -675,6 +675,7 @@ test('Wan and H3 prepare and train through the GUI with frozen captions cache re
           ),
         )
         .toBeGreaterThan(0);
+      await page.getByRole('tab', { name: 'Overview', exact: true }).click();
       const inspect = page.getByRole('button', {
         name: 'Inspect saved states',
         exact: true,
