@@ -24,7 +24,7 @@ from musubi_gui.redaction import redact
 from musubi_gui.run_store import RunStore, preparation_transaction
 from musubi_gui.safetensors_file import safetensors_header
 from musubi_gui.settings import Settings, atomic_json, validate_paths, within_root
-from musubi_gui.training_sections import dataset_toml, plan_sections, section_balance
+from musubi_gui.training_sections import dataset_resolution, dataset_toml, plan_sections, section_balance
 from musubi_gui.video_sampling import plan_windows
 from musubi_gui.wan import validate_wan, wan_stages
 from musubi_gui.wan_pair import MAX_PHASES, PAIRED_RECIPE, alternating_phases, expert_steps
@@ -135,6 +135,8 @@ class JobDataset(BaseModel):
     dataset_id: str
     # None inherits config.repeats, the [general] default.
     repeats: int | None = None
+    # Omit absent overrides so older records and exports keep their original shape.
+    resolution: tuple[int, int] | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 def _check_version_fields(version: Any, draft: Any) -> None:
@@ -214,6 +216,9 @@ class Preset(NamedPreset):
     id: str
     family: Literal["wan", "h3"]
     config: JobConfig
+    dataset_resolutions: dict[str, tuple[int, int] | None] = Field(
+        default_factory=dict, exclude_if=lambda value: not value
+    )
 
 
 # Capacity configurations measured on the target PC in #26; see docs/reference/evidence/production-trial.json.
@@ -540,7 +545,11 @@ class JobStore:
         job = self.get(job_id)
         self._require_unarchived(job_id)
         preset = Preset(
-            name=name, id=uuid.uuid4().hex, family=job.family, config=export_draft(as_draft(job)).draft.config
+            name=name,
+            id=uuid.uuid4().hex,
+            family=job.family,
+            config=export_draft(as_draft(job)).draft.config,
+            dataset_resolutions={entry.dataset_id: entry.resolution for entry in job.datasets},
         )
         directory = self.root.parent / "presets"
         directory.mkdir(parents=True, exist_ok=True)
@@ -569,6 +578,13 @@ class JobStore:
                 else preset.config
             )
             draft = as_draft(job).model_copy(update={"config": config})
+            if not built_in and preset.dataset_resolutions:
+                draft.datasets = [
+                    entry.model_copy(update={"resolution": preset.dataset_resolutions[entry.dataset_id]})
+                    if entry.dataset_id in preset.dataset_resolutions
+                    else entry
+                    for entry in job.datasets
+                ]
             return self.save(job_id, draft, selection.revision)
 
 
@@ -769,7 +785,12 @@ def disk_preflight(
             # Review reports unreadable media through the dataset checks.
             continue
     images = [item for item in items if item["kind"] == "image"]
-    estimate = estimate_disk(job.family, job.config, [*images, *video_windows], media_bytes=media_bytes)
+    sizes = {item["id"]: dataset_resolution(job, item.get("dataset_id", "")) for item in items}
+    estimated_items = [
+        {**item, "resolution": sizes.get(item["id"], (job.config.width, job.config.height))}
+        for item in [*images, *video_windows]
+    ]
+    estimate = estimate_disk(job.family, job.config, estimated_items, media_bytes=media_bytes)
     volumes = check_volumes(settings, estimate, free=free_space_reader(fixture_mode=fixture_mode))
     return {"estimate": estimate, "volumes": volumes}
 
@@ -861,9 +882,10 @@ def _review_items(
 def _reshaped_image_warning(job: Job, dataset: dict[str, Any], items: list[dict[str, Any]]) -> list[str]:
     """Bucketing off leaves the pinned loader one bucket: image_video_dataset.py scales to cover it and centre-crops."""
     config = job.config
-    if config.enable_bucket or config.width < 1 or config.height < 1:
+    width, height = dataset_resolution(job, dataset["id"])
+    if config.enable_bucket or width < 1 or height < 1:
         return []
-    target = config.width / config.height
+    target = width / height
 
     def reshaped(item: dict[str, Any]) -> bool:
         width, height = item.get("metadata", {}).get("width"), item.get("metadata", {}).get("height")
@@ -874,7 +896,7 @@ def _reshaped_image_warning(job: Job, dataset: dict[str, Any], items: list[dict[
         return []
     images = "1 image has" if count == 1 else f"{count} images have"
     return [
-        f'Dataset "{dataset["name"]}": {images} a different shape from {config.width}×{config.height} and bucketing is '
+        f'Dataset "{dataset["name"]}": {images} a different shape from {width}×{height} and bucketing is '
         "off, so training scales each to cover that size and crops the overflow from the centre. "
         + (
             "Enable bucketing to keep the whole image."
@@ -1053,6 +1075,14 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
                 )
                 continue
             datasets.append(dataset)
+            if entry.resolution is not None:
+                multiple = 16 if job.family == "wan" else 32
+                for dimension, dimension_value in zip(("width", "height"), entry.resolution, strict=True):
+                    if dimension_value < 64 or dimension_value % multiple:
+                        errors.add(
+                            f'Dataset "{dataset["name"]}": resolution {dimension} must be at least 64 and a multiple of {multiple}.',
+                            field=f"resolution-{entry.dataset_id}-{dimension}",
+                        )
             if entry.repeats is not None and entry.repeats < 1:
                 errors.add(
                     f'Dataset "{dataset["name"]}": enter repeats of at least one, or leave them blank to use the job\'s.',

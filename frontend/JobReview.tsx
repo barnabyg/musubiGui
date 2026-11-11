@@ -199,6 +199,7 @@ export function JobReview({
               <tr>
                 <th scope="col">Dataset</th>
                 <th scope="col">Type</th>
+                <th scope="col">Resolution</th>
                 <th scope="col">Items</th>
                 <th scope="col">Repeats</th>
                 <th scope="col">Samples per epoch</th>
@@ -210,6 +211,7 @@ export function JobReview({
                 <tr key={index}>
                   <th scope="row">{section.dataset}</th>
                   <td>{sectionType(section)}</td>
+                  <td>{section.resolution.join(' × ')}</td>
                   <td>{section.items}</td>
                   <td>{section.repeats}</td>
                   <td>{section.samples}</td>

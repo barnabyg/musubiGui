@@ -137,6 +137,8 @@ def cache_stage_keys(
     ]
     # One dataset's keys stay as they were, so its caches stay reusable.
     layout = {"sections": layout_identity(job, items)} if len(job.datasets) > 1 else {}
+    if any(entry.resolution is not None for entry in job.datasets):
+        layout = {"sections": layout_identity(job, items)}
     keys = {
         "latent_cache": digest(
             {

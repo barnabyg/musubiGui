@@ -106,6 +106,41 @@ because 200 images can otherwise swamp 10 clips without notice. This is only a w
 
 ## Training sections
 
+### Per-dataset training resolution
+
+Expand **Training resolution** on a dataset row to choose one width and height for
+that dataset. Leave **Use job resolution** checked to inherit Dataset preparation's
+width and height. Wan dimensions must be at least 64 and multiples of 16; H3 uses
+multiples of 32. Bucketing remains a separate aspect-ratio choice. Sample and preview
+geometry always comes from the job settings, independently of training overrides.
+
+Review lists the effective size of every training section. Overrides reach the native
+dataset TOML, cache identity and latent disk estimates; changing one invalidates the
+job's compatible preparation caches, including for a single-dataset job. Existing
+jobs without overrides retain their geometry and cache keys. Revisions and exports
+preserve overrides. Saved presets restore explicit sizes or inheritance for matching
+dataset IDs without adding datasets; older presets and built-in presets leave dataset
+overrides alone.
+
+Musubi Tuner supports this through its dataset-level `resolution`, inheriting from
+`[general]` when omitted; see the pinned
+[configuration schema](https://github.com/kohya-ss/musubi-tuner/blob/f8a1b03794a49239a3539015075f5123d6c07d66/src/musubi_tuner/dataset/config_utils.py#L113-L122).
+Multiple training resolutions within one dataset are not supported by this UI.
+
+From `C:/docs/git/musubiGui` in PowerShell 7, run:
+
+```powershell
+.\acceptance.cmd --workspace ".cache/resolution-check-$([guid]::NewGuid().ToString('N'))"
+```
+
+Open **WAN acceptance 1**, add **H3 acceptance** as its second dataset, and set the
+dataset training sizes to 320 × 256 and 256 × 320. Save and reload: both sizes should
+remain. Review should list both sizes and pass, while the sample remains 256 × 256.
+Choose **Prepare run** and expect a prepared Run. Repeat with an invalid width of
+65: review should link to that dataset's width and block preparation. The default
+fixture uses CPU workers; it proves orchestration and persistence, not GPU capacity
+or useful training. Real GPU geometry changes still require capacity qualification.
+
 `musubi_gui/training_sections.py` turns a job and its included items into native dataset
 sections. Review and preparation both use it, so the TOML that review shows is the one that
 runs, apart from the Run's own folder. A section has a dataset, a type (images or videos), a

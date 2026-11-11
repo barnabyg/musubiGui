@@ -32,7 +32,11 @@ export type JobConfig = {
   sample_steps: number;
   seed: number;
 };
-export type JobDataset = { dataset_id: string; repeats: number | null };
+export type JobDataset = {
+  dataset_id: string;
+  repeats: number | null;
+  resolution?: [number, number] | null;
+};
 export type Job = {
   version: number;
   id: string;
@@ -84,6 +88,7 @@ export type Review = {
     dataset: string;
     kind: 'image' | 'video';
     fps: number | null;
+    resolution: [number, number];
     items: number;
     repeats: number;
     samples: number;

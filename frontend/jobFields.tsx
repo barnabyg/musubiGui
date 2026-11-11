@@ -20,13 +20,23 @@ export function jobFields(
   const liveProblems: Record<string, string> = job
     ? fieldProblems(job.family, job.config, hasVideos)
     : {};
-  for (const entry of job?.datasets ?? [])
+  for (const entry of job?.datasets ?? []) {
+    if (entry.resolution) {
+      const multiple = job?.family === 'h3' ? 32 : 16;
+      for (const [index, dimension] of ['width', 'height'].entries()) {
+        const value = entry.resolution[index];
+        if (!Number.isInteger(value) || value < 64 || value % multiple)
+          liveProblems[`resolution-${entry.dataset_id}-${dimension}`] =
+            `Enter at least 64, in whole multiples of ${multiple}.`;
+      }
+    }
     if (
       entry.repeats !== null &&
       (!Number.isInteger(entry.repeats) || entry.repeats < 1)
     )
       liveProblems[datasetField(entry.dataset_id)] =
         'Enter a whole number of 1 or more, or leave blank.';
+  }
   // Review errors about a field show beside it, unless the check while typing already says so.
   const problems: Record<string, string> = {};
   // Review reports size as one error, so the check while typing says which dimension it means.
