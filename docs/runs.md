@@ -71,6 +71,8 @@ later sampling. Missing upstream estimates stay unknown. **Training elapsed** us
 recorded timestamps from the first training stage through the latest training stage,
 including expert-switch overhead, rather than the resetting progress-bar clock. It
 survives browser reloads and stops advancing when training ends.
+The logs API keeps `progress.eta` in its upstream time format and adds
+`progress.eta_scope: "phase"` for alternating Wan; callers must preserve that scope.
 
 **Inspect saved states** lists paired schedule positions, including interval saves
 partway through a phase. Restoration freezes both available expert states as a new
