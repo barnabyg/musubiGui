@@ -354,6 +354,42 @@ not real training or useful learning; see the [Wan reference](reference/wan.md).
 
 ## Disk estimates
 
+### Checkpoint retention
+
+Under Advanced controls, Checkpoints & final sample, set **Maximum checkpoint saves to keep**.
+Zero (the default, including older jobs) keeps unlimited history. A positive value keeps
+that many historical saves per expert plus the newest/final save. A save includes its
+LoRA and optimizer/training state when enabled. Wan protects the latest restorable pair,
+pending phase/sampling inputs, and the counterparts needed to restore retained pairs.
+Other Runs' frozen inputs and restoration sources are also protected, so these exceptions
+can exceed the limit. Sampling results are never pruned.
+
+During training the worker checks about every five seconds and at phase completion. It
+only prunes older validated saves once a newer complete save exists. Incomplete saves and
+unknown files are kept. Files are first quarantined under the Run's checkpoints folder;
+a durable journal allows interrupted removals to resume at the next check or saved-state
+inspection. Run details show removal counts, protected exceptions and errors. A removal
+failure does not fail training; inspect its reported error before removing a quarantine
+remainder manually. Quarantined and intentionally pruned artifacts are not offered as outputs
+or restoration choices. Restored segments start their own retention journal.
+
+Review reports expected retained saves before protected exceptions. The disk budget remains
+a conservative peak upper bound: short step intervals can accumulate saves between checks,
+and protected restoration sources cannot be counted as reclaimable storage.
+
+To verify manually, run from the repository root in PowerShell 7:
+
+```powershell
+.\acceptance.cmd --workspace ".cache/retention-$([guid]::NewGuid().ToString('N'))" --wan-paired
+```
+
+Open WAN acceptance 1, expand Advanced controls, set Training steps to 12, steps per expert
+to 2, Save every N steps to 1 and Maximum checkpoint saves to keep to 1. Review, then Prepare
+and start. Expect older saves to be pruned while both final expert LoRAs and their latest
+restorable pair remain available. Inspect Run details for retention status, restore the latest
+pair for four additional steps, and confirm the new segment completes. Zero should retain
+history as before. This command uses synthetic CPU workers and does not qualify GPU training.
+
 Review also estimates the disk a Run will use: the media snapshot, caches, LoRA
 checkpoints, optimizer states and samples, plus the free space on each target volume.
 When the output and cache roots share a volume, their needs are added together. A Run

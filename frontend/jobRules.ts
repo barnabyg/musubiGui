@@ -106,6 +106,12 @@ export function fieldProblems(
     ((config.preview_every ?? 0) as number) < 0
   )
     problems.preview_every = 'Enter zero (off) or a positive whole number.';
+  if (
+    !Number.isInteger(config.keep_checkpoints ?? 0) ||
+    (config.keep_checkpoints as number) < 0
+  )
+    problems.keep_checkpoints =
+      'Enter zero (unlimited) or a positive whole number.';
   return problems;
 }
 
@@ -129,6 +135,7 @@ const errorFields: [RegExp, string][] = [
   [/^Steps:/, 'steps'],
   [/^Gradient accumulation:/, 'gradient_accumulation'],
   [/^Checkpoint interval:/, 'save_every'],
+  [/^Checkpoint retention:/, 'keep_checkpoints'],
   [/^Sample steps:/, 'sample_steps'],
   [/^Preview interval:/, 'preview_every'],
   [/^Learning rate:/, 'learning_rate'],

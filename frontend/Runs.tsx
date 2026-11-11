@@ -21,6 +21,12 @@ type Run = {
   created: string;
   status: string;
   error: string | null;
+  retention?: {
+    removed?: string[];
+    pending?: string[];
+    errors?: string[];
+    protected?: string[];
+  };
   fixture: boolean;
   job: {
     id: string;
@@ -678,6 +684,26 @@ export function Runs({
                     ))}
                 </ul>
               </section>
+              {run.retention && (
+                <section aria-label="Checkpoint retention">
+                  <p>
+                    Checkpoint retention: {run.retention.removed?.length ?? 0}{' '}
+                    artifacts pruned; {run.retention.protected?.length ?? 0}{' '}
+                    protected artifacts retained beyond the limit.
+                  </p>
+                  {run.retention.errors?.map((error) => (
+                    <p className="error" key={error}>
+                      {error}
+                    </p>
+                  ))}
+                  {!!run.retention.pending?.length && (
+                    <p>
+                      Pruning will retry for {run.retention.pending.length}{' '}
+                      artifacts at the next checkpoint check.
+                    </p>
+                  )}
+                </section>
+              )}
               {run.start_after_prepare &&
                 ['pending_preparation', 'preparing'].includes(run.status) && (
                   <p>Training starts by itself when preparation succeeds.</p>

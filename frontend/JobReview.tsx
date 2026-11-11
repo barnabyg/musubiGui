@@ -185,6 +185,15 @@ export function JobReview({
       </section>
       <details data-testid="disk-estimate">
         <summary>Estimated disk use</summary>
+        {job.config.keep_checkpoints > 0 && (
+          <p>
+            Keep {job.config.keep_checkpoints} historical saves per expert, plus
+            final results and protected restoration inputs. Disk estimates
+            remain conservative: saves can accumulate between pruning checks,
+            and protected saves may exceed the limit. Expected retained saves
+            before protected exceptions: {review.disk.estimate.retained_saves}.
+          </p>
+        )}
         <ul>
           <li>
             Media snapshot: {sizeLabel(review.disk.estimate.media_snapshot)}

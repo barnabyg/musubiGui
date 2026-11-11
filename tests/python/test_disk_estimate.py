@@ -78,6 +78,16 @@ def test_saves_scale_the_estimate_and_state_can_be_left_out() -> None:
     assert without_sample["samples"] == 0
 
 
+def test_retention_reports_expected_history_without_underestimating_peak_storage() -> None:
+    config = wan_trial_config(steps=2000, keep_checkpoints=2)
+    estimate = estimate_disk("wan", config, [clip()], media_bytes=0)
+    assert estimate["retained_saves"] == 3
+    assert estimate["saves"] == 21
+    # Polling and protected sources can exceed the limit, so disk preflight remains a safe upper bound.
+    unlimited = estimate_disk("wan", config.model_copy(update={"keep_checkpoints": 0}), [clip()], media_bytes=0)
+    assert estimate["output_root"] == unlimited["output_root"]
+
+
 def test_every_cached_window_and_image_adds_a_latent_but_only_items_add_text() -> None:
     config = wan_trial_config()
     one = estimate_disk("wan", config, [clip(1)], media_bytes=0)["caches"]

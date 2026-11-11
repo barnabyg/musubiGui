@@ -418,6 +418,11 @@ export function JobControls({
         <h2>Checkpoints & final sample</h2>
         <div className="number-row">
           {number('Save every N steps', 'save_every')}
+          {number(
+            'Maximum checkpoint saves to keep',
+            'keep_checkpoints',
+            '0 keeps all saves. Applies per expert; final results and states needed for restoration are protected and may exceed the limit.',
+          )}
         </div>
         {toggle(
           'Save optimizer/training state',

@@ -86,6 +86,7 @@ class JobConfig(BaseModel):
     block_swap_h2d_only: bool = False
     audio_policy: Literal["require", "allow-missing"] = "require"
     save_every: int = 1
+    keep_checkpoints: int = 0
     save_state: bool = False
     sample_enabled: bool = True
     preview_every: int = 0
@@ -694,6 +695,8 @@ def configuration_errors(job: Job, *, has_videos: bool = True) -> list[str]:
         )
     if config.preview_every < 0:
         errors.append("Preview interval: enter zero (off) or a positive number of optimizer steps.")
+    if config.keep_checkpoints < 0:
+        errors.append("Checkpoint retention: enter zero (unlimited) or a positive number of saves.")
     if config.preview_every > 0 and config.recipe == PAIRED_RECIPE and config.steps > 0 and config.expert_interval > 0:
         try:
             alternating_phases(config.steps, config.expert_interval, preview_every=config.preview_every)

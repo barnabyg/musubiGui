@@ -28,6 +28,7 @@ export type JobConfig = {
   block_swap_h2d_only: boolean;
   audio_policy: 'require' | 'allow-missing';
   save_every: number;
+  keep_checkpoints: number;
   save_state: boolean;
   sample_enabled: boolean;
   preview_every: number;
@@ -130,6 +131,7 @@ export type Review = {
       states: number;
       samples: number;
       saves: number;
+      retained_saves?: number;
     };
     volumes: {
       volume: string;

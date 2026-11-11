@@ -97,6 +97,10 @@ def estimate_disk(family: str, config: "JobConfig", items: list[dict[str, Any]],
         "states": states,
         "samples": samples,
         "saves": saves,
+        # Retention is checked periodically and protects restoration inputs; peak remains an upper bound.
+        "retained_saves": min(saves, (config.keep_checkpoints + 1) * (2 if config.recipe == PAIRED_RECIPE else 1))
+        if config.keep_checkpoints > 0
+        else saves,
         "output_root": media_bytes + checkpoints + states + samples,
         "cache_root": caches,
     }
