@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
-from helpers import acceptance_workspace
+from helpers import acceptance_workspace, wait_for
 
 from musubi_gui.app import create_app
 from musubi_gui.jobs import smoke_config
@@ -149,5 +149,77 @@ def test_single_dataset_override_changes_prepared_cache_identity_and_disk_only_f
         native = tomllib.loads((Path(second["directory"]) / "dataset.toml").read_text(encoding="utf-8"))
         assert native["datasets"][0]["resolution"] == [512, 256]
         assert native["general"]["resolution"] == [256, 256]
+    finally:
+        service.close()
+
+
+def test_two_dataset_resolutions_reuse_compatible_caches_and_rebuild_after_one_size_changes(tmp_path: Path) -> None:
+    workspace = acceptance_workspace(tmp_path)
+    assets = tmp_path / "assets"
+    assets.mkdir()
+    state = Path(workspace["state"])
+    client = TestClient(create_app(state, assets, fixture_mode=True, device_path=tmp_path / "api-gpu.db"))
+    ids = [
+        next(entry["dataset_id"] for entry in workspace["jobs"] if entry["family"] == family)
+        for family in ("wan", "h3")
+    ]
+    config = smoke_config("wan").model_copy(update={"sample_enabled": False}).model_dump()
+    created = client.post(
+        "/api/jobs",
+        json={
+            "name": "Two cached sizes",
+            "family": "wan",
+            "config": config,
+            "datasets": [
+                {"dataset_id": ids[0], "resolution": [320, 256]},
+                {"dataset_id": ids[1], "resolution": [256, 320]},
+            ],
+        },
+    )
+    assert created.status_code == 200, created.text
+    job = created.json()
+    service = RunService(state, fixture_mode=True, device_path=tmp_path / "worker-gpu.db")
+    try:
+        first = service.prepare(job["id"])
+        wait_for(service, first["id"], "prepared", device_released=True)
+        config["steps"] = 3
+        saved = client.put(
+            f"/api/jobs/{job['id']}",
+            json={
+                "name": job["name"],
+                "family": "wan",
+                "config": config,
+                "datasets": job["datasets"],
+                "revision": job["revision"],
+            },
+        )
+        assert saved.status_code == 200, saved.text
+        second = service.prepare(job["id"])
+        prepared = wait_for(service, second["id"], "prepared", device_released=True)
+        caches = [stage for stage in prepared["stages"] if stage["name"] in {"latent_cache", "text_cache"}]
+        assert [stage["status"] for stage in caches] == ["reused", "reused"]
+        assert all(stage["reused_from"] == first["id"] for stage in caches)
+        updated_datasets = [{"dataset_id": ids[0], "resolution": [512, 256]}, job["datasets"][1]]
+        changed = client.put(
+            f"/api/jobs/{job['id']}",
+            json={
+                "name": job["name"],
+                "family": "wan",
+                "config": config,
+                "datasets": updated_datasets,
+                "revision": saved.json()["revision"],
+            },
+        )
+        assert changed.status_code == 200, changed.text
+        third = service.prepare(job["id"])
+        rebuilt = wait_for(service, third["id"], "prepared", device_released=True)
+        assert [stage["status"] for stage in rebuilt["stages"] if stage["name"] in {"latent_cache", "text_cache"}] == [
+            "completed",
+            "completed",
+        ]
+        native = tomllib.loads((Path(third["directory"]) / "dataset.toml").read_text(encoding="utf-8"))
+        assert [section["resolution"] for section in native["datasets"]] == [[512, 256], [256, 320]]
+        assert native["general"]["resolution"] == [256, 256]
+        assert any(Path(first["cache"]).glob("dataset*/*.safetensors"))
     finally:
         service.close()
