@@ -84,6 +84,7 @@ for (const family of ['wan', 'h3'] as const) {
             frames: number;
             fps: number;
             duration: number;
+            preview?: unknown;
           };
         }[];
       };
@@ -93,11 +94,12 @@ for (const family of ['wan', 'h3'] as const) {
         expect(output.status).toBe('available');
         expect(output.metadata.width).toBe(320);
         expect(output.metadata.height).toBe(192);
-        expect(output.metadata.frames).toBe(frames);
-        expect(output.metadata.duration).toBeCloseTo(
-          frames / (family === 'wan' ? 16 : 24),
-          2,
-        );
+        const nativeWan = family === 'wan' && output.metadata.preview;
+        const effectiveFrames = nativeWan ? 49 : frames;
+        const fps = nativeWan || family === 'h3' ? 24 : 16;
+        expect(output.metadata.frames).toBe(effectiveFrames);
+        expect(output.metadata.fps).toBe(fps);
+        expect(output.metadata.duration).toBeCloseTo(effectiveFrames / fps, 2);
       }
       await page.getByRole('tab', { name: 'Samples', exact: true }).click();
       await expect(

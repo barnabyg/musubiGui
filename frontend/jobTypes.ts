@@ -94,6 +94,7 @@ export type Review = {
     frames: number;
     fps: number;
     duration: number;
+    native_preview_frames: number;
   };
   optimizer: JobConfig['optimizer'];
   timestep_sampling: JobConfig['timestep_sampling'];

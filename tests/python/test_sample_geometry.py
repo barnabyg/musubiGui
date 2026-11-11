@@ -33,7 +33,11 @@ def test_legacy_samples_inherit_geometry_but_explicit_overrides_are_shared_by_al
     assert args[args.index("--video_size") + 1 : args.index("--video_size") + 3] == ["192", "320"]
     assert args[args.index("--video_length") + 1] == str(config.sample_frames)
     prompt = preview_prompt(job)[0]
-    assert (prompt["width"], prompt["height"], prompt["frame_count"]) == sample_geometry(config)
+    assert (prompt["width"], prompt["height"], prompt["frame_count"]) == (320, 192, 49 if family == "wan" else 141)
+    if family == "wan":
+        assert abs(prompt["frame_count"] / 24 - config.sample_frames / 16) <= 2 / 24
+        legacy = job.model_copy(update={"config": old})
+        assert preview_prompt(legacy)[0]["frame_count"] == old.frames
     assert (config.width, config.height, config.frames) == (old.width, old.height, old.frames)
 
 

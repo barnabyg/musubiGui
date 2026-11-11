@@ -76,7 +76,18 @@ export function JobReview({
             {review.sample.frames === 1
               ? 'image sample'
               : `${review.sample.fps} fps · ${Number(review.sample.duration.toFixed(6))} seconds`}
-            . Shared by previews and final sampling.
+            .
+          </p>
+        )}
+      {job.family === 'wan' &&
+        job.config.recipe !== 'alternating' &&
+        job.config.preview_every > 0 &&
+        review.sample?.frames > 1 && (
+          <p>
+            Native preview: {review.sample.width} × {review.sample.height} ·{' '}
+            {review.sample.native_preview_frames} frames · 24 fps ·{' '}
+            {Number((review.sample.native_preview_frames / 24).toFixed(6))}{' '}
+            seconds. Native previews use the pinned trainer's 24 fps frame grid.
           </p>
         )}
       {(['errors', 'warnings'] as const).map((level) => {

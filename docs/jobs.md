@@ -575,6 +575,11 @@ at 16 fps for Wan; `17*n+5`, from 124 to 345 frames, at 24 fps for H3. The effec
 resolution, frames, fps and duration appear beside the controls and in Review;
 out-of-range values are errors. For example, Wan 2 seconds resolves to 33 frames
 (2.0625 seconds), and H3 6 seconds resolves to 141 frames (5.875 seconds).
+Native single-expert Wan previews use the pinned trainer's fixed 24 fps. Explicit
+durations resolve separately onto its frame grid: the 33-frame final sample above
+uses a 49-frame preview (2.041667 seconds). Samples and Review show this distinction.
+Paired Wan previews use 16 fps, matching final samples. Older Jobs without an
+explicit duration retain their original preview frame count and playback rate.
 Wan also offers **Image sample (one frame)**, producing PNGs. H3 sampling stays
 video/audio even when its training dataset contains only images.
 

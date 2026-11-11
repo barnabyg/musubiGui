@@ -148,7 +148,7 @@ def main(stage: str | None = None) -> None:
                         destination,
                         prompt["frame_count"],
                         args.task == "t2va",
-                        24 if args.task == "t2va" else 16,
+                        24,
                         width=prompt["width"],
                         height=prompt["height"],
                     )

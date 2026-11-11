@@ -79,7 +79,7 @@ def estimate_disk(family: str, config: "JobConfig", items: list[dict[str, Any]],
     checkpoint = offset + per_rank * max(0, config.rank)
     checkpoints = saves * checkpoint
     states = int(checkpoints * STATE_TO_CHECKPOINT) if config.save_state else 0
-    from musubi_gui.sampling import sample_geometry
+    from musubi_gui.sampling import native_preview_frames, sample_geometry
 
     width, height, frames = sample_geometry(config)
     pixels = max(0, width) * max(0, height)
@@ -88,11 +88,12 @@ def estimate_disk(family: str, config: "JobConfig", items: list[dict[str, Any]],
     final_sample = 4 * pixels + 4096 if image_sample else video_sample
     samples = final_sample if config.sample_enabled else 0
     if config.preview_every > 0:
+        preview_frames = native_preview_frames(family, config) if config.recipe != PAIRED_RECIPE else frames
         # Native one-frame Wan sampling writes lossless PNGs, not compressed video.
         preview_bytes = (
             4 * pixels + 4096
             if family == "wan" and frames == 1 and (image_sample or config.recipe != PAIRED_RECIPE)
-            else video_sample
+            else int(pixels * max(0, preview_frames) * SAMPLE_BYTES_PER_PIXEL_FRAME)
         )
         samples += max(0, config.steps) // config.preview_every * preview_bytes
     return {

@@ -24,7 +24,7 @@ from musubi_gui.redaction import redact
 from musubi_gui.run_paths import job_folder
 from musubi_gui.run_store import RunStore, preparation_transaction
 from musubi_gui.safetensors_file import safetensors_header
-from musubi_gui.sampling import sample_geometry
+from musubi_gui.sampling import native_preview_frames, sample_geometry
 from musubi_gui.settings import Settings, atomic_json, validate_paths, within_root
 from musubi_gui.training_sections import dataset_resolution, dataset_toml, plan_sections, section_balance
 from musubi_gui.video_sampling import plan_windows
@@ -1241,6 +1241,7 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
             "frames": sample_geometry(job.config)[2],
             "fps": 16 if job.family == "wan" else 24,
             "duration": sample_geometry(job.config)[2] / (16 if job.family == "wan" else 24),
+            "native_preview_frames": native_preview_frames(job.family, job.config),
         },
         "sections": balance,
         "dataset_toml": dataset_toml(job, sections),

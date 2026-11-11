@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from musubi_gui.media_probe import inspect
-from musubi_gui.sampling import sample_geometry
+from musubi_gui.sampling import native_preview_frames, sample_geometry
 from musubi_gui.settings import Settings
 
 if TYPE_CHECKING:
@@ -14,7 +14,8 @@ if TYPE_CHECKING:
 
 def preview_prompt(job: "Job") -> list[dict[str, Any]]:
     config = job.config
-    width, height, frames = sample_geometry(config)
+    width, height, _ = sample_geometry(config)
+    frames = native_preview_frames(job.family, config)
     return [
         {
             "prompt": config.sample_prompt,

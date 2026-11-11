@@ -25,7 +25,8 @@ export function JobSamples({
       <h2>Samples</h2>
       <p>
         Periodic previews and the final sample share the prompt, seed, inference
-        steps and sample geometry. They can be enabled independently.
+        steps and resolution. They can be enabled independently; effective
+        durations are shown below.
       </p>
       {fields.toggle('Generate a final sample', 'sample_enabled')}
       {fields.number(

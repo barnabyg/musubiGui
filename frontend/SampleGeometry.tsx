@@ -18,6 +18,15 @@ export function SampleGeometry({
   const height = job.config.sample_height ?? job.config.height;
   const frames = job.config.sample_frames ?? job.config.frames;
   const fps = job.family === 'wan' ? 16 : 24;
+  const nativeWanPreview =
+    job.family === 'wan' &&
+    job.config.recipe !== 'alternating' &&
+    job.config.preview_every > 0 &&
+    frames > 1;
+  const previewFrames =
+    job.config.sample_frames == null
+      ? frames
+      : Math.max(5, 4 * Math.round(((frames * 24) / 16 - 1) / 4) + 1);
   const [durationDraft, setDurationDraft] = useState<{
     jobId: string;
     frames: number;
@@ -34,6 +43,13 @@ export function SampleGeometry({
         These settings apply to previews and the final sample. Training geometry
         is unchanged. Unset overrides inherit the Job's training defaults.
       </p>
+      {nativeWanPreview && (
+        <p>
+          Native preview: {width} × {height} · {previewFrames} frames · 24 fps ·{' '}
+          {Number((previewFrames / 24).toFixed(6))} seconds. The pinned trainer
+          uses 24 fps; explicit durations round to its supported frame grid.
+        </p>
+      )}
       <div className="number-row">
         {(['width', 'height'] as const).map((dimension) => {
           const key = `sample_${dimension}` as const;
