@@ -71,18 +71,15 @@ def main(stage: str | None = None) -> None:
                 if "video_jsonl_file" in dataset
                 else list(media_root.iterdir())
             )
+            # Like the real loaders, each section processes only its own media kind,
+            # even when its image/video directories point at the same mixed folder.
+            suffixes = (
+                {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".avif"}
+                if "image_directory" in dataset
+                else {".mp4", ".mov", ".mkv", ".webm", ".avi"}
+            )
             for media in media_files:
-                if media.suffix.lower() not in {
-                    ".mp4",
-                    ".mov",
-                    ".mkv",
-                    ".webm",
-                    ".avi",
-                    ".png",
-                    ".jpg",
-                    ".jpeg",
-                    ".webp",
-                }:
+                if media.suffix.lower() not in suffixes:
                     continue
                 suffix = f"0256x0256_{architecture}" if stage == "latent_cache" else f"{architecture}_te"
                 tensor(Path(dataset["cache_directory"]) / f"{media.stem}_{suffix}.safetensors")

@@ -118,7 +118,14 @@ def default_config(family: str) -> JobConfig:
         else {"width": 832, "height": 480, "frames": 33, "rank": 16, "alpha": 16, "sample_steps": 20}
     )
     return smoke_config(family).model_copy(
-        update={**size, "steps": NEW_DRAFT_STEPS, "save_every": 100, "save_state": True, "sample_prompt": ""}
+        update={
+            **size,
+            **({"recipe": PAIRED_RECIPE} if family == "wan" else {}),
+            "steps": NEW_DRAFT_STEPS,
+            "save_every": 100,
+            "save_state": True,
+            "sample_prompt": "",
+        }
     )
 
 
@@ -260,7 +267,6 @@ SMOKE_CONTROLS = (
 SMOKE_PRESETS = {
     preset.id: preset
     for preset in [
-        Preset(id="smoke-wan", name="Smoke test · Wan · 2 steps", family="wan", config=smoke_config("wan")),
         Preset(
             id="smoke-wan-paired",
             name="Smoke test · Wan alternating · 4 steps",
@@ -341,6 +347,10 @@ def conversion_draft(job: Job, family: Literal["wan", "h3"]) -> JobDraft:
             if value >= 64 and value % (32 if family == "h3" else 16) == 0:
                 shared[key] = value
     config = default_config(family).model_copy(update=shared)
+    if family == "wan":
+        config = config.model_copy(
+            update={"save_state": True, "expert_interval": min(config.expert_interval, max(1, config.steps // 2))}
+        )
     return JobDraft(name=job.name, family=family, datasets=job.datasets, config=config)
 
 
@@ -516,9 +526,14 @@ class JobStore:
             return job
 
     def presets(self) -> builtins.list[Preset]:
-        return [*MEASURED_PRESETS.values(), *SMOKE_PRESETS.values()] + [
+        saved = [
             Preset.model_validate_json(file.read_text(encoding="utf-8"))
             for file in sorted((self.root.parent / "presets").glob("*.json"))
+        ]
+        return [
+            *MEASURED_PRESETS.values(),
+            *SMOKE_PRESETS.values(),
+            *(preset for preset in saved if preset.family != "wan" or preset.config.recipe == PAIRED_RECIPE),
         ]
 
     def create_preset(self, job_id: str, name: str) -> Preset:
@@ -569,8 +584,9 @@ def effective_settings(job: Job, settings: Settings) -> Settings:
     return settings.model_copy(update={"models": {**settings.models, **job.config.components}})
 
 
-def configuration_errors(job: Job) -> list[str]:
+def configuration_errors(job: Job, *, has_videos: bool = True) -> list[str]:
     config = job.config
+    needs_frames = has_videos or config.sample_enabled or config.preview_every > 0
     errors: list[str] = []
     if not job.name.strip():
         errors.append("Name: enter a job name.")
@@ -581,7 +597,7 @@ def configuration_errors(job: Job) -> list[str]:
         errors.append("Dataset: the same dataset is listed more than once; remove the extra row.")
     if job.family == "wan":
         if config.recipe not in {"low-noise", PAIRED_RECIPE}:
-            errors.append("Recipe: choose low-noise or alternating high/low Wan training.")
+            errors.append("Recipe: choose alternating high/low Wan training.")
         if config.recipe == PAIRED_RECIPE:
             if config.expert_interval < 1:
                 errors.append("Expert interval: enter a positive integer.")
@@ -595,7 +611,7 @@ def configuration_errors(job: Job) -> list[str]:
                 errors.append("Training state: alternating experts requires saved optimizer/training state.")
         if config.width < 64 or config.height < 64 or config.width % 16 or config.height % 16:
             errors.append("Geometry: Wan width and height must be at least 64 and multiples of 16.")
-        if config.frames < 1 or (config.frames - 1) % 4:
+        if needs_frames and (config.frames < 1 or (config.frames - 1) % 4):
             errors.append("Frames: Wan requires 4*n+1 frames.")
         if not 0 <= config.blocks_to_swap <= WAN_MAX_BLOCKS_TO_SWAP:
             errors.append(
@@ -606,9 +622,9 @@ def configuration_errors(job: Job) -> list[str]:
             errors.append("Memory: runtime FP8 scaling from native FP16 weights is required by this Wan recipe.")
         if config.block_swap_h2d_only:
             errors.append("Memory: H2D-only swapping belongs to the H3 recipe, not the initial Wan recipe.")
-        if config.frame_extraction == "slide" and config.frame_stride < 1:
+        if has_videos and config.frame_extraction == "slide" and config.frame_stride < 1:
             errors.append("Frame extraction: enter a slide stride of at least one frame.")
-        if config.frame_extraction == "uniform" and config.frame_sample < 2:
+        if has_videos and config.frame_extraction == "uniform" and config.frame_sample < 2:
             errors.append("Frame extraction: uniform sampling needs at least two windows per clip; use head for one.")
         allowed_components = {"wan_low", "wan_high", "wan_vae", "wan_t5"}
     else:
@@ -618,7 +634,7 @@ def configuration_errors(job: Job) -> list[str]:
             )
         if config.width < 64 or config.height < 64 or config.width % 32 or config.height % 32:
             errors.append("Geometry: H3 width and height must be at least 64 and multiples of 32.")
-        if not 124 <= config.frames <= 345 or (config.frames - 5) % 17:
+        if needs_frames and (not 124 <= config.frames <= 345 or (config.frames - 5) % 17):
             errors.append("Frames: H3 requires 17*n+5 frames in the released 124–345 range.")
         if not 0 <= config.blocks_to_swap <= H3_MAX_BLOCKS_TO_SWAP:
             errors.append(
@@ -629,7 +645,7 @@ def configuration_errors(job: Job) -> list[str]:
             errors.append("Memory: H3 does not support FP8 transformer weights/runtime scaling.")
         if not config.block_swap_h2d_only:
             errors.append("Memory: H3 guidance loss requires H2D-only swapping for the validated target-PC recipe.")
-        if config.frame_extraction != "head":
+        if has_videos and config.frame_extraction != "head":
             errors.append(
                 "Frame extraction: H3 uses head only. Audio alignment and coverage are inspected for each clip's first window, so other modes are not qualified."
             )
@@ -935,7 +951,7 @@ def _add_duplicate_warnings(
 
 
 def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool = False) -> dict[str, Any]:
-    errors = ReviewMessages(configuration_errors(job))
+    errors = ReviewMessages([])
     warnings = ReviewMessages(
         [
             "Wan has short-run execution evidence on the 96 GB host using the documented native and converted weights; other artifacts and larger workloads need qualification."
@@ -1047,6 +1063,13 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
                 effective_items.extend(_review_items(store, job, dataset, prefix, errors, warnings, audio_coverage))
             except (ValueError, OSError, ImportError, HTTPException) as error:
                 errors.add(f'Dataset "{dataset["name"]}": {error}', dataset_id=entry.dataset_id)
+    # Image sections always cache one frame. Clip controls matter only to videos;
+    # frames still controls generated samples/previews even when training uses images.
+    errors.extend(
+        configuration_errors(
+            job, has_videos=not effective_items or any(item["kind"] == "video" for item in effective_items)
+        )
+    )
     output = Path(settings.output_root) / "jobs" / job.id
     cache = Path(settings.cache_root) / "jobs" / job.id
     snapshot = output / f"revision-{job.revision}"

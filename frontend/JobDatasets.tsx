@@ -115,8 +115,9 @@ export function JobDatasets({
         </ol>
       )}
       <p className="hint">
-        Blank repeats use the job's {job.config.repeats}. Each dataset trains as
-        its own section, and images and videos stay separate.
+        Add image datasets, video datasets, or both. Blank repeats use the job's{' '}
+        {job.config.repeats}. Each dataset trains as its own section, and images
+        and videos stay separate.
       </p>
       <div className="job-dataset-add">
         <label className="field">

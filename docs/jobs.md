@@ -8,6 +8,9 @@ a link that focuses that field.
 ## Compact job setup
 
 Jobs opens with name, datasets, recipe, training steps and final sample choice together.
+New Wan jobs use alternating high/low training. Low-noise-only training and its
+two-step smoke preset are no longer offered. Saved single-expert Wan presets are
+also omitted from the preset selector.
 Required choices names anything still missing, including the sample prompt when sampling
 is enabled. Turn sampling off explicitly if no final sample is needed. The compact view
 shows the draft's current size, frame count and rank; new drafts start from the measured
@@ -224,8 +227,7 @@ not saved scaled-FP8 weights. Inactive-DiT offload is not supported by this reci
 ### Alternating Wan high/low LoRAs
 
 The **Smoke test · Wan alternating · 4 steps** preset selects a complete small paired
-configuration with N = 1 and state saving enabled. The original **Wan · 2 steps**
-smoke preset selects low-noise training, including when applied to a paired job.
+configuration with N = 1 and state saving enabled. It is the only Wan smoke preset.
 
 Choose **Wan alternating low/high experts** under Recipe. **Steps per expert before
 switching** is a positive integer N, counted in optimizer updates after gradient
@@ -246,7 +248,7 @@ The existing AdamW/constant-scheduler recipe is retained.
 does not restore the batch position or epoch, and resets its displayed step counter.
 The GUI maintains total and per-expert counters separately. A short phase can repeat
 some examples before others are seen; this is not equivalent to an uninterrupted
-dataset traversal. Existing saved low-noise jobs keep their original behaviour.
+dataset traversal.
 
 Final sampling loads the trained low and high LoRAs into their respective experts,
 with both checkpoint identities and step counts recorded. Alternating Runs also support
@@ -336,14 +338,16 @@ bucketing with H3 images has not been tried on the target PC, so its warning sug
 
 New Wan job and New H3 job start from a recipe that can produce a useful LoRA:
 
-| Control                   | Wan     | H3      |
-| ------------------------- | ------- | ------- |
-| Size                      | 832×480 | 640×352 |
-| Frames                    | 33      | 124     |
-| Rank/alpha                | 16/16   | 8/8     |
-| Training steps            | 600     | 600     |
-| Save every N steps, state | 100, on | 100, on |
-| Sample inference steps    | 20      | 10      |
+| Control                           | Wan                  | H3            |
+| --------------------------------- | -------------------- | ------------- |
+| Training recipe                   | Alternating high/low | Guidance loss |
+| Steps per expert before switching | 30                   | —             |
+| Size                              | 832×480              | 640×352       |
+| Frames                            | 33                   | 124           |
+| Rank/alpha                        | 16/16                | 8/8           |
+| Training steps                    | 600                  | 600           |
+| Save every N steps, state         | 100, on              | 100, on       |
+| Sample inference steps            | 20                   | 10            |
 
 Size, frames, rank and sample steps are the largest configurations measured in the
 production trial (see [measured presets](#duplicates-and-presets)). 600 steps is the
@@ -356,18 +360,61 @@ Review warns when steps are below 600, because a shorter Run can check that trai
 works but is not expected to change samples. It also warns when H3 is larger than
 640×352, the largest size that trained.
 
-The earlier small recipe remains as the **Smoke test** built-in presets: 256×256, 17
-frames for Wan or 124 for H3, batch one, rank/alpha eight for Wan or four for H3, two
-steps saved every step, no state and a four-step sample with a synthetic prompt. These
-values are also the fixed fallbacks for fields missing from saved revisions and
-exports, so existing jobs keep their meaning. Acceptance fixtures use them
-and stay quick.
+The **Smoke test** built-in presets use 256×256, 17 frames for Wan or 124 for H3,
+batch one, rank/alpha eight for Wan or four for H3 and a four-step sample with a
+synthetic prompt. Wan alternates experts every step for four total steps, with
+optimizer state saving enabled. H3 uses two steps without optimizer state saving.
+Both save a checkpoint every step. The internal single-expert acceptance fixtures
+remain available for isolated orchestration checks; they are not a job creation option.
 
 Changing capacity controls requires capacity validation on the
 [target hardware](../README.md#target-hardware). Draft validation is not proof of successful GPU execution. Sampling runs
 after training by default, with opt-in in-run previews as described above, and can be disabled;
 no checkpoint-on-stop guarantee is made. Saving
 optimizer/training state is distinct from saving LoRA weights.
+
+## Preparing images, videos, or both
+
+Add one or more datasets under **Job & dataset**. For example, select a character's
+image dataset, choose **Add dataset**, then add its video dataset. The source
+folders stay separate and reusable. A folder containing both images and videos
+also works. Dataset contents come from valid, included files; no media type needs
+to be chosen when creating a dataset.
+
+Under **Advanced controls → Dataset preparation**, width, height, bucketing and
+repeats apply to both media kinds. Images always train as single frames. An
+image-only job hides frame extraction and H3 audio policy; saved video settings
+are retained for when a video dataset is added again. **Frames** applies to video
+training windows and generated samples. With images only it becomes **Sample
+frames**, shown only when final sampling or in-run previews are enabled. H3
+samples still require 124–345 frames in the supported increments, even when
+training on images. Turning both sampling and previews off removes that unused
+length requirement. Images never need supervised audio. H3 image training keeps
+its experimental warning described below.
+
+Review lists each image/video section, item count, repeats and share of training.
+Set an image dataset's repeats to 2 to double its samples per epoch without
+duplicating source files. Preparation freezes captions and media into the Run
+and gives each section its own cache directory.
+
+From `C:/docs/git/musubiGui` in PowerShell 7, this single command installs the app
+dependencies, builds and launches an isolated CPU workspace with image-only,
+video-only and combined jobs for both model families:
+
+```powershell
+.\acceptance.cmd --workspace ".cache/dataset-media-$([guid]::NewGuid().ToString('N'))" --dataset-media
+```
+
+Open the printed URL (normally `http://127.0.0.1:8767`). In Jobs, compare **WAN
+images only**, **WAN acceptance 1** (videos) and **WAN images + videos**. Expand
+Advanced controls and check the applicable controls. Review and **Prepare run**
+each job. Expect one image section, one video section, or both respectively; the
+combined job's images have repeats 2. Reopen the job and expect its dataset list
+and repeats to remain. Repeat for H3, checking its experimental image warning
+and video-only audio coverage. The fixture uses synthetic weights and CPU
+subprocesses: it verifies preparation and persistence, not GPU support or useful
+learning. Real training requires the configured pinned training environment,
+model weights and suitable hardware.
 
 ## H3 jobs
 

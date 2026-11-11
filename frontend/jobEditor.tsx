@@ -3,6 +3,7 @@ import { confirmDialog } from './ConfirmDialog';
 import { apiClient } from './api';
 import { type CaptionSession, useJobCaptionState } from './captionSession';
 import { jobFields } from './jobFields';
+import { jobMedia } from './jobMedia';
 import type {
   ConversionPreview,
   DatasetOption,
@@ -214,7 +215,8 @@ export function useJobEditor({
   function config<K extends keyof JobConfig>(key: K, value: JobConfig[K]) {
     if (job) edit({ ...job, config: { ...job.config, [key]: value } });
   }
-  const fields = jobFields(job, busy, review, config);
+  const media = jobMedia(job, datasets);
+  const fields = jobFields(job, busy, review, config, !media.imageOnly);
   async function create(family: 'wan' | 'h3') {
     if (dirty && !(await confirmDiscard('create a new draft'))) return;
     await perform(async () => {
@@ -525,6 +527,7 @@ export function useJobEditor({
     setTransferOpen,
     existingRun,
     fields,
+    media,
     edit,
     config,
     choose,

@@ -15,9 +15,10 @@ export function jobFields(
   busy: boolean,
   review: Review | null,
   config: SetConfig,
+  hasVideos = true,
 ) {
   const liveProblems: Record<string, string> = job
-    ? fieldProblems(job.family, job.config)
+    ? fieldProblems(job.family, job.config, hasVideos)
     : {};
   for (const entry of job?.datasets ?? [])
     if (

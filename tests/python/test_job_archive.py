@@ -115,7 +115,6 @@ def test_an_archived_job_cannot_be_changed_or_used_as_a_preset_source(tmp_path: 
     assert {preset["id"] for preset in client.get("/api/jobs/presets").json()} == {
         "measured-wan-832x480x33-r16",
         "measured-h3-640x352x124-r8",
-        "smoke-wan",
         "smoke-wan-paired",
         "smoke-h3",
     }

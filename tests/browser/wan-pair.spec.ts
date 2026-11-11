@@ -1,14 +1,31 @@
 import { test, expect } from '@playwright/test';
 import { runWorkspace } from './runHarness';
 
-test('Wan smoke presets switch expert recipe together with the required state settings', async ({
+test('Wan offers only alternating training for new jobs and presets', async ({
   page,
 }) => {
   const app = await runWorkspace();
   try {
     const job = app.manifest.jobs.find((item) => item.family === 'wan')!;
     await page.goto(`${app.url}/#/jobs/${job.id}`);
+    const recipe = page.getByRole('combobox', { name: /^Recipe/ });
+    await expect(
+      recipe.getByRole('option', { name: /low-noise expert/ }),
+    ).toHaveCount(0);
+    await expect(
+      recipe.getByRole('option', {
+        name: 'Choose alternating high/low training',
+      }),
+    ).toHaveAttribute('disabled', '');
     await page.getByText('Advanced controls', { exact: true }).click();
+    await expect(
+      page
+        .getByRole('combobox', { name: 'Compatible preset', exact: true })
+        .getByRole('option', {
+          name: 'Smoke test · Wan · 2 steps',
+          exact: true,
+        }),
+    ).toHaveCount(0);
     await page
       .getByRole('combobox', { name: 'Compatible preset', exact: true })
       .selectOption('smoke-wan-paired');
@@ -33,24 +50,22 @@ test('Wan smoke presets switch expert recipe together with the required state se
     await expect(page.getByLabel('Configuration review')).toContainText(
       'Review passed.',
     );
-    await page
-      .getByRole('combobox', { name: 'Compatible preset', exact: true })
-      .selectOption('smoke-wan');
-    await page
-      .getByRole('button', { name: 'Apply preset', exact: true })
-      .click();
-    await expect(page.getByRole('combobox', { name: /^Recipe/ })).toHaveValue(
-      'low-noise',
-    );
     await expect(
-      page.getByLabel('Training steps', { exact: true }),
-    ).toHaveValue('2');
+      recipe.getByRole('option', {
+        name: 'Choose alternating high/low training',
+      }),
+    ).toHaveCount(0);
+    await page
+      .getByRole('button', { name: 'New Wan job', exact: true })
+      .click();
+    await expect(recipe).toHaveValue('alternating');
+    await expect(recipe.getByRole('option')).toHaveCount(1);
     await expect(
       page.getByLabel('Steps per expert before switching', { exact: true }),
-    ).toHaveCount(0);
+    ).toHaveValue('30');
     await expect(
       page.getByRole('checkbox', { name: /^Save optimizer\/training state/ }),
-    ).not.toBeChecked();
+    ).toBeChecked();
   } finally {
     await app.close();
   }

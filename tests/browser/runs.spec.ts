@@ -1298,7 +1298,7 @@ test('a Wan job combines an image dataset and a video dataset through review, re
     await page.getByText('Advanced controls', { exact: true }).click();
     await page
       .getByRole('combobox', { name: 'Compatible preset' })
-      .selectOption({ label: 'Smoke test · Wan · 2 steps' });
+      .selectOption({ label: 'Smoke test · Wan alternating · 4 steps' });
     await page
       .getByRole('button', { name: 'Apply preset', exact: true })
       .click();
@@ -1555,7 +1555,9 @@ test('an H3 job adds an image dataset, warns that it is experimental and uses th
       .click();
     await review.click();
     await expect(page.getByRole('status')).toContainText('Review passed');
-    await expect(panel).toContainText('0 supervised / 0 included');
+    await expect(
+      panel.getByRole('heading', { name: 'Audio coverage', exact: true }),
+    ).toHaveCount(0);
     await page.getByText('Advanced', { exact: true }).click();
     await page.getByText('train arguments', { exact: true }).click();
     await expect(args('train')).toContainText('--video_only');

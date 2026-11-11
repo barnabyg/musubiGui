@@ -241,7 +241,7 @@ export function JobReview({
           </ul>
         </div>
       )}
-      {job.family === 'h3' && (
+      {job.family === 'h3' && review.audio_coverage.included > 0 && (
         <>
           <h3>Audio coverage</h3>
           <p>

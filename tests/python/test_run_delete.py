@@ -463,7 +463,7 @@ def test_prepare_creates_a_new_run_after_a_delete_and_other_runs_keep_working(tm
         assert client.post(f"/api/runs/{first['id']}/delete", json={"confirmed": True}).json()["deleted"]
 
         assert (tokenizer / "marker.txt").exists()
-        assert preset["id"] in [item["id"] for item in client.get("/api/jobs/presets").json()]
+        assert json.loads((root / "presets" / f"{preset['id']}.json").read_text(encoding="utf-8"))["name"] == "kept"
         assert {file: file.read_bytes() for file in dataset_files} == dataset_files
         assert [item["id"] for item in client.get("/api/jobs").json()].count(job["id"]) == 1
 
@@ -592,7 +592,7 @@ def test_a_job_without_runs_is_deleted_with_every_revision(tmp_path: Path) -> No
     client, running = job_client(tmp_path)
     job, kept = new_job(client), new_job(client, "keeper")
     client.put(f"/api/jobs/{job['id']}", json={"name": "second", "family": "wan", "revision": 1})
-    client.post(f"/api/jobs/{job['id']}/presets", json={"name": "saved"})
+    preset = client.post(f"/api/jobs/{job['id']}/presets", json={"name": "saved"}).json()
     assert client.get(f"/api/jobs/{job['id']}/delete-preview").json() == {"runs": 0, "refusal": None}
 
     deleted = client.post(f"/api/jobs/{job['id']}/delete", json={"confirmed": True})
@@ -602,7 +602,9 @@ def test_a_job_without_runs_is_deleted_with_every_revision(tmp_path: Path) -> No
     assert not (running.root / "jobs" / job["id"]).exists()
     assert [item["id"] for item in client.get("/api/jobs").json()] == [kept["id"]]
     assert client.get(f"/api/jobs/{job['id']}").status_code == 404
-    assert "saved" in [item["name"] for item in client.get("/api/jobs/presets").json()]
+    assert (
+        json.loads((running.root / "presets" / f"{preset['id']}.json").read_text(encoding="utf-8"))["name"] == "saved"
+    )
     running.close()
 
 

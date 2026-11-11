@@ -39,6 +39,7 @@ export function Jobs(props: JobsProps) {
     setTransferOpen,
     existingRun,
     fields,
+    media,
     edit,
     config,
     choose,
@@ -173,6 +174,7 @@ export function Jobs(props: JobsProps) {
             modelRoots={modelRoots}
           />
           <JobEssentials
+            media={media}
             job={job}
             busy={busy}
             fields={fields}
@@ -197,6 +199,7 @@ export function Jobs(props: JobsProps) {
               applyPreset={applyPreset}
             />
             <JobControls
+              media={media}
               job={job}
               busy={busy}
               fields={fields}

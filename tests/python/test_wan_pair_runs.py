@@ -242,10 +242,7 @@ def test_missing_old_phase_does_not_invalidate_a_later_complete_pair(tmp_path: P
 def test_smoke_presets_select_a_complete_expert_recipe(tmp_path: Path) -> None:
     root, job_id = paired_job(tmp_path, expert_interval=30, steps=120)
     store = JobStore(root)
-    low = store.apply_preset(job_id, PresetSelection(preset_id="smoke-wan", revision=1))
-    assert low.config.recipe == "low-noise"
-    assert low.config.steps == 2 and not low.config.save_state
-    paired = store.apply_preset(job_id, PresetSelection(preset_id="smoke-wan-paired", revision=2))
+    paired = store.apply_preset(job_id, PresetSelection(preset_id="smoke-wan-paired", revision=1))
     assert paired.config.recipe == "alternating"
     assert (paired.config.steps, paired.config.expert_interval, paired.config.save_state) == (4, 1, True)
     assert configuration_errors(paired) == []
