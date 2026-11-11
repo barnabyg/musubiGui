@@ -228,6 +228,15 @@ class Preset(NamedPreset):
         default_factory=dict, exclude_if=lambda value: not value
     )
 
+    @model_validator(mode="before")
+    @classmethod
+    def legacy_h3_timestep(cls, value: Any) -> Any:
+        if isinstance(value, dict) and value.get("family") == "h3":
+            config = value.get("config")
+            if isinstance(config, dict) and "timestep_sampling" not in config:
+                return {**value, "config": {**config, "timestep_sampling": "uniform"}}
+        return value
+
 
 # Capacity configurations measured on the target PC in #26; see docs/reference/evidence/production-trial.json.
 # Applying one replaces only these memory-bound controls, so model components, prompt, steps,
