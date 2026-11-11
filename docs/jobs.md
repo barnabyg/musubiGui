@@ -91,8 +91,8 @@ a link that focuses that field.
 ## Compact job setup
 
 Jobs opens with Job & dataset, Training, and one **Samples** configuration section.
-Samples holds final-sample enablement, preview cadence, prompt, inference steps and
-the shared training/sample seed. Image-only Jobs also keep sample frame length here.
+Samples holds final-sample enablement, preview cadence, prompt, inference steps,
+resolution, duration and the shared training/sample seed.
 Previews and the final sample can be enabled independently and share these settings.
 Dataset preparation and checkpoint controls no longer contain sample-only controls.
 New Wan jobs use alternating high/low training. Low-noise-only training and its
@@ -559,12 +559,45 @@ Under **Advanced controls → Dataset preparation**, width, height, bucketing an
 repeats apply to both media kinds. Images always train as single frames. An
 image-only job hides frame extraction and H3 audio policy; saved video settings
 are retained for when a video dataset is added again. **Frames** applies to video
-training windows and generated samples. With images only it becomes **Sample
-frames**, shown only when final sampling or in-run previews are enabled. H3
+training windows. **Samples** configures sample resolution and duration separately. H3
 samples still require 124–345 frames in the supported increments, even when
 training on images. Turning both sampling and previews off removes that unused
 length requirement. Images never need supervised audio. H3 image training keeps
 its experimental warning described below.
+
+### Sample resolution and duration
+
+In **Samples → Sample geometry**, choose width, height and duration in seconds.
+Both periodic previews and final samples use these values. Training and dataset
+geometry stay unchanged. Width/height must be at least 64, in multiples of 16 for
+Wan or 32 for H3. Duration rounds to the nearest supported frame count: `4*n+1`
+at 16 fps for Wan; `17*n+5`, from 124 to 345 frames, at 24 fps for H3. The effective
+resolution, frames, fps and duration appear beside the controls and in Review;
+out-of-range values are errors. For example, Wan 2 seconds resolves to 33 frames
+(2.0625 seconds), and H3 6 seconds resolves to 141 frames (5.875 seconds).
+Wan also offers **Image sample (one frame)**, producing PNGs. H3 sampling stays
+video/audio even when its training dataset contains only images.
+
+Jobs and exports without sample overrides retain their previous behaviour:
+sample width, height and frames inherit the Job defaults. **Use training width**,
+**Use training height** and **Use training frame count** clear individual overrides.
+Versioned exports store explicit overrides as `config.sample_width`,
+`config.sample_height` and `config.sample_frames`; frame counts are authoritative,
+so saving/reopening does not accumulate duration rounding. Disk preflight uses
+the effective sample geometry independently of the training cache estimate.
+
+To test from the repository root in PowerShell 7:
+
+```powershell
+.\acceptance.cmd --workspace ".cache/sample-geometry-$([guid]::NewGuid().ToString('N'))"
+```
+
+Set a Wan sample to 320×192 and 2 seconds; enable a preview every step. Review
+should show 33 frames at 16 fps, while training stays 256×256 with 17 frames.
+Prepare and start, open Samples and play the generated media. Repeat with H3 at
+320×192 and 6 seconds: expect 141 frames at 24 fps while training stays at 124.
+This CPU fixture verifies configuration, orchestration and decoded metadata, not
+GPU capacity or learning quality.
 
 Review lists each image/video section, item count, repeats and share of training.
 Set an image dataset's repeats to 2 to double its samples per epoch without

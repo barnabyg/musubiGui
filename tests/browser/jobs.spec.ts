@@ -467,7 +467,7 @@ test('Wan draft controls, validation and reviewed native configuration survive s
       page.getByRole('button', { name: 'Prepare run', exact: true }),
     ).toBeDisabled();
     await page.getByRole('spinbutton', { name: /^Frames\b/ }).fill('33');
-    await page.getByLabel('Width', { exact: false }).fill('320');
+    await page.getByLabel('Width', { exact: true }).fill('320');
     await page.getByRole('button', { name: 'Save draft', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('Draft saved');
     await page
@@ -673,7 +673,7 @@ test('H3 editor keeps T2VA guidance stages and identifies invalid geometry', asy
       page.getByLabel('Runtime FP8 scaling', { exact: false }),
     ).toHaveCount(0);
     await expect(page.getByLabel(/negative prompt/i)).toHaveCount(0);
-    await page.getByLabel('Width', { exact: false }).fill('272');
+    await page.getByLabel('Width', { exact: true }).fill('272');
     await page.getByRole('button', { name: 'Save draft', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('Draft saved');
     await page

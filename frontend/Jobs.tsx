@@ -176,13 +176,7 @@ export function Jobs(props: JobsProps) {
             modelRoots={modelRoots}
           />
           <JobEssentials media={media} job={job} busy={busy} fields={fields} />
-          <JobSamples
-            media={media}
-            job={job}
-            busy={busy}
-            fields={fields}
-            config={config}
-          />
+          <JobSamples job={job} busy={busy} fields={fields} config={config} />
           <details className="job-advanced">
             <summary>Advanced controls</summary>
             <p>

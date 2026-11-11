@@ -210,7 +210,7 @@ export function JobControls({
             number(
               'Frames',
               'frames',
-              'Frames per training video window and generated sample. Images each use one frame.',
+              'Frames per training video window. Images each use one frame; sample duration is configured in Samples.',
             )}
           {number(
             'Repeats',

@@ -68,6 +68,17 @@ export function JobReview({
           {diskVerdict(review.disk)}
         </span>
       </div>
+      {(job.config.sample_enabled || job.config.preview_every > 0) &&
+        review.sample && (
+          <p>
+            Sample output: {review.sample.width} × {review.sample.height} ·{' '}
+            {review.sample.frames} frames ·{' '}
+            {review.sample.frames === 1
+              ? 'image sample'
+              : `${review.sample.fps} fps · ${Number(review.sample.duration.toFixed(6))} seconds`}
+            . Shared by previews and final sampling.
+          </p>
+        )}
       {(['errors', 'warnings'] as const).map((level) => {
         const errors = level === 'errors';
         return (

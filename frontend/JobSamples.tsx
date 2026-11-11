@@ -1,5 +1,5 @@
 import type { JobFields } from './jobFields';
-import type { JobMedia } from './jobMedia';
+import { SampleGeometry } from './SampleGeometry';
 import { fieldId } from './jobRules';
 import type { Job, SetConfig } from './jobTypes';
 
@@ -8,13 +8,11 @@ export function JobSamples({
   busy,
   fields,
   config,
-  media,
 }: {
   job: Job;
   busy: boolean;
   fields: JobFields;
   config: SetConfig;
-  media: JobMedia;
 }) {
   const enabled = job.config.sample_enabled || job.config.preview_every > 0;
   return (
@@ -57,16 +55,12 @@ export function JobSamples({
             {fields.problemText('sample_prompt')}
           </label>
           {fields.number('Sample inference steps', 'sample_steps')}
-          {media.imageOnly &&
-            fields.number(
-              'Sample frames',
-              'frames',
-              'Only samples use this length. Training images each use one frame.',
-            )}
-          <p>
-            Sample resolution: {job.config.width} × {job.config.height} (Job
-            default).
-          </p>
+          <SampleGeometry
+            job={job}
+            busy={busy}
+            fields={fields}
+            config={config}
+          />
         </>
       )}
       {fields.number(

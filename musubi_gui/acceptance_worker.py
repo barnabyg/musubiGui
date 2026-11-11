@@ -2,7 +2,6 @@
 
 import argparse
 import json
-import shutil
 import time
 import tomllib
 from pathlib import Path
@@ -38,6 +37,9 @@ def main(stage: str | None = None) -> None:
     parser.add_argument("--save_state", action="store_true")
     parser.add_argument("--resume", type=Path)
     parser.add_argument("--save_path", type=Path)
+    parser.add_argument("--video_size", nargs=2, type=int, default=[256, 256])
+    parser.add_argument("--video_length", type=int, default=17)
+    parser.add_argument("--output_type", default="video")
     args, _ = parser.parse_known_args()
     stage = stage or str(args.stage)
     marker = Path.cwd() / ".musubi-gui-fixture.json"
@@ -140,8 +142,16 @@ def main(stage: str | None = None) -> None:
 
                     Image.new("RGB", (prompt["width"], prompt["height"]), "red").save(destination)
                 else:
-                    sample = "sample.mp4" if args.task == "t2va" else "sample-wan.mp4"
-                    shutil.copyfile(Path.cwd() / sample, destination)
+                    from musubi_gui.acceptance import synthetic_video
+
+                    synthetic_video(
+                        destination,
+                        prompt["frame_count"],
+                        args.task == "t2va",
+                        24 if args.task == "t2va" else 16,
+                        width=prompt["width"],
+                        height=prompt["height"],
+                    )
                 print(f"SYNTHETIC preview complete at step {step}", flush=True)
             # Like upstream, interval saves stamp their own metadata and include the last step.
             if args.save_every_n_steps and step % args.save_every_n_steps == 0:
@@ -156,11 +166,26 @@ def main(stage: str | None = None) -> None:
         if args.save_path is None:
             parser.error("--save_path is required for sample fixtures")
         destination = args.save_path
+        if args.output_type == "images":
+            from PIL import Image
+
+            destination.mkdir(parents=True, exist_ok=True)
+            Image.new("RGB", (args.video_size[1], args.video_size[0]), "red").save(destination / "sample.png")
+            print("SYNTHETIC image sample complete", flush=True)
+            return
         if destination.suffix != ".mp4":
             destination /= "sample.mp4"
         destination.parent.mkdir(parents=True, exist_ok=True)
-        sample = "sample.mp4" if args.task == "t2va" else "sample-wan.mp4"
-        shutil.copyfile(Path.cwd() / sample, destination)
+        from musubi_gui.acceptance import synthetic_video
+
+        synthetic_video(
+            destination,
+            args.video_length,
+            args.task == "t2va",
+            24 if args.task == "t2va" else 16,
+            width=args.video_size[1],
+            height=args.video_size[0],
+        )
     print(f"SYNTHETIC {stage} complete", flush=True)
 
 

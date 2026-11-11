@@ -12,6 +12,9 @@ export type RuleConfig = Record<string, unknown> & {
   frame_stride: number;
   frame_sample: number;
   sample_enabled: boolean;
+  sample_width?: number | null;
+  sample_height?: number | null;
+  sample_frames?: number | null;
 };
 
 const geometry = { wan: 16, h3: 32 };
@@ -60,10 +63,33 @@ export function fieldProblems(
       problems.discrete_flow_shift =
         'Enter a finite number from 0.001 to 1000.';
   }
-  const needsFrames =
-    hasVideos ||
-    config.sample_enabled ||
-    ((config.preview_every ?? 0) as number) > 0;
+  const sampling =
+    config.sample_enabled || ((config.preview_every ?? 0) as number) > 0;
+  const needsFrames = hasVideos;
+  if (sampling) {
+    for (const key of ['sample_width', 'sample_height'] as const) {
+      const value = config[key];
+      if (
+        value != null &&
+        (!Number.isInteger(value) || value < 64 || value % geometry[family])
+      )
+        problems[key] =
+          `Enter at least 64, in whole multiples of ${geometry[family]}.`;
+    }
+    const frames =
+      config.sample_frames ?? (hasVideos ? undefined : config.frames);
+    if (
+      frames != null &&
+      (!Number.isInteger(frames) ||
+        (family === 'wan'
+          ? frames < 1 || (frames - 1) % 4
+          : frames < 124 || frames > 345 || (frames - 5) % 17))
+    )
+      problems.sample_frames =
+        family === 'wan'
+          ? 'Choose a duration giving 4*n+1 frames at 16 fps, or an image sample.'
+          : 'Choose 124–345 frames in steps of 17 at 24 fps (about 5.167–14.375 seconds).';
+  }
   const step = geometry[family];
   for (const key of ['width', 'height'] as const)
     if (config[key] < 64 || config[key] % step)
@@ -134,6 +160,9 @@ export function fieldProblems(
 
 // Which field a Review error is about, from the label the backend starts each message with.
 const errorFields: [RegExp, string][] = [
+  [/^Sample width:/, 'sample_width'],
+  [/^Sample height:/, 'sample_height'],
+  [/^Sample duration:/, 'sample_frames'],
   [/^Name:/, 'name'],
   [/^Dataset:/, 'dataset_id'],
   [/^Recipe:/, 'recipe'],
