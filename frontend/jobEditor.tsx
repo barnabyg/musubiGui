@@ -99,23 +99,37 @@ export function useJobEditor({
       request<Preset[]>('/api/jobs/presets'),
       request<Job[]>('/api/jobs/archived'),
       request<JobSummary[]>('/api/jobs/summaries'),
-      request<TrainingOptions>('/api/jobs/training-options'),
     ])
-      .then(
-        ([items, library, settings, savedPresets, hidden, info, options]) => {
-          setJobs(items);
-          setSummaries(info);
-          setTrainingOptions(options);
-          setArchived(hidden);
-          setDatasets(library);
-          setModels(settings.models);
-          setModelRoots(settings.model_roots);
-          setPresets(savedPresets);
-          setStatus('Jobs loaded');
-        },
-      )
+      .then(([items, library, settings, savedPresets, hidden, info]) => {
+        setJobs(items);
+        setSummaries(info);
+        setArchived(hidden);
+        setDatasets(library);
+        setModels(settings.models);
+        setModelRoots(settings.model_roots);
+        setPresets(savedPresets);
+        setStatus('Jobs loaded');
+      })
       .catch((reason: Error) => setError(reason.message))
       .finally(() => setLoading(false));
+  }, []);
+  useEffect(() => {
+    let active = true;
+    void request<TrainingOptions>('/api/jobs/training-options')
+      .then((options) => {
+        if (active) setTrainingOptions(options);
+      })
+      .catch(() => {
+        if (active)
+          setTrainingOptions({
+            optimizers: ['AdamW'],
+            reason:
+              'Optimizer availability could not be checked. AdamW remains available.',
+          });
+      });
+    return () => {
+      active = false;
+    };
   }, []);
   // Follows the URL: a link, refresh or browser history can name a job that isn't open here.
   const followRoute = useEffectEvent((items: Job[]) => {
