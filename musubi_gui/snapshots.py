@@ -338,6 +338,16 @@ def snapshot_plan(root: Path, job_id: str, *, fixture_mode: bool = False) -> dic
 
 
 def verify_inputs(run: dict[str, Any]) -> None:
+    config = run.get("job", {}).get("config", {})
+    if "optimizer" in config:
+        for stage in run.get("stages", []):
+            if stage["name"] != "train":
+                continue
+            args = stage["args"]
+            if "--optimizer_type" not in args or args[args.index("--optimizer_type") + 1] != config["optimizer"]:
+                raise ValueError(
+                    "Optimizer differs from the frozen training configuration; incompatible restoration is blocked."
+                )
     for path, expected in run.get("input_files", {}).items():
         if not Path(path).is_file() or digest_file(Path(path)) != expected:
             raise ValueError(

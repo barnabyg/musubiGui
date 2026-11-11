@@ -1,5 +1,34 @@
 # Job drafts and configuration review
 
+## Optimizer selection
+
+Advanced controls → LoRA & training offers AdamW and, when the selected training
+Python can load a CUDA-enabled bitsandbytes optimizer, AdamW8bit. Both Wan and H3
+use the pinned trainer's shared optimizer implementation. AdamW remains the
+default for old and new jobs. A saved or imported unavailable choice stays visible
+but blocks review until the environment is compatible or AdamW is selected.
+Saving presets, revisions and exports preserves the optimizer. Review shows its
+effective value, and restoring a Run keeps that Run's original optimizer even if
+the Job has since changed. A conflicting frozen optimizer/command is rejected.
+
+The supported subset comes from the pinned upstream
+[optimizer implementation](https://github.com/kohya-ss/musubi-tuner/blob/f8a1b03794a49239a3539015075f5123d6c07d66/src/musubi_tuner/training/trainer_base.py#L225-L307).
+The target Windows environment has bitsandbytes 0.50.1 with a CUDA-enabled
+extension; import and CPU optimizer construction succeeded. This establishes
+availability, not GPU training, memory capacity or quality for AdamW8bit.
+
+From `C:/docs/git/musubiGui` in PowerShell 7:
+
+```powershell
+.\acceptance.cmd --workspace ".cache/optimizer-$([guid]::NewGuid().ToString('N'))"
+```
+
+Open WAN acceptance 1, expand Advanced controls, select AdamW8bit, save and reload.
+The selection should remain; Review configuration should show Optimizer: AdamW8bit.
+Repeat with H3 acceptance 1. The fixture explicitly labels optimizer execution as
+simulated. No model weights or GPU are required; real optimizer execution needs
+the existing pinned training environment, compatible model paths and CUDA hardware.
+
 A sticky menu above the form jumps to each section and marks the current one. Simple rules
 such as multiples, frame formulas and ranges are flagged beside their field while typing, and
 never block saving a draft. Review stays the authority: each of its errors about a field is

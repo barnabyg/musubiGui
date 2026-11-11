@@ -24,6 +24,7 @@ from musubi_gui.jobs import (
     review_job,
 )
 from musubi_gui.settings import load_settings
+from musubi_gui.training_options import optimizer_options
 
 
 class JobUpdate(JobDraft):
@@ -53,6 +54,10 @@ def job_errors() -> Iterator[None]:
 def jobs_router(root: Path, *, fixture_mode: bool = False) -> APIRouter:
     router = APIRouter(prefix="/api/jobs")
     store = JobStore(root)
+
+    @router.get("/training-options")
+    def get_training_options() -> dict[str, Any]:
+        return optimizer_options(load_settings(root), fixture_mode=fixture_mode)
 
     @router.get("")
     def get_jobs() -> list[Job]:

@@ -12,6 +12,7 @@ import type {
   PreparedRun,
   Preset,
   Review,
+  TrainingOptions,
 } from './jobTypes';
 import type { JobSummary } from './JobTable';
 import { plural } from './labels';
@@ -44,6 +45,10 @@ export function useJobEditor({
   const [datasets, setDatasets] = useState<DatasetOption[]>([]);
   const [models, setModels] = useState<Record<string, string>>({});
   const [modelRoots, setModelRoots] = useState<string[]>([]);
+  const [trainingOptions, setTrainingOptions] = useState<TrainingOptions>({
+    optimizers: ['AdamW'],
+    reason: 'Checking optimizer availability…',
+  });
   const [job, setJob] = useState<Job | null>(null);
   const datasetsInJob = job?.datasets;
   const jobCaptions = useMemo(
@@ -94,17 +99,21 @@ export function useJobEditor({
       request<Preset[]>('/api/jobs/presets'),
       request<Job[]>('/api/jobs/archived'),
       request<JobSummary[]>('/api/jobs/summaries'),
+      request<TrainingOptions>('/api/jobs/training-options'),
     ])
-      .then(([items, library, settings, savedPresets, hidden, info]) => {
-        setJobs(items);
-        setSummaries(info);
-        setArchived(hidden);
-        setDatasets(library);
-        setModels(settings.models);
-        setModelRoots(settings.model_roots);
-        setPresets(savedPresets);
-        setStatus('Jobs loaded');
-      })
+      .then(
+        ([items, library, settings, savedPresets, hidden, info, options]) => {
+          setJobs(items);
+          setSummaries(info);
+          setTrainingOptions(options);
+          setArchived(hidden);
+          setDatasets(library);
+          setModels(settings.models);
+          setModelRoots(settings.model_roots);
+          setPresets(savedPresets);
+          setStatus('Jobs loaded');
+        },
+      )
       .catch((reason: Error) => setError(reason.message))
       .finally(() => setLoading(false));
   }, []);
@@ -509,6 +518,7 @@ export function useJobEditor({
     datasets,
     models,
     modelRoots,
+    trainingOptions,
     job,
     dirty,
     busy,

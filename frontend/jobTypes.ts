@@ -16,6 +16,7 @@ export type JobConfig = {
   rank: number;
   alpha: number;
   learning_rate: number;
+  optimizer: 'AdamW' | 'AdamW8bit';
   steps: number;
   gradient_accumulation: number;
   blocks_to_swap: number;
@@ -50,6 +51,10 @@ export type SetConfig = <K extends keyof JobConfig>(
   key: K,
   value: JobConfig[K],
 ) => void;
+export type TrainingOptions = {
+  optimizers: JobConfig['optimizer'][];
+  reason: string;
+};
 export type DatasetOption = {
   id: string;
   name: string;
@@ -74,6 +79,7 @@ export type ReviewTarget =
     };
 
 export type Review = {
+  optimizer: JobConfig['optimizer'];
   job_id: string;
   revision: number;
   error_targets: Record<number, ReviewTarget>;

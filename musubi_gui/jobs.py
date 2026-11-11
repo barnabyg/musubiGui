@@ -74,6 +74,7 @@ class JobConfig(BaseModel):
     rank: int = 8
     alpha: int = 8
     learning_rate: float = 0.0001
+    optimizer: Literal["AdamW", "AdamW8bit"] = "AdamW"
     steps: int = 2
     gradient_accumulation: int = 1
     blocks_to_swap: int = 36
@@ -725,6 +726,7 @@ def build_stages(job: Job, settings: Settings, run: Path, cache: Path, kinds: se
                 ("--network_dim", config.rank),
                 ("--network_alpha", config.alpha),
                 ("--learning_rate", config.learning_rate),
+                ("--optimizer_type", config.optimizer),
                 ("--max_train_steps", config.steps),
                 ("--gradient_accumulation_steps", config.gradient_accumulation),
                 ("--blocks_to_swap", config.blocks_to_swap),
@@ -1008,6 +1010,12 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
             "Geometry: H3 is qualified up to 640×352 on the target PC; 832×480 ran out of VRAM at the first step."
         )
     settings = effective_settings(job, settings)
+    if job.config.optimizer == "AdamW8bit":
+        from musubi_gui.training_options import optimizer_options
+
+        options = optimizer_options(settings, fixture_mode=fixture_mode)
+        if "AdamW8bit" not in options["optimizers"]:
+            errors.add(f"Optimizer: {options['reason']}", field="optimizer")
     for label, value in [("Output root", settings.output_root), ("Cache root", settings.cache_root)]:
         if not value:
             errors.append(f"{label}: configure a dedicated directory in Settings.")
@@ -1129,6 +1137,7 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
         errors.append(f"Commands: {error}")
     return {
         "valid": not errors,
+        "optimizer": job.config.optimizer,
         "error_targets": errors.targets,
         "warning_targets": warnings.targets,
         "errors": errors,

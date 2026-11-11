@@ -136,6 +136,7 @@ export function JobReview({
           )
         );
       })}
+      <p>Optimizer: {review.optimizer}</p>
       {review.expert_schedule && (
         <section aria-label="Expert training schedule">
           <h3>Alternating expert schedule</h3>

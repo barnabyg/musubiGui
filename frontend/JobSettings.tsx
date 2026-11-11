@@ -3,7 +3,13 @@ import { JobDatasets } from './JobDatasets';
 import { componentLabels } from './labels';
 import type { JobFields } from './jobFields';
 import { fieldId } from './jobRules';
-import type { DatasetOption, Job, JobConfig, SetConfig } from './jobTypes';
+import type {
+  DatasetOption,
+  Job,
+  JobConfig,
+  SetConfig,
+  TrainingOptions,
+} from './jobTypes';
 import { PathField } from './PathField';
 import type { JobMedia } from './jobMedia';
 
@@ -183,12 +189,14 @@ export function JobControls({
   fields,
   config,
   media,
+  trainingOptions,
 }: {
   job: Job;
   busy: boolean;
   fields: JobFields;
   config: SetConfig;
   media: JobMedia;
+  trainingOptions: TrainingOptions;
 }) {
   const { problems, problemProps, problemText, number, toggle } = fields;
   return (
@@ -305,6 +313,32 @@ export function JobControls({
       </section>
       <section className="panel" id="job-section-training" tabIndex={-1}>
         <h2>LoRA & training</h2>
+        <label className="field">
+          Optimizer
+          <select
+            id={fieldId('optimizer')}
+            aria-label="Optimizer"
+            value={job.config.optimizer}
+            disabled={busy}
+            {...problemProps('optimizer')}
+            onChange={(event) =>
+              config('optimizer', event.target.value as JobConfig['optimizer'])
+            }
+          >
+            {trainingOptions.optimizers.map((optimizer) => (
+              <option key={optimizer} value={optimizer}>
+                {optimizer}
+              </option>
+            ))}
+            {!trainingOptions.optimizers.includes(job.config.optimizer) && (
+              <option value={job.config.optimizer} disabled>
+                {job.config.optimizer} (unavailable)
+              </option>
+            )}
+          </select>
+          {problemText('optimizer')}
+          <small>{trainingOptions.reason}</small>
+        </label>
         <div className="number-row">
           {number('LoRA rank', 'rank')}
           {number('LoRA alpha', 'alpha')}
