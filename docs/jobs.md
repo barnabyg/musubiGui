@@ -604,6 +604,13 @@ Prepare and start, open Samples and play the generated media. Repeat with H3 at
 This CPU fixture verifies configuration, orchestration and decoded metadata, not
 GPU capacity or learning quality.
 
+The [short GPU sample checks](reference/evidence/run-screen-samples.json) on the
+RTX 3090 decoded a 320×192 Wan final sample at 33 frames/16 fps, its corrected
+native preview at 49 frames/24 fps, and H3 preview/final samples at 141 frames/24 fps
+with audio. Training remained 256×256 with 17 Wan or 124 H3 frames. These synthetic
+two-step checks establish execution and metadata only; production capacity,
+learning and audible quality are unqualified.
+
 Review lists each image/video section, item count, repeats and share of training.
 Set an image dataset's repeats to 2 to double its samples per epoch without
 duplicating source files. Preparation freezes captions and media into the Run

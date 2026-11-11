@@ -1,0 +1,154 @@
+{
+  "version": 1,
+  "date": "2026-11-11",
+  "application_revision": "6fad2ea386e5e9f3947f0d772e1ba97a24512ee4",
+  "upstream_revision": "f8a1b03794a49239a3539015075f5123d6c07d66",
+  "hardware": {
+    "gpu": "NVIDIA GeForce RTX 3090",
+    "vram_mib": 24576,
+    "host_ram_gb": 96,
+    "os": "Windows 11"
+  },
+  "scope": "Two training steps and four inference steps on synthetic video; independent sample width, height and duration. This proves execution and decoded geometry, not learning or production capacity.",
+  "source_note": "Execution used the working tree committed in this branch. The completed original command plans were compared with the committed builder byte-for-byte. The corrected native preview uses the same source as the application_revision above. Full inputs, commands, logs, provenance and artifact identities remain in the isolated local workspace.",
+  "workspace": ".cache/run-screen-geometry-gpu-20261111",
+  "cases": [
+    {
+      "family": "wan",
+      "kind": "final",
+      "run_id": "1f34082ff625450ea5dbd9da5f1804bf",
+      "training": [256, 256, 17],
+      "requested_sample": [320, 192, 33],
+      "sample": {
+        "path": "samples/20261111-185849-147_42_.mp4",
+        "bytes": 359497,
+        "status": "available",
+        "metadata": {
+          "audio": null,
+          "format": "mov,mp4,m4a,3gp,3g2,mj2",
+          "width": 320,
+          "height": 192,
+          "frames": 33,
+          "fps": 16.0,
+          "duration": 2.06201171875,
+          "video_start": 0.0
+        }
+      }
+    },
+    {
+      "family": "wan",
+      "kind": "native-preview",
+      "run_id": "9d2203bb000c466a958d98ddeb6c1ef3",
+      "training": [256, 256, 17],
+      "requested_sample": [320, 192, 33],
+      "sample": {
+        "path": "checkpoints/sample/wan-b79dc057d71341c0b9adeb15b1f2fc3e_000002_00_20261111190917_42.mp4",
+        "bytes": 948988,
+        "status": "available",
+        "metadata": {
+          "audio": null,
+          "format": "mov,mp4,m4a,3gp,3g2,mj2",
+          "width": 320,
+          "height": 192,
+          "frames": 49,
+          "fps": 24.0,
+          "duration": 2.0416666666666665,
+          "video_start": 0.0,
+          "preview": {
+            "step": 2,
+            "scope": "low-noise expert only",
+            "prompt": "A red square moves across a blue background.",
+            "seed": 42,
+            "counter": "segment optimizer updates"
+          }
+        }
+      }
+    },
+    {
+      "family": "h3",
+      "kind": "preview-and-final",
+      "run_id": "9a782fbb0ad3437bbbdf4a79b2134804",
+      "training": [256, 256, 124],
+      "requested_sample": [320, 192, 141],
+      "samples": [
+        {
+          "path": "checkpoints/sample/h3-bff00377568341e1a9fc60d03c8eb1f3_000002_00_20261111190123_42.mp4",
+          "bytes": 243325,
+          "status": "available",
+          "metadata": {
+            "audio": {
+              "sample_rate": 32000,
+              "channels": 2,
+              "duration": 5.875,
+              "start": 0.0,
+              "codec": "aac"
+            },
+            "format": "mov,mp4,m4a,3gp,3g2,mj2",
+            "width": 320,
+            "height": 192,
+            "frames": 141,
+            "fps": 24.0,
+            "duration": 5.875,
+            "video_start": 0.0,
+            "preview": {
+              "step": 2,
+              "scope": "H3",
+              "prompt": "A red square moves across a blue background. A steady sine tone plays.",
+              "seed": 42,
+              "counter": "segment optimizer updates"
+            }
+          }
+        },
+        {
+          "path": "samples/sample.mp4",
+          "bytes": 251191,
+          "status": "available",
+          "metadata": {
+            "audio": {
+              "sample_rate": 32000,
+              "channels": 2,
+              "duration": 5.875,
+              "start": 0.0,
+              "codec": "aac"
+            },
+            "format": "mov,mp4,m4a,3gp,3g2,mj2",
+            "width": 320,
+            "height": 192,
+            "frames": 141,
+            "fps": 24.0,
+            "duration": 5.875,
+            "video_start": 0.0
+          }
+        }
+      ]
+    }
+  ],
+  "timing_parser": {
+    "wan": {
+      "step": 2,
+      "total": 2,
+      "elapsed": "00:30",
+      "eta": "00:00",
+      "loss": "0.0198"
+    },
+    "h3": {
+      "step": 2,
+      "total": 2,
+      "elapsed": "00:32",
+      "eta": "00:00",
+      "loss": "1.97"
+    }
+  },
+  "initial_wan_preview_finding": {
+    "frames": 33,
+    "fps": 24,
+    "duration": 1.375,
+    "requested_final_duration": 2.0625,
+    "correction": "Explicit durations now resolve separately onto the native 24 fps frame grid; the corrected 49-frame output lasts 2.041667 seconds. Legacy Jobs retain their original frame count."
+  },
+  "limits": [
+    "No production-size, learning-quality or audible-quality claim.",
+    "The paired Wan generation path is covered by fixture/browser regressions; these new GPU cases use native single-process previews.",
+    "One-frame PNG generation is covered by fixture/browser tests; no new one-frame GPU case was run."
+  ]
+}
