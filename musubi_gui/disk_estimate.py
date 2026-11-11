@@ -46,12 +46,14 @@ def estimate_disk(family: str, config: "JobConfig", items: list[dict[str, Any]],
     """Peak bytes per category. A final save on the interval counts until the duplicate is removed after training."""
     latents = 0
     for item in items:
+        resolution = item.get("resolution")
+        geometry = config.model_copy(update={"width": resolution[0], "height": resolution[1]}) if resolution else config
         if item.get("kind") == "image":
-            latents += _latent_bytes(family, config, 1)
+            latents += _latent_bytes(family, geometry, 1)
         else:
             # A clip without a window count still caches once when it has an unknown length.
             windows = item.get("windows")
-            latents += _latent_bytes(family, config, config.frames) * (1 if windows is None else windows)
+            latents += _latent_bytes(family, geometry, config.frames) * (1 if windows is None else windows)
     caches = latents + TEXT_CACHE_BYTES[family] * len(items) + HUGGING_FACE_BYTES[family]
     saves = config.steps // config.save_every + 1 if config.steps >= 1 and config.save_every >= 1 else 0
     if (
@@ -95,6 +97,10 @@ def estimate_disk(family: str, config: "JobConfig", items: list[dict[str, Any]],
         "states": states,
         "samples": samples,
         "saves": saves,
+        # Retention is checked periodically and protects restoration inputs; peak remains an upper bound.
+        "retained_saves": min(saves, (config.keep_checkpoints + 1) * (2 if config.recipe == PAIRED_RECIPE else 1))
+        if config.keep_checkpoints > 0
+        else saves,
         "output_root": media_bytes + checkpoints + states + samples,
         "cache_root": caches,
     }

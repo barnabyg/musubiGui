@@ -21,6 +21,7 @@ export function Jobs(props: JobsProps) {
     datasets,
     models,
     modelRoots,
+    trainingOptions,
     job,
     dirty,
     busy,
@@ -199,6 +200,7 @@ export function Jobs(props: JobsProps) {
               applyPreset={applyPreset}
             />
             <JobControls
+              trainingOptions={trainingOptions}
               media={media}
               job={job}
               busy={busy}

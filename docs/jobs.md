@@ -1,5 +1,88 @@
 # Job drafts and configuration review
 
+## Timestep strategy
+
+Advanced controls → LoRA & training offers **Shift**, **Sigmoid** and **Uniform**
+for Wan. Shift favours noisier timesteps using a shifted sigmoid distribution;
+Sigmoid concentrates draws around the middle; Uniform assigns equal probability
+across the active expert's range. Sigmoid scale controls spread for Shift and
+Sigmoid, while Flow shift controls the shift for Shift only. Both parameters must
+be between 0.001 and 1000, avoiding unstable extremes in the trainer's FP32 draw.
+
+Old jobs and new-job defaults keep the original Shift recipe: flow shift 3,
+sigmoid scale 1 and distribution-preserving rejection sampling within each expert's
+range. Alternative strategies and custom parameter values use the upstream bounded
+mapping into each expert's range. This is deliberate: upstream rejection sampling
+falls back to an unrestricted draw after 1000 misses, which can violate the expert
+range for extreme custom distributions. Low/high phases keep ranges 0–875 and
+875–1000 respectively. Review shows the effective strategy, parameters and mapping.
+
+H3 displays a fixed Uniform strategy because the pinned trainer rejects other
+strategies. It draws one base sigma shared by video/audio and applies their own
+model-specific shifts. A saved unsupported H3 choice blocks review and can be
+repaired by selecting Uniform. Switching model family applies the target family's
+strategy defaults. Presets, revisions and exports preserve choices, and restoration
+keeps the original Run's strategy regardless of later Job edits.
+
+These controls follow the pinned upstream
+[parser](https://github.com/kohya-ss/musubi-tuner/blob/f8a1b03794a49239a3539015075f5123d6c07d66/src/musubi_tuner/training/parser_common.py#L444-L474),
+[sampling and range mapping](https://github.com/kohya-ss/musubi-tuner/blob/f8a1b03794a49239a3539015075f5123d6c07d66/src/musubi_tuner/training/trainer_base.py#L635-L760)
+and [H3 restrictions](https://github.com/kohya-ss/musubi-tuner/blob/f8a1b03794a49239a3539015075f5123d6c07d66/src/musubi_tuner/minimax_h3_train_network.py#L707-L720).
+Short target-PC GPU checks exercised the original Shift recipe and Sigmoid with
+scale 1.5 in alternating Wan training, plus H3's Uniform strategy, including state
+restoration. See the [execution evidence](reference/evidence/training-settings-gpu.json).
+Other custom parameter values and Wan Uniform have command/orchestration coverage.
+Production-size capacity and training quality remain unqualified.
+
+From `C:/docs/git/musubiGui` in PowerShell 7:
+
+```powershell
+.\acceptance.cmd --workspace ".cache/timesteps-$([guid]::NewGuid().ToString('N'))" --wan-paired
+```
+
+Open WAN acceptance 1, expand Advanced controls, select Sigmoid and set its scale
+to 1.5. Save and reload: the choice should remain. Review should pass and show
+Sigmoid with scale 1.5 and bounded mapping; Advanced command arrays should keep
+the appropriate low/high ranges. Prepare and start the four-step fixture, then
+restore a complete save: the segment should keep its strategy. H3 acceptance 1
+should show Uniform with an explanation and no incompatible choices. This is a
+CPU orchestration test; no models or GPU are required.
+
+## Optimizer selection
+
+Advanced controls → LoRA & training offers AdamW and, when the selected training
+Python can load a CUDA-enabled bitsandbytes optimizer, AdamW8bit. Both Wan and H3
+use the pinned trainer's shared optimizer implementation. AdamW remains the
+default for old and new jobs. A saved or imported unavailable choice stays visible
+but blocks review until the environment is compatible or AdamW is selected.
+Saving presets, revisions and exports preserves the optimizer. Review shows its
+effective value, and restoring a Run keeps that Run's original optimizer even if
+the Job has since changed. A conflicting frozen optimizer/command is rejected.
+
+The supported subset comes from the pinned upstream
+[optimizer implementation](https://github.com/kohya-ss/musubi-tuner/blob/f8a1b03794a49239a3539015075f5123d6c07d66/src/musubi_tuner/training/trainer_base.py#L225-L307).
+The target RTX 3090 Windows environment has bitsandbytes 0.50.1 with a CUDA-enabled
+extension. Both optimizers completed preparation, training, checkpoint saving and
+restoration for Wan and H3 on two synthetic images at 256 × 256. Wan trained both
+experts for one update each, then restored for another update each; H3 trained two
+updates and restored for one more, with its saved optimizer counter reaching three.
+The [GPU evidence](reference/evidence/training-settings-gpu.json) records the
+configuration, commands, package/model identities, checkpoint hashes and restored
+counters. Final sampling was off. These checks establish execution for the recorded
+settings, not production capacity or useful learning.
+
+From `C:/docs/git/musubiGui` in PowerShell 7:
+
+```powershell
+.\acceptance.cmd --workspace ".cache/optimizer-$([guid]::NewGuid().ToString('N'))"
+```
+
+Open WAN acceptance 1, expand Advanced controls, select AdamW8bit, save and reload.
+The selection should remain; Review configuration should show Optimizer: AdamW8bit.
+Repeat with H3 acceptance 1. The fixture explicitly labels optimizer execution as
+simulated. No model weights or GPU are required; real optimizer execution needs
+the existing pinned training environment, compatible model paths and CUDA hardware.
+
 A sticky menu above the form jumps to each section and marks the current one. Simple rules
 such as multiples, frame formulas and ranges are flagged beside their field while typing, and
 never block saving a draft. Review stays the authority: each of its errors about a field is
@@ -106,6 +189,41 @@ because 200 images can otherwise swamp 10 clips without notice. This is only a w
 
 ## Training sections
 
+### Per-dataset training resolution
+
+Expand **Training resolution** on a dataset row to choose one width and height for
+that dataset. Leave **Use job resolution** checked to inherit Dataset preparation's
+width and height. Wan dimensions must be at least 64 and multiples of 16; H3 uses
+multiples of 32. Bucketing remains a separate aspect-ratio choice. Sample and preview
+geometry always comes from the job settings, independently of training overrides.
+
+Review lists the effective size of every training section. Overrides reach the native
+dataset TOML, cache identity and latent disk estimates; changing one invalidates the
+job's compatible preparation caches, including for a single-dataset job. Existing
+jobs without overrides retain their geometry and cache keys. Revisions and exports
+preserve overrides. Saved presets restore explicit sizes or inheritance for matching
+dataset IDs without adding datasets; older presets and built-in presets leave dataset
+overrides alone.
+
+Musubi Tuner supports this through its dataset-level `resolution`, inheriting from
+`[general]` when omitted; see the pinned
+[configuration schema](https://github.com/kohya-ss/musubi-tuner/blob/f8a1b03794a49239a3539015075f5123d6c07d66/src/musubi_tuner/dataset/config_utils.py#L113-L122).
+Multiple training resolutions within one dataset are not supported by this UI.
+
+From `C:/docs/git/musubiGui` in PowerShell 7, run:
+
+```powershell
+.\acceptance.cmd --workspace ".cache/resolution-check-$([guid]::NewGuid().ToString('N'))"
+```
+
+Open **WAN acceptance 1**, add **H3 acceptance** as its second dataset, and set the
+dataset training sizes to 320 × 256 and 256 × 320. Save and reload: both sizes should
+remain. Review should list both sizes and pass, while the sample remains 256 × 256.
+Choose **Prepare run** and expect a prepared Run. Repeat with an invalid width of
+65: review should link to that dataset's width and block preparation. The default
+fixture uses CPU workers; it proves orchestration and persistence, not GPU capacity
+or useful training. Real GPU geometry changes still require capacity qualification.
+
 `musubi_gui/training_sections.py` turns a job and its included items into native dataset
 sections. Review and preparation both use it, so the TOML that review shows is the one that
 runs, apart from the Run's own folder. A section has a dataset, a type (images or videos), a
@@ -136,6 +254,18 @@ identical files (the same SHA-256), which train once for each dataset. It compar
 only for files of the same size.
 
 ## Configuration review
+
+### Caching
+
+Under Advanced controls, Dataset preparation offers separate latent and text
+embedding cache policies. **Reuse compatible cache** is the default; preparation
+copies verified compatible artifacts into the new Run's private cache, or builds
+them when none are usable. **Rebuild cache** always runs that encoder for the new
+Run. Both stages are required by the Wan/H3 recipes. Other Runs' caches remain
+untouched. Review shows the policies; the Run shows each stage's actual result.
+Saved drafts, presets and exports retain the choices. Retry retains its frozen
+choices; Restore continues from the frozen prepared inputs without recaching.
+See [the pinned upstream investigation and manual test](reference/caching.md).
 
 ### Previews during training
 
@@ -277,6 +407,46 @@ workspace and does not change the installation. CPU fixtures establish orchestra
 not real training or useful learning; see the [Wan reference](reference/wan.md).
 
 ## Disk estimates
+
+### Checkpoint retention
+
+Under Advanced controls, Checkpoints & final sample, set **Maximum checkpoint saves to keep**.
+Zero (the default, including older jobs) keeps unlimited history. A positive value keeps
+that many historical saves per expert plus the newest/final save. A save includes its
+LoRA and optimizer/training state when enabled. Wan protects the latest restorable pair,
+pending phase/sampling inputs, and the counterparts needed to restore retained pairs.
+Other Runs' frozen inputs and restoration sources are also protected, so these exceptions
+can exceed the limit. Sampling results are never pruned.
+
+During training a separate worker checks about every five seconds and at phase completion. It
+only prunes older validated saves once a newer complete save exists. Incomplete saves and
+unknown files are kept. Files are first quarantined under the Run's checkpoints folder;
+a durable journal allows interrupted removals to resume at the next check or saved-state
+inspection. Run details show removal counts, protected exceptions and errors. A removal
+failure does not fail training; inspect its reported error before removing a quarantine
+remainder manually. Quarantined and intentionally pruned artifacts are not offered as outputs
+or restoration choices. Restored segments start their own retention journal.
+Inspection runs independently of training process supervision so Stop remains responsive.
+Closing the service cancels chunked hashing, terminates/reaps its state probe (including
+the Windows interpreter-launcher child), and joins the inspection worker. This does not
+terminate training processes, which retain the existing interrupted-run recovery behaviour.
+
+Review reports expected retained saves before protected exceptions. The disk budget remains
+a conservative peak upper bound: short step intervals can accumulate saves between checks,
+and protected restoration sources cannot be counted as reclaimable storage.
+
+To verify manually, run from the repository root in PowerShell 7:
+
+```powershell
+.\acceptance.cmd --workspace ".cache/retention-$([guid]::NewGuid().ToString('N'))" --wan-paired
+```
+
+Open WAN acceptance 1, expand Advanced controls, set Training steps to 12, steps per expert
+to 2, Save every N steps to 1 and Maximum checkpoint saves to keep to 1. Review, then Prepare
+and start. Expect older saves to be pruned while both final expert LoRAs and their latest
+restorable pair remain available. Inspect Run details for retention status, restore the latest
+pair for four additional steps, and confirm the new segment completes. Zero should retain
+history as before. This command uses synthetic CPU workers and does not qualify GPU training.
 
 Review also estimates the disk a Run will use: the media snapshot, caches, LoRA
 checkpoints, optimizer states and samples, plus the free space on each target volume.

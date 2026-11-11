@@ -18,6 +18,7 @@ from typing import Any
 import psutil
 
 from musubi_gui.checkpoint_dedup import remove_final_duplicates
+from musubi_gui.checkpoint_retention import Save, apply_retention, retained_states, retention_candidates
 from musubi_gui.media_probe import inspect as inspect_media
 from musubi_gui.processes import identity_status, observed_tree, process_identity, terminate_owned
 from musubi_gui.recipe import Stage, reference_environment
@@ -82,6 +83,12 @@ class RunService:
         self.identity = process_identity()
         self.identity["instance"] = uuid.uuid4().hex
         self.stopping = threading.Event()
+        self.retention_stamps: dict[str, tuple[tuple[str, int, int], ...]] = {}
+        self.retention_validation: dict[str, tuple[object, Save]] = {}
+        self.retention_lock = threading.RLock()
+        self.retention_condition = threading.Condition()
+        self.retention_requested: set[str] = set()
+        self.retention_thread = threading.Thread(target=self._retain_requested, name="musubi-retention", daemon=True)
         self.thread = threading.Thread(target=self._schedule, name="musubi-worker", daemon=True)
         if autostart:
             self.start_worker()
@@ -98,6 +105,7 @@ class RunService:
                 "uncertain",
             }:
                 self.reconcile(run["id"])
+        self.retention_thread.start()
         self.thread.start()
 
     def list(self) -> list[dict[str, Any]]:
@@ -237,8 +245,15 @@ class RunService:
 
     def close(self) -> None:
         self.stopping.set()
+        with self.retention_condition:
+            self.retention_condition.notify_all()
         if self.thread.is_alive():
             self.thread.join(timeout=5)
+        if self.retention_thread.is_alive():
+            # Cancellation interrupts chunked hashes and kills/reaps an active state probe.
+            self.retention_thread.join(timeout=45)
+            if self.retention_thread.is_alive():
+                raise RuntimeError("Background checkpoint inspection did not finish after cancellation.")
 
     def retry(self, run_id: str) -> dict[str, Any]:
         previous = self.get(run_id)
@@ -426,9 +441,62 @@ class RunService:
             return []
         if run.get("processes"):
             raise ValueError("Choose Check for leftover processes before inspecting saved state.")
+        self.retain_checkpoints(run_id)
+        run = self.get(run_id)
         states = paired_saved_states(run) if is_paired(run) else discover_states(run)
+        states = retained_states(run, states)
         self.store.update(run_id, lambda r: r.update(saved_states=states))
         return states
+
+    def retain_checkpoints(self, run_id: str) -> None:
+        """Apply the frozen Run's policy; failure preserves training and is visible for repair."""
+        with self.retention_lock:
+            self._retain_checkpoints(run_id)
+
+    def request_retention(self, run_id: str) -> None:
+        """Coalesce work without delaying process supervision or Stop signalling."""
+        with self.retention_condition:
+            self.retention_requested.add(run_id)
+            self.retention_condition.notify()
+
+    def _retain_requested(self) -> None:
+        while not self.stopping.is_set():
+            with self.retention_condition:
+                self.retention_condition.wait_for(lambda: self.retention_requested or self.stopping.is_set())
+                if self.stopping.is_set():
+                    return
+                run_id = self.retention_requested.pop()
+            try:
+                self.retain_checkpoints(run_id)
+            except (OSError, ValueError):
+                # A terminal Run may have been deleted after its final request was queued.
+                continue
+
+    def _retain_checkpoints(self, run_id: str) -> None:
+        run = self.get(run_id)
+        if run["job"].get("config", {}).get("keep_checkpoints", 0) <= 0:
+            return
+        try:
+            root = Path(run["directory"]) / "checkpoints"
+            stamp = tuple(
+                sorted(
+                    (str(path), path.stat().st_mtime_ns, path.stat().st_size)
+                    for path in root.rglob("*")
+                    if path.is_file() and ".retention" not in path.parts
+                )
+            )
+            if self.retention_stamps.get(run_id) == stamp and not run.get("retention", {}).get("pending"):
+                return
+            candidates, protected = retention_candidates(run, self.retention_validation, self.stopping)
+            if self.stopping.is_set():
+                return
+            self.store.update_with_others(
+                run_id, lambda record, others: apply_retention(record, others, candidates, protected)
+            )
+            self.retention_stamps[run_id] = stamp
+        except (OSError, ValueError) as error:
+            message = redact(str(error))
+            self.store.update(run_id, lambda record: record.setdefault("retention", {}).update(errors=[message]))
 
     def restore_state(
         self, run_id: str, state_id: str, additional_steps: int, *, confirmed: bool = False
@@ -483,7 +551,15 @@ class RunService:
             },
             state_source={"path": state["path"], "files": state["files"]},
         )
-        for key in ["stop_requested", "stop_kind", "finished", "exit_code", "checkpoints", "removed_duplicates"]:
+        for key in [
+            "stop_requested",
+            "stop_kind",
+            "finished",
+            "exit_code",
+            "checkpoints",
+            "removed_duplicates",
+            "retention",
+        ]:
             record.pop(key, None)
         for stage in record["stages"]:
             if stage["name"] not in {"train", "generate"}:
@@ -652,6 +728,7 @@ class RunService:
                     self.store.update(run_id, lambda r: r.update(processes=identities, launch_pending=False))
                     self.device.update(run_id, identities, launch_pending=False)
                     signalled = ""
+                    retention_at = time.monotonic() + 5
                     while process.poll() is None:
                         fresh = observed_tree(process.pid)
                         for pid in job_object.pids():
@@ -668,6 +745,9 @@ class RunService:
                             job_object.terminate()
                             terminate_owned(identities, force=True)
                         signalled = self._signal_stop(run_id, job_object, identities, signalled)
+                        if stage["name"] == "train" and time.monotonic() >= retention_at:
+                            self.request_retention(run_id)
+                            retention_at = time.monotonic() + 5
                         if self.stopping.wait(0.1):
                             release = False
                             self.store.update(
@@ -760,6 +840,7 @@ class RunService:
                             record.setdefault("expert_states", {})[stage["training"]["expert"]] = state
 
                         self.store.update(run_id, save_expert)
+                    self.request_retention(run_id)
                 elif stage["name"] == "generate":
                     destination = Path(stage["args"][stage["args"].index("--save_path") + 1])
                     samples = list(destination.rglob("*")) if destination.is_dir() else [destination]
@@ -946,6 +1027,12 @@ class RunService:
         return [{"path": str(file.relative_to(cache)), "sha256": digest_file(file)} for file in files]
 
     def _reuse(self, run: dict[str, Any], stage_name: str, index: int) -> bool:
+        policy = "latent_cache_policy" if stage_name == "latent_cache" else "text_cache_policy"
+        rebuild = run["job"].get("config", {}).get(policy, "reuse") == "rebuild"
+        reason = "Rebuild requested by this Run." if rebuild else "No verified compatible cache found."
+        self.store.update(run["id"], lambda r: r["stages"][index].update(cache_reason=reason))
+        if rebuild:
+            return False
         key = run.get("stage_keys", {}).get(stage_name)
         if not key:
             return False
@@ -973,7 +1060,11 @@ class RunService:
             self.store.update(
                 run["id"],
                 lambda r: r["stages"][index].update(
-                    status="reused", artifacts=artifacts, reused_from=previous["id"], exit_code=0
+                    status="reused",
+                    artifacts=artifacts,
+                    reused_from=previous["id"],
+                    cache_reason="Compatible identity and artifact hashes verified.",
+                    exit_code=0,
                 ),
             )
             return True

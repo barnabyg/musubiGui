@@ -69,6 +69,39 @@ async function jobAction(page: Page, name: string) {
   await page.getByRole('menuitem', { name, exact: true }).click();
 }
 
+test('checkpoint retention persists and review explains protected saves', async ({
+  page,
+}) => {
+  const app = await workspace();
+  try {
+    await openJobs(page, app.url);
+    await page
+      .getByRole('button', { name: 'New Wan job', exact: true })
+      .click();
+    await page.getByText('Advanced controls', { exact: true }).click();
+    const retention = page.getByLabel('Maximum checkpoint saves to keep', {
+      exact: true,
+    });
+    await expect(retention).toHaveValue('0');
+    await retention.fill('2');
+    await page.getByRole('button', { name: 'Save draft', exact: true }).click();
+    await expect(page.getByRole('status')).toContainText('Draft saved');
+    await page.reload();
+    await page.getByText('Advanced controls', { exact: true }).click();
+    await expect(retention).toHaveValue('2');
+    await page
+      .getByRole('button', { name: 'Review configuration', exact: true })
+      .click();
+    await page.getByText('Estimated disk use', { exact: true }).click();
+    await expect(page.getByTestId('disk-estimate')).toContainText(
+      'Keep 2 historical saves per expert',
+    );
+    await expect(page.getByTestId('disk-estimate')).toContainText('protected');
+  } finally {
+    await app.close();
+  }
+});
+
 test('the action bar stays visible, identity comes first and rare actions are in a keyboard menu', async ({
   page,
 }) => {

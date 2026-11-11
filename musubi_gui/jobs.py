@@ -24,7 +24,7 @@ from musubi_gui.redaction import redact
 from musubi_gui.run_store import RunStore, preparation_transaction
 from musubi_gui.safetensors_file import safetensors_header
 from musubi_gui.settings import Settings, atomic_json, validate_paths, within_root
-from musubi_gui.training_sections import dataset_toml, plan_sections, section_balance
+from musubi_gui.training_sections import dataset_resolution, dataset_toml, plan_sections, section_balance
 from musubi_gui.video_sampling import plan_windows
 from musubi_gui.wan import validate_wan, wan_stages
 from musubi_gui.wan_pair import MAX_PHASES, PAIRED_RECIPE, alternating_phases, expert_steps
@@ -71,9 +71,15 @@ class JobConfig(BaseModel):
     repeats: int = 1
     enable_bucket: bool = False
     bucket_no_upscale: bool = False
+    latent_cache_policy: Literal["reuse", "rebuild"] = "reuse"
+    text_cache_policy: Literal["reuse", "rebuild"] = "reuse"
     rank: int = 8
     alpha: int = 8
     learning_rate: float = 0.0001
+    optimizer: Literal["AdamW", "AdamW8bit"] = "AdamW"
+    timestep_sampling: Literal["shift", "sigmoid", "uniform"] = "shift"
+    sigmoid_scale: float = 1.0
+    discrete_flow_shift: float = 3.0
     steps: int = 2
     gradient_accumulation: int = 1
     blocks_to_swap: int = 36
@@ -83,6 +89,7 @@ class JobConfig(BaseModel):
     block_swap_h2d_only: bool = False
     audio_policy: Literal["require", "allow-missing"] = "require"
     save_every: int = 1
+    keep_checkpoints: int = 0
     save_state: bool = False
     sample_enabled: bool = True
     preview_every: int = 0
@@ -99,6 +106,7 @@ def smoke_config(family: str) -> JobConfig:
     if family == "h3":
         return JobConfig(
             recipe="guidance-loss",
+            timestep_sampling="uniform",
             frames=124,
             rank=4,
             alpha=4,
@@ -135,6 +143,8 @@ class JobDataset(BaseModel):
     dataset_id: str
     # None inherits config.repeats, the [general] default.
     repeats: int | None = None
+    # Omit absent overrides so older records and exports keep their original shape.
+    resolution: tuple[int, int] | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 def _check_version_fields(version: Any, draft: Any) -> None:
@@ -214,6 +224,18 @@ class Preset(NamedPreset):
     id: str
     family: Literal["wan", "h3"]
     config: JobConfig
+    dataset_resolutions: dict[str, tuple[int, int] | None] = Field(
+        default_factory=dict, exclude_if=lambda value: not value
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def legacy_h3_timestep(cls, value: Any) -> Any:
+        if isinstance(value, dict) and value.get("family") == "h3":
+            config = value.get("config")
+            if isinstance(config, dict) and "timestep_sampling" not in config:
+                return {**value, "config": {**config, "timestep_sampling": "uniform"}}
+        return value
 
 
 # Capacity configurations measured on the target PC in #26; see docs/reference/evidence/production-trial.json.
@@ -540,7 +562,11 @@ class JobStore:
         job = self.get(job_id)
         self._require_unarchived(job_id)
         preset = Preset(
-            name=name, id=uuid.uuid4().hex, family=job.family, config=export_draft(as_draft(job)).draft.config
+            name=name,
+            id=uuid.uuid4().hex,
+            family=job.family,
+            config=export_draft(as_draft(job)).draft.config,
+            dataset_resolutions={entry.dataset_id: entry.resolution for entry in job.datasets},
         )
         directory = self.root.parent / "presets"
         directory.mkdir(parents=True, exist_ok=True)
@@ -569,6 +595,13 @@ class JobStore:
                 else preset.config
             )
             draft = as_draft(job).model_copy(update={"config": config})
+            if not built_in and preset.dataset_resolutions:
+                draft.datasets = [
+                    entry.model_copy(update={"resolution": preset.dataset_resolutions[entry.dataset_id]})
+                    if entry.dataset_id in preset.dataset_resolutions
+                    else entry
+                    for entry in job.datasets
+                ]
             return self.save(job_id, draft, selection.revision)
 
 
@@ -588,6 +621,13 @@ def configuration_errors(job: Job, *, has_videos: bool = True) -> list[str]:
     config = job.config
     needs_frames = has_videos or config.sample_enabled or config.preview_every > 0
     errors: list[str] = []
+    if job.family == "h3" and config.timestep_sampling != "uniform":
+        errors.append("Timestep strategy: the pinned H3 trainer supports uniform sampling only.")
+    if job.family == "wan":
+        if config.timestep_sampling in {"shift", "sigmoid"} and not 0.001 <= config.sigmoid_scale <= 1000:
+            errors.append("Sigmoid scale: enter a finite number from 0.001 to 1000 for stable sampling.")
+        if config.timestep_sampling == "shift" and not 0.001 <= config.discrete_flow_shift <= 1000:
+            errors.append("Flow shift: enter a finite number from 0.001 to 1000 for stable sampling.")
     if not job.name.strip():
         errors.append("Name: enter a job name.")
     listed = [entry.dataset_id for entry in job.datasets]
@@ -675,6 +715,8 @@ def configuration_errors(job: Job, *, has_videos: bool = True) -> list[str]:
         )
     if config.preview_every < 0:
         errors.append("Preview interval: enter zero (off) or a positive number of optimizer steps.")
+    if config.keep_checkpoints < 0:
+        errors.append("Checkpoint retention: enter zero (unlimited) or a positive number of saves.")
     if config.preview_every > 0 and config.recipe == PAIRED_RECIPE and config.steps > 0 and config.expert_interval > 0:
         try:
             alternating_phases(config.steps, config.expert_interval, preview_every=config.preview_every)
@@ -696,6 +738,8 @@ def _set_argument(args: list[str], flag: str, value: str) -> None:
 
 def build_stages(job: Job, settings: Settings, run: Path, cache: Path, kinds: set[str]) -> list[Stage]:
     """Kinds are the included item kinds, because H3 images change its commands."""
+    from musubi_gui.training_options import timestep_range_policy
+
     settings = effective_settings(job, settings)
     config = job.config
     recipe_stages = wan_stages if job.family == "wan" else h3_stages
@@ -709,6 +753,7 @@ def build_stages(job: Job, settings: Settings, run: Path, cache: Path, kinds: se
                 ("--network_dim", config.rank),
                 ("--network_alpha", config.alpha),
                 ("--learning_rate", config.learning_rate),
+                ("--optimizer_type", config.optimizer),
                 ("--max_train_steps", config.steps),
                 ("--gradient_accumulation_steps", config.gradient_accumulation),
                 ("--blocks_to_swap", config.blocks_to_swap),
@@ -717,6 +762,19 @@ def build_stages(job: Job, settings: Settings, run: Path, cache: Path, kinds: se
                 ("--output_name", f"{job.family}-{job.id}"),
             ]:
                 _set_argument(args, flag, str(value))
+            if job.family == "wan":
+                _set_argument(args, "--timestep_sampling", config.timestep_sampling)
+                if config.timestep_sampling in {"shift", "sigmoid"}:
+                    _set_argument(args, "--sigmoid_scale", str(config.sigmoid_scale))
+                if config.timestep_sampling == "shift":
+                    _set_argument(args, "--discrete_flow_shift", str(config.discrete_flow_shift))
+                elif "--discrete_flow_shift" in args:
+                    index = args.index("--discrete_flow_shift")
+                    del args[index : index + 2]
+                # Keep the original qualified recipe exact; custom distributions use bounded mapping.
+                # Upstream rejection sampling falls back outside the expert range after 1000 misses.
+                if timestep_range_policy(job) != "original" and "--preserve_distribution_shape" in args:
+                    args.remove("--preserve_distribution_shape")
             if config.save_state:
                 args.extend(["--save_state", "--save_state_on_train_end"])
             if config.preview_every and config.recipe != PAIRED_RECIPE:
@@ -769,7 +827,12 @@ def disk_preflight(
             # Review reports unreadable media through the dataset checks.
             continue
     images = [item for item in items if item["kind"] == "image"]
-    estimate = estimate_disk(job.family, job.config, [*images, *video_windows], media_bytes=media_bytes)
+    sizes = {item["id"]: dataset_resolution(job, item.get("dataset_id", "")) for item in items}
+    estimated_items = [
+        {**item, "resolution": sizes.get(item["id"], (job.config.width, job.config.height))}
+        for item in [*images, *video_windows]
+    ]
+    estimate = estimate_disk(job.family, job.config, estimated_items, media_bytes=media_bytes)
     volumes = check_volumes(settings, estimate, free=free_space_reader(fixture_mode=fixture_mode))
     return {"estimate": estimate, "volumes": volumes}
 
@@ -861,9 +924,10 @@ def _review_items(
 def _reshaped_image_warning(job: Job, dataset: dict[str, Any], items: list[dict[str, Any]]) -> list[str]:
     """Bucketing off leaves the pinned loader one bucket: image_video_dataset.py scales to cover it and centre-crops."""
     config = job.config
-    if config.enable_bucket or config.width < 1 or config.height < 1:
+    width, height = dataset_resolution(job, dataset["id"])
+    if config.enable_bucket or width < 1 or height < 1:
         return []
-    target = config.width / config.height
+    target = width / height
 
     def reshaped(item: dict[str, Any]) -> bool:
         width, height = item.get("metadata", {}).get("width"), item.get("metadata", {}).get("height")
@@ -874,7 +938,7 @@ def _reshaped_image_warning(job: Job, dataset: dict[str, Any], items: list[dict[
         return []
     images = "1 image has" if count == 1 else f"{count} images have"
     return [
-        f'Dataset "{dataset["name"]}": {images} a different shape from {config.width}×{config.height} and bucketing is '
+        f'Dataset "{dataset["name"]}": {images} a different shape from {width}×{height} and bucketing is '
         "off, so training scales each to cover that size and crops the overflow from the centre. "
         + (
             "Enable bucketing to keep the whole image."
@@ -951,6 +1015,8 @@ def _add_duplicate_warnings(
 
 
 def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool = False) -> dict[str, Any]:
+    from musubi_gui.training_options import timestep_range_policy
+
     errors = ReviewMessages([])
     warnings = ReviewMessages(
         [
@@ -986,6 +1052,12 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
             "Geometry: H3 is qualified up to 640×352 on the target PC; 832×480 ran out of VRAM at the first step."
         )
     settings = effective_settings(job, settings)
+    if job.config.optimizer == "AdamW8bit":
+        from musubi_gui.training_options import optimizer_options
+
+        options = optimizer_options(settings, fixture_mode=fixture_mode)
+        if "AdamW8bit" not in options["optimizers"]:
+            errors.add(f"Optimizer: {options['reason']}", field="optimizer")
     for label, value in [("Output root", settings.output_root), ("Cache root", settings.cache_root)]:
         if not value:
             errors.append(f"{label}: configure a dedicated directory in Settings.")
@@ -1053,6 +1125,14 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
                 )
                 continue
             datasets.append(dataset)
+            if entry.resolution is not None:
+                multiple = 16 if job.family == "wan" else 32
+                for dimension, dimension_value in zip(("width", "height"), entry.resolution, strict=True):
+                    if dimension_value < 64 or dimension_value % multiple:
+                        errors.add(
+                            f'Dataset "{dataset["name"]}": resolution {dimension} must be at least 64 and a multiple of {multiple}.',
+                            field=f"resolution-{entry.dataset_id}-{dimension}",
+                        )
             if entry.repeats is not None and entry.repeats < 1:
                 errors.add(
                     f'Dataset "{dataset["name"]}": enter repeats of at least one, or leave them blank to use the job\'s.',
@@ -1099,6 +1179,16 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
         errors.append(f"Commands: {error}")
     return {
         "valid": not errors,
+        "optimizer": job.config.optimizer,
+        "timestep_sampling": job.config.timestep_sampling,
+        "timestep_range_policy": timestep_range_policy(job),
+        "timestep_parameters": (
+            {"sigmoid_scale": job.config.sigmoid_scale, "discrete_flow_shift": job.config.discrete_flow_shift}
+            if job.family == "wan" and job.config.timestep_sampling == "shift"
+            else {"sigmoid_scale": job.config.sigmoid_scale}
+            if job.family == "wan" and job.config.timestep_sampling == "sigmoid"
+            else {}
+        ),
         "error_targets": errors.targets,
         "warning_targets": warnings.targets,
         "errors": errors,
@@ -1111,6 +1201,7 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
         "effective_count": len(effective_items),
         "audio_coverage": audio_coverage,
         "video_windows": windows,
+        "cache_policy": {"latent_cache": job.config.latent_cache_policy, "text_cache": job.config.text_cache_policy},
         "disk": disk,
         "models": {key: value for key, value in settings.models.items() if key.startswith(job.family + "_")},
         "model_provenance": model_provenance,

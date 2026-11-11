@@ -73,6 +73,28 @@ def test_failed_paired_preview_stops_before_the_next_training_phase(tmp_path: Pa
         service.close()
 
 
+def test_retention_preserves_paired_previews_and_latest_restoration(tmp_path: Path) -> None:
+    root, job_id = paired_job(tmp_path, steps=12, expert_interval=3, preview_every=2, keep_checkpoints=1)
+    service = RunService(root, fixture_mode=True, device_path=tmp_path / "gpu.sqlite")
+    try:
+        run = service.prepare(job_id, start=True)
+        wait_for(service, run["id"], "completed", device_released=True)
+        states = service.saved_states(run["id"])
+        assert states and all(state["valid"] for state in states)
+        assert service.get(run["id"])["retention"]["removed"]
+        outputs = OutputBrowser(service).scan(run["id"])
+        previews = [output for output in outputs["outputs"] if "preview" in output.get("metadata", {})]
+        assert [output["metadata"]["preview"]["step"] for output in previews] == [2, 4, 6, 8, 10, 12]
+        assert all(output["status"] == "available" for output in previews)
+        assert all(outputs["lora_pair"][expert]["output"]["status"] == "available" for expert in ("low", "high"))
+        restored = service.restore_state(run["id"], states[-1]["id"], 6, confirmed=True)
+        completed = wait_for(service, restored["id"], "completed", device_released=True)
+        assert completed["expert_states"]["low"]["optimizer_step"] == 9
+        assert completed["expert_states"]["high"]["optimizer_step"] == 9
+    finally:
+        service.close()
+
+
 def test_stopping_after_a_paired_preview_retains_it_and_its_pair(tmp_path: Path) -> None:
     root, job_id = paired_job(tmp_path, steps=40, expert_interval=10, preview_every=5)
     service = RunService(root, fixture_mode=True, device_path=tmp_path / "gpu.sqlite")

@@ -196,6 +196,9 @@ test('alternating Wan settings persist, train both experts and restore the paire
       'Step 5/5',
       { timeout: 240_000 },
     );
+    await expect(
+      page.getByText('State: Completed', { exact: true }),
+    ).toBeVisible({ timeout: 240_000 });
     await expect(page.getByLabel('Paired LoRA outputs')).toContainText(
       '4 optimizer steps',
     );

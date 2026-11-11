@@ -3,7 +3,13 @@ import { JobDatasets } from './JobDatasets';
 import { componentLabels } from './labels';
 import type { JobFields } from './jobFields';
 import { fieldId } from './jobRules';
-import type { DatasetOption, Job, JobConfig, SetConfig } from './jobTypes';
+import type {
+  DatasetOption,
+  Job,
+  JobConfig,
+  SetConfig,
+  TrainingOptions,
+} from './jobTypes';
 import { PathField } from './PathField';
 import type { JobMedia } from './jobMedia';
 
@@ -183,12 +189,14 @@ export function JobControls({
   fields,
   config,
   media,
+  trainingOptions,
 }: {
   job: Job;
   busy: boolean;
   fields: JobFields;
   config: SetConfig;
   media: JobMedia;
+  trainingOptions: TrainingOptions;
 }) {
   const { problems, problemProps, problemText, number, toggle } = fields;
   return (
@@ -275,6 +283,34 @@ export function JobControls({
         )}
         {toggle('Enable bucketing', 'enable_bucket')}
         {toggle('Do not upscale buckets', 'bucket_no_upscale')}
+        <h3>Caching</h3>
+        <p className="hint">
+          Latents and text embeddings are required. Compatible caches are copied
+          into each Run’s private storage. Rebuilding leaves other Runs
+          unchanged.
+        </p>
+        <div className="columns">
+          {(
+            [
+              ['Latent caching', 'latent_cache_policy'],
+              ['Text embedding caching', 'text_cache_policy'],
+            ] as const
+          ).map(([label, key]) => (
+            <label className="field" key={key}>
+              {label}
+              <select
+                value={job.config[key]}
+                disabled={busy}
+                onChange={(event) =>
+                  config(key, event.target.value as 'reuse' | 'rebuild')
+                }
+              >
+                <option value="reuse">Reuse compatible cache</option>
+                <option value="rebuild">Rebuild cache</option>
+              </select>
+            </label>
+          ))}
+        </div>
         {job.family === 'h3' && !media.imageOnly && (
           <label className="field">
             Audio policy
@@ -305,6 +341,96 @@ export function JobControls({
       </section>
       <section className="panel" id="job-section-training" tabIndex={-1}>
         <h2>LoRA & training</h2>
+        <label className="field">
+          Optimizer
+          <select
+            id={fieldId('optimizer')}
+            aria-label="Optimizer"
+            value={job.config.optimizer}
+            disabled={busy}
+            {...problemProps('optimizer')}
+            onChange={(event) =>
+              config('optimizer', event.target.value as JobConfig['optimizer'])
+            }
+          >
+            {trainingOptions.optimizers.map((optimizer) => (
+              <option key={optimizer} value={optimizer}>
+                {optimizer}
+              </option>
+            ))}
+            {!trainingOptions.optimizers.includes(job.config.optimizer) && (
+              <option value={job.config.optimizer} disabled>
+                {job.config.optimizer} (unavailable)
+              </option>
+            )}
+          </select>
+          {problemText('optimizer')}
+          <small>{trainingOptions.reason}</small>
+        </label>
+        <label className="field">
+          Timestep strategy
+          <select
+            id={fieldId('timestep_sampling')}
+            aria-label="Timestep strategy"
+            value={job.config.timestep_sampling}
+            disabled={
+              busy ||
+              (job.family === 'h3' &&
+                job.config.timestep_sampling === 'uniform')
+            }
+            {...problemProps('timestep_sampling')}
+            onChange={(event) =>
+              config(
+                'timestep_sampling',
+                event.target.value as JobConfig['timestep_sampling'],
+              )
+            }
+          >
+            {job.family === 'wan' && <option value="shift">Shift</option>}
+            {job.family === 'wan' && <option value="sigmoid">Sigmoid</option>}
+            <option value="uniform">Uniform</option>
+            {job.family === 'h3' &&
+              job.config.timestep_sampling !== 'uniform' && (
+                <option value={job.config.timestep_sampling} disabled>
+                  Unsupported: {job.config.timestep_sampling}
+                </option>
+              )}
+          </select>
+          {problemText('timestep_sampling')}
+          <small>
+            {job.family === 'h3'
+              ? 'The pinned H3 trainer supports Uniform only, sharing one base draw between video and audio.'
+              : job.config.timestep_sampling === 'uniform'
+                ? 'Equal probability across the active expert’s timestep range.'
+                : job.config.timestep_sampling === 'sigmoid'
+                  ? 'Concentrates draws around the middle of the active expert’s range. Scale controls the spread.'
+                  : 'Shifts a sigmoid distribution toward noisier timesteps. The default shift 3 and scale 1 preserve the original recipe.'}
+          </small>
+        </label>
+        {job.family === 'wan' && job.config.timestep_sampling !== 'uniform' && (
+          <div className="number-row">
+            {number(
+              'Sigmoid scale',
+              'sigmoid_scale',
+              '0.001–1000. Larger values spread draws toward the range edges.',
+            )}
+            {job.config.timestep_sampling === 'shift' &&
+              number(
+                'Flow shift',
+                'discrete_flow_shift',
+                '0.001–1000. Values above one favour noisier timesteps.',
+              )}
+          </div>
+        )}
+        {job.family === 'wan' && (
+          <p className="hint">
+            {job.config.timestep_sampling === 'shift' &&
+            job.config.discrete_flow_shift === 3 &&
+            job.config.sigmoid_scale === 1
+              ? 'Original recipe: preserve the distribution within each expert’s range.'
+              : 'The selected distribution is scaled into each expert’s range, keeping every draw inside it.'}
+          </p>
+        )}
         <div className="number-row">
           {number('LoRA rank', 'rank')}
           {number('LoRA alpha', 'alpha')}
@@ -356,6 +482,11 @@ export function JobControls({
         <h2>Checkpoints & final sample</h2>
         <div className="number-row">
           {number('Save every N steps', 'save_every')}
+          {number(
+            'Maximum checkpoint saves to keep',
+            'keep_checkpoints',
+            '0 keeps all saves. Applies per expert; final results and states needed for restoration are protected and may exceed the limit.',
+          )}
         </div>
         {toggle(
           'Save optimizer/training state',

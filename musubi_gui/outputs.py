@@ -142,10 +142,14 @@ class OutputBrowser:
             if run["status"] == "deleting":
                 return self._result(run, {}, [BEING_DELETED])
             entries = self._load(run_id)
-            if is_paired(run):
+            if is_paired(run) or run.get("retention"):
                 # Phase-end deduplication intentionally removes interval-save aliases.
                 # They may have been observed while training, but are not missing outputs.
-                removed = set(run.get("removed_duplicates", []))
+                removed = (
+                    set(run.get("removed_duplicates", []))
+                    | set(run.get("retention", {}).get("removed", []))
+                    | set(run.get("retention", {}).get("pending", []))
+                )
                 entries = {
                     identity: entry
                     for identity, entry in entries.items()
@@ -162,6 +166,8 @@ class OutputBrowser:
             try:
                 for subdirectory in ["checkpoints", "samples"]:
                     for file in (directory / subdirectory).rglob("*"):
+                        if ".retention" in file.relative_to(directory).parts:
+                            continue
                         if file.is_file() and file.suffix.lower() in IMAGES | VIDEOS | AUDIO | CHECKPOINTS:
                             relative = file.relative_to(directory).as_posix()
                             identity = output_id(run_id, relative)

@@ -24,6 +24,12 @@ class Section:
     # H3 video sections list their clips, with explicit audio, in their own metadata file.
     jsonl: Path | None = None
     items: list[dict[str, Any]] = field(default_factory=list)
+    resolution: tuple[int, int] | None = None
+
+
+def dataset_resolution(job: "Job", dataset_id: str) -> tuple[int, int]:
+    entry = next((entry for entry in job.datasets if entry.dataset_id == dataset_id), None)
+    return entry.resolution if entry and entry.resolution is not None else (job.config.width, job.config.height)
 
 
 def plan_sections(job: "Job", items: list[dict[str, Any]], run: Path, cache: Path) -> list[Section]:
@@ -42,7 +48,15 @@ def plan_sections(job: "Job", items: list[dict[str, Any]], run: Path, cache: Pat
         if images:
             sections.append(
                 Section(
-                    entry.dataset_id, "image", None, entry.repeats, directory, cache / f"{prefix}-images", None, images
+                    entry.dataset_id,
+                    "image",
+                    None,
+                    entry.repeats,
+                    directory,
+                    cache / f"{prefix}-images",
+                    None,
+                    images,
+                    resolution=entry.resolution,
                 )
             )
         videos = [item for item in members if item["kind"] == "video"]
@@ -52,7 +66,17 @@ def plan_sections(job: "Job", items: list[dict[str, Any]], run: Path, cache: Pat
                 clips = [clip for clip in videos if not rates or source_rate(clip) == rate]
                 jsonl = run / f"{prefix}.jsonl" if job.family == "h3" else None
                 sections.append(
-                    Section(entry.dataset_id, "video", rate, entry.repeats, video_directory, video_cache, jsonl, clips)
+                    Section(
+                        entry.dataset_id,
+                        "video",
+                        rate,
+                        entry.repeats,
+                        video_directory,
+                        video_cache,
+                        jsonl,
+                        clips,
+                        resolution=entry.resolution,
+                    )
                 )
     if not sections:
         # Nothing to train yet, so review previews the form a video section takes.
@@ -75,6 +99,7 @@ def layout_identity(job: "Job", items: list[dict[str, Any]]) -> list[dict[str, A
             "fps": section.fps,
             "repeats": section.repeats,
             "media": [item["sha256"] for item in section.items],
+            **({"resolution": section.resolution} if section.resolution is not None else {}),
         }
         for section in plan_sections(job, items, Path(), Path())
     ]
@@ -106,6 +131,7 @@ def section_balance(
                 "dataset": names.get(section.dataset_id, section.dataset_id),
                 "kind": section.kind,
                 "fps": section.fps,
+                "resolution": dataset_resolution(job, section.dataset_id),
                 "items": len(section.items),
                 "repeats": repeats,
                 "samples": max(0, repeats) * sum(samples(item) for item in section.items),
@@ -127,6 +153,8 @@ def dataset_toml(job: "Job", sections: list[Section]) -> str:
 
     def native(section: Section) -> str:
         repeats = f"num_repeats = {section.repeats}\n" if section.repeats is not None else ""
+        if section.resolution is not None:
+            repeats += f"resolution = [{section.resolution[0]}, {section.resolution[1]}]\n"
         if section.kind == "image":
             return (
                 f"[[datasets]]\nimage_directory = {quote(section.directory)}\n"

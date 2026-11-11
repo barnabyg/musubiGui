@@ -67,7 +67,8 @@ export function JobPresets({
         Measured presets set only size, frames, rank and memory controls
         qualified on the target PC. Smoke tests also select the expert recipe
         and set steps, checkpoints and the sample, to check that training runs.
-        Saved presets replace all settings.
+        Saved presets replace job settings and restore resolution overrides for
+        matching datasets. They do not add datasets.
       </p>
       <div className="actions">
         <button

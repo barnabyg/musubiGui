@@ -95,6 +95,7 @@ def restored_pair(original: dict[str, Any], state: dict[str, Any], steps: int) -
         "exit_code",
         "checkpoints",
         "removed_duplicates",
+        "retention",
         "sample_pair",
         "samples",
         "state_source",

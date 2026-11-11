@@ -136,6 +136,24 @@ export function JobReview({
           )
         );
       })}
+      <p>Optimizer: {review.optimizer}</p>
+      <p>
+        Timestep strategy: {review.timestep_sampling}
+        {Object.entries(review.timestep_parameters).map(([key, value]) => (
+          <span key={key}>
+            {' '}
+            · {key === 'sigmoid_scale' ? 'Sigmoid scale' : 'Flow shift'}:{' '}
+            {value}
+          </span>
+        ))}
+      </p>
+      <p>
+        {review.timestep_range_policy === 'original'
+          ? 'Original recipe: preserve the distribution within each expert’s range.'
+          : review.timestep_range_policy === 'bounded'
+            ? 'The selected distribution is scaled into each expert’s range, keeping every draw inside it.'
+            : 'H3 shares one uniform base draw between video and audio.'}
+      </p>
       {review.expert_schedule && (
         <section aria-label="Expert training schedule">
           <h3>Alternating expert schedule</h3>
@@ -163,8 +181,36 @@ export function JobReview({
           </details>
         </section>
       )}
+      <section aria-label="Cache preparation policy">
+        <h3>Caching</h3>
+        <p>
+          Latents:{' '}
+          {review.cache_policy.latent_cache === 'rebuild'
+            ? 'Rebuild cache'
+            : 'Reuse compatible cache'}
+          . Text embeddings:{' '}
+          {review.cache_policy.text_cache === 'rebuild'
+            ? 'Rebuild cache'
+            : 'Reuse compatible cache'}
+          .
+        </p>
+        <p className="hint">
+          Both cache stages are required. Preparation verifies compatible
+          artifacts before reuse; otherwise it rebuilds them. Run stages show
+          the actual result. Other Runs’ caches are preserved.
+        </p>
+      </section>
       <details data-testid="disk-estimate">
         <summary>Estimated disk use</summary>
+        {job.config.keep_checkpoints > 0 && (
+          <p>
+            Keep {job.config.keep_checkpoints} historical saves per expert, plus
+            final results and protected restoration inputs. Disk estimates
+            remain conservative: saves can accumulate between pruning checks,
+            and protected saves may exceed the limit. Expected retained saves
+            before protected exceptions: {review.disk.estimate.retained_saves}.
+          </p>
+        )}
         <ul>
           <li>
             Media snapshot: {sizeLabel(review.disk.estimate.media_snapshot)}
@@ -199,6 +245,7 @@ export function JobReview({
               <tr>
                 <th scope="col">Dataset</th>
                 <th scope="col">Type</th>
+                <th scope="col">Resolution</th>
                 <th scope="col">Items</th>
                 <th scope="col">Repeats</th>
                 <th scope="col">Samples per epoch</th>
@@ -210,6 +257,7 @@ export function JobReview({
                 <tr key={index}>
                   <th scope="row">{section.dataset}</th>
                   <td>{sectionType(section)}</td>
+                  <td>{section.resolution.join(' × ')}</td>
                   <td>{section.items}</td>
                   <td>{section.repeats}</td>
                   <td>{section.samples}</td>

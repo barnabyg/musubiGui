@@ -12,6 +12,7 @@ import type {
   PreparedRun,
   Preset,
   Review,
+  TrainingOptions,
 } from './jobTypes';
 import type { JobSummary } from './JobTable';
 import { plural } from './labels';
@@ -44,6 +45,10 @@ export function useJobEditor({
   const [datasets, setDatasets] = useState<DatasetOption[]>([]);
   const [models, setModels] = useState<Record<string, string>>({});
   const [modelRoots, setModelRoots] = useState<string[]>([]);
+  const [trainingOptions, setTrainingOptions] = useState<TrainingOptions>({
+    optimizers: ['AdamW'],
+    reason: 'Checking optimizer availability…',
+  });
   const [job, setJob] = useState<Job | null>(null);
   const datasetsInJob = job?.datasets;
   const jobCaptions = useMemo(
@@ -107,6 +112,24 @@ export function useJobEditor({
       })
       .catch((reason: Error) => setError(reason.message))
       .finally(() => setLoading(false));
+  }, []);
+  useEffect(() => {
+    let active = true;
+    void request<TrainingOptions>('/api/jobs/training-options')
+      .then((options) => {
+        if (active) setTrainingOptions(options);
+      })
+      .catch(() => {
+        if (active)
+          setTrainingOptions({
+            optimizers: ['AdamW'],
+            reason:
+              'Optimizer availability could not be checked. AdamW remains available.',
+          });
+      });
+    return () => {
+      active = false;
+    };
   }, []);
   // Follows the URL: a link, refresh or browser history can name a job that isn't open here.
   const followRoute = useEffectEvent((items: Job[]) => {
@@ -509,6 +532,7 @@ export function useJobEditor({
     datasets,
     models,
     modelRoots,
+    trainingOptions,
     job,
     dirty,
     busy,
