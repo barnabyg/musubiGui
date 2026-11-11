@@ -164,15 +164,18 @@ def apply_retention(
         "input_files": run.get("input_files", {}),
         "state_source": run.get("state_source"),
     }
-    blocked: list[str] = []
-    for save in candidates:
-        paths = [save.checkpoint, *([save.state] if save.state else [])]
-        if any(
+
+    def is_protected(path: Path) -> bool:
+        return (
             str(path) in protected_paths
             or references_folder(own_inputs, str(path))
             or any(references_folder(other, str(path)) for other in others)
-            for path in paths
-        ):
+        )
+
+    blocked: list[str] = []
+    for save in candidates:
+        paths = [save.checkpoint, *([save.state] if save.state else [])]
+        if any(is_protected(path) for path in paths):
             blocked.extend(path.name for path in paths)
             continue
         for path in paths:
@@ -194,11 +197,7 @@ def apply_retention(
         source = root / name
         target = quarantine / name
         try:
-            if source.exists() and (
-                str(source) in protected_paths
-                or references_folder(own_inputs, str(source))
-                or any(references_folder(other, str(source)) for other in others)
-            ):
+            if source.exists() and is_protected(source):
                 journal["pending"].remove(name)
                 journal["protected"].append(name)
                 atomic_json(journal_file, journal)
