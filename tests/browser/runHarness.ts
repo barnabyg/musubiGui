@@ -20,7 +20,11 @@ export type RunRecord = {
 };
 
 export async function runWorkspace(
-  options: { freeBytes?: number; previewImages?: boolean } = {},
+  options: {
+    freeBytes?: number;
+    previewImages?: boolean;
+    datasetMedia?: boolean;
+  } = {},
 ) {
   const parent = await mkdtemp(path.join(tmpdir(), 'musubi-runs-'));
   const fixture = path.join(parent, 'fixture');
@@ -32,6 +36,7 @@ export async function runWorkspace(
     '--prepare-only',
     '--skip-library-scan',
     ...(options.previewImages ? ['--preview-images'] : []),
+    ...(options.datasetMedia ? ['--dataset-media'] : []),
   ]);
   const manifest = JSON.parse(
     await readFile(path.join(fixture, 'acceptance.json'), 'utf8'),

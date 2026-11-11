@@ -37,19 +37,27 @@ const whole = [
   'seed',
 ];
 
-export function fieldProblems(family: Family, config: RuleConfig) {
+export function fieldProblems(
+  family: Family,
+  config: RuleConfig,
+  hasVideos = true,
+) {
   const problems: Record<string, string> = {};
+  const needsFrames =
+    hasVideos ||
+    config.sample_enabled ||
+    ((config.preview_every ?? 0) as number) > 0;
   const step = geometry[family];
   for (const key of ['width', 'height'] as const)
     if (config[key] < 64 || config[key] % step)
       problems[key] = `Enter at least 64, in multiples of ${step}.`;
-  if (family === 'wan') {
+  if (needsFrames && family === 'wan') {
     if (config.frames < 1 || (config.frames - 1) % 4)
       problems.frames = 'Wan needs 4*n+1 frames, such as 33.';
   } else if (
-    config.frames < 124 ||
-    config.frames > 345 ||
-    (config.frames - 5) % 17
+    needsFrames &&
+    family === 'h3' &&
+    (config.frames < 124 || config.frames > 345 || (config.frames - 5) % 17)
   )
     problems.frames = 'H3 needs 17*n+5 frames between 124 and 345.';
   if (config.blocks_to_swap < 0 || config.blocks_to_swap > maxBlocks[family])
@@ -74,12 +82,25 @@ export function fieldProblems(family: Family, config: RuleConfig) {
   }
   for (const key of positive)
     if ((config[key] as number) < 1) problems[key] = 'Enter 1 or more.';
-  if (config.frame_extraction === 'slide' && config.frame_stride < 1)
+  if (
+    hasVideos &&
+    config.frame_extraction === 'slide' &&
+    config.frame_stride < 1
+  )
     problems.frame_stride = 'Enter 1 or more.';
-  if (config.frame_extraction === 'uniform' && config.frame_sample < 2)
+  if (
+    hasVideos &&
+    config.frame_extraction === 'uniform' &&
+    config.frame_sample < 2
+  )
     problems.frame_sample = 'Enter 2 or more.';
   for (const key of whole)
-    if (!Number.isInteger(config[key])) problems[key] = 'Enter a whole number.';
+    if (
+      (key !== 'frames' || needsFrames) &&
+      (hasVideos || !['frame_stride', 'frame_sample'].includes(key)) &&
+      !Number.isInteger(config[key])
+    )
+      problems[key] = 'Enter a whole number.';
   if (
     !Number.isInteger(config.preview_every ?? 0) ||
     ((config.preview_every ?? 0) as number) < 0

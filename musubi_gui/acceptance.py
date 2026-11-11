@@ -141,6 +141,7 @@ def prepare(
     scan_library: bool = True,
     wan_paired: bool = False,
     preview_images: bool = False,
+    dataset_media: bool = False,
 ) -> dict[str, Any]:
     workspace = workspace.resolve()
     if workspace.exists():
@@ -190,13 +191,13 @@ def prepare(
             )
             if family == "h3":
                 synthetic_audio(folder / "motion.wav", frames)
-        if preview_images:
+        if preview_images or dataset_media:
             from PIL import Image, ImageDraw
 
             for family in families:
                 folder = datasets / f"{family}-images"
                 folder.mkdir()
-                for index in range(15):
+                for index in range(15 if preview_images else 2):
                     image = Image.new("RGB", (256, 256), "blue")
                     ImageDraw.Draw(image).rectangle((index * 10, 80, index * 10 + 48, 128), fill="red")
                     image.save(folder / f"image{index:02d}.png")
@@ -249,6 +250,24 @@ def prepare(
                     )
                 )
                 manifest["jobs"].append({"id": job.id, "name": job.name, "family": family, "dataset_id": dataset["id"]})
+            if dataset_media:
+                images = store.register(f"{family.upper()} images", str(datasets / f"{family}-images"))
+                store.scan(images["id"])
+                for combined in [False, True]:
+                    rows = [JobDataset(dataset_id=images["id"], repeats=2)]
+                    if combined:
+                        rows.append(JobDataset(dataset_id=dataset["id"]))
+                    job = jobs.create(
+                        JobDraft(
+                            name=f"{family.upper()} images" + (" + videos" if combined else " only"),
+                            family=family,
+                            datasets=rows,
+                            config=smoke_config(family),
+                        )
+                    )
+                    manifest["jobs"].append(
+                        {"id": job.id, "name": job.name, "family": family, "dataset_id": images["id"]}
+                    )
         library = store.register("Mixed media and invalid item", str(workspace / "library" / "media 资料"))
         if scan_library:
             store.scan(library["id"])
@@ -277,6 +296,9 @@ def main() -> None:
     )
     parser.add_argument("--port", type=int, default=8767)
     parser.add_argument(
+        "--dataset-media", action="store_true", help="Add image-only and image-plus-video jobs for both families."
+    )
+    parser.add_argument(
         "--preview-images",
         action="store_true",
         help="15 synthetic captioned images, 500 steps and previews every 100 steps.",
@@ -292,6 +314,7 @@ def main() -> None:
             scan_library=not args.skip_library_scan,
             wan_paired=args.wan_paired,
             preview_images=args.preview_images,
+            dataset_media=args.dataset_media,
         )
     except (ValueError, OSError, subprocess.SubprocessError) as error:
         print(f"Acceptance preparation failed: {error}")

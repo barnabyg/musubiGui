@@ -569,8 +569,9 @@ def effective_settings(job: Job, settings: Settings) -> Settings:
     return settings.model_copy(update={"models": {**settings.models, **job.config.components}})
 
 
-def configuration_errors(job: Job) -> list[str]:
+def configuration_errors(job: Job, *, has_videos: bool = True) -> list[str]:
     config = job.config
+    needs_frames = has_videos or config.sample_enabled or config.preview_every > 0
     errors: list[str] = []
     if not job.name.strip():
         errors.append("Name: enter a job name.")
@@ -595,7 +596,7 @@ def configuration_errors(job: Job) -> list[str]:
                 errors.append("Training state: alternating experts requires saved optimizer/training state.")
         if config.width < 64 or config.height < 64 or config.width % 16 or config.height % 16:
             errors.append("Geometry: Wan width and height must be at least 64 and multiples of 16.")
-        if config.frames < 1 or (config.frames - 1) % 4:
+        if needs_frames and (config.frames < 1 or (config.frames - 1) % 4):
             errors.append("Frames: Wan requires 4*n+1 frames.")
         if not 0 <= config.blocks_to_swap <= WAN_MAX_BLOCKS_TO_SWAP:
             errors.append(
@@ -606,9 +607,9 @@ def configuration_errors(job: Job) -> list[str]:
             errors.append("Memory: runtime FP8 scaling from native FP16 weights is required by this Wan recipe.")
         if config.block_swap_h2d_only:
             errors.append("Memory: H2D-only swapping belongs to the H3 recipe, not the initial Wan recipe.")
-        if config.frame_extraction == "slide" and config.frame_stride < 1:
+        if has_videos and config.frame_extraction == "slide" and config.frame_stride < 1:
             errors.append("Frame extraction: enter a slide stride of at least one frame.")
-        if config.frame_extraction == "uniform" and config.frame_sample < 2:
+        if has_videos and config.frame_extraction == "uniform" and config.frame_sample < 2:
             errors.append("Frame extraction: uniform sampling needs at least two windows per clip; use head for one.")
         allowed_components = {"wan_low", "wan_high", "wan_vae", "wan_t5"}
     else:
@@ -618,7 +619,7 @@ def configuration_errors(job: Job) -> list[str]:
             )
         if config.width < 64 or config.height < 64 or config.width % 32 or config.height % 32:
             errors.append("Geometry: H3 width and height must be at least 64 and multiples of 32.")
-        if not 124 <= config.frames <= 345 or (config.frames - 5) % 17:
+        if needs_frames and (not 124 <= config.frames <= 345 or (config.frames - 5) % 17):
             errors.append("Frames: H3 requires 17*n+5 frames in the released 124–345 range.")
         if not 0 <= config.blocks_to_swap <= H3_MAX_BLOCKS_TO_SWAP:
             errors.append(
@@ -629,7 +630,7 @@ def configuration_errors(job: Job) -> list[str]:
             errors.append("Memory: H3 does not support FP8 transformer weights/runtime scaling.")
         if not config.block_swap_h2d_only:
             errors.append("Memory: H3 guidance loss requires H2D-only swapping for the validated target-PC recipe.")
-        if config.frame_extraction != "head":
+        if has_videos and config.frame_extraction != "head":
             errors.append(
                 "Frame extraction: H3 uses head only. Audio alignment and coverage are inspected for each clip's first window, so other modes are not qualified."
             )
@@ -935,7 +936,7 @@ def _add_duplicate_warnings(
 
 
 def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool = False) -> dict[str, Any]:
-    errors = ReviewMessages(configuration_errors(job))
+    errors = ReviewMessages([])
     warnings = ReviewMessages(
         [
             "Wan has short-run execution evidence on the 96 GB host using the documented native and converted weights; other artifacts and larger workloads need qualification."
@@ -1047,6 +1048,13 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
                 effective_items.extend(_review_items(store, job, dataset, prefix, errors, warnings, audio_coverage))
             except (ValueError, OSError, ImportError, HTTPException) as error:
                 errors.add(f'Dataset "{dataset["name"]}": {error}', dataset_id=entry.dataset_id)
+    # Image sections always cache one frame. Clip controls matter only to videos;
+    # frames still controls generated samples/previews even when training uses images.
+    errors.extend(
+        configuration_errors(
+            job, has_videos=not effective_items or any(item["kind"] == "video" for item in effective_items)
+        )
+    )
     output = Path(settings.output_root) / "jobs" / job.id
     cache = Path(settings.cache_root) / "jobs" / job.id
     snapshot = output / f"revision-{job.revision}"

@@ -5,6 +5,7 @@ import type { JobFields } from './jobFields';
 import { fieldId } from './jobRules';
 import type { DatasetOption, Job, JobConfig, SetConfig } from './jobTypes';
 import { PathField } from './PathField';
+import type { JobMedia } from './jobMedia';
 
 const extractionModes: {
   value: JobConfig['frame_extraction'];
@@ -177,11 +178,13 @@ export function JobControls({
   busy,
   fields,
   config,
+  media,
 }: {
   job: Job;
   busy: boolean;
   fields: JobFields;
   config: SetConfig;
+  media: JobMedia;
 }) {
   const { problems, problemProps, problemText, number, toggle } = fields;
   return (
@@ -191,7 +194,16 @@ export function JobControls({
         <div className="number-row">
           {number('Width', 'width')}
           {number('Height', 'height')}
-          {number('Frames', 'frames')}
+          {(!media.imageOnly ||
+            job.config.sample_enabled ||
+            job.config.preview_every > 0) &&
+            number(
+              media.imageOnly ? 'Sample frames' : 'Frames',
+              'frames',
+              media.imageOnly
+                ? 'Only generated samples and previews use this length. Training images each use one frame.'
+                : 'Frames per training video window and generated sample. Images each use one frame.',
+            )}
           {number(
             'Repeats',
             'repeats',
@@ -201,55 +213,65 @@ export function JobControls({
         </div>
         <p className="hint">
           {job.family === 'wan'
-            ? 'Wan requires multiples of 16 and 4*n+1 frames; 33 frames is measured on the target PC.'
-            : 'H3 requires multiples of 32 and 17*n+5 frames between 124 and 345; 124 frames is measured on the target PC.'}{' '}
+            ? 'Wan width and height require multiples of 16.'
+            : 'H3 width and height require multiples of 32.'}{' '}
+          {(!media.imageOnly ||
+            job.config.sample_enabled ||
+            job.config.preview_every > 0) &&
+            (job.family === 'wan'
+              ? 'Videos and samples require 4*n+1 frames; 33 frames is measured on the target PC. '
+              : 'Videos and samples require 17*n+5 frames between 124 and 345; 124 frames is measured on the target PC. ')}
           Keep the batch size at one for the target-PC recipe.
         </p>
-        <div className="columns">
-          <label className="field">
-            Frame extraction
-            <select
-              id={fieldId('frame_extraction')}
-              {...problemProps('frame_extraction')}
-              value={job.config.frame_extraction}
-              disabled={busy}
-              onChange={(event) =>
-                config(
-                  'frame_extraction',
-                  event.target.value as JobConfig['frame_extraction'],
-                )
-              }
-            >
-              {extractionModes.map((mode) => (
-                <option
-                  key={mode.value}
-                  value={mode.value}
-                  disabled={job.family === 'h3' && mode.value !== 'head'}
+        {!media.imageOnly && (
+          <>
+            <div className="columns">
+              <label className="field">
+                Frame extraction
+                <select
+                  id={fieldId('frame_extraction')}
+                  {...problemProps('frame_extraction')}
+                  value={job.config.frame_extraction}
+                  disabled={busy}
+                  onChange={(event) =>
+                    config(
+                      'frame_extraction',
+                      event.target.value as JobConfig['frame_extraction'],
+                    )
+                  }
                 >
-                  {mode.label}
-                </option>
-              ))}
-            </select>
-            {problemText('frame_extraction')}
-          </label>
-          {job.config.frame_extraction === 'slide' &&
-            number('Slide stride', 'frame_stride')}
-          {job.config.frame_extraction === 'uniform' &&
-            number('Windows per clip', 'frame_sample')}
-        </div>
-        <p className="hint">
-          {
-            extractionModes.find(
-              (mode) => mode.value === job.config.frame_extraction,
-            )?.help
-          }{' '}
-          {job.family === 'wan'
-            ? 'Clip length is counted after resampling to 16 fps. Review lists each clip’s cached windows; more windows mean a larger cache and longer epochs.'
-            : 'H3 uses head only: audio alignment is inspected for each clip’s first window, so other modes are not qualified.'}
-        </p>
+                  {extractionModes.map((mode) => (
+                    <option
+                      key={mode.value}
+                      value={mode.value}
+                      disabled={job.family === 'h3' && mode.value !== 'head'}
+                    >
+                      {mode.label}
+                    </option>
+                  ))}
+                </select>
+                {problemText('frame_extraction')}
+              </label>
+              {job.config.frame_extraction === 'slide' &&
+                number('Slide stride', 'frame_stride')}
+              {job.config.frame_extraction === 'uniform' &&
+                number('Windows per clip', 'frame_sample')}
+            </div>
+            <p className="hint">
+              {
+                extractionModes.find(
+                  (mode) => mode.value === job.config.frame_extraction,
+                )?.help
+              }{' '}
+              {job.family === 'wan'
+                ? 'Clip length is counted after resampling to 16 fps. Review lists each clip’s cached windows; more windows mean a larger cache and longer epochs.'
+                : 'H3 uses head only: audio alignment is inspected for each clip’s first window, so other modes are not qualified.'}
+            </p>
+          </>
+        )}
         {toggle('Enable bucketing', 'enable_bucket')}
         {toggle('Do not upscale buckets', 'bucket_no_upscale')}
-        {job.family === 'h3' && (
+        {job.family === 'h3' && !media.imageOnly && (
           <label className="field">
             Audio policy
             <select

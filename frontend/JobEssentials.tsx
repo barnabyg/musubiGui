@@ -1,17 +1,20 @@
 import { focusField, type JobFields } from './jobFields';
 import { fieldId } from './jobRules';
 import type { Job, SetConfig } from './jobTypes';
+import type { JobMedia } from './jobMedia';
 
 export function JobEssentials({
   job,
   busy,
   fields,
   config,
+  media,
 }: {
   job: Job;
   busy: boolean;
   fields: JobFields;
   config: SetConfig;
+  media: JobMedia;
 }) {
   const choices: { field: string; message: string }[] = [];
   if (!job.name.trim())
@@ -68,9 +71,20 @@ export function JobEssentials({
       </section>
       <p className="hint">
         Current recipe settings: {job.config.width} × {job.config.height} ·{' '}
-        {job.config.frames} frames · LoRA rank {job.config.rank}. New jobs start
-        from the measured target-PC defaults.
+        {media.imageOnly
+          ? '1 frame per training image'
+          : `${job.config.frames} frames per video window`}{' '}
+        · LoRA rank {job.config.rank}. New jobs start from the measured
+        target-PC defaults.
       </p>
+      {media.imageOnly && (
+        <p className="hint">
+          Images train as single frames.{' '}
+          {job.family === 'h3'
+            ? 'H3 image training is experimental; using the result for video is unvalidated.'
+            : 'You can add a video dataset to train on images and videos together.'}
+        </p>
+      )}
       {fields.number(
         'Training steps',
         'steps',

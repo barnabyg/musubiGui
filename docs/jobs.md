@@ -369,6 +369,49 @@ after training by default, with opt-in in-run previews as described above, and c
 no checkpoint-on-stop guarantee is made. Saving
 optimizer/training state is distinct from saving LoRA weights.
 
+## Preparing images, videos, or both
+
+Add one or more datasets under **Job & dataset**. For example, select a character's
+image dataset, choose **Add dataset**, then add its video dataset. The source
+folders stay separate and reusable. A folder containing both images and videos
+also works. Dataset contents come from valid, included files; no media type needs
+to be chosen when creating a dataset.
+
+Under **Advanced controls → Dataset preparation**, width, height, bucketing and
+repeats apply to both media kinds. Images always train as single frames. An
+image-only job hides frame extraction and H3 audio policy; saved video settings
+are retained for when a video dataset is added again. **Frames** applies to video
+training windows and generated samples. With images only it becomes **Sample
+frames**, shown only when final sampling or in-run previews are enabled. H3
+samples still require 124–345 frames in the supported increments, even when
+training on images. Turning both sampling and previews off removes that unused
+length requirement. Images never need supervised audio. H3 image training keeps
+its experimental warning described below.
+
+Review lists each image/video section, item count, repeats and share of training.
+Set an image dataset's repeats to 2 to double its samples per epoch without
+duplicating source files. Preparation freezes captions and media into the Run
+and gives each section its own cache directory.
+
+From `C:/docs/git/musubiGui` in PowerShell 7, this single command installs the app
+dependencies, builds and launches an isolated CPU workspace with image-only,
+video-only and combined jobs for both model families:
+
+```powershell
+.\acceptance.cmd --workspace ".cache/dataset-media-$([guid]::NewGuid().ToString('N'))" --dataset-media
+```
+
+Open the printed URL (normally `http://127.0.0.1:8767`). In Jobs, compare **WAN
+images only**, **WAN acceptance 1** (videos) and **WAN images + videos**. Expand
+Advanced controls and check the applicable controls. Review and **Prepare run**
+each job. Expect one image section, one video section, or both respectively; the
+combined job's images have repeats 2. Reopen the job and expect its dataset list
+and repeats to remain. Repeat for H3, checking its experimental image warning
+and video-only audio coverage. The fixture uses synthetic weights and CPU
+subprocesses: it verifies preparation and persistence, not GPU support or useful
+learning. Real training requires the configured pinned training environment,
+model weights and suitable hardware.
+
 ## H3 jobs
 
 New H3 job uses the proven T2VA guidance-loss recipe: 124 frames, BF16, 48 H2D-only swapped blocks, unconditional text caching and both video/audio

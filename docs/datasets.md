@@ -30,6 +30,10 @@ creating one asks for none, so a mixed folder works like any other. Keeping imag
 in separate datasets lets each be reused with models that take only one of them, and a
 [job can list several](jobs.md#training-sections).
 
+For image-only, video-only, and separate image-plus-video preparation examples,
+including a single command that launches testable jobs without model downloads,
+see [Preparing images, videos, or both](jobs.md#preparing-images-videos-or-both).
+
 The individual editor fills the available window with thumbnails and editable captions.
 A compact top bar contains back navigation, the dataset name/scan status, **Add media**,
 **Bulk actions** and **Dataset settings**. Thumbnails start directly below this bar; the

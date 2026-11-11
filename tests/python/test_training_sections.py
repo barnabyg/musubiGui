@@ -80,6 +80,23 @@ def wan_mixed_job(workspace: Workspace) -> dict[str, Any]:
     return workspace.job("wan", {"dataset_id": stills, "repeats": 4}, {"dataset_id": clips}, frames=17, repeats=2)
 
 
+@pytest.mark.parametrize("family", ["wan", "h3"])
+def test_image_only_preparation_ignores_unused_video_controls(workspace: Workspace, family: str) -> None:
+    stills = workspace.images("stills")
+    job = workspace.job(
+        family,
+        {"dataset_id": stills},
+        frames=1,
+        frame_extraction="slide",
+        frame_stride=0,
+        sample_enabled=False,
+    )
+    review = workspace.review(job)
+    assert review["valid"], review["errors"]
+    assert "target_frames" not in review["dataset_toml"]
+    assert review["audio_coverage"]["included"] == 0
+
+
 def test_wan_datasets_get_separate_sections_caches_and_their_own_repeats(workspace: Workspace) -> None:
     review = workspace.review(wan_mixed_job(workspace))
     assert review["valid"] is True, review["errors"]
