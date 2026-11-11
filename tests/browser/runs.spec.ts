@@ -1555,7 +1555,9 @@ test('an H3 job adds an image dataset, warns that it is experimental and uses th
       .click();
     await review.click();
     await expect(page.getByRole('status')).toContainText('Review passed');
-    await expect(panel).toContainText('0 supervised / 0 included');
+    await expect(
+      panel.getByRole('heading', { name: 'Audio coverage', exact: true }),
+    ).toHaveCount(0);
     await page.getByText('Advanced', { exact: true }).click();
     await page.getByText('train arguments', { exact: true }).click();
     await expect(args('train')).toContainText('--video_only');
