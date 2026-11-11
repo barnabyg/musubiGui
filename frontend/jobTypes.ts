@@ -19,6 +19,9 @@ export type JobConfig = {
   alpha: number;
   learning_rate: number;
   optimizer: 'AdamW' | 'AdamW8bit';
+  timestep_sampling: 'shift' | 'sigmoid' | 'uniform';
+  sigmoid_scale: number;
+  discrete_flow_shift: number;
   steps: number;
   gradient_accumulation: number;
   blocks_to_swap: number;
@@ -83,6 +86,9 @@ export type ReviewTarget =
 
 export type Review = {
   optimizer: JobConfig['optimizer'];
+  timestep_sampling: JobConfig['timestep_sampling'];
+  timestep_parameters: Record<string, number>;
+  timestep_range_policy: 'original' | 'bounded' | 'shared-av';
   job_id: string;
   revision: number;
   error_targets: Record<number, ReviewTarget>;

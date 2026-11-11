@@ -77,6 +77,9 @@ class JobConfig(BaseModel):
     alpha: int = 8
     learning_rate: float = 0.0001
     optimizer: Literal["AdamW", "AdamW8bit"] = "AdamW"
+    timestep_sampling: Literal["shift", "sigmoid", "uniform"] = "shift"
+    sigmoid_scale: float = 1.0
+    discrete_flow_shift: float = 3.0
     steps: int = 2
     gradient_accumulation: int = 1
     blocks_to_swap: int = 36
@@ -103,6 +106,7 @@ def smoke_config(family: str) -> JobConfig:
     if family == "h3":
         return JobConfig(
             recipe="guidance-loss",
+            timestep_sampling="uniform",
             frames=124,
             rank=4,
             alpha=4,
@@ -608,6 +612,13 @@ def configuration_errors(job: Job, *, has_videos: bool = True) -> list[str]:
     config = job.config
     needs_frames = has_videos or config.sample_enabled or config.preview_every > 0
     errors: list[str] = []
+    if job.family == "h3" and config.timestep_sampling != "uniform":
+        errors.append("Timestep strategy: the pinned H3 trainer supports uniform sampling only.")
+    if job.family == "wan":
+        if config.timestep_sampling in {"shift", "sigmoid"} and not 0.001 <= config.sigmoid_scale <= 1000:
+            errors.append("Sigmoid scale: enter a finite number from 0.001 to 1000 for stable sampling.")
+        if config.timestep_sampling == "shift" and not 0.001 <= config.discrete_flow_shift <= 1000:
+            errors.append("Flow shift: enter a finite number from 0.001 to 1000 for stable sampling.")
     if not job.name.strip():
         errors.append("Name: enter a job name.")
     listed = [entry.dataset_id for entry in job.datasets]
@@ -718,6 +729,8 @@ def _set_argument(args: list[str], flag: str, value: str) -> None:
 
 def build_stages(job: Job, settings: Settings, run: Path, cache: Path, kinds: set[str]) -> list[Stage]:
     """Kinds are the included item kinds, because H3 images change its commands."""
+    from musubi_gui.training_options import timestep_range_policy
+
     settings = effective_settings(job, settings)
     config = job.config
     recipe_stages = wan_stages if job.family == "wan" else h3_stages
@@ -740,6 +753,19 @@ def build_stages(job: Job, settings: Settings, run: Path, cache: Path, kinds: se
                 ("--output_name", f"{job.family}-{job.id}"),
             ]:
                 _set_argument(args, flag, str(value))
+            if job.family == "wan":
+                _set_argument(args, "--timestep_sampling", config.timestep_sampling)
+                if config.timestep_sampling in {"shift", "sigmoid"}:
+                    _set_argument(args, "--sigmoid_scale", str(config.sigmoid_scale))
+                if config.timestep_sampling == "shift":
+                    _set_argument(args, "--discrete_flow_shift", str(config.discrete_flow_shift))
+                elif "--discrete_flow_shift" in args:
+                    index = args.index("--discrete_flow_shift")
+                    del args[index : index + 2]
+                # Keep the original qualified recipe exact; custom distributions use bounded mapping.
+                # Upstream rejection sampling falls back outside the expert range after 1000 misses.
+                if timestep_range_policy(job) != "original" and "--preserve_distribution_shape" in args:
+                    args.remove("--preserve_distribution_shape")
             if config.save_state:
                 args.extend(["--save_state", "--save_state_on_train_end"])
             if config.preview_every and config.recipe != PAIRED_RECIPE:
@@ -980,6 +1006,8 @@ def _add_duplicate_warnings(
 
 
 def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool = False) -> dict[str, Any]:
+    from musubi_gui.training_options import timestep_range_policy
+
     errors = ReviewMessages([])
     warnings = ReviewMessages(
         [
@@ -1143,6 +1171,15 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
     return {
         "valid": not errors,
         "optimizer": job.config.optimizer,
+        "timestep_sampling": job.config.timestep_sampling,
+        "timestep_range_policy": timestep_range_policy(job),
+        "timestep_parameters": (
+            {"sigmoid_scale": job.config.sigmoid_scale, "discrete_flow_shift": job.config.discrete_flow_shift}
+            if job.family == "wan" and job.config.timestep_sampling == "shift"
+            else {"sigmoid_scale": job.config.sigmoid_scale}
+            if job.family == "wan" and job.config.timestep_sampling == "sigmoid"
+            else {}
+        ),
         "error_targets": errors.targets,
         "warning_targets": warnings.targets,
         "errors": errors,

@@ -43,6 +43,23 @@ export function fieldProblems(
   hasVideos = true,
 ) {
   const problems: Record<string, string> = {};
+  if (family === 'h3' && config.timestep_sampling !== 'uniform')
+    problems.timestep_sampling = 'The pinned H3 trainer supports Uniform only.';
+  if (
+    family === 'wan' &&
+    ['shift', 'sigmoid'].includes(String(config.timestep_sampling))
+  ) {
+    const scale = config.sigmoid_scale as number;
+    if (!Number.isFinite(scale) || scale < 0.001 || scale > 1000)
+      problems.sigmoid_scale = 'Enter a finite number from 0.001 to 1000.';
+    const shift = config.discrete_flow_shift as number;
+    if (
+      config.timestep_sampling === 'shift' &&
+      (!Number.isFinite(shift) || shift < 0.001 || shift > 1000)
+    )
+      problems.discrete_flow_shift =
+        'Enter a finite number from 0.001 to 1000.';
+  }
   const needsFrames =
     hasVideos ||
     config.sample_enabled ||
@@ -139,6 +156,9 @@ const errorFields: [RegExp, string][] = [
   [/^Sample steps:/, 'sample_steps'],
   [/^Preview interval:/, 'preview_every'],
   [/^Learning rate:/, 'learning_rate'],
+  [/^Timestep strategy:/, 'timestep_sampling'],
+  [/^Sigmoid scale:/, 'sigmoid_scale'],
+  [/^Flow shift:/, 'discrete_flow_shift'],
   [/^Memory:.*FP8/, 'fp8_scaled'],
   [/^Memory:.*H2D/, 'block_swap_h2d_only'],
   [/^Memory:.*gradient checkpointing/, 'gradient_checkpointing'],

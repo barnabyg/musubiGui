@@ -137,6 +137,23 @@ export function JobReview({
         );
       })}
       <p>Optimizer: {review.optimizer}</p>
+      <p>
+        Timestep strategy: {review.timestep_sampling}
+        {Object.entries(review.timestep_parameters).map(([key, value]) => (
+          <span key={key}>
+            {' '}
+            · {key === 'sigmoid_scale' ? 'Sigmoid scale' : 'Flow shift'}:{' '}
+            {value}
+          </span>
+        ))}
+      </p>
+      <p>
+        {review.timestep_range_policy === 'original'
+          ? 'Original recipe: preserve the distribution within each expert’s range.'
+          : review.timestep_range_policy === 'bounded'
+            ? 'The selected distribution is scaled into each expert’s range, keeping every draw inside it.'
+            : 'H3 shares one uniform base draw between video and audio.'}
+      </p>
       {review.expert_schedule && (
         <section aria-label="Expert training schedule">
           <h3>Alternating expert schedule</h3>

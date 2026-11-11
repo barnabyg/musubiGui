@@ -344,10 +344,35 @@ def verify_inputs(run: dict[str, Any]) -> None:
             if stage["name"] != "train":
                 continue
             args = stage["args"]
-            if "--optimizer_type" not in args or args[args.index("--optimizer_type") + 1] != config["optimizer"]:
+            if "--optimizer_type" not in args or args[
+                args.index("--optimizer_type") + 1 : args.index("--optimizer_type") + 2
+            ] != [config["optimizer"]]:
                 raise ValueError(
                     "Optimizer differs from the frozen training configuration; incompatible restoration is blocked."
                 )
+    if "timestep_sampling" in config:
+        parameters = [("--timestep_sampling", config["timestep_sampling"])]
+        if run["job"]["family"] == "wan" and config["timestep_sampling"] in {"shift", "sigmoid"}:
+            parameters.append(("--sigmoid_scale", str(config.get("sigmoid_scale", 1.0))))
+        if run["job"]["family"] == "wan" and config["timestep_sampling"] == "shift":
+            parameters.append(("--discrete_flow_shift", str(config.get("discrete_flow_shift", 3.0))))
+        for stage in run.get("stages", []):
+            if stage["name"] == "train":
+                args = stage["args"]
+                # H3's pinned parser owns its uniform default; keep existing H3 command arrays unchanged.
+                if (
+                    run["job"]["family"] == "h3"
+                    and "--timestep_sampling" not in args
+                    and config["timestep_sampling"] == "uniform"
+                ):
+                    continue
+                if any(
+                    flag not in args or args[args.index(flag) + 1 : args.index(flag) + 2] != [value]
+                    for flag, value in parameters
+                ):
+                    raise ValueError(
+                        "Timestep strategy differs from the frozen training configuration; incompatible restoration is blocked."
+                    )
     for path, expected in run.get("input_files", {}).items():
         if not Path(path).is_file() or digest_file(Path(path)) != expected:
             raise ValueError(

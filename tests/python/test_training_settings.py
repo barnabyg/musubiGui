@@ -44,6 +44,26 @@ def test_unavailable_optimizer_can_be_saved_but_blocks_review(tmp_path: Path) ->
     assert client.post("/api/jobs", json={"config": {"optimizer": "arbitrary.Module"}}).status_code == 422
 
 
+def test_timestep_strategy_survives_export_and_presets(tmp_path: Path) -> None:
+    client = client_for(tmp_path)
+    response = client.post("/api/jobs", json={"config": {"timestep_sampling": "sigmoid", "sigmoid_scale": 1.5}})
+    assert response.status_code == 200
+    job = response.json()
+    assert client_for(tmp_path).get(f"/api/jobs/{job['id']}").json()["config"]["timestep_sampling"] == "sigmoid"
+    exported = client.get(f"/api/jobs/{job['id']}/export").json()
+    imported = client.post("/api/jobs/import", json=exported).json()
+    assert imported["config"]["timestep_sampling"] == "sigmoid"
+    assert imported["config"]["sigmoid_scale"] == 1.5
+    preset = client.post(f"/api/jobs/{job['id']}/presets", json={"name": "Sigmoid"}).json()
+    target = client.post("/api/jobs", json={}).json()
+    assert target["config"]["timestep_sampling"] == "shift"
+    applied = client.post(
+        f"/api/jobs/{target['id']}/apply-preset", json={"preset_id": preset["id"], "revision": target["revision"]}
+    ).json()
+    assert applied["config"]["timestep_sampling"] == "sigmoid"
+    assert applied["config"]["sigmoid_scale"] == 1.5
+
+
 @pytest.mark.parametrize("family", ["wan", "h3"])
 def test_optimizer_reaches_training_and_restore_keeps_original_optimizer(tmp_path: Path, family: str) -> None:
     fixture = acceptance_workspace(tmp_path)
@@ -55,6 +75,9 @@ def test_optimizer_reaches_training_and_restore_keeps_original_optimizer(tmp_pat
     job = store.get(next(job["id"] for job in fixture["jobs"] if job["family"] == family))
     draft = as_draft(job)
     draft.config.optimizer = "AdamW8bit"
+    if family == "wan":
+        draft.config.timestep_sampling = "sigmoid"
+        draft.config.sigmoid_scale = 1.5
     draft.config.save_state = True
     saved = store.save(job.id, draft, job.revision)
     review = client.post(f"/api/jobs/{saved.id}/review", json={}).json()
@@ -68,16 +91,25 @@ def test_optimizer_reaches_training_and_restore_keeps_original_optimizer(tmp_pat
         service.start(run["id"])
         wait_for(service, run["id"], "completed", device_released=True)
         draft.config.optimizer = "AdamW"
+        draft.config.timestep_sampling = "uniform"
         store.save(job.id, draft, saved.revision)
         states = service.saved_states(run["id"])
         service.store.update(run["id"], lambda record: record["job"]["config"].update(optimizer="AdamW"))
         with pytest.raises(ValueError, match="Optimizer differs"):
             service.restore_state(run["id"], next(state["id"] for state in states if state["valid"]), 1, confirmed=True)
         service.store.update(run["id"], lambda record: record["job"]["config"].update(optimizer="AdamW8bit"))
+        if family == "wan":
+            service.store.update(run["id"], lambda record: record["job"]["config"].update(timestep_sampling="uniform"))
+            with pytest.raises(ValueError, match="Timestep strategy differs"):
+                service.restore_state(
+                    run["id"], next(state["id"] for state in states if state["valid"]), 1, confirmed=True
+                )
+            service.store.update(run["id"], lambda record: record["job"]["config"].update(timestep_sampling="sigmoid"))
         restored = service.restore_state(
             run["id"], next(state["id"] for state in states if state["valid"]), 1, confirmed=True
         )
         assert restored["job"]["config"]["optimizer"] == "AdamW8bit"
+        assert restored["job"]["config"]["timestep_sampling"] == ("sigmoid" if family == "wan" else "uniform")
         train = next(stage["args"] for stage in restored["stages"] if stage["name"] == "train")
         assert train[train.index("--optimizer_type") + 1] == "AdamW8bit"
         wait_for(service, restored["id"], "completed", device_released=True)

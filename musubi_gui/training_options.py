@@ -3,9 +3,23 @@
 import json
 import subprocess  # nosec B404
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from musubi_gui.settings import Settings
+
+if TYPE_CHECKING:
+    from musubi_gui.jobs import Job
+
+
+def timestep_range_policy(job: "Job") -> Literal["original", "bounded", "shared-av"]:
+    if job.family == "h3":
+        return "shared-av"
+    config = job.config
+    return (
+        "original"
+        if config.timestep_sampling == "shift" and config.discrete_flow_shift == 3.0 and config.sigmoid_scale == 1.0
+        else "bounded"
+    )
 
 
 def optimizer_options(settings: Settings, *, fixture_mode: bool = False) -> dict[str, Any]:

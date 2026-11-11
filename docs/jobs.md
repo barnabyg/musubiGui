@@ -1,5 +1,50 @@
 # Job drafts and configuration review
 
+## Timestep strategy
+
+Advanced controls → LoRA & training offers **Shift**, **Sigmoid** and **Uniform**
+for Wan. Shift favours noisier timesteps using a shifted sigmoid distribution;
+Sigmoid concentrates draws around the middle; Uniform assigns equal probability
+across the active expert's range. Sigmoid scale controls spread for Shift and
+Sigmoid, while Flow shift controls the shift for Shift only. Both parameters must
+be between 0.001 and 1000, avoiding unstable extremes in the trainer's FP32 draw.
+
+Old jobs and new-job defaults keep the original Shift recipe: flow shift 3,
+sigmoid scale 1 and distribution-preserving rejection sampling within each expert's
+range. Alternative strategies and custom parameter values use the upstream bounded
+mapping into each expert's range. This is deliberate: upstream rejection sampling
+falls back to an unrestricted draw after 1000 misses, which can violate the expert
+range for extreme custom distributions. Low/high phases keep ranges 0–875 and
+875–1000 respectively. Review shows the effective strategy, parameters and mapping.
+
+H3 displays a fixed Uniform strategy because the pinned trainer rejects other
+strategies. It draws one base sigma shared by video/audio and applies their own
+model-specific shifts. A saved unsupported H3 choice blocks review and can be
+repaired by selecting Uniform. Switching model family applies the target family's
+strategy defaults. Presets, revisions and exports preserve choices, and restoration
+keeps the original Run's strategy regardless of later Job edits.
+
+These controls follow the pinned upstream
+[parser](https://github.com/kohya-ss/musubi-tuner/blob/f8a1b03794a49239a3539015075f5123d6c07d66/src/musubi_tuner/training/parser_common.py#L444-L474),
+[sampling and range mapping](https://github.com/kohya-ss/musubi-tuner/blob/f8a1b03794a49239a3539015075f5123d6c07d66/src/musubi_tuner/training/trainer_base.py#L635-L760)
+and [H3 restrictions](https://github.com/kohya-ss/musubi-tuner/blob/f8a1b03794a49239a3539015075f5123d6c07d66/src/musubi_tuner/minimax_h3_train_network.py#L707-L720).
+Configurable distributions have orchestration coverage; their GPU capacity and
+training quality remain unqualified.
+
+From `C:/docs/git/musubiGui` in PowerShell 7:
+
+```powershell
+.\acceptance.cmd --workspace ".cache/timesteps-$([guid]::NewGuid().ToString('N'))" --wan-paired
+```
+
+Open WAN acceptance 1, expand Advanced controls, select Sigmoid and set its scale
+to 1.5. Save and reload: the choice should remain. Review should pass and show
+Sigmoid with scale 1.5 and bounded mapping; Advanced command arrays should keep
+the appropriate low/high ranges. Prepare and start the four-step fixture, then
+restore a complete save: the segment should keep its strategy. H3 acceptance 1
+should show Uniform with an explanation and no incompatible choices. This is a
+CPU orchestration test; no models or GPU are required.
+
 ## Optimizer selection
 
 Advanced controls → LoRA & training offers AdamW and, when the selected training
