@@ -142,8 +142,8 @@ test('the action bar stays visible, identity comes first and rare actions are in
       .allInnerTexts();
     expect(headings.slice(0, 3)).toEqual([
       'Job & dataset',
-      'Training & sample',
-      'Presets',
+      'Training',
+      'Samples',
     ]);
 
     const menu = page.getByRole('button', { name: 'More job actions' });
@@ -880,11 +880,12 @@ test('the section menu reaches every section, marks the current one and keeps un
       menu.getByRole('button', { name, exact: true }).click();
     const current = menu.locator('[aria-current="true"]');
     const headings: [string, string][] = [
-      ['Training & sample', 'Training & sample'],
+      ['Training', 'Training'],
+      ['Samples', 'Samples'],
       ['Dataset preparation', 'Dataset preparation'],
       ['LoRA & training', 'LoRA & training'],
       ['Memory', 'Memory'],
-      ['Checkpoints & sample', 'Checkpoints & final sample'],
+      ['Checkpoints', 'Checkpoints'],
       ['Review', 'Review'],
       ['Job & dataset', 'Job & dataset'],
     ];

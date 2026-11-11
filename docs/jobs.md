@@ -90,7 +90,11 @@ a link that focuses that field.
 
 ## Compact job setup
 
-Jobs opens with name, datasets, recipe, training steps and final sample choice together.
+Jobs opens with Job & dataset, Training, and one **Samples** configuration section.
+Samples holds final-sample enablement, preview cadence, prompt, inference steps and
+the shared training/sample seed. Image-only Jobs also keep sample frame length here.
+Previews and the final sample can be enabled independently and share these settings.
+Dataset preparation and checkpoint controls no longer contain sample-only controls.
 New Wan jobs use alternating high/low training. Low-noise-only training and its
 two-step smoke preset are no longer offered. Saved single-expert Wan presets are
 also omitted from the preset selector.
@@ -269,7 +273,7 @@ See [the pinned upstream investigation and manual test](reference/caching.md).
 
 ### Previews during training
 
-Set **Preview every N steps** in Training & sample. Zero (the default for new and
+Set **Preview every N steps** in Samples. Zero (the default for new and
 existing jobs) disables previews. Exports store this as `config.preview_every`; older
 files that omit it keep previews off. The interval counts optimizer updates after gradient
 accumulation, independently of checkpoint saving. Previews share the sample prompt,
@@ -410,7 +414,7 @@ not real training or useful learning; see the [Wan reference](reference/wan.md).
 
 ### Checkpoint retention
 
-Under Advanced controls, Checkpoints & final sample, set **Maximum checkpoint saves to keep**.
+Under Advanced controls, Checkpoints, set **Maximum checkpoint saves to keep**.
 Zero (the default, including older jobs) keeps unlimited history. A positive value keeps
 that many historical saves per expert plus the newest/final save. A save includes its
 LoRA and optimizer/training state when enabled. Wan protects the latest restorable pair,

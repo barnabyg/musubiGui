@@ -76,7 +76,7 @@ for (const family of ['wan', 'h3'] as const) {
             'main input:visible, main select:visible, main textarea:visible',
           )
           .count(),
-      ).toBeLessThanOrEqual(family === 'wan' ? 10 : 9);
+      ).toBeLessThanOrEqual(family === 'wan' ? 12 : 11);
       await page.setViewportSize({ width: 700, height: 900 });
       expect(
         await page.evaluate(

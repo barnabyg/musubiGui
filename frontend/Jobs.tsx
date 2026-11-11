@@ -1,5 +1,6 @@
 import { JobActionBar } from './JobActionBar';
 import { JobEssentials } from './JobEssentials';
+import { JobSamples } from './JobSamples';
 import { useJobEditor, type JobsProps } from './jobEditor';
 import { JobPresets } from './JobPresets';
 import { JobReview } from './JobReview';
@@ -174,7 +175,8 @@ export function Jobs(props: JobsProps) {
             models={models}
             modelRoots={modelRoots}
           />
-          <JobEssentials
+          <JobEssentials media={media} job={job} busy={busy} fields={fields} />
+          <JobSamples
             media={media}
             job={job}
             busy={busy}
