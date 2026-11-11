@@ -306,6 +306,10 @@ export function JobReview({
       <details>
         <summary>Advanced</summary>
         <h3>Resolved paths</h3>
+        <p>
+          The Run/output folder uses the Job name. A unique suffix is allocated
+          when preparing.
+        </p>
         <pre>
           {JSON.stringify({ ...review.paths, models: review.models }, null, 2)}
         </pre>

@@ -21,6 +21,7 @@ from musubi_gui.disk_estimate import check_volumes, estimate_disk, free_space_re
 from musubi_gui.h3 import add_image_flags, h3_stages, validate_h3
 from musubi_gui.recipe import CAPTION, UPSTREAM, Stage
 from musubi_gui.redaction import redact
+from musubi_gui.run_paths import job_folder
 from musubi_gui.run_store import RunStore, preparation_transaction
 from musubi_gui.safetensors_file import safetensors_header
 from musubi_gui.settings import Settings, atomic_json, validate_paths, within_root
@@ -1150,9 +1151,9 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
             job, has_videos=not effective_items or any(item["kind"] == "video" for item in effective_items)
         )
     )
-    output = Path(settings.output_root) / "jobs" / job.id
+    output = Path(settings.output_root) / "runs" / f"{job_folder(job.name)}-{{unique}}"
     cache = Path(settings.cache_root) / "jobs" / job.id
-    snapshot = output / f"revision-{job.revision}"
+    snapshot = output
     _add_duplicate_warnings(datasets, effective_items, warnings)
     if job.family == "h3" and any(item["kind"] == "image" for item in effective_items):
         warnings.extend(H3_IMAGE_WARNINGS)

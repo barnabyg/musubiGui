@@ -103,6 +103,14 @@ new Run of the same revision.
 
 ## Immutable inputs
 
+New Run/output folders use the frozen Job name plus a unique suffix under the
+configured output root's `runs` folder. Names replace Windows-invalid characters
+and whitespace with hyphens, protect reserved names and limit the readable part
+to 60 characters. Repeated Runs and same-name Jobs never share a folder. Review
+shows `{unique}` until preparation allocates the suffix; Run details show the
+actual output path. Retries and restored segments also keep the frozen name.
+Renaming a Job never moves older Runs, and existing folder layouts stay readable.
+
 Before copying media, each new snapshot writes a versioned `snapshot.json` containing
 its source manifest, settings and provenance. A directory with no published Run remains
 an incomplete snapshot; caught failures mark it `incomplete` and retain the evidence.

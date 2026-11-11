@@ -8,12 +8,15 @@ from pathlib import Path
 from typing import Any
 
 from musubi_gui.recipe import Stage
+from musubi_gui.run_paths import job_folder
 from musubi_gui.snapshots import digest_file
 from musubi_gui.wan_pair_plan import argument, paired_stages, set_argument
 
 
 def restored_pair(original: dict[str, Any], state: dict[str, Any], steps: int) -> dict[str, Any]:
-    directory = Path(original["directory"]).parent / ("restore-" + uuid.uuid4().hex)
+    directory = Path(original["directory"]).parent / (
+        job_folder(original["job"]["name"]) + "-restore-" + uuid.uuid4().hex
+    )
     sources = copy.deepcopy(state["sources"])
     files = dict(original["input_files"])
     for source in sources.values():
