@@ -38,6 +38,7 @@ test('paired Wan previews show total steps and their own expert counts', async (
     const first = page.getByRole('button', {
       name: /^Step 4 preview · paired Wan · low 4 \/ high 0 trained steps.*available$/,
     });
+    await page.getByRole('tab', { name: 'Samples', exact: true }).click();
     await expect(first).toBeVisible({ timeout: 240_000 });
     await first.click();
     const playing = page.getByLabel('Output video', { exact: true });
@@ -115,6 +116,7 @@ for (const family of ['wan', 'h3'] as const) {
         start: true,
       })) as { id: string };
       await page.goto(`${app.url}/#/runs/${run.id}`);
+      await page.getByRole('tab', { name: 'Samples', exact: true }).click();
       const first = page.getByRole('button', {
         name: /^Step 5 preview.*available$/,
       });

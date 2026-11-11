@@ -47,6 +47,7 @@ test('Wan and H3 output playback comparison download and missing states retain r
     await expect(
       page.getByRole('heading', { name: 'Run outputs', exact: true }),
     ).toBeVisible();
+    await page.getByRole('tab', { name: 'Samples', exact: true }).click();
     await page
       .getByRole('button', {
         name: 'sample.mp4 · available',
@@ -87,6 +88,7 @@ test('Wan and H3 output playback comparison download and missing states retain r
         audio.evaluate((element) => (element as HTMLAudioElement).currentTime),
       )
       .toBeGreaterThan(0);
+    await page.getByRole('tab', { name: 'Overview', exact: true }).click();
     await page.getByText(/^LoRA checkpoints/).click();
     await page
       .getByRole('button', {
@@ -136,6 +138,7 @@ test('Wan and H3 output playback comparison download and missing states retain r
     await page
       .getByRole('button', { name: 'wan-revision-1 · WAN · r1', exact: true })
       .click();
+    await page.getByRole('tab', { name: 'Samples', exact: true }).click();
     await page
       .getByRole('button', {
         name: 'still.png · available',

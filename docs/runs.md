@@ -4,6 +4,12 @@ Runs lists the queue and history beside the selected Run. Statuses read as label
 Preparing or Ready to start, and the stored values are unchanged. The GPU line names the job
 using the GPU and links to its Run.
 
+Each Run opens on **Overview**, with progress, controls, diagnostics and LoRA
+downloads. **Samples** holds generated media and periodic previews. Use the tabs
+or arrow keys to switch views. Switching views keeps the selected sample and its
+player mounted, so returning preserves playback. New previews do not replace a
+selected sample. LoRA downloads remain visible on both tabs.
+
 ## History refresh and network traffic
 
 History, queue updates and completion notifications share lightweight Run summaries.
