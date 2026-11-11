@@ -6,6 +6,7 @@ import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
+from threading import Event
 from typing import Any
 
 from musubi_gui.run_store import references_folder
@@ -26,7 +27,7 @@ class Save:
     optimizer_step: int
 
 
-def _saves(run: dict[str, Any], validated: dict[str, tuple[object, Save]]) -> list[Save]:
+def _saves(run: dict[str, Any], validated: dict[str, tuple[object, Save]], cancelled: Event | None) -> list[Save]:
     """Only complete, named recipe saves enter retention; unknown files are preserved."""
     saves = []
     root = Path(run["directory"]) / "checkpoints"
@@ -39,6 +40,8 @@ def _saves(run: dict[str, Any], validated: dict[str, tuple[object, Save]]) -> li
         expert = phase.get("expert", "model")
         total = int(args[args.index("--max_train_steps") + 1])
         for checkpoint in root.glob(f"{name}*.safetensors"):
+            if cancelled is not None and cancelled.is_set():
+                return []
             suffix = checkpoint.stem.removeprefix(name)
             match = re.fullmatch(r"-step(\d+)", suffix)
             if suffix == "":
@@ -69,11 +72,14 @@ def _saves(run: dict[str, Any], validated: dict[str, tuple[object, Save]]) -> li
                     if is_paired(run) and not run["fixture"] and not (state_path / "scaler.pt").is_file():
                         continue
                     previous = run.get("pair_seals", {}).get(str(state_path))
-                    inspected = inspect_state(run, state_path, previous)
+                    inspected = inspect_state(run, state_path, previous, cancelled=cancelled)
                     if not inspected["valid"]:
                         continue
                     complete_safetensors(state_path / "model.safetensors")
-                    if any(digest_file(state_path / file) != expected for file, expected in inspected["files"].items()):
+                    if any(
+                        digest_file(state_path / file, cancelled=cancelled) != expected
+                        for file, expected in inspected["files"].items()
+                    ):
                         continue
                     state = state_path
                     optimizer_step = inspected["optimizer_step"]
@@ -86,12 +92,14 @@ def _saves(run: dict[str, Any], validated: dict[str, tuple[object, Save]]) -> li
     return saves
 
 
-def retention_candidates(run: dict[str, Any], validated: dict[str, tuple[object, Save]]) -> tuple[list[Save], set[str]]:
+def retention_candidates(
+    run: dict[str, Any], validated: dict[str, tuple[object, Save]], cancelled: Event | None = None
+) -> tuple[list[Save], set[str]]:
     """Validate outside the RunStore transaction, then recheck protected references inside it."""
     limit = run["job"].get("config", {}).get("keep_checkpoints", 0)
     if limit <= 0:
         return [], set()
-    saves = _saves(run, validated)
+    saves = _saves(run, validated, cancelled)
     keep: set[str] = set()
     for expert in {save.expert for save in saves}:
         ordered = [save for save in saves if save.expert == expert]

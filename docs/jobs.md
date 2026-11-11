@@ -409,7 +409,7 @@ pending phase/sampling inputs, and the counterparts needed to restore retained p
 Other Runs' frozen inputs and restoration sources are also protected, so these exceptions
 can exceed the limit. Sampling results are never pruned.
 
-During training the worker checks about every five seconds and at phase completion. It
+During training a separate worker checks about every five seconds and at phase completion. It
 only prunes older validated saves once a newer complete save exists. Incomplete saves and
 unknown files are kept. Files are first quarantined under the Run's checkpoints folder;
 a durable journal allows interrupted removals to resume at the next check or saved-state
@@ -417,6 +417,10 @@ inspection. Run details show removal counts, protected exceptions and errors. A 
 failure does not fail training; inspect its reported error before removing a quarantine
 remainder manually. Quarantined and intentionally pruned artifacts are not offered as outputs
 or restoration choices. Restored segments start their own retention journal.
+Inspection runs independently of training process supervision so Stop remains responsive.
+Closing the service cancels chunked hashing, terminates/reaps its state probe (including
+the Windows interpreter-launcher child), and joins the inspection worker. This does not
+terminate training processes, which retain the existing interrupted-run recovery behaviour.
 
 Review reports expected retained saves before protected exceptions. The disk budget remains
 a conservative peak upper bound: short step intervals can accumulate saves between checks,

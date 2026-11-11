@@ -8,6 +8,7 @@ import uuid
 from dataclasses import dataclass
 from importlib import import_module
 from pathlib import Path
+from threading import Event
 from typing import Any
 
 from musubi_gui.diagnostics import training_environment, upstream_revision
@@ -18,10 +19,12 @@ from musubi_gui.training_sections import dataset_toml, layout_identity, plan_sec
 from musubi_gui.video_sampling import WAN_FPS, source_rates
 
 
-def digest_file(path: Path) -> str:
+def digest_file(path: Path, *, cancelled: Event | None = None) -> str:
     hasher = hashlib.sha256()
     with path.open("rb") as stream:
         for chunk in iter(lambda: stream.read(4 * 1024**2), b""):
+            if cancelled is not None and cancelled.is_set():
+                raise InterruptedError("File inspection cancelled during service shutdown.")
             hasher.update(chunk)
     return hasher.hexdigest()
 

@@ -85,6 +85,10 @@ class RunService:
         self.stopping = threading.Event()
         self.retention_stamps: dict[str, tuple[tuple[str, int, int], ...]] = {}
         self.retention_validation: dict[str, tuple[object, Save]] = {}
+        self.retention_lock = threading.RLock()
+        self.retention_condition = threading.Condition()
+        self.retention_requested: set[str] = set()
+        self.retention_thread = threading.Thread(target=self._retain_requested, name="musubi-retention", daemon=True)
         self.thread = threading.Thread(target=self._schedule, name="musubi-worker", daemon=True)
         if autostart:
             self.start_worker()
@@ -101,6 +105,7 @@ class RunService:
                 "uncertain",
             }:
                 self.reconcile(run["id"])
+        self.retention_thread.start()
         self.thread.start()
 
     def list(self) -> list[dict[str, Any]]:
@@ -240,8 +245,15 @@ class RunService:
 
     def close(self) -> None:
         self.stopping.set()
+        with self.retention_condition:
+            self.retention_condition.notify_all()
         if self.thread.is_alive():
             self.thread.join(timeout=5)
+        if self.retention_thread.is_alive():
+            # Cancellation interrupts chunked hashes and kills/reaps an active state probe.
+            self.retention_thread.join(timeout=45)
+            if self.retention_thread.is_alive():
+                raise RuntimeError("Background checkpoint inspection did not finish after cancellation.")
 
     def retry(self, run_id: str) -> dict[str, Any]:
         previous = self.get(run_id)
@@ -438,6 +450,29 @@ class RunService:
 
     def retain_checkpoints(self, run_id: str) -> None:
         """Apply the frozen Run's policy; failure preserves training and is visible for repair."""
+        with self.retention_lock:
+            self._retain_checkpoints(run_id)
+
+    def request_retention(self, run_id: str) -> None:
+        """Coalesce work without delaying process supervision or Stop signalling."""
+        with self.retention_condition:
+            self.retention_requested.add(run_id)
+            self.retention_condition.notify()
+
+    def _retain_requested(self) -> None:
+        while not self.stopping.is_set():
+            with self.retention_condition:
+                self.retention_condition.wait_for(lambda: self.retention_requested or self.stopping.is_set())
+                if self.stopping.is_set():
+                    return
+                run_id = self.retention_requested.pop()
+            try:
+                self.retain_checkpoints(run_id)
+            except (OSError, ValueError):
+                # A terminal Run may have been deleted after its final request was queued.
+                continue
+
+    def _retain_checkpoints(self, run_id: str) -> None:
         run = self.get(run_id)
         if run["job"].get("config", {}).get("keep_checkpoints", 0) <= 0:
             return
@@ -452,7 +487,9 @@ class RunService:
             )
             if self.retention_stamps.get(run_id) == stamp and not run.get("retention", {}).get("pending"):
                 return
-            candidates, protected = retention_candidates(run, self.retention_validation)
+            candidates, protected = retention_candidates(run, self.retention_validation, self.stopping)
+            if self.stopping.is_set():
+                return
             self.store.update_with_others(
                 run_id, lambda record, others: apply_retention(record, others, candidates, protected)
             )
@@ -709,7 +746,7 @@ class RunService:
                             terminate_owned(identities, force=True)
                         signalled = self._signal_stop(run_id, job_object, identities, signalled)
                         if stage["name"] == "train" and time.monotonic() >= retention_at:
-                            self.retain_checkpoints(run_id)
+                            self.request_retention(run_id)
                             retention_at = time.monotonic() + 5
                         if self.stopping.wait(0.1):
                             release = False
@@ -803,7 +840,7 @@ class RunService:
                             record.setdefault("expert_states", {})[stage["training"]["expert"]] = state
 
                         self.store.update(run_id, save_expert)
-                    self.retain_checkpoints(run_id)
+                    self.request_retention(run_id)
                 elif stage["name"] == "generate":
                     destination = Path(stage["args"][stage["args"].index("--save_path") + 1])
                     samples = list(destination.rglob("*")) if destination.is_dir() else [destination]

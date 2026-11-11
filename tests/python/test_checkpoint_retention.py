@@ -1,8 +1,11 @@
 import json
 import shutil
 import sys
+import threading
+import time
 from pathlib import Path
 
+import psutil
 import pytest
 from helpers import acceptance_workspace, wait_for
 
@@ -11,6 +14,78 @@ from musubi_gui.recipe import Stage
 from musubi_gui.runs import ExecutionPlan, RunService
 from musubi_gui.settings import Settings
 from musubi_gui.snapshots import digest_file
+
+
+def test_slow_retention_validation_does_not_block_force_stop_or_shutdown(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import subprocess
+
+    marker = tmp_path / "probe-started"
+    original_popen = subprocess.Popen
+
+    def delayed_probe(args: list[str], **kwargs: object) -> subprocess.Popen:
+        if any(str(arg).endswith("state_probe.py") for arg in args):
+            code = (
+                f"import os,pathlib,time; pathlib.Path({str(marker)!r}).write_text(str(os.getpid())); time.sleep(120)"
+            )
+            args = [sys.executable, "-c", code]
+        return original_popen(args, **kwargs)
+
+    monkeypatch.setattr(subprocess, "Popen", delayed_probe)
+    service, run, output = submitted_history(tmp_path, save_state=True)
+    service.close()
+    # The local execution adapter supplies a slow, CPU-only training process and real state-probe boundary.
+    script = tmp_path / "trainer.py"
+    script.write_text("import time\nprint('training ready', flush=True)\ntime.sleep(120)\n", encoding="utf-8")
+    previous = service.get(run["id"])
+    plan = ExecutionPlan(
+        job=previous["job"],
+        settings=Settings(checkout=str(tmp_path), python=sys.executable),
+        manifest={},
+        directory=Path(previous["directory"]),
+        cache=tmp_path / "cache",
+        fingerprint="slow",
+        stages=[
+            Stage(
+                "train",
+                [
+                    sys.executable,
+                    str(script),
+                    "--output_name",
+                    "lora",
+                    "--output_dir",
+                    str(output),
+                    "--max_train_steps",
+                    "4",
+                ],
+            )
+        ],
+    )
+    service = RunService(tmp_path / "slow-state", fixture_mode=False, device_path=tmp_path / "gpu.sqlite")
+    try:
+        active = service.submit(plan, start_after_prepare=True)
+        deadline = time.monotonic() + 30
+        while not marker.exists() and time.monotonic() < deadline:
+            time.sleep(0.02)
+        assert marker.exists(), service.get(active["id"])
+        probe_pid = int(marker.read_text())
+        service.stop(active["id"])
+        assert service.get(active["id"])["status"] == "stopping"
+        service.stop(active["id"], force=True, confirmed=True)
+        deadline = time.monotonic() + 15
+        while service.get(active["id"])["status"] != "stopped" and time.monotonic() < deadline:
+            time.sleep(0.02)
+        assert service.get(active["id"])["status"] == "stopped"
+        service.close()
+        assert not psutil.pid_exists(probe_pid)
+        assert not any(thread.name == "musubi-retention" and thread.is_alive() for thread in threading.enumerate())
+    finally:
+        service.close()
+        if service.get(active["id"]).get("processes"):
+            recovered = service.reconcile(active["id"])
+            if recovered["status"] in {"orphaned", "uncertain"}:
+                service.terminate_orphan(active["id"], confirmed=True)
 
 
 def test_retention_prunes_old_saves_but_preserves_the_final_restorable_pair(tmp_path: Path) -> None:
@@ -38,10 +113,11 @@ def test_retention_prunes_old_saves_but_preserves_the_final_restorable_pair(tmp_
     try:
         run = service.prepare(job.id, start=True)
         completed = wait_for(service, run["id"], "completed", device_released=True)
+        states = service.saved_states(run["id"])
+        completed = service.get(run["id"])
         assert completed["retention"]["removed"]
         assert completed["retention"]["errors"] == []
         assert all(Path(state["path"]).is_dir() for state in completed["expert_states"].values())
-        states = service.saved_states(run["id"])
         assert all(state["valid"] for state in states), states
         assert states[-1]["valid"] and states[-1]["counts"] == {"low": 4, "high": 4}
         assert all("missing or moved" not in state["error"] for state in states)
