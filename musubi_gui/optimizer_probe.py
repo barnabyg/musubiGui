@@ -15,7 +15,7 @@ def main() -> None:
         supported = bool(lib.compiled_with_cuda and torch.cuda.is_available())
     except Exception:
         # Do not expose upstream errors containing environment paths or credentials.
-        pass
+        supported = False
     print("MUSUBI_OPTIMIZERS=" + json.dumps({"adamw8bit": supported}))
 
 
