@@ -467,7 +467,9 @@ test('Wan draft controls, validation and reviewed native configuration survive s
       page.getByRole('button', { name: 'Prepare run', exact: true }),
     ).toBeDisabled();
     await page.getByRole('spinbutton', { name: /^Frames\b/ }).fill('33');
-    await page.getByLabel('Width', { exact: true }).fill('320');
+    await page
+      .getByLabel('Default training width', { exact: true })
+      .fill('320');
     await page.getByRole('button', { name: 'Save draft', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('Draft saved');
     await page
@@ -531,7 +533,7 @@ test('a new draft starts realistic, warns about low steps and offers the smoke-t
       .click();
     await page.getByText('Advanced controls', { exact: true }).click();
     await expect(
-      page.getByRole('spinbutton', { name: /^Width\b/ }),
+      page.getByRole('spinbutton', { name: /^Default training width\b/ }),
     ).toHaveValue('832');
     await expect(
       page.getByLabel('Training steps', { exact: true }),
@@ -554,7 +556,7 @@ test('a new draft starts realistic, warns about low steps and offers the smoke-t
       .getByRole('button', { name: 'Apply preset', exact: true })
       .click();
     await expect(
-      page.getByRole('spinbutton', { name: /^Width\b/ }),
+      page.getByRole('spinbutton', { name: /^Default training width\b/ }),
     ).toHaveValue('256');
     await expect(
       page.getByRole('textbox', { name: 'Sample prompt' }),
@@ -673,7 +675,9 @@ test('H3 editor keeps T2VA guidance stages and identifies invalid geometry', asy
       page.getByLabel('Runtime FP8 scaling', { exact: false }),
     ).toHaveCount(0);
     await expect(page.getByLabel(/negative prompt/i)).toHaveCount(0);
-    await page.getByLabel('Width', { exact: true }).fill('272');
+    await page
+      .getByLabel('Default training width', { exact: true })
+      .fill('272');
     await page.getByRole('button', { name: 'Save draft', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('Draft saved');
     await page
@@ -748,7 +752,7 @@ test('duplication presets cancelled conversion and versioned export import keep 
       'Preset applied as a new revision',
     );
     await expect(
-      page.getByRole('spinbutton', { name: /^Width\b/ }),
+      page.getByRole('spinbutton', { name: /^Default training width\b/ }),
     ).toHaveValue('832');
     await expect(
       page.getByRole('spinbutton', { name: /^Frames\b/ }),
@@ -853,11 +857,15 @@ test('the job form uses short fields for short values and shares rows between re
       await page.evaluate(() => document.documentElement.scrollHeight),
     ).toBeLessThan(3200);
     await page.getByText('Advanced controls', { exact: true }).click();
-    for (const label of ['Blocks to swap', 'Width', 'Training steps'])
+    for (const label of [
+      'Blocks to swap',
+      'Default training width',
+      'Training steps',
+    ])
       expect((await box(label)).width).toBeLessThan(200);
-    const width = await box('Width');
-    expect((await box('Height')).y).toBe(width.y);
-    expect((await box('Frames')).y).toBe(width.y);
+    const width = await box('Default training width');
+    expect((await box('Default training height')).y).toBe(width.y);
+    expect((await box('Frames')).y).toBeGreaterThan(width.y);
     // The header and its repeated title are gone.
     await expect(page.locator('main header')).toHaveCount(0);
   } finally {
@@ -944,7 +952,7 @@ test('invalid fields are flagged while typing and review errors lead to their fi
       .getByRole('button', { name: 'New Wan job', exact: true })
       .click();
     await page.getByText('Advanced controls', { exact: true }).click();
-    const width = page.getByLabel('Width', { exact: true });
+    const width = page.getByLabel('Default training width', { exact: true });
     await expect(width).not.toHaveAttribute('aria-invalid', 'true');
     await width.fill('250');
     await expect(width).toHaveAttribute('aria-invalid', 'true');
@@ -1032,16 +1040,19 @@ test('a review size error leads to the dimension that is wrong', async ({
       .getByRole('button', { name: 'New Wan job', exact: true })
       .click();
     await page.getByText('Advanced controls', { exact: true }).click();
-    await page.getByLabel('Height', { exact: true }).fill('250');
+    await page
+      .getByLabel('Default training height', { exact: true })
+      .fill('250');
     await page
       .getByRole('button', { name: 'Review configuration', exact: true })
       .click();
     await page.getByRole('button', { name: /^Geometry:/ }).click();
-    await expect(page.getByLabel('Height', { exact: true })).toBeFocused();
-    await expect(page.getByLabel('Width', { exact: true })).not.toHaveAttribute(
-      'aria-invalid',
-      'true',
-    );
+    await expect(
+      page.getByLabel('Default training height', { exact: true }),
+    ).toBeFocused();
+    await expect(
+      page.getByLabel('Default training width', { exact: true }),
+    ).not.toHaveAttribute('aria-invalid', 'true');
   } finally {
     await app.close();
   }

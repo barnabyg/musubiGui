@@ -181,7 +181,9 @@ test('compact saved and imported jobs retain every advanced value and reveal hid
       .getByRole('button', { name: 'Review configuration', exact: true })
       .click();
     await page.getByRole('button', { name: /^Geometry:/ }).click();
-    await expect(page.getByLabel('Width', { exact: true })).toBeFocused();
+    await expect(
+      page.getByLabel('Default training width', { exact: true }),
+    ).toBeFocused();
     await expect(page.getByLabel('LoRA rank', { exact: true })).toHaveValue(
       '16',
     );
