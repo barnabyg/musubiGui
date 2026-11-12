@@ -188,6 +188,27 @@ def test_incomplete_new_save_never_authorizes_pruning(tmp_path: Path) -> None:
     assert service.get(run["id"])["retention"]["removed"] == []
 
 
+def test_retention_before_first_checkpoint_does_not_report_a_missing_path(tmp_path: Path) -> None:
+    service, run, output = submitted_history(tmp_path)
+    try:
+        # Real trainers create this folder at their first save, after caching and startup.
+        shutil.rmtree(output)
+        service.retain_checkpoints(run["id"])
+        status = service.get(run["id"])["retention"]
+        assert status["errors"] == [], status
+        assert status["pending"] == [] and status["removed"] == []
+        # An initially empty retention pass must not prevent pruning later saves.
+        for step in (1, 2, 3):
+            checkpoint(output / f"lora-step{step:08d}.safetensors")
+        service.retain_checkpoints(run["id"])
+        status = service.get(run["id"])["retention"]
+        assert status["errors"] == []
+        assert status["removed"] == ["lora-step00000001.safetensors"]
+        assert (output / "lora-step00000003.safetensors").is_file()
+    finally:
+        service.close()
+
+
 def test_incomplete_optimizer_state_never_authorizes_pruning(tmp_path: Path) -> None:
     service, run, output = submitted_history(tmp_path, save_state=True)
     (output / "lora-step00000003-state" / "scheduler.bin").unlink()
