@@ -34,7 +34,7 @@ type Run = {
     name: string;
     family: string;
     revision: number;
-    config?: { recipe?: string };
+    config?: { recipe?: string; save_state?: boolean; save_every?: number };
   };
   manifest: {
     items: { name?: string; path: string; caption: { text: string } }[];
@@ -247,10 +247,12 @@ function RunBadge({ status }: { status: string }) {
 function SavedStates({
   runId,
   files,
+  config,
   onRestore,
 }: {
   runId: string;
   files: Output[];
+  config: Run['job']['config'];
   onRestore: (stateId: string, steps: number) => Promise<void>;
 }) {
   const [states, setStates] = useState<
@@ -267,11 +269,13 @@ function SavedStates({
   const [steps, setSteps] = useState(1);
   const [error, setError] = useState('');
   const [inspecting, setInspecting] = useState(false);
+  const [inspected, setInspected] = useState(false);
   async function inspect() {
     // Inspection hashes every state file, which takes seconds for large folders.
     setInspecting(true);
     try {
       setStates(await request(`/api/runs/${runId}/states`));
+      setInspected(true);
       setError('');
     } catch (reason) {
       setError((reason as Error).message);
@@ -280,14 +284,34 @@ function SavedStates({
     }
   }
   return (
-    <section className="panel">
-      <h2>Saved optimizer state</h2>
+    <section className="panel" aria-label="Resume training">
+      <h2>Resume training from saved state</h2>
       <p>
         Restoration starts a new segment with saved optimizer, scheduler and RNG
         state. Upstream resets its displayed step counter and data position. A
         LoRA checkpoint alone cannot restore training state. Stopping does not
         guarantee a checkpoint or state save.
       </p>
+      <p>
+        After stopping or restarting the app, inspect saved states, choose the
+        additional steps to train and select Restore as new segment. Work since
+        the last saved state must run again. The original Run stays in history.
+      </p>
+      {config?.save_state === false ? (
+        <p>
+          Saved optimizer state was not enabled for this Run. If no valid state
+          is available, start a new Run. For future Runs, enable Save
+          optimizer/training state in the Job before training.
+        </p>
+      ) : (
+        <p>
+          For future Runs, enable Save optimizer/training state in the Job and
+          choose a checkpoint interval to control how much work can be lost.
+          {config?.save_state && config.save_every
+            ? ` This Run saves state every ${config.save_every} training steps.`
+            : ''}
+        </p>
+      )}
       {files.length > 0 && (
         <details>
           <summary>Optimizer state files ({files.length})</summary>
@@ -314,6 +338,13 @@ function SavedStates({
       </button>
       {inspecting && <p role="status">Checking saved states…</p>}
       {error && <p role="alert">{error}</p>}
+      {inspected && states.length === 0 && !error && (
+        <p>
+          No saved optimizer states found. A LoRA alone cannot resume optimizer
+          state. Start a new Run and enable Save optimizer/training state for
+          future Runs.
+        </p>
+      )}
       <label className="field number-field">
         Additional segment steps
         <input
@@ -744,6 +775,21 @@ export function Runs({
               hidden={tab !== 'overview'}
             >
               {run.error && <p className="error">{run.error}</p>}
+              {showFiles && (
+                <SavedStates
+                  key={`states-${run.id}`}
+                  runId={run.id}
+                  files={stateFiles(outputs)}
+                  config={run.job.config}
+                  onRestore={(stateId, steps) =>
+                    action('restore-state', {
+                      state_id: stateId,
+                      additional_steps: steps,
+                      confirmed: true,
+                    })
+                  }
+                />
+              )}
               <section aria-label="Cache preparation results">
                 <h3>Caching</h3>
                 <ul>
@@ -802,10 +848,10 @@ export function Runs({
               {pairedStarted &&
                 ['failed', 'stopped', 'interrupted'].includes(run.status) && (
                   <p>
-                    Inspect paired saved states below to continue both experts
-                    and the schedule as a new segment. Updates after the
-                    selected save are lost. Prepare from Jobs to restart both
-                    experts.
+                    Inspect paired saved states in Resume training to continue
+                    both experts and the schedule as a new segment. Updates
+                    after the selected save are lost. Prepare from Jobs to
+                    restart both experts.
                     {run.resume_of && (
                       <>
                         {' '}
@@ -838,7 +884,7 @@ export function Runs({
                     <p>
                       To change the build, edit the job, save and review it,
                       then prepare from Jobs. For saved optimizer state, use
-                      Inspect saved states below.
+                      Inspect saved states in Resume training.
                     </p>
                   </div>
                 )}
@@ -1027,22 +1073,6 @@ export function Runs({
                 {current?.text || 'Waiting for stage output…'}
               </pre>
             </details>
-          )}
-          {showFiles && (
-            <div hidden={tab !== 'overview'}>
-              <SavedStates
-                key={`states-${run.id}`}
-                runId={run.id}
-                files={stateFiles(outputs)}
-                onRestore={(stateId, steps) =>
-                  action('restore-state', {
-                    state_id: stateId,
-                    additional_steps: steps,
-                    confirmed: true,
-                  })
-                }
-              />
-            </div>
           )}
           {showFiles && (
             <div

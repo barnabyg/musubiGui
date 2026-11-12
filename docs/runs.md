@@ -311,6 +311,38 @@ that grace period makes the Run orphaned instead.
 
 ## Saved state
 
+**Resume training from saved state** is near the top of Run Overview. It also
+works after restarting the application: open the stopped or interrupted Run,
+choose **Inspect saved states**, enter **Additional segment steps**, then choose
+**Restore as new segment** for a valid state and confirm. This immediately queues
+training for those additional steps. The original Run stays in history.
+
+Enable **Save optimizer/training state** in the Job before starting training and
+set **Save every N steps** to a suitable checkpoint interval. Work since the last
+saved state must run again. Without a valid saved state, optimizer restoration
+is unavailable; prepare a new Run. The panel explains when state saving was
+disabled or inspection finds no saved states.
+
+Manual check from the repository root:
+
+```powershell
+$resumeWorkspace = ".cache/resume-check-$([guid]::NewGuid().ToString('N'))"
+.\acceptance.cmd --workspace $resumeWorkspace
+```
+
+This isolated CPU fixture needs no models or GPU. In a fixture Job set 50 steps,
+save every step and enable Save optimizer/training state. Prepare and start,
+wait for an interval state in the outputs, then request graceful stop. Close and
+relaunch the saved workspace with the command below, open the stopped Run and
+restore a valid state with one additional step. Expect a separate completed Run
+linked to the original, which remains Stopped. This checks orchestration, not GPU
+training quality or seamless data-position continuation.
+
+```powershell
+$env:MUSUBI_GUI_STATE = (Get-Content "$resumeWorkspace/acceptance.json" -Raw | ConvertFrom-Json).state
+try { .\launch.cmd --acceptance-fixture --port 8767 } finally { Remove-Item Env:MUSUBI_GUI_STATE }
+```
+
 Enable saved optimizer state in the Job before training. After completion or a
 fully observed stop, Inspect saved states checks model/optimizer/scheduler/RNG
 files and records hashes. Hashing large state folders takes seconds; the panel
