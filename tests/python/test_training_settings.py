@@ -34,7 +34,8 @@ def test_optimizer_survives_revisions_export_and_presets(tmp_path: Path) -> None
     assert applied["config"]["optimizer"] == "AdamW8bit"
 
 
-def test_unavailable_optimizer_can_be_saved_but_blocks_review(tmp_path: Path) -> None:
+def test_unavailable_optimizer_can_be_saved_but_blocks_review(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)  # A clean project, independent of the host's managed GPU environment.
     client = client_for(tmp_path)
     assert client.get("/api/jobs/training-options").json()["optimizers"] == ["AdamW"]
     job = client.post("/api/jobs", json={"config": {"optimizer": "AdamW8bit"}}).json()

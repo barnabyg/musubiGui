@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -36,6 +37,8 @@ def test_h3_nvfp4_block_scales_do_not_get_rejected_as_fp8_weights(tmp_path: Path
     result = subprocess.run(
         [sys.executable, "-m", "musubi_gui.reference", "h3", "--settings", str(state), "--plan-only"],
         capture_output=True,
+        cwd=tmp_path,
+        env={**os.environ, "PYTHONPATH": str(Path.cwd())},
         text=True,
         timeout=300,
     )

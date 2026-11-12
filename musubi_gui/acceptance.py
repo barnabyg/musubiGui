@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from musubi_gui.acceptance_worker import tensor
-from musubi_gui.settings import Settings, atomic_json, save_settings, validate_paths
+from musubi_gui.settings import Settings, atomic_json, managed_settings, save_settings, validate_paths
 
 
 def synthetic_video(
@@ -154,12 +154,12 @@ def prepare(
             raise ValueError(
                 "GPU acceptance requires --settings pointing to your existing saved installation and model paths."
             )
-        settings = Settings.model_validate_json(selected.read_text(encoding="utf-8"))
+        settings = managed_settings(Settings.model_validate_json(selected.read_text(encoding="utf-8")))
         if settings.version != 1:
             raise ValueError("Unsupported settings format; the source file has been preserved.")
         validate_paths(settings)
         if not settings.checkout or not settings.python:
-            raise ValueError("Select the existing training checkout and Python before GPU acceptance.")
+            raise ValueError("Install the supported Musubi version in Settings before GPU acceptance.")
     workspace.mkdir(parents=True)
     manifest: dict[str, Any] = {
         "version": 1,

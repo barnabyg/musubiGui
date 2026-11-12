@@ -1136,7 +1136,7 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
     except (ValueError, OSError) as error:
         errors.append(f"Installation: {error}")
     if not settings.python or not Path(settings.python).is_file():
-        errors.append("Training Python: select an existing executable in Settings.")
+        errors.append("Training Python: install the supported Musubi version in Settings.")
     effective_items: list[dict[str, Any]] = []
     datasets: list[dict[str, Any]] = []
     audio_coverage: dict[str, Any] = {"included": 0, "supervised": 0, "missing": 0, "items": []}

@@ -60,7 +60,7 @@ def training_environment(
 ) -> dict[str, Any]:
     python = Path(settings.python)
     if not python.is_file():
-        raise ValueError("Select the existing training environment's python.exe.")
+        raise ValueError("Install or repair the managed training environment in Settings.")
     env = os.environ.copy() if environment is None else environment.copy()
     env.update(PYTHONDONTWRITEBYTECODE="1", PYTHONUTF8="1")
     # B603: selected local Python is an explicit trust boundary; review if selectable remotely.
@@ -125,7 +125,9 @@ def diagnostics(settings: Settings) -> dict[str, Any]:
     if not settings.checkout or not all(
         (checkout / p).is_file() for p in ["wan_train_network.py", "minimax_h3_train_network.py"]
     ):
-        check("Installation", "error", "Select a musubi-tuner checkout containing both training entry points.")
+        check(
+            "Installation", "error", "Install the supported Musubi version in Settings to create the training checkout."
+        )
     else:
         check("Installation", "ok", "Training entry points found.")
         try:
@@ -142,7 +144,9 @@ def diagnostics(settings: Settings) -> dict[str, Any]:
         packages = environment.get("packages", {})
         if environment.get("torch_error") == "missing":
             check(
-                "PyTorch", "error", "Install PyTorch in the selected training environment; the GUI will not change it."
+                "PyTorch",
+                "error",
+                "Repair the managed training environment using Install supported version in Settings.",
             )
         elif environment.get("torch_error"):
             check("PyTorch", "error", "PyTorch cannot initialize; check the selected environment and NVIDIA driver.")

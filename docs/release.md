@@ -74,9 +74,9 @@ normal application launch; the explicit fixture opt-in is required.
 
 ## Real GPU acceptance
 
-An existing musubi-tuner checkout at the pinned revision, its existing Python/environment
+The managed musubi-tuner checkout at the supported revision, its project-local Python/environment
 and the compatible model components, all documented in
-[reference workflows](reference/README.md), are required. No training dependencies or models are installed by the app.
+[reference workflows](reference/README.md), are required. Install the training dependencies through Settings; model weights remain separate.
 The tested environment is Python 3.12.10, PyTorch 2.13.0+cu130, CUDA 13.0 and
 musubi-tuner 0.3.6. Select exact existing component paths in Settings; Wan may use
 the separately validated [offline weight conversion](reference/wan-conversion.md).

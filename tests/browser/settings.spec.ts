@@ -3,14 +3,13 @@ import {
   mkdtemp,
   mkdir,
   readFile,
-  readdir,
   realpath,
   rm,
   writeFile,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { localBackend, python } from './backend';
+import { localBackend } from './backend';
 
 function settingsBackend(root: string) {
   return localBackend({
@@ -21,22 +20,11 @@ function settingsBackend(root: string) {
   });
 }
 
-test('settings survive backend restart and invalid installations explain corrections', async ({
+test('managed paths are read only and storage settings survive restart', async ({
   page,
 }) => {
-  // Windows CI's TEMP can use an 8.3 alias; the backend returns resolved paths.
   const root = await realpath(
     await mkdtemp(path.join(tmpdir(), 'musubi-setup-')),
-  );
-  const checkout = path.join(root, '安装 with spaces');
-  await mkdir(checkout);
-  await writeFile(
-    path.join(checkout, 'wan_train_network.py'),
-    '# fixture checkout',
-  );
-  await writeFile(
-    path.join(checkout, 'minimax_h3_train_network.py'),
-    '# fixture checkout',
   );
   const { url, start, stop } = await settingsBackend(root);
   try {
@@ -46,18 +34,15 @@ test('settings survive backend restart and invalid installations explain correct
     await expect(page.getByLabel('Dataset roots (one per line)')).toHaveValue(
       defaultDatasets,
     );
-    await page.getByRole('button', { name: 'Datasets', exact: true }).click();
-    await page.getByRole('button', { name: 'New dataset' }).click();
+    await expect(page.locator('#settings-environment')).toContainText(
+      path.join(root, 'musubi-tuner'),
+    );
     await expect(
-      page.getByLabel('Upload parent folder', { exact: true }),
-    ).toHaveValue(defaultDatasets);
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
-    await page
-      .getByLabel('musubi-tuner checkout', { exact: true })
-      .fill(path.join(root, 'missing'));
-    await page
-      .getByLabel('Training Python executable', { exact: true })
-      .fill(python);
+      page.getByLabel('musubi-tuner checkout', { exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByLabel('Training Python executable', { exact: true }),
+    ).toHaveCount(0);
     await page
       .getByLabel('Output root', { exact: true })
       .fill(path.join(root, 'output'));
@@ -66,47 +51,32 @@ test('settings survive backend restart and invalid installations explain correct
       .fill(path.join(root, 'cache'));
     await page.getByRole('button', { name: 'Save settings' }).click();
     await expect(page.getByRole('status')).toHaveText('Settings saved');
-    expect(
-      JSON.parse(await readFile(path.join(root, 'state/settings.json'), 'utf8'))
-        .dataset_roots,
-    ).toEqual([defaultDatasets]);
-    await page.getByRole('button', { name: 'Datasets', exact: true }).click();
-    await page
-      .getByLabel('Dataset name', { exact: true })
-      .fill('Default location');
-    await page
-      .getByRole('button', { name: 'Create a new folder for uploads' })
-      .click();
-    await expect(page.getByText('Scan: complete 0/0')).toBeVisible();
-    expect(await readdir(defaultDatasets)).toHaveLength(1);
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    const saved = JSON.parse(
+      await readFile(path.join(root, 'state/settings.json'), 'utf8'),
+    );
+    expect(saved.checkout).toBe(path.join(root, 'musubi-tuner'));
+    expect(saved.dataset_roots).toEqual([defaultDatasets]);
     await page.getByRole('button', { name: 'Run diagnostics' }).click();
     await expect(
       page.getByText(
-        'Select a musubi-tuner checkout containing both training entry points.',
+        'Install the supported Musubi version in Settings to create the training checkout.',
       ),
     ).toBeVisible();
-    await page
-      .getByLabel('musubi-tuner checkout', { exact: true })
-      .fill(checkout);
-    await page.getByRole('button', { name: 'Save settings' }).click();
-    await expect(page.getByRole('status')).toHaveText('Settings saved');
     await stop();
     await start();
     await page.reload();
     await expect(page.getByLabel('Dataset roots (one per line)')).toHaveValue(
       defaultDatasets,
     );
+    await expect(page.getByLabel('Output root', { exact: true })).toHaveValue(
+      saved.output_root,
+    );
+    await expect(page.locator('#settings-environment')).toContainText(
+      saved.checkout,
+    );
     await expect(
-      page.getByLabel('musubi-tuner checkout', { exact: true }),
-    ).toHaveValue(checkout);
-    await page.getByRole('button', { name: 'Run diagnostics' }).click();
-    await expect(page.getByText('Training entry points found.')).toBeVisible();
-    await expect(
-      page.getByText(
-        'Install PyTorch in the selected training environment; the GUI will not change it.',
-      ),
-    ).toBeVisible();
+      page.getByRole('button', { name: 'Install supported version' }),
+    ).toBeEnabled();
   } finally {
     await stop();
     await rm(root, {
@@ -279,6 +249,11 @@ test('an unconfigured app opens on Settings with a checklist of real progress', 
     await page.goto(`${url}/#/settings`);
 
     // Completed work from the backend ticks items, and only then can it be dismissed.
+    await page.route('**/api/checkout', (route) =>
+      route.fulfill({
+        json: { ready: true, operation: { state: 'idle', message: 'Fixture' } },
+      }),
+    );
     await page.route('**/api/settings', (route) =>
       route.fulfill({
         json: {
@@ -509,10 +484,10 @@ test('path fields warn before saving, browse local folders and show the full pat
 
     // File fields choose a file.
     await page
-      .getByRole('button', { name: 'Browse for Training Python executable' })
+      .getByRole('button', { name: 'Browse for Wan low-noise DiT' })
       .click();
     const files = page.getByRole('dialog', {
-      name: 'Choose Training Python executable',
+      name: 'Choose Wan low-noise DiT',
     });
     await files.getByRole('button', { name: 'Cancel' }).click();
     await expect(files).toHaveCount(0);

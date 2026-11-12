@@ -1,6 +1,6 @@
 # Musubi GUI
 
-A local Windows LoRA training application for an **existing musubi-tuner installation**.
+A local Windows LoRA training application with a **project-managed musubi-tuner checkout**.
 It supports Wan 2.2 A14B T2V and MiniMax H3 T2VA on the [target hardware](#target-hardware).
 React/TypeScript provides the interface; FastAPI serves the local API and a durable worker
 manages preparation and training.
@@ -22,12 +22,33 @@ From a clean checkout, run this command in PowerShell, or double-click `run.bat`
 It installs only the application's locked dependencies into `.venv` and `node_modules`,
 builds the UI, starts the backend on **127.0.0.1:8765** and opens the browser.
 Use `.\launch.cmd --port 8766 --no-browser` for a second local instance. Stop with Ctrl+C.
-Registry access is required on first launch. No model download or training upgrade occurs.
+Registry access is required on first launch. Musubi setup is a separate action in Settings; model weights are never downloaded by setup.
 The Wan reference can use the separately qualified [offline conversion](docs/reference/wan-conversion.md)
 of existing scaled-FP8 files; originals remain untouched and lost precision is not recovered.
 
-In Settings, select the existing checkout and its Python executable, dedicated output/cache
-roots, and model roots. Component paths must remain within those model roots; symlinks and
+In Settings, click **Install supported version**. The app clones the official repository into
+`musubi-tuner/` inside this project, checks out the revision supported by this GUI, and uses
+`uv` to create its separate Python 3.12 `.venv`, install the qualified CUDA 13.0
+PyTorch 2.13.0 / torchvision 0.28.0 pair, and install the editable upstream package and its
+development group (including TensorBoard). This downloads training dependencies and CUDA 13.0
+PyTorch, so allow several GB of disk space and internet access to GitHub, PyPI and PyTorch.
+The GUI's `.venv` is separate. Installation paths are read only; external installations are
+no longer used. Existing version-1 settings remain readable: model, dataset, output and cache
+settings are retained, and old external installation folders are left untouched.
+
+**Update to supported version** installs the revision shipped with your current GUI, rather
+than upstream's newest commit. A GUI update can advance that supported revision. Finish or
+cancel queued and active Runs first; setup also reserves the GPU across app instances and
+blocks new preparation while it runs. Local source changes or an unexpected Git origin stop
+the update without overwriting files. The previous source revision is retained in Git at
+`refs/musubi-gui/previous`. Setup does not automatically roll back dependencies on failure:
+fix the reported cause and retry the same button. A failed dependency install is not shown
+as ready. Keep the backend running during setup; leaving the Settings page is fine. Setup
+status survives reloads and backend restarts, and interrupted setup can be retried once its
+processes have exited. The project-local setup record and sanitized failure log live under
+`.cache/musubi-setup/`. Run diagnostics again after setup.
+
+Choose dedicated output/cache roots and model roots. Component paths must remain within those model roots; symlinks and
 Windows junctions resolve before containment checks. Enter one model or dataset root per line;
 saving drops blank lines and surrounding spaces. Save, then Run diagnostics: it warns about each
 configured root that is not an existing folder, such as two paths joined on one line. The probe
@@ -40,7 +61,7 @@ Credentials are not a settings field. Use local filesystem paths, never credenti
 
 Run diagnostics keeps its latest result, with its time and the settings it checked, in a
 versioned `diagnostics.json` beside `settings.json`. The sidebar shows it as Ready, the number of warnings to
-check, Problems found or Not checked and links to the report, which stays until the next run and is marked out
+check, Problems found or Not checked and links to the report, which stays until the next diagnostics run or managed setup and is marked out
 of date once settings change. These checks do not establish model support.
 
 Path fields can be typed, pasted or filled with Browse, and warn before saving when a path
@@ -48,8 +69,9 @@ is missing, the wrong type or outside its root. Browse lists names only, through
 endpoint that never reads file contents. Saving and running enforce the same rules, including
 symlink and junction containment.
 
-Manual setup scenario: select a nonexistent checkout, save, and run diagnostics. Correct the
-reported checkout/Python paths, save, and rerun. Stop the backend, relaunch, and confirm that
+Manual setup scenario: install the supported version in Settings, configure storage and model
+paths, save, and run diagnostics. Click Update to supported version again to confirm setup
+is repeatable; expect the installed revision to match the supported revision. Stop the backend, relaunch, and confirm that
 the fields persist. Change a field without saving: diagnostics require a save and closing
 the tab prompts about unsaved edits. A failed save retains edits and reports the failure.
 
@@ -80,8 +102,9 @@ least 400 GB available disk.
 
 The interface takes interaction inspiration from [AI Toolkit](https://github.com/ostris/ai-toolkit):
 a persistent sidebar and grouped settings. No AI Toolkit source/assets are copied.
-[musubi-tuner](https://github.com/kohya-ss/musubi-tuner) owns all training; it remains a separate
-installation with its own licences. No upstream code or model weights are distributed here.
+[musubi-tuner](https://github.com/kohya-ss/musubi-tuner) owns all training; its checkout and training environment have their own licences and stay in the ignored
+`musubi-tuner/` folder. Upstream source is fetched during setup; it and model weights are not
+bundled in GUI releases.
 
 Model weights retain their model-card licences. In particular, consult the
 [MiniMax H3 Community License](https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE)

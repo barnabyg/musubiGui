@@ -1,10 +1,10 @@
 # GPU reference workflows
 
 These are CLI acceptance scenarios, separate from the GUI's job execution. They call the
-**existing** musubi-tuner installation and do not install, upgrade, patch, or copy its
-training code. Ordinary verification does not run a GPU.
+**managed** `musubi-tuner/` checkout and environment. These CLI commands do not update
+training code; install or update it through Settings first. Ordinary verification does not run a GPU.
 
-1. Run `launch.cmd`, save installation/model/output/cache paths in Settings, and run diagnostics.
+1. Run `launch.cmd`, install the supported version, save model/output/cache paths in Settings, and run diagnostics.
 2. Stop the GUI if desired. Its backend is not required by these commands.
 3. Run one scenario at a time from the repository root:
 
@@ -20,14 +20,14 @@ real-audio supervision in the latent-cache summary and decodable generated audio
 The synthetic fixture media/captions contain no downloaded/private media and measure
 execution rather than model quality.
 
-Prerequisites: the [target hardware](../../README.md#target-hardware), Git, the selected
-existing Python with the pinned upstream's dependencies, and the components listed in the
+Prerequisites: the [target hardware](../../README.md#target-hardware), Git, the managed
+Python environment with the supported upstream's dependencies, and the components listed in the
 family guides.
 Recipes pin upstream revision `f8a1b03794a49239a3539015075f5123d6c07d66`.
-The runner rejects other revisions; it never checks out or upgrades the selected install.
+The runner rejects other revisions. Settings updates the managed checkout to this pin.
 This pin is a tested integration candidate, not a promise of upstream release stability.
 
-Use `--settings C:\absolute\settings.json` for a separate saved setup, in the shape of
+Use `--settings C:\absolute\settings.json` for separate model and storage settings (checkout/Python fields are ignored), in the shape of
 [this example from the target PC](settings.example.json), `--plan-only` to
 validate and save commands without training, and `--stage-timeout 1800` to bound each stage.
 Plan-only output always leaves support unresolved. Missing prerequisites exit 2 and retain

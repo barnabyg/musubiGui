@@ -16,11 +16,12 @@ from starlette.responses import Response
 from musubi_gui.datasets_api import dataset_router
 from musubi_gui.diagnostics import diagnostics, latest_report, record_report
 from musubi_gui.jobs_api import jobs_router
+from musubi_gui.managed_checkout import ManagedCheckout, checkout_router
 from musubi_gui.outputs import output_router
 from musubi_gui.path_tools import paths_router
 from musubi_gui.runs import RunService
 from musubi_gui.runs_api import runs_router
-from musubi_gui.settings import Settings, load_settings, save_settings, state_root, validate_paths
+from musubi_gui.settings import Settings, managed_settings, save_settings, state_root, training_settings, validate_paths
 
 
 def create_app(
@@ -64,7 +65,7 @@ def create_app(
 
     def current() -> Settings:
         try:
-            return load_settings(root)
+            return training_settings(root, fixture_mode=fixture_mode)
         except (ValueError, OSError) as error:
             raise HTTPException(
                 409, "Cannot read saved settings. Preserve settings.json and repair it or restore a compatible version."
@@ -77,6 +78,8 @@ def create_app(
     @app.put("/api/settings")
     def put_settings(settings: Settings) -> Settings:
         current()  # Refuse to overwrite corrupt data or an unknown future format.
+        if not fixture_mode:
+            settings = managed_settings(settings)
         try:
             validate_paths(settings)
             save_settings(root, settings)
@@ -99,6 +102,26 @@ def create_app(
         return record_report(root, settings, diagnostics(settings))
 
     app.include_router(jobs_router(root, fixture_mode=fixture_mode))
+    if not fixture_mode:
+        app.include_router(checkout_router(ManagedCheckout(root, service.device)))
+    else:
+
+        @app.get("/api/checkout")
+        def fixture_checkout() -> dict[str, Any]:
+            settings = current()
+            return {
+                "checkout": settings.checkout,
+                "python": settings.python,
+                "supported_revision": "synthetic fixture",
+                "installed_revision": "synthetic fixture",
+                "ready": True,
+                "fixture": True,
+                "operation": {
+                    "state": "idle",
+                    "message": "Synthetic CPU fixture; setup is disabled and does not establish GPU support.",
+                },
+            }
+
     app.include_router(runs_router(service))
     app.include_router(output_router(service))
     app.include_router(dataset_router(root))
