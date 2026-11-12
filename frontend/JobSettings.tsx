@@ -1,5 +1,6 @@
 import type { RefObject } from 'react';
 import { JobDatasets } from './JobDatasets';
+import { JobDatasetResolutions } from './JobDatasetResolutions';
 import { componentLabels } from './labels';
 import type { JobFields } from './jobFields';
 import { fieldId } from './jobRules';
@@ -188,6 +189,8 @@ export function JobControls({
   busy,
   fields,
   config,
+  edit,
+  datasets,
   media,
   trainingOptions,
 }: {
@@ -195,6 +198,8 @@ export function JobControls({
   busy: boolean;
   fields: JobFields;
   config: SetConfig;
+  edit: (next: Job) => void;
+  datasets: DatasetOption[];
   media: JobMedia;
   trainingOptions: TrainingOptions;
 }) {
@@ -203,9 +208,24 @@ export function JobControls({
     <>
       <section className="panel" id="job-section-dataset" tabIndex={-1}>
         <h2>Dataset preparation</h2>
+        <h3>Default training resolution</h3>
+        <p className="hint">
+          Used by datasets without a custom resolution. Changing this default
+          leaves custom dataset resolutions unchanged. Set sample and preview
+          resolution in Samples.
+        </p>
         <div className="number-row">
-          {number('Width', 'width')}
-          {number('Height', 'height')}
+          {number('Default training width', 'width')}
+          {number('Default training height', 'height')}
+        </div>
+        <JobDatasetResolutions
+          job={job}
+          busy={busy}
+          fields={fields}
+          edit={edit}
+          datasets={datasets}
+        />
+        <div className="number-row">
           {!media.imageOnly &&
             number(
               'Frames',

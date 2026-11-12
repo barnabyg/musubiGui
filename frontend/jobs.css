@@ -217,9 +217,7 @@
   color: var(--color-text-label);
 }
 .job-dataset-resolution {
-  flex: 1 1 100%;
   min-width: 0;
-  order: 1;
 }
 .job-dataset-resolution .number-row {
   flex-wrap: wrap;

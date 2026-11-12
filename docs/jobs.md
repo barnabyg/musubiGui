@@ -195,11 +195,16 @@ because 200 images can otherwise swamp 10 clips without notice. This is only a w
 
 ### Per-dataset training resolution
 
-Expand **Training resolution** on a dataset row to choose one width and height for
-that dataset. Leave **Use job resolution** checked to inherit Dataset preparation's
-width and height. Wan dimensions must be at least 64 and multiples of 16; H3 uses
-multiples of 32. Bucketing remains a separate aspect-ratio choice. Sample and preview
-geometry always comes from the job settings, independently of training overrides.
+Open **Dataset preparation** from the section menu or choose **Set training
+resolutions in Dataset preparation** below the dataset list. **Default training
+resolution** sets the shared width and height. Below it, each dataset shows its
+**Effective training resolution**, marked **default** or **custom**. Leave **Use
+default training resolution** checked to follow the shared default; uncheck it to
+choose that dataset's width and height. Changing the default updates inherited
+sizes and leaves custom sizes unchanged. Wan dimensions must be at least 64 and
+multiples of 16; H3 uses multiples of 32. Bucketing remains a separate aspect-ratio
+choice. Set sample and preview resolution separately in **Samples**; dataset
+overrides never affect it.
 
 Review lists the effective size of every training section. Overrides reach the native
 dataset TOML, cache identity and latent disk estimates; changing one invalidates the
@@ -220,9 +225,13 @@ From `C:/docs/git/musubiGui` in PowerShell 7, run:
 .\acceptance.cmd --workspace ".cache/resolution-check-$([guid]::NewGuid().ToString('N'))"
 ```
 
-Open **WAN acceptance 1**, add **H3 acceptance** as its second dataset, and set the
-dataset training sizes to 320 × 256 and 256 × 320. Save and reload: both sizes should
-remain. Review should list both sizes and pass, while the sample remains 256 × 256.
+Open **WAN acceptance 1**, add **H3 acceptance** as its second dataset, then choose
+**Set training resolutions in Dataset preparation**. Change the default width to
+288: both datasets should show 288 × 256 marked **default**. Uncheck inheritance
+for each and set the dataset training sizes to 320 × 256 and 256 × 320. Save and
+reload: both sizes should remain, marked **custom**. Change the default: neither
+custom size should change. In **Samples**, set sample width and height to 256.
+Review should list both training sizes and pass, while the sample remains 256 × 256.
 Choose **Prepare run** and expect a prepared Run. Repeat with an invalid width of
 65: review should link to that dataset's width and block preparation. The default
 fixture uses CPU workers; it proves orchestration and persistence, not GPU capacity
@@ -567,7 +576,8 @@ its experimental warning described below.
 
 ### Sample resolution and duration
 
-In **Samples → Sample geometry**, choose width, height and duration in seconds.
+In **Samples → Sample and preview resolution & duration**, choose width, height
+and duration in seconds.
 Both periodic previews and final samples use these values. Training and dataset
 geometry stay unchanged. Width/height must be at least 64, in multiples of 16 for
 Wan or 32 for H3. Duration rounds to the nearest supported frame count: `4*n+1`
@@ -584,8 +594,8 @@ Wan also offers **Image sample (one frame)**, producing PNGs. H3 sampling stays
 video/audio even when its training dataset contains only images.
 
 Jobs and exports without sample overrides retain their previous behaviour:
-sample width, height and frames inherit the Job defaults. **Use training width**,
-**Use training height** and **Use training frame count** clear individual overrides.
+sample width, height and frames inherit the Job defaults. **Use default training width**,
+**Use default training height** and **Use training frame count** clear individual overrides.
 Versioned exports store explicit overrides as `config.sample_width`,
 `config.sample_height` and `config.sample_frames`; frame counts are authoritative,
 so saving/reopening does not accumulate duration rounding. Disk preflight uses

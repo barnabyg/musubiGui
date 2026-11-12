@@ -196,6 +196,8 @@ export function Jobs(props: JobsProps) {
               applyPreset={applyPreset}
             />
             <JobControls
+              edit={edit}
+              datasets={datasets}
               trainingOptions={trainingOptions}
               media={media}
               job={job}

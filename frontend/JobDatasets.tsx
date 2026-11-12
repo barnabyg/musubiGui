@@ -55,14 +55,6 @@ export function JobDatasets({
       ),
     });
   }
-  function setResolution(row: number, resolution: [number, number] | null) {
-    edit({
-      ...job,
-      datasets: job.datasets.map((entry, index) =>
-        index === row ? { ...entry, resolution } : entry,
-      ),
-    });
-  }
   return (
     <div className="job-datasets">
       <h3>Datasets</h3>
@@ -92,65 +84,6 @@ export function JobDatasets({
                   {problemText(key)}
                   {problemText(removeKey)}
                 </div>
-                {dataset && (
-                  <details className="job-dataset-resolution">
-                    <summary>Training resolution</summary>
-                    <label className="job-toggle">
-                      <input
-                        type="checkbox"
-                        disabled={busy}
-                        aria-label={`Use job resolution for ${name}`}
-                        checked={entry.resolution == null}
-                        onChange={(event) =>
-                          setResolution(
-                            row,
-                            event.target.checked
-                              ? null
-                              : [job.config.width, job.config.height],
-                          )
-                        }
-                      />
-                      Use job resolution ({job.config.width} ×{' '}
-                      {job.config.height})
-                    </label>
-                    {entry.resolution != null && (
-                      <div className="number-row">
-                        {(['width', 'height'] as const).map(
-                          (dimension, index) => {
-                            const resolutionKey = `resolution-${entry.dataset_id}-${dimension}`;
-                            return (
-                              <label className="field" key={dimension}>
-                                Training {dimension}
-                                <input
-                                  id={fieldId(resolutionKey)}
-                                  type="number"
-                                  step="1"
-                                  disabled={busy}
-                                  aria-label={`Training ${dimension} for ${name}`}
-                                  value={entry.resolution![index]}
-                                  {...problemProps(resolutionKey)}
-                                  onChange={(event) => {
-                                    const next: [number, number] = [
-                                      ...entry.resolution!,
-                                    ];
-                                    next[index] = Number(event.target.value);
-                                    setResolution(row, next);
-                                  }}
-                                />
-                                {problemText(resolutionKey)}
-                              </label>
-                            );
-                          },
-                        )}
-                      </div>
-                    )}
-                    <p className="hint">
-                      One training size for this dataset. Bucketing still
-                      controls aspect ratios; sample and preview sizes use the
-                      job settings.
-                    </p>
-                  </details>
-                )}
                 {dataset && (
                   <label className="job-dataset-repeats">
                     Repeats
@@ -186,6 +119,15 @@ export function JobDatasets({
         {job.config.repeats}. Each dataset trains as its own section, and images
         and videos stay separate.
       </p>
+      {job.datasets.length > 0 && (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => focusField('width')}
+        >
+          Set training resolutions in Dataset preparation
+        </button>
+      )}
       <div className="job-dataset-add">
         <label className="field">
           Add a dataset

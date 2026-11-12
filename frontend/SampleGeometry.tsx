@@ -38,10 +38,12 @@ export function SampleGeometry({
       : String(Number((frames / fps).toFixed(6)));
   return (
     <fieldset>
-      <legend>Sample geometry</legend>
+      <legend>Sample and preview resolution &amp; duration</legend>
       <p>
-        These settings apply to previews and the final sample. Training geometry
-        is unchanged. Unset overrides inherit the Job's training defaults.
+        Previews and the final sample share these settings. Set their resolution
+        here independently of dataset training resolutions. Dimensions left at
+        the default follow the default training resolution, never a dataset's
+        custom resolution.
       </p>
       {nativeWanPreview && (
         <p>
@@ -65,13 +67,18 @@ export function SampleGeometry({
                 {...fields.problemProps(key)}
                 onChange={(event) => config(key, Number(event.target.value))}
               />
+              <small>
+                {job.config[key] == null
+                  ? `Using default training ${dimension}`
+                  : `Custom sample and preview ${dimension}`}
+              </small>
               {fields.problemText(key)}
               <button
                 type="button"
                 disabled={busy || job.config[key] == null}
                 onClick={() => config(key, null)}
               >
-                Use training {dimension}
+                Use default training {dimension}
               </button>
             </div>
           );
@@ -139,7 +146,8 @@ export function SampleGeometry({
         Use training frame count
       </button>
       <p aria-live="polite">
-        Effective sample: {width} × {height} · {frames} frames ·{' '}
+        Effective sample and preview resolution: {width} × {height} · {frames}{' '}
+        frames ·{' '}
         {frames === 1
           ? 'image sample'
           : `${fps} fps · ${Number((frames / fps).toFixed(6))} seconds`}
