@@ -212,9 +212,10 @@ failures. Checkpoint/sample locations stay associated with the originating Run.
 
 The top of a Run shows its stages as Caching, Training, Sample and Done, each marked
 done, in progress, not started, failed or stopped. Below them, Training shows the latest
-step count, elapsed time, ETA and loss from upstream's progress bar. Nothing is estimated:
-a value upstream hasn't reported shows as unknown, and elapsed time falls back to the
-stage's own start and finish times. A restored segment counts its own steps, because
+step count, elapsed time, ETA and loss from upstream's progress bar. Unreported
+values show as unknown, and elapsed time falls back to the stage's own start and
+finish times. A separately labelled estimate extrapolates the observed speed to
+maximum steps as described above. A restored segment counts its own steps, because
 upstream resets the displayed counter. Stage logs are collapsed below that, and open by
 themselves when a Run has failed.
 
