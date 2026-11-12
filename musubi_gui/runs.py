@@ -26,7 +26,7 @@ from musubi_gui.processes import identity_status, observed_tree, process_identit
 from musubi_gui.recipe import Stage, reference_environment
 from musubi_gui.redaction import redact
 from musubi_gui.run_deletion import failure_message, folder_bytes, output_index_file, plan_deletion, remove_folder
-from musubi_gui.run_paths import job_folder
+from musubi_gui.run_paths import create_run_directory
 from musubi_gui.run_progress import estimated_remaining, parse_progress
 from musubi_gui.run_store import DeviceLease, RunStore, blocks_revision, preparation_transaction
 from musubi_gui.saved_state import discover_states
@@ -288,11 +288,8 @@ class RunService:
                 "Choose Check for leftover processes first if processes remain."
             )
         self._verify_inputs(previous)
-        directory = Path(previous["directory"]).parent / (
-            job_folder(previous["job"]["name"]) + "-retry-" + uuid.uuid4().hex
-        )
+        directory = create_run_directory(Path(previous["directory"]).parent, previous["job"]["name"], "retry")
         cache = Path(previous["cache"]).parent / ("retry-" + uuid.uuid4().hex)
-        directory.mkdir(parents=True)
         # An H3 Run has one metadata file per video section.
         metadata = sorted(file.name for file in Path(previous["directory"]).glob("dataset*.jsonl"))
         native_names = ["dataset.toml", *metadata, "samples.txt", "previews.json"]
@@ -549,10 +546,7 @@ class RunService:
                 },
             )
             return self.enqueue(record["id"])
-        directory = Path(original["directory"]).parent / (
-            job_folder(original["job"]["name"]) + "-restore-" + uuid.uuid4().hex
-        )
-        directory.mkdir()
+        directory = create_run_directory(Path(original["directory"]).parent, original["job"]["name"], "restore")
         record = copy.deepcopy(original)
         record.update(
             id=uuid.uuid4().hex,

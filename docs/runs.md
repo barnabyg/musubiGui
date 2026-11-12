@@ -10,6 +10,18 @@ or arrow keys to switch views. Switching views keeps the selected sample and its
 player mounted, so returning preserves playback. New previews do not replace a
 selected sample. LoRA downloads remain visible on both tabs.
 
+New output folders use the Job name and a UTC timestamp, for example
+`My-Job-2026-11-12_12-30-00Z`. Retries and restored segments include `retry` or
+`restore` before the timestamp. Same-name Runs created in the same second get
+numeric suffixes (`-2`, `-3`, …). Existing folders keep their paths; internal Run
+IDs and cache identities remain independent.
+
+To check folder naming, from the repository root run
+`.\acceptance.cmd --workspace ".cache/folder-check-$([guid]::NewGuid().ToString('N'))"`.
+Prepare a fixture Job and inspect the Output path on its Run. It should contain
+the Job name and timestamp, without a random suffix. The fixture needs no models
+or GPU; preparation creates synthetic training inputs.
+
 ## History refresh and network traffic
 
 Training progress includes **Estimated training remaining to max steps**. It
