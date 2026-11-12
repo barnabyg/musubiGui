@@ -12,6 +12,20 @@ selected sample. LoRA downloads remain visible on both tabs.
 
 ## History refresh and network traffic
 
+Training progress includes **Estimated training remaining to max steps**. It
+extrapolates the trainer's observed step speed over all remaining steps, including
+later alternating Wan phases and the requested steps of a restored segment.
+It stays unknown until timing is available. This is a training estimate, not a
+finish-time promise: future model loading, previews and final sampling are excluded,
+and expert speeds may differ. The trainer's own Training ETA or Phase ETA remains
+visible separately. The logs API adds nullable `estimated_remaining_seconds`.
+
+Manual check from the repository root: run `.\launch.cmd`, start a prepared Job
+with several training steps and confirm the estimate appears once step timing is
+reported. For alternating Wan, confirm it covers the total remaining steps while
+Phase ETA covers only the current phase. Requires installed training dependencies,
+models and a dataset; the CPU fixture has no timing and should show unknown.
+
 History, queue updates and completion notifications share lightweight Run summaries.
 The selected Run's frozen inputs are loaded separately, again only when its recorded
 details change or after an action. Action responses select the Run; a fresh detail

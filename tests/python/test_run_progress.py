@@ -1,9 +1,10 @@
 from pathlib import Path
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from musubi_gui.run_progress import parse_progress
+from musubi_gui.run_progress import estimated_remaining, parse_progress
 from musubi_gui.runs import ExecutionPlan, RunService
 from musubi_gui.runs_api import runs_router
 from musubi_gui.settings import Settings
@@ -99,3 +100,35 @@ def test_paired_progress_keeps_reported_eta_with_phase_scope(tmp_path: Path) -> 
     assert progress["step"] == 6
     assert progress["eta"] == "00:20"
     assert progress["eta_scope"] == "phase"
+    assert progress["estimated_remaining_seconds"] == 20
+
+
+@pytest.mark.parametrize(
+    ("step", "total", "phase_step", "phase_total", "elapsed", "eta", "expected"),
+    [
+        (2, 10, 2, 10, "00:20", "01:20", 80),
+        (6, 20, 2, 4, "00:20", "00:20", 140),
+        (4, 12, 4, 4, "00:40", "00:00", 80),
+        (2, 10, 2, 10, "1:00:00", None, 14400),
+        (0, 10, 0, 10, "00:00", None, None),
+        (2, 10, 2, 10, None, None, None),
+        (2, 10, 2, 10, "00:00", "00:00", None),
+        (10, 10, 10, 10, None, None, 0),
+    ],
+)
+def test_estimated_remaining_extrapolates_observed_phase_speed(
+    step: int, total: int, phase_step: int, phase_total: int, elapsed: str | None, eta: str | None, expected: int | None
+) -> None:
+    assert (
+        estimated_remaining(
+            {
+                "step": step,
+                "total": total,
+                "phase_step": phase_step,
+                "phase_total": phase_total,
+                "elapsed": elapsed,
+                "eta": eta,
+            }
+        )
+        == expected
+    )

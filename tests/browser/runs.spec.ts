@@ -253,8 +253,11 @@ test('live progress steps through stages, reports steps and loss, and shows a fa
     const progress = page.getByLabel('Training progress');
     await expect(progress).toContainText(/Step [1-5]\/6/);
     await expect(progress).toContainText('Loss 0.0');
-    // The fixture reports no ETA, and an unreported value is not estimated.
+    // The fixture reports no timing, so both reported and estimated ETA stay unknown.
     await expect(progress).toContainText('ETA unknown');
+    await expect(progress).toContainText(
+      'Estimated training remaining to max steps: unknown',
+    );
     await expect(page.getByLabel('Training steps')).toHaveAttribute('max', '6');
     await expect(page.getByLabel('Run logs')).toBeHidden();
 
@@ -262,6 +265,9 @@ test('live progress steps through stages, reports steps and loss, and shows a fa
     await expect(step(1)).toHaveClass('completed');
     await expect(step(2)).toHaveClass('completed');
     await expect(progress).toContainText('Step 6/6');
+    await expect(progress).toContainText(
+      'Estimated training remaining to max steps: 0h 0m 0s',
+    );
 
     // A failed stage is obvious without opening the log, which then opens by itself.
     await writeFile(path.join(app.fixture, 'checkout', 'fail-train'), '');

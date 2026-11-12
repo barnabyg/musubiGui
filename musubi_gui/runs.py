@@ -27,7 +27,7 @@ from musubi_gui.recipe import Stage, reference_environment
 from musubi_gui.redaction import redact
 from musubi_gui.run_deletion import failure_message, folder_bytes, output_index_file, plan_deletion, remove_folder
 from musubi_gui.run_paths import job_folder
-from musubi_gui.run_progress import parse_progress
+from musubi_gui.run_progress import estimated_remaining, parse_progress
 from musubi_gui.run_store import DeviceLease, RunStore, blocks_revision, preparation_transaction
 from musubi_gui.saved_state import discover_states
 from musubi_gui.settings import Settings, atomic_json, load_settings, managed_settings
@@ -257,6 +257,8 @@ class RunService:
                 expert_steps=expert_steps(absolute, phase["interval"]),
                 eta_scope="phase",
             )
+        if progress:
+            progress["estimated_remaining_seconds"] = estimated_remaining(progress)
         return progress
 
     def close(self) -> None:

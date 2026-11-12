@@ -70,6 +70,7 @@ type Progress = {
   elapsed: string | null;
   eta: string | null;
   eta_scope?: 'phase';
+  estimated_remaining_seconds?: number | null;
   loss: string | null;
   expert?: string;
   phase_step?: number;
@@ -202,6 +203,16 @@ function TrainingProgress({
         {progress.eta_scope === 'phase' ? 'Phase ETA' : 'Training ETA'}{' '}
         {progress.eta ?? 'unknown'} · Loss {progress.loss ?? 'unknown'}
       </p>
+      <p>
+        Estimated training remaining to max steps:{' '}
+        {progress.estimated_remaining_seconds == null
+          ? 'unknown'
+          : `${Math.floor(progress.estimated_remaining_seconds / 3600)}h ${Math.floor((progress.estimated_remaining_seconds % 3600) / 60)}m ${progress.estimated_remaining_seconds % 60}s`}
+      </p>
+      <small>
+        Assumes the current observed step speed for all remaining steps.
+        Excludes future model loading, previews and final sampling.
+      </small>
     </div>
   );
 }
