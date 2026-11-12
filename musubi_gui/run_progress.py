@@ -1,5 +1,6 @@
 """Training progress as upstream reports it; anything it did not report stays unknown."""
 
+import math
 import re
 from typing import Any
 
@@ -8,6 +9,27 @@ from typing import Any
 STEP = re.compile(r"(?:^|[\r\n])steps:[^\r\n]*?(\d+)/(\d+)([^\r\n]*)")
 TIMES = re.compile(r"\[([\d:]+)<([\d:]+)")
 LOSS = re.compile(r"\b(?:avr_)?loss=([-+\d.eE]+)")
+
+
+def estimated_remaining(progress: dict[str, Any]) -> int | None:
+    """Extrapolate the trainer's observed speed across remaining segment steps."""
+    remaining = int(progress["total"]) - int(progress["step"])
+    if remaining == 0:
+        return 0
+    step = int(progress.get("phase_step", progress["step"]))
+    total = int(progress.get("phase_total", progress["total"]))
+    if step <= 0:
+        return None
+    for field, divisor in [("eta", total - step), ("elapsed", step)]:
+        value = progress.get(field)
+        if value is None or divisor <= 0:
+            continue
+        seconds = 0
+        for part in value.split(":"):
+            seconds = seconds * 60 + int(part)
+        if seconds > 0:
+            return math.ceil(seconds / divisor * remaining)
+    return None
 
 
 def parse_progress(text: str) -> dict[str, Any] | None:

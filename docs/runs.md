@@ -10,7 +10,33 @@ or arrow keys to switch views. Switching views keeps the selected sample and its
 player mounted, so returning preserves playback. New previews do not replace a
 selected sample. LoRA downloads remain visible on both tabs.
 
+New output folders use the Job name and a UTC timestamp, for example
+`My-Job-2026-11-12_12-30-00Z`. Retries and restored segments include `retry` or
+`restore` before the timestamp. Same-name Runs created in the same second get
+numeric suffixes (`-2`, `-3`, …). Existing folders keep their paths; internal Run
+IDs and cache identities remain independent.
+
+To check folder naming, from the repository root run
+`.\acceptance.cmd --workspace ".cache/folder-check-$([guid]::NewGuid().ToString('N'))"`.
+Prepare a fixture Job and inspect the Output path on its Run. It should contain
+the Job name and timestamp, without a random suffix. The fixture needs no models
+or GPU; preparation creates synthetic training inputs.
+
 ## History refresh and network traffic
+
+Training progress includes **Estimated training remaining to max steps**. It
+extrapolates the trainer's observed step speed over all remaining steps, including
+later alternating Wan phases and the requested steps of a restored segment.
+It stays unknown until timing is available. This is a training estimate, not a
+finish-time promise: future model loading, previews and final sampling are excluded,
+and expert speeds may differ. The trainer's own Training ETA or Phase ETA remains
+visible separately. The logs API adds nullable `estimated_remaining_seconds`.
+
+Manual check from the repository root: run `.\launch.cmd`, start a prepared Job
+with several training steps and confirm the estimate appears once step timing is
+reported. For alternating Wan, confirm it covers the total remaining steps while
+Phase ETA covers only the current phase. Requires installed training dependencies,
+models and a dataset; the CPU fixture has no timing and should show unknown.
 
 History, queue updates and completion notifications share lightweight Run summaries.
 The selected Run's frozen inputs are loaded separately, again only when its recorded
@@ -111,11 +137,11 @@ new Run of the same revision.
 
 ## Immutable inputs
 
-New Run/output folders use the frozen Job name plus a unique suffix under the
+New Run/output folders use the frozen Job name plus a UTC timestamp under the
 configured output root's `runs` folder. Names replace Windows-invalid characters
 and whitespace with hyphens, protect reserved names and limit the readable part
 to 60 characters. Repeated Runs and same-name Jobs never share a folder. Review
-shows `{unique}` until preparation allocates the suffix; Run details show the
+shows `{timestamp}` until preparation allocates the folder; Run details show the
 actual output path. Retries and restored segments also keep the frozen name.
 Renaming a Job never moves older Runs, and existing folder layouts stay readable.
 
@@ -186,9 +212,10 @@ failures. Checkpoint/sample locations stay associated with the originating Run.
 
 The top of a Run shows its stages as Caching, Training, Sample and Done, each marked
 done, in progress, not started, failed or stopped. Below them, Training shows the latest
-step count, elapsed time, ETA and loss from upstream's progress bar. Nothing is estimated:
-a value upstream hasn't reported shows as unknown, and elapsed time falls back to the
-stage's own start and finish times. A restored segment counts its own steps, because
+step count, elapsed time, ETA and loss from upstream's progress bar. Unreported
+values show as unknown, and elapsed time falls back to the stage's own start and
+finish times. A separately labelled estimate extrapolates the observed speed to
+maximum steps as described above. A restored segment counts its own steps, because
 upstream resets the displayed counter. Stage logs are collapsed below that, and open by
 themselves when a Run has failed.
 
@@ -284,6 +311,38 @@ becomes stopped and its active stage shows stopped. A descendant still alive aft
 that grace period makes the Run orphaned instead.
 
 ## Saved state
+
+**Resume training from saved state** is near the top of Run Overview. It also
+works after restarting the application: open the stopped or interrupted Run,
+choose **Inspect saved states**, enter **Additional segment steps**, then choose
+**Restore as new segment** for a valid state and confirm. This immediately queues
+training for those additional steps. The original Run stays in history.
+
+Enable **Save optimizer/training state** in the Job before starting training and
+set **Save every N steps** to a suitable checkpoint interval. Work since the last
+saved state must run again. Without a valid saved state, optimizer restoration
+is unavailable; prepare a new Run. The panel explains when state saving was
+disabled or inspection finds no saved states.
+
+Manual check from the repository root:
+
+```powershell
+$resumeWorkspace = ".cache/resume-check-$([guid]::NewGuid().ToString('N'))"
+.\acceptance.cmd --workspace $resumeWorkspace
+```
+
+This isolated CPU fixture needs no models or GPU. In a fixture Job set 50 steps,
+save every step and enable Save optimizer/training state. Prepare and start,
+wait for an interval state in the outputs, then request graceful stop. Close and
+relaunch the saved workspace with the command below, open the stopped Run and
+restore a valid state with one additional step. Expect a separate completed Run
+linked to the original, which remains Stopped. This checks orchestration, not GPU
+training quality or seamless data-position continuation.
+
+```powershell
+$env:MUSUBI_GUI_STATE = (Get-Content "$resumeWorkspace/acceptance.json" -Raw | ConvertFrom-Json).state
+try { .\launch.cmd --acceptance-fixture --port 8767 } finally { Remove-Item Env:MUSUBI_GUI_STATE }
+```
 
 Enable saved optimizer state in the Job before training. After completion or a
 fully observed stop, Inspect saved states checks model/optimizer/scheduler/RNG

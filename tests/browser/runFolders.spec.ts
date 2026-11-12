@@ -21,7 +21,7 @@ test('Run and output folders keep readable frozen Job names without collisions',
         .click();
       const review = page.getByLabel('Configuration review');
       await review.getByText('Advanced', { exact: true }).click();
-      await expect(review).toContainText('Summer---test-{unique}');
+      await expect(review).toContainText('Summer---test-{timestamp}');
       await page
         .getByRole('button', { name: 'Prepare run', exact: true })
         .click();
@@ -32,7 +32,7 @@ test('Run and output folders keep readable frozen Job names without collisions',
         (item) => item.job.id === job.id,
       )!;
       expect(path.basename(record.directory)).toMatch(
-        /^Summer---test-[a-f0-9]{32}$/,
+        /^Summer---test-\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}Z(?:-\d+)?$/,
       );
       records.push(record);
     }

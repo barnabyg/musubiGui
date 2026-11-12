@@ -1177,7 +1177,7 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
             job, has_videos=not effective_items or any(item["kind"] == "video" for item in effective_items)
         )
     )
-    output = Path(settings.output_root) / "runs" / f"{job_folder(job.name)}-{{unique}}"
+    output = Path(settings.output_root) / "runs" / f"{job_folder(job.name)}-{{timestamp}}"
     cache = Path(settings.cache_root) / "jobs" / job.id
     snapshot = output
     _add_duplicate_warnings(datasets, effective_items, warnings)
