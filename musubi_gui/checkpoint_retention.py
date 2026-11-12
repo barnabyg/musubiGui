@@ -190,7 +190,8 @@ def apply_retention(
     quarantine = root / ".retention"
     if quarantine.is_symlink() or quarantine.is_junction():
         raise ValueError("Checkpoint retention refuses linked quarantine storage.")
-    quarantine.mkdir(exist_ok=True)
+    # Retention also runs before the trainer has created its first checkpoint folder.
+    quarantine.mkdir(parents=True, exist_ok=True)
     for name in list(journal["pending"]):
         if not isinstance(name, str) or Path(name).name != name or name.startswith("."):
             raise ValueError("Invalid retention journal path; nothing outside checkpoints may be removed.")
