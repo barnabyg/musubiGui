@@ -137,11 +137,11 @@ new Run of the same revision.
 
 ## Immutable inputs
 
-New Run/output folders use the frozen Job name plus a unique suffix under the
+New Run/output folders use the frozen Job name plus a UTC timestamp under the
 configured output root's `runs` folder. Names replace Windows-invalid characters
 and whitespace with hyphens, protect reserved names and limit the readable part
 to 60 characters. Repeated Runs and same-name Jobs never share a folder. Review
-shows `{unique}` until preparation allocates the suffix; Run details show the
+shows `{timestamp}` until preparation allocates the folder; Run details show the
 actual output path. Retries and restored segments also keep the frozen name.
 Renaming a Job never moves older Runs, and existing folder layouts stay readable.
 
