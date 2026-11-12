@@ -23,7 +23,7 @@ from musubi_gui.jobs import (
     export_draft,
     review_job,
 )
-from musubi_gui.settings import load_settings
+from musubi_gui.settings import training_settings
 from musubi_gui.training_options import optimizer_options
 
 
@@ -57,7 +57,7 @@ def jobs_router(root: Path, *, fixture_mode: bool = False) -> APIRouter:
 
     @router.get("/training-options")
     def get_training_options() -> dict[str, Any]:
-        return optimizer_options(load_settings(root), fixture_mode=fixture_mode)
+        return optimizer_options(training_settings(root, fixture_mode=fixture_mode), fixture_mode=fixture_mode)
 
     @router.get("")
     def get_jobs() -> list[Job]:
@@ -160,6 +160,8 @@ def jobs_router(root: Path, *, fixture_mode: bool = False) -> APIRouter:
     @router.post("/{job_id}/review")
     def review(job_id: str) -> dict[str, Any]:
         with job_errors():
-            return review_job(root, store.get(job_id), load_settings(root), fixture_mode=fixture_mode)
+            return review_job(
+                root, store.get(job_id), training_settings(root, fixture_mode=fixture_mode), fixture_mode=fixture_mode
+            )
 
     return router

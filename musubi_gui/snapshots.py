@@ -15,7 +15,7 @@ from musubi_gui.diagnostics import training_environment, upstream_revision
 from musubi_gui.jobs import Job, JobStore, build_stages, effective_settings, load_job, review_job
 from musubi_gui.run_paths import job_folder
 from musubi_gui.safetensors_file import safetensors_header
-from musubi_gui.settings import Settings, atomic_json, load_settings, within_root
+from musubi_gui.settings import Settings, atomic_json, training_settings, within_root
 from musubi_gui.training_sections import dataset_toml, layout_identity, plan_sections, section_folders
 from musubi_gui.video_sampling import WAN_FPS, source_rates
 
@@ -190,7 +190,7 @@ def identify_snapshot(
         )
     if JobStore(root).is_archived(job_id):
         raise ValueError("This job is archived. Restore it from Jobs before preparing a new Run.")
-    settings = effective_settings(job, load_settings(root))
+    settings = effective_settings(job, training_settings(root, fixture_mode=fixture_mode))
     review = review_job(root, job, settings, fixture_mode=fixture_mode)
     if not review["valid"]:
         raise ValueError("Preparation blocked: " + " ".join(review["errors"]))

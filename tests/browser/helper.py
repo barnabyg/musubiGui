@@ -5,15 +5,35 @@ import json
 import sys
 from fractions import Fraction
 from pathlib import Path
+from unittest.mock import patch
 
 import psutil
 import uvicorn
 
 from musubi_gui.acceptance import synthetic_video
 from musubi_gui.app import create_app
+from musubi_gui.managed_checkout import ManagedCheckout
 from musubi_gui.run_store import DeviceLease
 
 OTHER_INSTANCE_RUN = "other-work"
+
+
+def serve_setup(args: argparse.Namespace) -> None:
+    """Real managed checkout API against a synthetic local Git remote, without GPU downloads."""
+    import musubi_gui.managed_checkout as managed
+
+    managed.REMOTE = str(args.remote)
+    managed.UPSTREAM = args.revision
+    original = ManagedCheckout.command
+
+    def command(self: ManagedCheckout, command: list[str], *, cwd: Path | None = None, timeout: int = 900) -> str:
+        if command[1] == "pip":
+            return ""  # Synthetic source and real isolated Python, without GPU dependency downloads.
+        return original(self, command, cwd=cwd, timeout=timeout)
+
+    with patch.object(ManagedCheckout, "command", command):
+        app = create_app(device_path=args.device)
+        uvicorn.run(app, host="127.0.0.1", port=args.port, access_log=False)
 
 
 def serve(args: argparse.Namespace) -> None:
@@ -55,6 +75,13 @@ def video(args: argparse.Namespace) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(required=True)
+
+    command = commands.add_parser("serve-setup")
+    command.add_argument("--remote", type=Path, required=True)
+    command.add_argument("--revision", required=True)
+    command.add_argument("--device", type=Path, required=True)
+    command.add_argument("--port", type=int, required=True)
+    command.set_defaults(run=serve_setup)
 
     command = commands.add_parser("serve")
     command.add_argument("--identity", type=Path, required=True)

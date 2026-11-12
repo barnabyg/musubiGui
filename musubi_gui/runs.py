@@ -10,6 +10,7 @@ import subprocess  # nosec B404
 import threading
 import time
 import uuid
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -19,6 +20,7 @@ import psutil
 
 from musubi_gui.checkpoint_dedup import remove_final_duplicates
 from musubi_gui.checkpoint_retention import Save, apply_retention, retained_states, retention_candidates
+from musubi_gui.managed_checkout import checkout_gate
 from musubi_gui.media_probe import inspect as inspect_media
 from musubi_gui.processes import identity_status, observed_tree, process_identity, terminate_owned
 from musubi_gui.recipe import Stage, reference_environment
@@ -28,7 +30,7 @@ from musubi_gui.run_paths import job_folder
 from musubi_gui.run_progress import parse_progress
 from musubi_gui.run_store import DeviceLease, RunStore, blocks_revision, preparation_transaction
 from musubi_gui.saved_state import discover_states
-from musubi_gui.settings import Settings, atomic_json, load_settings
+from musubi_gui.settings import Settings, atomic_json, load_settings, managed_settings
 from musubi_gui.snapshots import (
     digest_file,
     identify_snapshot,
@@ -119,7 +121,7 @@ class RunService:
         return self.store.get(run_id)
 
     def prepare(self, job_id: str, *, start: bool = False, reviewed_revision: int | None = None) -> dict[str, Any]:
-        with preparation_transaction(self.root):
+        with nullcontext() if self.fixture_mode else checkout_gate(), preparation_transaction(self.root):
             inputs = identify_snapshot(
                 self.root, job_id, fixture_mode=self.fixture_mode, reviewed_revision=reviewed_revision
             )
@@ -153,6 +155,19 @@ class RunService:
     def reorder(self, run_ids: builtins.list[str]) -> None:
         self.store.reorder(run_ids)
 
+    def _verify_inputs(self, run: dict[str, Any]) -> None:
+        # API snapshots carry checkout provenance. Trusted CPU execution adapters may omit it.
+        settings = Settings.model_validate(run["settings"])
+        if (
+            not self.fixture_mode
+            and run.get("provenance", {}).get("checkout")
+            and settings != managed_settings(settings)
+        ):
+            raise ValueError(
+                "This Run uses an external training installation. Prepare a new Run with the managed checkout."
+            )
+        verify_inputs(run)
+
     def _request_training(self, run_id: str, *, allow_wait: bool) -> dict[str, Any]:
         run = self.get(run_id)
         if run["status"] in {"pending_training", "training", "generating", "completed"}:
@@ -162,7 +177,7 @@ class RunService:
         owner = self.device.owner()
         if owner and owner["run_id"] != run_id and not allow_wait:
             raise ValueError("The GPU is owned by another operation. Wait for it to finish.")
-        verify_inputs(run)
+        self._verify_inputs(run)
         if not any(stage["name"] == "train" for stage in run["stages"]):
             raise ValueError("This run has no supported training stage.")
 
@@ -270,7 +285,7 @@ class RunService:
                 "Only failed, cancelled or interrupted Runs without recorded processes can be retried. "
                 "Choose Check for leftover processes first if processes remain."
             )
-        verify_inputs(previous)
+        self._verify_inputs(previous)
         directory = Path(previous["directory"]).parent / (
             job_folder(previous["job"]["name"]) + "-retry-" + uuid.uuid4().hex
         )
@@ -295,7 +310,7 @@ class RunService:
                 target = directory / name
                 target.write_text(text, encoding="utf-8")
                 input_files[str(target)] = digest_file(target)
-        verify_inputs(previous)
+        self._verify_inputs(previous)
         stages = []
         for stage in previous["stages"]:
             args = [
@@ -511,7 +526,7 @@ class RunService:
         if not 1 <= additional_steps <= 1_000_000:
             raise ValueError("Choose between 1 and 1000000 additional training steps.")
         original = self.get(run_id)
-        verify_inputs(original)
+        self._verify_inputs(original)
         state = next((state for state in self.saved_states(run_id) if state["id"] == state_id), None)
         if not state or not state["valid"]:
             raise ValueError(
@@ -664,7 +679,7 @@ class RunService:
             self.device.release(run_id)
             return
         try:
-            verify_inputs(run)
+            self._verify_inputs(run)
             if run.get("state_source"):
                 for name, expected in run["state_source"]["files"].items():
                     if digest_file(Path(run["state_source"]["path"]) / name) != expected:
@@ -672,7 +687,7 @@ class RunService:
             for index, stage in enumerate(run["stages"]):
                 if stage["name"] not in ({"latent_cache", "text_cache"} if preparing else {"train", "generate"}):
                     continue
-                verify_inputs(run)
+                self._verify_inputs(run)
                 fresh_run = self.get(run_id)
                 if fresh_run.get("stop_requested"):
                     self.store.update(

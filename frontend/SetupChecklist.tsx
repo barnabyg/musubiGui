@@ -76,7 +76,7 @@ export function SetupChecklist({
   }
   const items = [
     {
-      label: 'Connect your musubi-tuner installation',
+      label: 'Install the supported Musubi version',
       done: connected,
       note: undefined,
       href: '#/settings',

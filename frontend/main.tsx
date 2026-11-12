@@ -32,6 +32,7 @@ import {
 } from './route';
 import { useRunSignals } from './runSignals';
 import { SetupChecklist } from './SetupChecklist';
+import { ManagedCheckout } from './ManagedCheckout';
 import { StatusBadge, type Tone } from './StatusBadge';
 
 type Settings = {
@@ -127,6 +128,8 @@ function App() {
   const [status, setStatus] = useState('Loading settings…');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [setupRunning, setSetupRunning] = useState(false);
+  const [checkoutReady, setCheckoutReady] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [report, setReport] = useState<Report | null>(null);
   const [initialRoute] = useState(() => parseRoute(window.location.hash));
@@ -247,10 +250,12 @@ function App() {
     void Promise.all([
       api<Settings>('/api/settings'),
       api<Report | null>('/api/diagnostics'),
+      api<{ ready: boolean }>('/api/checkout'),
     ])
-      .then(async ([value, latest]) => {
+      .then(async ([value, latest, checkout]) => {
         load(value);
         setReport(latest);
+        setCheckoutReady(checkout.ready);
         setStatus('Settings loaded');
         if (!landingPending.current) return;
         const runs = await api<{ id: string; status: string; order: number }[]>(
@@ -262,7 +267,8 @@ function App() {
           runs
             .filter((run) => waitingStatuses.includes(run.status))
             .sort((a, b) => a.order - b.order)[0];
-        if (!setupComplete(value)) go('Settings', undefined, true);
+        if (!checkout.ready || !setupComplete(value))
+          go('Settings', undefined, true);
         else if (active) go('Runs', active.id, true);
         else go('Datasets', undefined, true);
       })
@@ -437,8 +443,8 @@ function App() {
             <section className="title">
               <h1>Settings</h1>
               <p>
-                Connect an existing musubi-tuner installation and check that it
-                is ready.
+                Install the supported Musubi Tuner version and check that it is
+                ready.
               </p>
             </section>
             {error && (
@@ -449,33 +455,19 @@ function App() {
             {settings && (
               <>
                 <SetupChecklist
-                  configured={setupComplete(settings)}
-                  connected={!dirty && setupComplete(settings)}
+                  configured={checkoutReady && setupComplete(settings)}
+                  connected={checkoutReady && !dirty && setupComplete(settings)}
                   diagnosed={!!report && report.current && !dirty}
                   problemsFound={
                     !!report?.checks.some((check) => check.status === 'error')
                   }
                 />
-                <section className="panel" id="settings-environment">
-                  <div className="section-heading">
-                    <h2>Training environment</h2>
-                    <p>
-                      The selected environment runs training. Setup never
-                      installs or upgrades it.
-                    </p>
-                  </div>
-                  {field(
-                    'musubi-tuner checkout',
-                    'checkout',
-                    'Existing repository containing the Wan and MiniMax H3 entry points.',
-                  )}
-                  {field(
-                    'Training Python executable',
-                    'python',
-                    'Select the python.exe inside your existing training environment.',
-                    'file',
-                  )}
-                </section>
+                <ManagedCheckout
+                  disabled={busy || dirty}
+                  onRunning={setSetupRunning}
+                  onReady={setCheckoutReady}
+                  onChange={() => setReport(null)}
+                />
                 <section className="panel">
                   <div className="section-heading">
                     <h2>Storage & model components</h2>
@@ -537,7 +529,7 @@ function App() {
                 <div className="actions" id="settings-actions">
                   <span role="status">{status}</span>
                   <button
-                    disabled={busy || dirty}
+                    disabled={busy || dirty || setupRunning}
                     onClick={() => void diagnose()}
                   >
                     {busy ? 'Working…' : 'Run diagnostics'}

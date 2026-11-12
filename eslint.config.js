@@ -5,6 +5,7 @@ export default ts.config(
   {
     ignores: [
       'node_modules/**',
+      'musubi-tuner/**',
       'dist/**',
       '.cache/**',
       'musubi_gui/web/**',

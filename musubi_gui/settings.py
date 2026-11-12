@@ -40,6 +40,18 @@ def load_settings(root: Path) -> Settings:
     return Settings.model_validate(data)
 
 
+def managed_settings(settings: Settings) -> Settings:
+    """Read old settings without reusing or modifying their external training installation."""
+    checkout = Path.cwd() / "musubi-tuner"
+    python = checkout / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+    return settings.model_copy(update={"checkout": str(checkout.absolute()), "python": str(python.absolute())})
+
+
+def training_settings(root: Path, *, fixture_mode: bool = False) -> Settings:
+    settings = load_settings(root)
+    return settings if fixture_mode else managed_settings(settings)
+
+
 def save_settings(root: Path, settings: Settings) -> None:
     if settings.version != 1:
         raise ValueError("Settings version must be 1.")

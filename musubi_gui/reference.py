@@ -20,7 +20,7 @@ from musubi_gui.h3 import h3_stages, validate_h3
 from musubi_gui.recipe import UPSTREAM, Stage, python_args, reference_environment
 from musubi_gui.redaction import redact
 from musubi_gui.safetensors_file import safetensors_header
-from musubi_gui.settings import Settings, atomic_json, validate_paths, within_root
+from musubi_gui.settings import Settings, atomic_json, managed_settings, validate_paths, within_root
 from musubi_gui.wan import validate_wan, wan_stages
 
 
@@ -134,6 +134,7 @@ def dataset_config(run: Path, cache: Path, family: str) -> None:
 
 
 def execute(family: str, settings: Settings, plan_only: bool, timeout: int) -> tuple[int, Path]:
+    settings = managed_settings(settings)
     validate_paths(settings)
     if not settings.output_root or not settings.cache_root:
         raise ValueError("Save dedicated output and cache roots before running a reference.")

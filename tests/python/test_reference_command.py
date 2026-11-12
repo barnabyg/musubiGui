@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -42,6 +43,13 @@ def test_reference_failure_writes_unproven_evidence_without_touching_installatio
 
 
 def test_reference_child_overrides_inherited_hugging_face_cache_locations(tmp_path: Path) -> None:
+    # The CLI uses only its project-owned Python, even when an old settings file names another one.
+    subprocess.run(
+        [shutil.which("uv") or "uv", "venv", "--python", sys.executable, str(tmp_path / "musubi-tuner/.venv")],
+        check=True,
+        capture_output=True,
+        timeout=300,
+    )
     state = tmp_path / "settings.json"
     output = tmp_path / "outputs"
     cache = tmp_path / "cache"
@@ -59,6 +67,7 @@ def test_reference_child_overrides_inherited_hugging_face_cache_locations(tmp_pa
     )
     env = {
         **os.environ,
+        "PYTHONPATH": str(Path.cwd()),
         "MUSUBI_REFERENCE_PROBE": "1",
         "HF_HOME": str(tmp_path / "private-home"),
         "HF_HUB_CACHE": str(tmp_path / "private-hub"),
@@ -68,6 +77,7 @@ def test_reference_child_overrides_inherited_hugging_face_cache_locations(tmp_pa
     result = subprocess.run(
         [sys.executable, "-m", "musubi_gui.reference", "wan", "--settings", str(state)],
         env=env,
+        cwd=tmp_path,
         capture_output=True,
         text=True,
         timeout=300,

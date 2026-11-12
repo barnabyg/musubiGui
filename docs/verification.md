@@ -2,7 +2,7 @@
 
 Prerequisites: native Windows 11, Python 3.12, uv, Node.js 24 LTS and Microsoft Edge.
 Run `uv sync --locked` and `npm.cmd ci` to prepare the isolated app environment.
-The training environment is independent and is never installed or upgraded by these commands.
+The managed training environment is independent and is never installed or upgraded by these verification commands. Settings installs/updates it explicitly.
 
 The canonical command is `npm.cmd run verify`. It checks Python/TypeScript formatting,
 lint, strict types, Bandit static security analysis, pytest and real Edge browser tests,
@@ -64,7 +64,7 @@ Exceptions: subprocess calls have narrow Bandit `B603` annotations beside their 
 argument arrays or explicitly selected training executable. They never use a shell.
 The `B404` import exception permits those same controlled subprocess operations.
 Revisit these if command sources change. Missing Torch in the application environment is expected;
-the probe imports Torch only through the selected existing training Python.
+the probe imports Torch only through the managed training Python.
 
 The detect-secrets allowlist marks the public upstream Git revision in `recipe.py`, and
 the public Hub commit and tokenizer file hashes in `wan_tokenizer.py`, and the fixed stage-key
@@ -79,3 +79,16 @@ so minified third-party strings cannot be mistaken for project credentials.
 
 GPU reference execution is separate from CI and ordinary verification. Fake processes
 and fixture checkout files prove orchestration and persistence, not model support.
+
+Managed checkout tests use local synthetic Git repositories. Browser tests exercise the real
+install/update API, Git checkout, isolated Python creation, reload/restart, dirty-source
+refusal and retry. They substitute dependency downloads with an isolated `uv venv`; they do not qualify
+CUDA dependencies or GPU/model support. The managed training environment must be qualified
+separately using the GPU reference workflows before claiming new GPU support.
+
+Manual managed-checkout verification: from the repository root, run `./launch.cmd`.
+In Settings, click Install supported version (or Update to supported version), wait for
+completion, and confirm the installed and supported revisions match. Reload and confirm
+it stays installed, then run diagnostics. Prerequisites are Git, uv, Python 3.12, internet
+access and enough disk space for the separate CUDA training environment. Existing models
+are needed for GPU diagnostics/training, not for the source installation itself.

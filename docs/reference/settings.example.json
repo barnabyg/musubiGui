@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "checkout": "C:/ai/musubi-tuner",
-  "python": "C:/ai/musubi-tuner/.venv/Scripts/python.exe",
+  "checkout": "C:/docs/git/musubiGui/musubi-tuner",
+  "python": "C:/docs/git/musubiGui/musubi-tuner/.venv/Scripts/python.exe",
   "output_root": "C:\\docs\\git\\musubiGui\\outputs",
   "cache_root": "C:\\docs\\git\\musubiGui\\cache",
   "model_roots": [

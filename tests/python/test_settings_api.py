@@ -65,7 +65,7 @@ def test_partial_setup_cannot_write_inside_training_checkout(tmp_path: Path) -> 
     assets.mkdir()
     client = TestClient(create_app(tmp_path / "state", assets))
     settings = client.get("/api/settings").json()
-    settings.update(checkout=str(tmp_path / "upstream"), output_root=str(tmp_path / "upstream/generated"))
+    settings.update(output_root=str(Path(settings["checkout"]) / "generated"))
     assert client.put("/api/settings", json=settings).status_code == 422
 
 

@@ -241,7 +241,7 @@ def test_queue_order_and_cancellation_survive_restart(tmp_path: Path) -> None:
 
 
 def test_changed_training_source_blocks_execution_of_prepared_inputs(tmp_path: Path) -> None:
-    service = RunService(tmp_path / "state", device_path=tmp_path / "gpu.sqlite", autostart=False)
+    service = RunService(tmp_path / "state", device_path=tmp_path / "gpu.sqlite", autostart=False, fixture_mode=True)
     execution = plan(tmp_path)
     git = shutil.which("git")
     assert git
