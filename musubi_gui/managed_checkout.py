@@ -24,10 +24,12 @@ from musubi_gui.settings import Settings, atomic_json, managed_settings
 REMOTE = "https://github.com/kohya-ss/musubi-tuner.git"
 TORCH = "2.13.0"
 TORCHVISION = "0.28.0"
+# Triton 3.7 matches PyTorch 2.13; newer minor releases target newer Torch versions.
+TRITON_WINDOWS = "3.7.1.post27"
 
 
 def supported_environment() -> str:
-    return f"{UPSTREAM}\ncu130\n{TORCH}\n{TORCHVISION}"
+    return f"{UPSTREAM}\ncu130\n{TORCH}\n{TORCHVISION}\ntriton-windows=={TRITON_WINDOWS}"
 
 
 @contextmanager
@@ -249,7 +251,9 @@ class ManagedCheckout:
         # Resolve only this Windows environment. Universal `uv sync` resolves upstream's other CUDA
         # extras too, preventing a constraint on our qualified CUDA 13.0 versions.
         constraints = self.directory / "constraints.txt"
-        constraints.write_text(f"torch=={TORCH}\ntorchvision=={TORCHVISION}\n", encoding="utf-8")
+        constraints.write_text(
+            f"torch=={TORCH}\ntorchvision=={TORCHVISION}\ntriton-windows=={TRITON_WINDOWS}\n", encoding="utf-8"
+        )
         self.command(
             [
                 uv,
@@ -281,6 +285,24 @@ class ManagedCheckout:
             ],
             cwd=self.checkout,
             timeout=3600,
+        )
+        self.command(
+            [
+                uv,
+                "pip",
+                "install",
+                "--python",
+                str(self.python),
+                "--default-index",
+                "https://pypi.org/simple",
+                "--only-binary",
+                ":all:",
+                "--constraints",
+                str(constraints),
+                f"triton-windows=={TRITON_WINDOWS}",
+            ],
+            cwd=self.checkout,
+            timeout=900,
         )
         (self.directory / "ready").write_text(supported_environment(), encoding="utf-8")
 

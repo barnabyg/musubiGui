@@ -1,9 +1,12 @@
 import json
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from musubi_gui.app import create_app
+from musubi_gui.diagnostics import diagnostics
+from musubi_gui.settings import Settings
 
 
 def client_for(tmp_path: Path) -> TestClient:
@@ -52,3 +55,23 @@ def test_unreadable_or_future_reports_count_as_not_checked_and_settings_still_lo
         assert client.get("/api/diagnostics").json() is None
         assert client.get("/api/settings").status_code == 200
     assert client.post("/api/diagnostics", json={}).json()["current"] is True
+
+
+@pytest.mark.parametrize(
+    ("version", "importable", "expected"),
+    [(None, False, "error"), ("3.7.1.post27", False, "error"), ("3.7.1.post27", True, "ok")],
+)
+def test_diagnostics_expose_missing_or_broken_h3_acceleration(
+    monkeypatch: pytest.MonkeyPatch, version: str | None, importable: bool, expected: str
+) -> None:
+    monkeypatch.setattr(
+        "musubi_gui.diagnostics.training_environment",
+        lambda settings: {
+            "packages": {"triton-windows": version},
+            "triton_importable": importable,
+            "cuda_available": False,
+        },
+    )
+    check = next(row for row in diagnostics(Settings())["checks"] if row["name"] == "Triton")
+    assert check["status"] == expected
+    assert ("Update to the supported version" if expected == "error" else version) in check["message"]

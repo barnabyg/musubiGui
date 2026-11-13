@@ -14,7 +14,7 @@ def main() -> None:
     )
     args = parser.parse_args()
     packages: dict[str, str | None] = {}
-    for name in ["torch", "accelerate", "safetensors", "transformers", "av", "musubi-tuner"]:
+    for name in ["torch", "accelerate", "safetensors", "transformers", "av", "musubi-tuner", "triton-windows"]:
         try:
             packages[name] = importlib.metadata.version(name)
         except importlib.metadata.PackageNotFoundError:
@@ -51,6 +51,15 @@ def main() -> None:
     except Exception:
         # Never return upstream exception text: it can contain environment secrets.
         result["torch_error"] = "initialization_failed"
+    result["triton_importable"] = False
+    if packages["triton-windows"] is not None:
+        try:
+            from musubi_tuner.modules.convrot_int8_kernels import HAS_TRITON  # type: ignore[import-not-found]
+
+            result["triton_importable"] = bool(HAS_TRITON)
+        except Exception:
+            # Import checks do not compile kernels or expose upstream exception text.
+            result["triton_error"] = "initialization_failed"
     print("MUSUBI_PROBE=" + json.dumps(result))
 
 

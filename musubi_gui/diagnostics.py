@@ -150,7 +150,11 @@ def diagnostics(settings: Settings) -> dict[str, Any]:
             )
         elif environment.get("torch_error"):
             check("PyTorch", "error", "PyTorch cannot initialize; check the selected environment and NVIDIA driver.")
-        missing = [name for name, version in packages.items() if version is None and name != "musubi-tuner"]
+        missing = [
+            name
+            for name, version in packages.items()
+            if version is None and name not in {"musubi-tuner", "triton-windows"}
+        ]
         if missing:
             check(
                 "Dependencies",
@@ -159,6 +163,20 @@ def diagnostics(settings: Settings) -> dict[str, Any]:
             )
         else:
             check("Dependencies", "ok", "Required training packages found.")
+        if packages.get("triton-windows") and environment.get("triton_importable"):
+            check(
+                "Triton",
+                "ok",
+                f"Triton Windows {packages['triton-windows']}: H3 fused INT8 kernels import successfully. "
+                "GPU execution and training quality require separate validation.",
+            )
+        else:
+            check(
+                "Triton",
+                "error",
+                "H3 fused INT8 acceleration is unavailable. Update to the supported version in Settings, "
+                "then run diagnostics again; otherwise H3 may use slower transient dequantization.",
+            )
         if environment.get("cuda_available"):
             gpu = environment["gpu"]
             check(
