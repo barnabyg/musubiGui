@@ -6,6 +6,7 @@ import type { Dataset, DatasetItem } from './Datasets';
 import type { DatasetPanel } from './DatasetTopbar';
 import { DatasetUploads } from './DatasetUploads';
 import { H3Coverage } from './H3Inspector';
+import { H3Preparation } from './H3Preparation';
 import { DatasetJobImpact, useDatasetUsage } from './datasetUsage';
 
 export function DatasetPanels({
@@ -23,6 +24,7 @@ export function DatasetPanels({
   selected,
   setSelected,
   onChanged,
+  roots,
 }: {
   dataset: Dataset;
   visible: boolean;
@@ -38,6 +40,7 @@ export function DatasetPanels({
   selected: Set<string>;
   setSelected: Dispatch<SetStateAction<Set<string>>>;
   onChanged: () => Promise<void>;
+  roots: string[];
 }) {
   const usage = useDatasetUsage(
     dataset.id,
@@ -82,6 +85,14 @@ export function DatasetPanels({
             : 'Registered local folder · add media in this folder, then re-scan.'}
         </p>
         <H3Coverage key={dataset.id} datasetId={dataset.id} />
+        {visible && panel === 'settings' && (
+          <H3Preparation
+            key={`prepare-${dataset.id}`}
+            dataset={dataset}
+            roots={roots}
+            afterCaptionFlush={(action) => captions.afterCaptionFlush(action)}
+          />
+        )}
         {panel === 'settings' && <DatasetJobImpact {...usage} />}
         <button disabled={busy} onClick={() => void rescan()}>
           Re-scan

@@ -590,6 +590,7 @@ export function Datasets({
             </p>
           )}
           <DatasetPanels
+            roots={datasetRoots ?? [defaultFolder].filter(Boolean)}
             visible={visible}
             dataset={dataset}
             panel={panel}

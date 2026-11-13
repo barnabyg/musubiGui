@@ -1,5 +1,67 @@
 # Dataset acceptance
 
+## Preparing video sources for H3
+
+Open a source dataset, choose **Dataset settings → Prepare videos for H3**, and
+choose **Prepare H3 dataset**. Upload a batch into a dataset first, or register an
+existing folder and wait for its scan to finish. Preparation uses all included
+videos, regardless of gallery selection or filters; images and excluded videos
+are left out.
+
+The default is **640 × 352, 124 frames at 24 fps (5.167 seconds)**, the configuration
+demonstrated on the target 24 GB GPU. Larger resolutions or durations can still
+exceed training VRAM. Width and height must be multiples of 32; duration is selected
+from 124–345 frames in increments of 17. Source frame rates can differ.
+
+Each source produces one clip from its beginning. Choose centre cropping to fill
+the frame, or fit with black borders to retain the whole picture. Sources shorter
+than the chosen duration are skipped, with a per-file explanation. In particular,
+an exactly five-second source is too short for the shortest supported window.
+The tool does not pad video or split a source into multiple clips.
+
+Preparation creates a fresh managed dataset under **Prepared dataset parent**.
+This parent must be within a configured dataset root and outside the source
+dataset. If the source is an entire configured root, add a separate output root
+in Settings first. Originals and their captions remain in place. Matching captions
+are copied; review them because trimming can remove events described in the text.
+Output names include an item identifier to distinguish same-stem sources.
+
+Audio selection follows the inspector: explicit path, one same-stem sidecar, then
+embedded audio. Supplied audio is aligned to the video and written as a matching
+32 kHz stereo WAV. Materially short, ambiguous, malformed or discontinuous audio
+is reported per file; it is never silently dropped. Small missing regions within
+H3's 200 ms budget are filled with silence. **Allow videos without audio** accepts
+sources with no audio and leaves their output audio absent; choose the training
+job's allow-missing audio policy for those datasets.
+
+The panel reports progress and failures while successful files continue. Use
+**Open prepared dataset** when complete. Reloading the panel recovers the latest
+batch report. Interrupted batches retain completed copies; start a new batch to
+retry, and re-scan a retained partial dataset before using its completed clips.
+Conversion runs on the CPU, needs no model weights or separate FFmpeg install,
+and limits each conversion subprocess to 15 minutes. Source inspection has the
+existing 45-second media probe limit; very long sources may need shorter clips.
+
+Manual verification: from `C:/docs/git/musubiGui`, run this one PowerShell 7 command
+(prerequisites: Python 3.12, Node.js 24 LTS, uv, and a source video at least six
+seconds long; the launcher installs dependencies and builds the app):
+
+```powershell
+.\launch.cmd
+```
+
+Choose **Datasets → New dataset → Upload files**, create a folder, and upload the
+video and its matching caption. Open **Dataset settings → Prepare videos for H3**.
+Keep the defaults, using the configured dataset root as the output parent. For a
+silent source, enable **Allow videos without audio**. Prepare, then open the new
+dataset, play its video and inspect its H3 media. Expect 640 × 352, 124 frames,
+24 fps and 100% audio coverage when audio is supplied. The original video, audio
+and caption must remain unchanged. This verifies conversion and playback, not
+GPU learning quality. Repeat with a five-second video: expect a per-file
+too-short explanation while the longer clip still succeeds.
+
+## Dataset library
+
 Dataset roots default to the `datasets` folder under the application project root
 (the working directory selected by `launch.cmd`). Saved custom roots, including an
 explicitly empty list, are preserved; change them in Settings to use a different
