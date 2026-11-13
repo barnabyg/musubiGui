@@ -4,6 +4,15 @@ Prerequisites: native Windows 11, Python 3.12, uv, Node.js 24 LTS and Microsoft 
 Run `uv sync --locked` and `npm.cmd ci` to prepare the isolated app environment.
 The managed training environment is independent and is never installed or upgraded by these verification commands. Settings installs/updates it explicitly.
 
+Managed setup tests check the pinned Triton wheel command, retry after dependency failure,
+and migration of an old readiness marker. Browser tests use a synthetic installer and check
+that missing H3 acceleration appears in diagnostics; they do not validate GPU kernels.
+For manual verification, run `.\launch.cmd` in the repository root, open Settings, choose
+**Update to supported version**, then **Run diagnostics**. Expect the Triton check to pass.
+Prepare and start a short H3 Run using configured models and a compatible dataset; expect
+training to complete without the ConvRot transient-dequantization fallback warning.
+Training quality and speed require separate GPU measurements.
+
 The canonical command is `npm.cmd run verify`. It checks Python/TypeScript formatting,
 lint, strict types, Bandit static security analysis, pytest and real Edge browser tests,
 lockfile consistency, installed npm dependency integrity, Python/npm vulnerabilities,

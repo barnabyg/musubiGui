@@ -30,7 +30,9 @@ In Settings, click **Install supported version**. The app clones the official re
 `musubi-tuner/` inside this project, checks out the revision supported by this GUI, and uses
 `uv` to create its separate Python 3.12 `.venv`, install the qualified CUDA 13.0
 PyTorch 2.13.0 / torchvision 0.28.0 pair, and install the editable upstream package and its
-development group (including TensorBoard). This downloads training dependencies and CUDA 13.0
+development group (including TensorBoard), plus `triton-windows==3.7.1.post27` for H3's
+fused INT8 kernels. Triton 3.7 matches this PyTorch version and supports the RTX 3090.
+This downloads training dependencies and CUDA 13.0
 PyTorch, so allow several GB of disk space and internet access to GitHub, PyPI and PyTorch.
 The GUI's `.venv` is separate. Installation paths are read only; external installations are
 no longer used. Existing version-1 settings remain readable: model, dataset, output and cache
@@ -47,6 +49,10 @@ as ready. Keep the backend running during setup; leaving the Settings page is fi
 status survives reloads and backend restarts, and interrupted setup can be retried once its
 processes have exited. The project-local setup record and sanitized failure log live under
 `.cache/musubi-setup/`. Run diagnostics again after setup.
+Existing installations need this update to install Triton. The **Triton** diagnostics check
+must pass before testing H3 acceleration; it checks imports, while a real training run
+checks GPU execution. Preparing a new Run after updating refreshes its environment identity
+and may rebuild caches. Existing Run records remain readable.
 
 Choose dedicated output/cache roots and model roots. Component paths must remain within those model roots; symlinks and
 Windows junctions resolve before containment checks. Enter one model or dataset root per line;

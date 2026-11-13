@@ -112,6 +112,9 @@ test('installs supported source, persists it and refuses to overwrite local chan
     });
     await page.getByRole('button', { name: 'Run diagnostics' }).click();
     await expect(page.getByText('Training entry points found.')).toBeVisible();
+    await expect(
+      page.getByText(/H3 fused INT8 acceleration is unavailable/),
+    ).toBeVisible();
   } finally {
     await stop();
     await rm(root, {

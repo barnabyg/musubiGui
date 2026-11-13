@@ -176,6 +176,56 @@ def test_dependency_failure_is_retryable_and_never_reports_ready(
     assert wait(manager)["ready"] is True
 
 
+def test_installer_pins_triton_and_invalidates_pre_acceleration_readiness(
+    checkout: tuple[ManagedCheckout, Path, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manager, _, revision = checkout
+    commands: list[list[str]] = []
+    original = manager.command
+
+    def capture(args: list[str], *, cwd: Path | None = None, timeout: int = 900) -> str:
+        commands.append(args)
+        return original(args, cwd=cwd, timeout=timeout)
+
+    monkeypatch.setattr(manager, "command", capture)
+    manager.install()
+    requirement = f"triton-windows=={managed.TRITON_WINDOWS}"
+    installs = [args for args in commands if requirement in args]
+    assert len(installs) == 1
+    assert installs[0][installs[0].index("--python") + 1] == str(manager.python)
+    assert installs[0][installs[0].index("--only-binary") + 1] == ":all:"
+    assert requirement in (manager.directory / "constraints.txt").read_text(encoding="utf-8")
+    assert manager.status()["ready"]
+    # Released readiness markers remain readable, but require the updated environment.
+    (manager.directory / "ready").write_text(
+        f"{revision}\ncu130\n{managed.TORCH}\n{managed.TORCHVISION}", encoding="utf-8"
+    )
+    assert not manager.status()["ready"]
+
+
+def test_triton_install_failure_keeps_setup_retryable_without_a_ready_marker(
+    checkout: tuple[ManagedCheckout, Path, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manager, _, _ = checkout
+    original = manager.command
+
+    def fail_triton(args: list[str], *, cwd: Path | None = None, timeout: int = 900) -> str:
+        if f"triton-windows=={managed.TRITON_WINDOWS}" in args:
+            raise ValueError("Triton wheel download failed")
+        return original(args, cwd=cwd, timeout=timeout)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(manager, "command", fail_triton)
+        manager.start()
+        status = wait(manager)
+        assert status["operation"]["state"] == "failed"
+        assert not status["ready"]
+        assert not (manager.directory / "ready").exists()
+        assert manager.device.owner() is None
+    manager.start()
+    assert wait(manager)["ready"]
+
+
 def test_api_migrates_paths_without_touching_external_install_or_other_settings(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

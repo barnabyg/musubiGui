@@ -33,7 +33,15 @@ def test_version_only_probe_reports_optional_preprocessors_without_initializing_
     }
     assert "torch_error" not in report
     assert "cuda_available" not in report
-    assert set(report["packages"]) == {"torch", "accelerate", "safetensors", "transformers", "av", "musubi-tuner"}
+    assert set(report["packages"]) == {
+        "torch",
+        "accelerate",
+        "safetensors",
+        "transformers",
+        "av",
+        "musubi-tuner",
+        "triton-windows",
+    }
 
 
 def test_preprocessor_versions_invalidate_cache_and_changed_queued_environment_blocks_launch(

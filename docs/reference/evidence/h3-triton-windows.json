@@ -1,0 +1,214 @@
+{
+  "date": "2026-11-13",
+  "hardware": "RTX 3090 24 GiB, Windows 11",
+  "upstream_revision": "f8a1b03794a49239a3539015075f5123d6c07d66",
+  "configuration": {
+    "video_clips": 11,
+    "width": 640,
+    "height": 352,
+    "frames": 124,
+    "steps": 8,
+    "rank": 32,
+    "alpha": 32,
+    "batch": 1,
+    "seed": 42,
+    "optimizer": "AdamW",
+    "gradient_checkpointing": true,
+    "blocks_to_swap": 48,
+    "block_swap_h2d_only": true,
+    "previews": false
+  },
+  "kernel_preflight": {
+    "triton": "3.7.1",
+    "torch": "2.13.0+cu130",
+    "has_fused_kernel": true,
+    "forward_backward_finite": true,
+    "relative_rmse_vs_eager": 0.008372161537408829,
+    "cold_compile_and_execution_seconds": 4.2810000000026776
+  },
+  "runs": {
+    "installed-baseline": {
+      "status": "completed",
+      "packages": {
+        "torch": "2.13.0+cu130",
+        "accelerate": "1.15.0",
+        "safetensors": "0.8.0",
+        "transformers": "5.17.0",
+        "av": "17.1.0",
+        "musubi-tuner": "0.3.6",
+        "triton-windows": null
+      },
+      "mean_seconds_steps_2_to_8": 80.74,
+      "mean_seconds_steps_5_to_8": 80.5,
+      "steps": [
+        {
+          "step": 1,
+          "reported_elapsed_seconds": 70,
+          "reported_seconds_per_step": 70.63,
+          "interval_seconds_per_step": 70.0
+        },
+        {
+          "step": 2,
+          "reported_elapsed_seconds": 79,
+          "reported_seconds_per_step": 79.89,
+          "interval_seconds_per_step": 79.0
+        },
+        {
+          "step": 3,
+          "reported_elapsed_seconds": 160,
+          "reported_seconds_per_step": 80.23,
+          "interval_seconds_per_step": 81.0
+        },
+        {
+          "step": 4,
+          "reported_elapsed_seconds": 243,
+          "reported_seconds_per_step": 81.3,
+          "interval_seconds_per_step": 83.0
+        },
+        {
+          "step": 5,
+          "reported_elapsed_seconds": 325,
+          "reported_seconds_per_step": 81.46,
+          "interval_seconds_per_step": 82.0
+        },
+        {
+          "step": 6,
+          "reported_elapsed_seconds": 409,
+          "reported_seconds_per_step": 81.96,
+          "interval_seconds_per_step": 84.0
+        },
+        {
+          "step": 7,
+          "reported_elapsed_seconds": 482,
+          "reported_seconds_per_step": 80.37,
+          "interval_seconds_per_step": 73.0
+        },
+        {
+          "step": 8,
+          "reported_elapsed_seconds": 565,
+          "reported_seconds_per_step": 80.74,
+          "interval_seconds_per_step": 83.0
+        }
+      ],
+      "windows_process_memory": [
+        {
+          "valid_shared_samples": 425,
+          "shared_peak_gib": 1.08203125,
+          "dedicated_peak_gib": 21.152053833007812,
+          "shared_distinct_gib": [0.07421875, 1.08203125],
+          "dedicated_gib_when_shared_first_reached_peak": 3.8687210083007812
+        }
+      ],
+      "invalid_process_counter_samples_skipped": 5,
+      "gpu_utilization_percent": {
+        "min": 75.0,
+        "median": 100.0,
+        "max": 100.0,
+        "mean": 99.77477477477477
+      },
+      "graphics_clock_mhz": {
+        "min": 210.0,
+        "median": 1455.0,
+        "max": 1920.0,
+        "mean": 1271.8918918918919
+      },
+      "minimum_available_host_gib": 63.643470764160156,
+      "maximum_training_disk_read_bytes_per_second": 0.0
+    },
+    "installed-triton": {
+      "status": "completed",
+      "packages": {
+        "torch": "2.13.0+cu130",
+        "accelerate": "1.15.0",
+        "safetensors": "0.8.0",
+        "transformers": "5.17.0",
+        "av": "17.1.0",
+        "musubi-tuner": "0.3.6",
+        "triton-windows": "3.7.1.post27"
+      },
+      "mean_seconds_steps_2_to_8": 74.49,
+      "mean_seconds_steps_5_to_8": 72.5,
+      "steps": [
+        {
+          "step": 1,
+          "reported_elapsed_seconds": 80,
+          "reported_seconds_per_step": 80.65,
+          "interval_seconds_per_step": 80.0
+        },
+        {
+          "step": 2,
+          "reported_elapsed_seconds": 78,
+          "reported_seconds_per_step": 78.66,
+          "interval_seconds_per_step": 78.0
+        },
+        {
+          "step": 3,
+          "reported_elapsed_seconds": 154,
+          "reported_seconds_per_step": 77.44,
+          "interval_seconds_per_step": 76.0
+        },
+        {
+          "step": 4,
+          "reported_elapsed_seconds": 231,
+          "reported_seconds_per_step": 77.04,
+          "interval_seconds_per_step": 77.0
+        },
+        {
+          "step": 5,
+          "reported_elapsed_seconds": 309,
+          "reported_seconds_per_step": 77.32,
+          "interval_seconds_per_step": 78.0
+        },
+        {
+          "step": 6,
+          "reported_elapsed_seconds": 381,
+          "reported_seconds_per_step": 76.22,
+          "interval_seconds_per_step": 72.0
+        },
+        {
+          "step": 7,
+          "reported_elapsed_seconds": 444,
+          "reported_seconds_per_step": 74.02,
+          "interval_seconds_per_step": 63.0
+        },
+        {
+          "step": 8,
+          "reported_elapsed_seconds": 521,
+          "reported_seconds_per_step": 74.49,
+          "interval_seconds_per_step": 77.0
+        }
+      ],
+      "windows_process_memory": [
+        {
+          "valid_shared_samples": 402,
+          "shared_peak_gib": 1.08203125,
+          "dedicated_peak_gib": 21.070022583007812,
+          "shared_distinct_gib": [0.07421875, 1.07421875, 1.08203125],
+          "dedicated_gib_when_shared_first_reached_peak": 5.1402130126953125
+        }
+      ],
+      "invalid_process_counter_samples_skipped": 0,
+      "gpu_utilization_percent": {
+        "min": 100.0,
+        "median": 100.0,
+        "max": 100.0,
+        "mean": 100.0
+      },
+      "graphics_clock_mhz": {
+        "min": 210.0,
+        "median": 1155.0,
+        "max": 1935.0,
+        "mean": 1118.4466019417475
+      },
+      "minimum_available_host_gib": 62.74640655517578,
+      "maximum_training_disk_read_bytes_per_second": 0.0
+    }
+  },
+  "limitations": [
+    "One before/after pair; clocks varied and no fan/power settings were changed.",
+    "Short runs establish execution, not useful learning or long-run stability.",
+    "Windows counters show allocation; no ETW residency/page-fault trace.",
+    "First step excluded from steady timings; upstream resets the progress clock and Triton compiles on first use.",
+    "Interval timings have one-second log resolution."
+  ]
+}
