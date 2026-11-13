@@ -27,6 +27,7 @@ from musubi_gui.recipe import Stage, reference_environment
 from musubi_gui.redaction import redact
 from musubi_gui.run_deletion import failure_message, folder_bytes, output_index_file, plan_deletion, remove_folder
 from musubi_gui.run_paths import create_run_directory
+from musubi_gui.run_performance import RunPerformance, start_performance
 from musubi_gui.run_progress import estimated_remaining, parse_progress
 from musubi_gui.run_store import DeviceLease, RunStore, blocks_revision, preparation_transaction
 from musubi_gui.saved_state import discover_states
@@ -266,7 +267,7 @@ class RunService:
         with self.retention_condition:
             self.retention_condition.notify_all()
         if self.thread.is_alive():
-            self.thread.join(timeout=5)
+            self.thread.join(timeout=20)
         if self.retention_thread.is_alive():
             # Cancellation interrupts chunked hashes and kills/reaps an active state probe.
             self.retention_thread.join(timeout=45)
@@ -664,6 +665,7 @@ class RunService:
         job_object: ProcessJob | None = None
         process: WindowsProcess | subprocess.Popen[str] | None = None
         failure: str | None = None
+        performance: RunPerformance | None = None
         preparing = run["phase"] == "prepare"
 
         def claim(record: dict[str, Any]) -> None:
@@ -738,6 +740,7 @@ class RunService:
                             text=True,
                             start_new_session=True,
                         )
+                    performance = start_performance(run, stage, process.pid, log_file, fixture=self.fixture_mode)
                     identities = observed_tree(process.pid)
                     self.store.update(run_id, lambda r: r.update(processes=identities))
                     self.device.update(run_id, identities)
@@ -779,6 +782,9 @@ class RunService:
                                 threading.Thread(target=process.wait, name="musubi-child-reaper", daemon=True).start()
                             return
                     code = process.wait()
+                    if performance:
+                        performance.close(code)
+                        performance = None
                     if isinstance(process, WindowsProcess):
                         process.close()
                     if not self._await_descendant_exit(run_id, job_object, identities, signalled):
@@ -912,6 +918,8 @@ class RunService:
         except Exception as error:
             failure = redact(str(error))
         finally:
+            if performance:
+                performance.close()
             if isinstance(process, WindowsProcess):
                 process.close()
             if job_object:

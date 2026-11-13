@@ -9,6 +9,7 @@ from typing import Any
 STEP = re.compile(r"(?:^|[\r\n])steps:[^\r\n]*?(\d+)/(\d+)([^\r\n]*)")
 TIMES = re.compile(r"\[([\d:]+)<([\d:]+)")
 LOSS = re.compile(r"\b(?:avr_)?loss=([-+\d.eE]+)")
+RATE = re.compile(r"(?<![\w.+-])([\d.]+)\s*(s/it|it/s)\b")
 
 
 def estimated_remaining(progress: dict[str, Any]) -> int | None:
@@ -42,10 +43,20 @@ def parse_progress(text: str) -> dict[str, Any] | None:
     rest = latest[3]
     times = TIMES.search(rest)
     loss = LOSS.search(rest)
+    rate = RATE.search(rest)
+    seconds_per_step = None
+    if rate:
+        try:
+            value = float(rate[1])
+            if value > 0 and math.isfinite(value):
+                seconds_per_step = value if rate[2] == "s/it" else 1 / value
+        except ValueError:
+            pass
     return {
         "step": int(latest[1]),
         "total": int(latest[2]),
         "elapsed": times[1] if times else None,
         "eta": times[2] if times else None,
         "loss": loss[1] if loss else None,
+        "seconds_per_step": seconds_per_step,
     }

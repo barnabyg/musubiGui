@@ -24,6 +24,75 @@ or GPU; preparation creates synthetic training inputs.
 
 ## History refresh and network traffic
 
+The progress area shows **Seconds per step**, using the latest training progress
+bar's reported rate. Rates reported as iterations per second are converted to
+seconds per step. This is the trainer's smoothed rate, not a measured individual
+GPU operation. It stays unknown when no rate was reported, including CPU fixtures.
+It also works for existing Runs whose retained training log contains a rate.
+
+## H3 performance diagnostics
+
+New H3 stages automatically append `performance.jsonl` in the Run's output folder.
+On Overview, **Download performance diagnostics** downloads a snapshot of its
+complete JSON lines. Existing Runs without a report remain readable; diagnostics
+cannot reconstruct past hardware measurements. Restart the application to use the
+collector on subsequently launched stages. A Run already training in an older
+backend does not acquire the collector retroactively.
+
+The report records UTC timestamps, stage elapsed time, frozen configuration,
+executed arguments and provenance at each stage start. Every approximately five
+seconds during caching, training and generation it records:
+
+- NVIDIA device identity, utilization, VRAM used/total, power draw/limit,
+  temperature, graphics/memory clocks and performance state, for every visible
+  device returned by `nvidia-smi`. CUDA device visibility is recorded at stage start.
+- Available host RAM and memory usage percentage, process-tree RSS, CPU usage and
+  read/write byte rates. CPU percentage can exceed 100% across cores. Process I/O
+  counters measure logical I/O, not physical disk throughput. RSS can double-count
+  shared pages; host usage and device measurements include unrelated applications.
+- Latest training step, elapsed time, ETA, loss and reported seconds per step.
+  Observed seconds per step measures intervals between changes seen by the collector,
+  divided by the number of steps advanced. It includes intervening saves/previews,
+  can combine several steps and has roughly five-second observation granularity.
+  It remains unknown until two different step positions have been observed.
+
+Stage launch/loading time remains separate from observed step intervals; a step-zero
+to step-one interval can include startup. A final progress observation and monitor
+stop record preserve the last position and launcher exit code. `null` means unknown,
+not zero. Missing GPU utilities, unsupported fields, access errors and timed-out
+queries are recorded explicitly. CPU fixtures disable GPU queries and identify
+themselves as synthetic; they are not training-performance evidence.
+
+The collector runs outside the trainer, imports no Torch and adds no CUDA
+synchronization. It does not change model arguments or enable a profiler. Queries
+have a ten-second timeout, diagnostics stop with their stage/service, and diagnostic
+write failures do not fail training. Sampling and file writes still have some overhead;
+`collection_seconds` helps identify expensive probes. Measurements can miss short
+spikes. The report does not time individual forward/backward passes, attention
+kernels or PCIe transfers, and cannot prove the cause of a slowdown by itself.
+Credentials are redacted before writing, but the report contains local paths and
+job settings; review these before sharing it.
+
+`GET /api/runs/{id}/logs` adds `performance_available` and nullable
+`progress.seconds_per_step`. `GET /api/runs/{id}/performance` downloads the report,
+or returns 404 when none exists. No existing persisted Run format is replaced.
+
+Manual verification: in PowerShell 7, from `C:/docs/git/musubiGui`, run:
+
+```powershell
+.\launch.cmd
+```
+
+Prerequisites: configured training installation, H3 models, prepared videos and an
+NVIDIA GPU. Start an H3 Run and open Overview. After training reports a speed, expect
+**Seconds per step** to match the latest `steps:` log bar. Download diagnostics during
+training and after completion; each line should parse as JSON and include stage/sample
+records. Compare GPU utilization, power and available RAM with Task Manager or
+`nvidia-smi`, allowing for sampling delay and their different memory definitions.
+Reload Overview and expect the download and reported speed to remain available.
+
+## Remaining-time estimates and refresh
+
 Training progress includes **Estimated training remaining to max steps**. It
 extrapolates the trainer's observed step speed over all remaining steps, including
 later alternating Wan phases and the requested steps of a restored segment.
