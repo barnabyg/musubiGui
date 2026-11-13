@@ -494,7 +494,9 @@ class DatasetStore:
             destination.rmdir()
             raise
 
-    def inspect_h3(self, dataset_id: str, item_id: str, frames: int = 124) -> dict[str, Any]:
+    def inspect_h3(
+        self, dataset_id: str, item_id: str, frames: int = 124, *, check_geometry: bool = True
+    ) -> dict[str, Any]:
         path = self.media_path(dataset_id, item_id)
         folder = self._folder(self.get(dataset_id)["path"])
         errors: builtins.list[str] = []
@@ -517,7 +519,7 @@ class DatasetStore:
         if path.suffix.lower() not in VIDEOS:
             errors.append("The initial H3 T2VA recipe requires video targets.")
         width, height = int(metadata.get("width", 0)), int(metadata.get("height", 0))
-        if width <= 0 or height <= 0 or width % 32 or height % 32:
+        if check_geometry and (width <= 0 or height <= 0 or width % 32 or height % 32):
             errors.append(
                 "H3 geometry requires positive width and height in multiples of 32. Re-encode or choose compatible training geometry."
             )

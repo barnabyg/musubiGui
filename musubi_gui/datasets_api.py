@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from musubi_gui.dataset_uploads import DatasetUploads
 from musubi_gui.datasets import CaptionConflict, DatasetStore
 from musubi_gui.datasets_bulk import DatasetBulk
+from musubi_gui.h3_preparation import H3Preparation, H3PreparationRequest
 
 T = TypeVar("T")
 
@@ -107,6 +108,17 @@ def dataset_router(root: Path) -> APIRouter:
     store = DatasetStore(root)
     bulk = DatasetBulk(store)
     uploads = DatasetUploads(store)
+    preparation = H3Preparation(store)
+
+    @router.get("/{dataset_id}/h3-preparation")
+    def preparation_status(dataset_id: str) -> dict[str, Any] | None:
+        return result(lambda: preparation.status(dataset_id))
+
+    @router.post("/{dataset_id}/h3-preparation")
+    def prepare_h3(dataset_id: str, request: H3PreparationRequest, background: BackgroundTasks) -> dict[str, Any]:
+        record = result(lambda: preparation.begin(dataset_id, request))
+        background.add_task(preparation.run, dataset_id)
+        return record
 
     @router.get("")
     def datasets() -> list[dict[str, Any]]:
