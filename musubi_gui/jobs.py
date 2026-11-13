@@ -945,6 +945,25 @@ def _review_items(
             elif not inspection.get("errors"):
                 audio_coverage["supervised"] += 1
     warnings.extend(_reshaped_image_warning(job, dataset, items))
+    if job.family == "h3" and not job.config.enable_bucket:
+        width, height = dataset_resolution(job, dataset["id"])
+        count = sum(
+            1
+            for item in items
+            if item["kind"] == "video"
+            and item.get("metadata", {}).get("width")
+            and item.get("metadata", {}).get("height")
+            and width > 0
+            and height > 0
+            and abs(item["metadata"]["width"] / item["metadata"]["height"] / (width / height) - 1) > ASPECT_TOLERANCE
+        )
+        if count:
+            warnings.append(
+                f'Dataset "{dataset["name"]}": {count} video(s) differ from the fixed {width}×{height} training shape. '
+                "Training will centre-crop them and may cut off heads or other subjects. "
+                "Enable bucketing with no upscaling to preserve the prepared portrait and landscape shapes. "
+                "Portrait and mixed-orientation H3 GPU training have not been measured on the target PC."
+            )
     return items
 
 

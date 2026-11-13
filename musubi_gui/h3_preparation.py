@@ -20,7 +20,8 @@ class H3PreparationRequest(BaseModel):
     width: int = Field(default=640, ge=64, le=2048)
     height: int = Field(default=352, ge=64, le=2048)
     frames: int = Field(default=124, ge=124, le=345)
-    fit: Literal["crop", "pad"] = "crop"
+    orientation: Literal["auto", "fixed"] = "auto"
+    fit: Literal["crop", "pad"] = "pad"
     allow_missing_audio: bool = False
 
     @model_validator(mode="after")
@@ -93,7 +94,7 @@ class H3Preparation:
             destination = self.store.folder(record["dataset_id"])
             items = record["sources"]
             for index, item in enumerate(items):
-                outcome = {"name": item["name"], "state": "failed", "error": ""}
+                outcome: dict[str, Any] = {"name": item["name"], "state": "failed", "error": ""}
                 # IDs avoid collisions between same-stem source containers and nested folders.
                 output = regular_path(destination / f"{Path(item['name']).stem}-{item['id'][:8]}.mp4", destination)
                 staging = destination / f".preparing-{item['id']}.mp4"
@@ -120,6 +121,8 @@ class H3Preparation:
                         str(request.frames),
                         "--fit",
                         request.fit,
+                        "--orientation",
+                        request.orientation,
                     ]
                     if inspection["audio_path"]:
                         audio = regular_path(Path(inspection["audio_path"]), self.store.folder(dataset_id))
@@ -128,12 +131,15 @@ class H3Preparation:
                     converted = subprocess.run(command, capture_output=True, text=True, timeout=900, check=False)  # nosec B603
                     if converted.returncode:
                         raise ValueError(converted.stderr.strip()[-2000:] or "Video conversion failed.")
+                    geometry = json.loads(converted.stdout)
                     if staging.with_suffix(".wav").exists():
                         staging.with_suffix(".wav").rename(output.with_suffix(".wav"))
                     if caption["exists"]:
                         output.with_suffix(".txt").write_text(caption["text"], encoding="utf-8")
                     staging.rename(output)
-                    outcome.update(state="complete", output=output.name)
+                    outcome.update(
+                        state="complete", output=output.name, width=geometry["width"], height=geometry["height"]
+                    )
                 except (OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
                     outcome["error"] = str(error) or type(error).__name__
                     # Only remove files owned by this conversion, in its fresh managed folder.

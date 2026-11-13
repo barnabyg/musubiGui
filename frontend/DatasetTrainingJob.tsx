@@ -1,6 +1,6 @@
 import { useId, useState } from 'react';
 import { apiClient } from './api';
-import type { Dataset } from './Datasets';
+import type { Dataset, DatasetItem } from './Datasets';
 import type { Job, JobConfig } from './jobTypes';
 
 const request = apiClient(
@@ -53,6 +53,31 @@ export function DatasetTrainingJob({
         request<Job[]>('/api/jobs/archived'),
         request<JobConfig>(`/api/jobs/defaults/${family}`),
       ]);
+      // Video aspect ratios must survive the handoff; fixed-size training centre-crops them again.
+      if (family === 'h3') {
+        const items = await request<DatasetItem[]>(
+          `/api/datasets/${dataset.id}/items`,
+        );
+        if (
+          items.some(
+            (item) =>
+              item.valid &&
+              !item.excluded &&
+              item.kind === 'video' &&
+              Number(item.metadata.width) > 0 &&
+              Number(item.metadata.height) > 0 &&
+              Math.abs(
+                Number(item.metadata.width) /
+                  Number(item.metadata.height) /
+                  (config.width / config.height) -
+                  1,
+              ) > 0.01,
+          )
+        ) {
+          config.enable_bucket = true;
+          config.bucket_no_upscale = true;
+        }
+      }
       if (window.location.hash !== origin) return;
       const taken = new Set([...jobs, ...archived].map((job) => job.name));
       const base = `${current.name.slice(0, 175)} · ${family === 'wan' ? 'Wan' : 'H3'}`;
@@ -79,6 +104,10 @@ export function DatasetTrainingJob({
         <p>
           A separate draft starts with {dataset.name} selected. Captions save
           first.
+        </p>
+        <p>
+          H3 drafts enable aspect-ratio bucketing when videos differ from the
+          default training shape.
         </p>
         {reason && <p id={reasonId}>{reason}</p>}
         <button

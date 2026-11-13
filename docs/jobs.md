@@ -168,6 +168,13 @@ that dataset selected once. Failed caption saves keep the gallery open for repai
 Missing folders, scans that have not finished and datasets without valid included
 media explain what to fix before creating a job. Existing jobs stay independent.
 
+For H3, this handoff enables **Enable bucketing** and **Do not upscale buckets**
+when an included video differs from the default training shape. This preserves
+the portrait and landscape outputs of H3 video preparation. Existing saved jobs
+retain their settings; Review warns if fixed-size training would crop videos of
+a different shape. Portrait and mixed-orientation GPU training remain unmeasured
+on the target PC, even though the two preparation buckets have equal pixel counts.
+
 To check this handoff, run the following from `C:/docs/git/musubiGui` in PowerShell 7:
 
 ```powershell

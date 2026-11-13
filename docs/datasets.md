@@ -8,16 +8,35 @@ existing folder and wait for its scan to finish. Preparation uses all included
 videos, regardless of gallery selection or filters; images and excluded videos
 are left out.
 
-The default is **640 × 352, 124 frames at 24 fps (5.167 seconds)**, the configuration
-demonstrated on the target 24 GB GPU. Larger resolutions or durations can still
-exceed training VRAM. Width and height must be multiples of 32; duration is selected
+The default uses **automatic landscape and portrait buckets**: **640 × 352** for
+landscape and **352 × 640** for portrait, both at **124 frames, 24 fps (5.167 seconds)**.
+Orientation follows the displayed picture, including phone rotation metadata.
+Square sources use the landscape bucket. The width/height controls set the two
+bucket dimensions, sorted into landscape or portrait per source; choose **One fixed
+width and height** to use exactly the entered size for every source. Each completed
+item reports its output dimensions.
+
+Landscape 640 × 352 was demonstrated on the target 24 GB GPU. Portrait has the same
+pixel count, but portrait and mixed-orientation GPU training have not been measured.
+Larger resolutions or durations can still exceed training VRAM.
+Width and height must be multiples of 32; duration is selected
 from 124–345 frames in increments of 17. Source frame rates can differ.
 
-Each source produces one clip from its beginning. Choose centre cropping to fill
-the frame, or fit with black borders to retain the whole picture. Sources shorter
+Each source produces one clip from its beginning. **Fit whole picture with black
+borders** is the default, preserving heads and other edge content even when a
+source differs from its bucket's aspect ratio. Centre cropping is an explicit
+option and can still cut off subjects. Sources shorter
 than the chosen duration are skipped, with a per-file explanation. In particular,
 an exactly five-second source is too short for the shortest supported window.
-The tool does not pad video or split a source into multiple clips.
+The tool does not extend video duration or split a source into multiple clips.
+
+Use **Create training job → Create H3 job** from the prepared dataset. The handoff
+enables aspect-ratio bucketing with no upscaling when any included video differs
+from the default training shape. These settings keep prepared portrait videos from
+being cropped back to landscape by training. For a manually created or existing
+job, enable **Advanced controls → Dataset preparation → Enable bucketing** and
+**Do not upscale buckets**. Review warns when bucketing is off and videos would be
+centre-cropped to a different shape. Existing saved jobs are not changed.
 
 Preparation creates a fresh managed dataset under **Prepared dataset parent**.
 This parent must be within a configured dataset root and outside the source
@@ -43,7 +62,7 @@ and limits each conversion subprocess to 15 minutes. Source inspection has the
 existing 45-second media probe limit; very long sources may need shorter clips.
 
 Manual verification: from `C:/docs/git/musubiGui`, run this one PowerShell 7 command
-(prerequisites: Python 3.12, Node.js 24 LTS, uv, and a source video at least six
+(prerequisites: Python 3.12, Node.js 24 LTS, uv, and landscape and portrait source videos at least six
 seconds long; the launcher installs dependencies and builds the app):
 
 ```powershell
@@ -51,12 +70,15 @@ seconds long; the launcher installs dependencies and builds the app):
 ```
 
 Choose **Datasets → New dataset → Upload files**, create a folder, and upload the
-video and its matching caption. Open **Dataset settings → Prepare videos for H3**.
+videos and their matching captions. Open **Dataset settings → Prepare videos for H3**.
 Keep the defaults, using the configured dataset root as the output parent. For a
 silent source, enable **Allow videos without audio**. Prepare, then open the new
-dataset, play its video and inspect its H3 media. Expect 640 × 352, 124 frames,
+dataset, play both videos and inspect their H3 media. Expect 640 × 352 landscape,
+352 × 640 portrait, 124 frames,
 24 fps and 100% audio coverage when audio is supplied. The original video, audio
-and caption must remain unchanged. This verifies conversion and playback, not
+and captions must remain unchanged. Check the portrait subject's head remains
+visible. Create an H3 job from this dataset and confirm bucketing and no upscaling
+are enabled. This verifies conversion and playback, not
 GPU learning quality. Repeat with a five-second video: expect a per-file
 too-short explanation while the longer clip still succeeds.
 

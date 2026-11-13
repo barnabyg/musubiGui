@@ -57,6 +57,25 @@ def add_separate_folders(root: Path, media: Path) -> tuple[Path, Path]:
     return images, videos
 
 
+def add_portrait(folder: Path) -> None:
+    """A portrait frame with a head marker that a landscape centre crop removes."""
+    from PIL import ImageDraw
+
+    image = Image.new("RGB", (352, 640), "blue")
+    ImageDraw.Draw(image).rectangle((140, 24, 212, 100), fill="red")
+    with av.open(str(folder / "portrait.mp4"), "w") as container:
+        video: Any = container.add_stream("libx264", rate=24)
+        video.width, video.height, video.pix_fmt = 352, 640, "yuv420p"
+        frame_type: Any = av.VideoFrame
+        for _ in range(124):
+            for packet in video.encode(frame_type.from_image(image)):
+                container.mux(packet)
+        for packet in video.encode():
+            container.mux(packet)
+    write_tone(folder / "portrait.wav", 124 / 24)
+    (folder / "portrait.txt").write_text("A red head marker near the top of a blue portrait frame.", encoding="utf-8")
+
+
 def write_tone(file: Path, seconds: float) -> None:
     with wave.open(str(file), "wb") as stream:
         stream.setnchannels(1)
@@ -113,12 +132,15 @@ def main() -> None:
     parser.add_argument("root", type=Path, help="A new isolated fixture directory; existing directories are preserved.")
     parser.add_argument("--launch", action="store_true")
     parser.add_argument("--h3-audio", action="store_true")
+    parser.add_argument("--h3-portrait", action="store_true")
     parser.add_argument("--port", type=int, default=8767)
     args = parser.parse_args()
     media = prepare(args.root.resolve())
     if args.h3_audio:
         add_h3_cases(media)
     images, videos = add_separate_folders(args.root.resolve(), media)
+    if args.h3_portrait:
+        add_portrait(videos)
     print(f"Register this folder in Datasets: {media}", flush=True)
     print(f"To combine media in one job, also register the image folder: {images}", flush=True)
     print(f"and the video folder: {videos}", flush=True)

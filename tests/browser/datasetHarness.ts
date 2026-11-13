@@ -4,7 +4,9 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { localBackend, python } from './backend';
 
-export async function datasetHarness(options: { h3Audio?: boolean } = {}) {
+export async function datasetHarness(
+  options: { h3Audio?: boolean; h3Portrait?: boolean } = {},
+) {
   // Windows CI's TEMP can use an 8.3 alias; fixture settings use resolved paths.
   const root = await realpath(
     await mkdtemp(path.join(tmpdir(), 'musubi-dataset-')),
@@ -17,6 +19,7 @@ export async function datasetHarness(options: { h3Audio?: boolean } = {}) {
       'musubi_gui.dataset_fixture',
       fixture,
       ...(options.h3Audio ? ['--h3-audio'] : []),
+      ...(options.h3Portrait ? ['--h3-portrait'] : []),
     ],
     {
       stdio: 'pipe',
