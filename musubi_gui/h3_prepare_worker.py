@@ -1,8 +1,10 @@
 """Bounded CPU conversion of one H3 clip; invoked in an isolated subprocess."""
 
 import argparse
+import json
 import wave
 from fractions import Fraction
+from itertools import chain
 from pathlib import Path
 from typing import Any
 
@@ -10,12 +12,24 @@ import av
 from PIL import Image, ImageOps
 
 
-def prepare_video(source: Path, output: Path, width: int, height: int, frames: int, fit: str) -> float:
+def prepare_video(
+    source: Path, output: Path, width: int, height: int, frames: int, fit: str, orientation: str = "auto"
+) -> tuple[float, int, int]:
     duration = Fraction(frames, 24)
     count = 0
     with av.open(str(source)) as media, av.open(str(output), "w") as target:
         video = media.streams.video[0]
         video.thread_count = 2
+        decoded_frames = media.decode(video=0)
+        first = next(decoded_frames, None)
+        if first is None:
+            raise ValueError("No decodable video frames.")
+        if orientation == "auto":
+            # Phone videos can be landscape in storage and portrait on display.
+            display_frame: Any = first
+            displayed = display_frame.to_image().rotate(first.rotation, expand=True)
+            short, long = sorted((width, height))
+            width, height = (short, long) if displayed.height > displayed.width else (long, short)
         stream: Any = target.add_stream("libx264", rate=24)
         stream.width, stream.height, stream.pix_fmt = width, height, "yuv420p"
         stream.options = {"crf": "18", "preset": "fast", "threads": "2"}
@@ -44,7 +58,7 @@ def prepare_video(source: Path, output: Path, width: int, height: int, frames: i
                     target.mux(packet)
                 count += 1
 
-        for decoded in media.decode(video=0):
+        for decoded in chain([first], decoded_frames):
             if decoded.time is None:
                 raise ValueError("Video has no frame timestamps; re-encode its timeline first.")
             if origin is None:
@@ -69,7 +83,7 @@ def prepare_video(source: Path, output: Path, width: int, height: int, frames: i
             raise ValueError("Video did not produce the required training frames.")
         for packet in stream.encode():
             target.mux(packet)
-    return origin
+    return origin, width, height
 
 
 def prepare_audio(source: Path, output: Path, frames: int, origin: float | None) -> None:
@@ -124,14 +138,18 @@ def main() -> None:
     parser.add_argument("--height", type=int, required=True)
     parser.add_argument("--frames", type=int, required=True)
     parser.add_argument("--fit", choices=["crop", "pad"], required=True)
+    parser.add_argument("--orientation", choices=["auto", "fixed"], default="auto")
     parser.add_argument("--audio", type=Path)
     args = parser.parse_args()
     try:
-        origin = prepare_video(args.source, args.output, args.width, args.height, args.frames, args.fit)
+        origin, width, height = prepare_video(
+            args.source, args.output, args.width, args.height, args.frames, args.fit, args.orientation
+        )
         if args.audio:
             prepare_audio(
                 args.audio, args.output.with_suffix(".wav"), args.frames, origin if args.audio == args.source else None
             )
+        print(json.dumps({"width": width, "height": height}))
     except Exception as error:
         raise SystemExit(str(error)) from error
 

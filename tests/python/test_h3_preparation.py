@@ -8,6 +8,7 @@ import av
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from PIL import Image, ImageDraw
 
 from musubi_gui.acceptance import synthetic_video
 from musubi_gui.dataset_fixture import write_tone
@@ -16,6 +17,45 @@ from musubi_gui.datasets_api import dataset_router
 from musubi_gui.h3_preparation import H3Preparation, H3PreparationRequest
 from musubi_gui.h3_prepare_worker import prepare_audio
 from musubi_gui.settings import Settings, save_settings
+
+
+@pytest.mark.parametrize("rotation", [0, 90])
+def test_mixed_orientation_preparation_retains_portrait_head(tmp_path: Path, rotation: int) -> None:
+    client, media, dataset_id, _ = setup(tmp_path)
+    image = Image.new("RGB", (192, 320), "blue")
+    ImageDraw.Draw(image).rectangle((72, 12, 120, 48), fill="red")
+    image = image.rotate(-rotation, expand=True)
+    with av.open(str(media / "portrait.mp4"), "w") as output:
+        stream: Any = output.add_stream("libx264", rate=24)
+        stream.width, stream.height, stream.pix_fmt = image.width, image.height, "yuv420p"
+        stream.set_display_rotation(rotation)
+        frame_type: Any = av.VideoFrame
+        for _ in range(124):
+            for packet in stream.encode(frame_type.from_image(image)):
+                output.mux(packet)
+        for packet in stream.encode():
+            output.mux(packet)
+    client.post(f"/api/datasets/{dataset_id}/scan?wait=true", json={})
+    response = client.post(
+        f"/api/datasets/{dataset_id}/h3-preparation",
+        json={
+            "name": "Mixed prepared",
+            "output_root": str(tmp_path),
+            "width": 320,
+            "height": 192,
+            "allow_missing_audio": True,
+        },
+    )
+    assert response.status_code == 200, response.text
+    record = client.get(f"/api/datasets/{dataset_id}/h3-preparation").json()
+    items = client.get(f"/api/datasets/{record['dataset_id']}/items").json()
+    portrait = next(item for item in items if item["name"].startswith("portrait-"))
+    with av.open(str(Path(record["path"]) / portrait["path"])) as output:
+        first = next(output.decode(video=0)).to_image()
+    # The red marker represents the head near the top of a portrait shot.
+    assert first.size == (192, 320), "Portrait video was forced into a landscape crop."
+    pixel = first.getpixel((96, 30))
+    assert isinstance(pixel, tuple) and pixel[0] > 200 and pixel[2] < 60, "The portrait head was cropped out."
 
 
 def setup(tmp_path: Path) -> tuple[TestClient, Path, str, Path]:
@@ -107,6 +147,33 @@ def test_silent_video_conversion_changes_geometry_without_stretching(tmp_path: P
         pixel = frame.getpixel((2, 96))
         assert isinstance(pixel, tuple)
         assert (max(pixel) < 10) == (fit == "pad")
+
+
+def test_fixed_geometry_can_keep_portrait_content_with_borders(tmp_path: Path) -> None:
+    client, media, dataset_id, _ = setup(tmp_path)
+    synthetic_video(media / "portrait.mp4", 124, width=192, height=320)
+    client.post(f"/api/datasets/{dataset_id}/scan?wait=true", json={})
+    response = client.post(
+        f"/api/datasets/{dataset_id}/h3-preparation",
+        json={
+            "name": "Fixed geometry",
+            "output_root": str(tmp_path),
+            "width": 320,
+            "height": 192,
+            "orientation": "fixed",
+            "fit": "pad",
+            "allow_missing_audio": True,
+        },
+    )
+    assert response.status_code == 200, response.text
+    record = client.get(f"/api/datasets/{dataset_id}/h3-preparation").json()
+    portrait = next(item for item in record["items"] if item["name"] == "portrait.mp4")
+    assert portrait["state"] == "complete", portrait
+    assert (portrait["width"], portrait["height"]) == (320, 192)
+    with av.open(str(Path(record["path"]) / portrait["output"])) as output:
+        first = next(output.decode(video=0)).to_image()
+        edge = first.getpixel((2, 96))
+        assert isinstance(edge, tuple) and max(edge) < 10
 
 
 def test_preparation_rejects_unsafe_targets_invalid_geometry_and_overlapping_batches(tmp_path: Path) -> None:

@@ -408,6 +408,31 @@ def test_the_crop_warning_only_recommends_bucketing_where_it_ran(workspace: Work
     assert "has not been tried" in h3
 
 
+def test_h3_review_warns_when_training_would_crop_portrait_videos(workspace: Workspace) -> None:
+    folder = workspace.folder / "Portrait videos"
+    folder.mkdir()
+    synthetic_video(folder / "portrait.mp4", 124, width=352, height=640)
+    synthetic_audio(folder / "portrait.wav", 124)
+    (folder / "portrait.txt").write_text("A portrait clip.", encoding="utf-8")
+    dataset = workspace.register("Portrait videos", folder)
+    fixed = workspace.review(workspace.job("h3", {"dataset_id": dataset}, width=640, height=352))
+    assert any("may cut off heads" in warning and "Enable bucketing" in warning for warning in fixed["warnings"])
+    bucketed = workspace.review(
+        workspace.job(
+            "h3",
+            {"dataset_id": dataset},
+            width=640,
+            height=352,
+            enable_bucket=True,
+            bucket_no_upscale=True,
+        )
+    )
+    assert not any("may cut off heads" in warning for warning in bucketed["warnings"])
+    native = tomllib.loads(bucketed["dataset_toml"])
+    assert native["general"]["enable_bucket"] is True
+    assert native["general"]["bucket_no_upscale"] is True
+
+
 def test_review_counts_only_included_images_and_treats_a_mixed_folder_like_any_other(workspace: Workspace) -> None:
     mixed = workspace.images("Mixed")
     synthetic_video(workspace.folder / "Mixed" / "clip.mp4", 33, rate=Fraction(16))

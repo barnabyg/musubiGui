@@ -10,7 +10,13 @@ type Preparation = {
   completed: number;
   total: number;
   error?: string;
-  items: { name: string; state: string; error: string }[];
+  items: {
+    name: string;
+    state: string;
+    error: string;
+    width?: number;
+    height?: number;
+  }[];
 };
 const api = apiClient('H3 preparation failed.');
 
@@ -26,7 +32,8 @@ export function H3Preparation({
   const [width, setWidth] = useState(640);
   const [height, setHeight] = useState(352);
   const [frames, setFrames] = useState(124);
-  const [fit, setFit] = useState('crop');
+  const [orientation, setOrientation] = useState('auto');
+  const [fit, setFit] = useState('pad');
   const [allowMissing, setAllowMissing] = useState(false);
   const [parent, setParent] = useState(roots[0] ?? '');
   const [name, setName] = useState(`${dataset.name} · H3`.slice(0, 200));
@@ -69,6 +76,7 @@ export function H3Preparation({
             width,
             height,
             frames,
+            orientation,
             fit,
             allow_missing_audio: allowMissing,
           }),
@@ -89,8 +97,10 @@ export function H3Preparation({
         without padding. Captions are copied: review them after trimming.
       </p>
       <p>
-        The default 640 × 352, 124-frame configuration has trained on this PC’s
-        24 GB GPU. Larger settings may run out of GPU memory during training.
+        Landscape 640 × 352 at 124 frames has trained on the target 24 GB GPU.
+        Portrait uses the same pixel count, but portrait and mixed-orientation
+        GPU training have not been measured. Larger settings may run out of GPU
+        memory during training.
       </p>
       <fieldset disabled={running}>
         <label className="field">
@@ -112,6 +122,16 @@ export function H3Preparation({
           Choose a parent outside this source dataset and within a configured
           dataset root. A new folder is created for every batch.
         </p>
+        <label className="field">
+          H3 orientation buckets
+          <select
+            value={orientation}
+            onChange={(e) => setOrientation(e.target.value)}
+          >
+            <option value="auto">Automatic landscape and portrait</option>
+            <option value="fixed">One fixed width and height</option>
+          </select>
+        </label>
         <label className="field">
           H3 preparation width
           <input
@@ -148,14 +168,27 @@ export function H3Preparation({
           </select>
         </label>
         <p>
-          Output: {width} × {height}, 24 fps, {(frames / 24).toFixed(3)}{' '}
-          seconds. Source clips must be at least this long.
+          {orientation === 'auto'
+            ? `Buckets: landscape ${Math.max(width, height)} × ${Math.min(width, height)}; portrait ${Math.min(width, height)} × ${Math.max(width, height)}`
+            : `Output: ${width} × ${height}`}
+          , 24 fps, {(frames / 24).toFixed(3)} seconds. Source clips must be at
+          least this long.
         </p>
+        {orientation === 'auto' && (
+          <p>
+            Orientation follows the displayed video, including rotation. Square
+            sources use the landscape bucket. Fit with black borders keeps the
+            whole picture. Enable aspect-ratio bucketing in the training job to
+            preserve these shapes.
+          </p>
+        )}
         <label className="field">
           H3 aspect ratio handling
           <select value={fit} onChange={(e) => setFit(e.target.value)}>
-            <option value="crop">Centre crop to fill</option>
-            <option value="pad">Fit with black borders</option>
+            <option value="pad">Fit whole picture with black borders</option>
+            <option value="crop">
+              Centre crop to fill (can cut off subjects)
+            </option>
           </select>
         </label>
         <label>
@@ -206,7 +239,9 @@ export function H3Preparation({
             {record.items.map((item) => (
               <li key={item.name}>
                 {item.name}:{' '}
-                {item.state === 'complete' ? 'prepared' : item.error}
+                {item.state === 'complete'
+                  ? `prepared${item.width && item.height ? ` · ${item.width} × ${item.height}` : ''}`
+                  : item.error}
               </li>
             ))}
           </ul>
