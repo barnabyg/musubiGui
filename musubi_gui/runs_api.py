@@ -1,9 +1,11 @@
 """Same-origin run operations; clients select records rather than commands or paths."""
 
 from contextlib import contextmanager
+from pathlib import Path
 from typing import Any, Iterator
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict
 
 from musubi_gui.runs import RunService
@@ -96,7 +98,30 @@ def runs_router(service: RunService) -> APIRouter:
     @router.get("/{run_id}/logs")
     def logs(run_id: str) -> dict[str, Any]:
         with run_errors():
-            return {"text": service.logs(run_id), "progress": service.progress(run_id)}
+            run = service.get(run_id)
+            return {
+                "text": service.logs(run_id),
+                "progress": service.progress(run_id),
+                "performance_available": (Path(run["directory"]) / "performance.jsonl").is_file(),
+            }
+
+    @router.get("/{run_id}/performance")
+    def performance(run_id: str) -> Response:
+        with run_errors():
+            run = service.get(run_id)
+            path = Path(run["directory"]) / "performance.jsonl"
+            if not path.is_file():
+                raise HTTPException(404, "No performance diagnostics recorded for this Run.")
+            # Snapshot complete lines: the collector may append while the browser downloads.
+            content = path.read_bytes().rpartition(b"\n")[0]
+            return Response(
+                content + b"\n" if content else b"",
+                media_type="application/x-ndjson",
+                headers={
+                    "Content-Disposition": 'attachment; filename="h3-performance.jsonl"',
+                    "Cache-Control": "no-store",
+                },
+            )
 
     @router.post("/{run_id}/retry")
     def retry(run_id: str) -> dict[str, Any]:

@@ -71,6 +71,7 @@ type Progress = {
   eta: string | null;
   eta_scope?: 'phase';
   estimated_remaining_seconds?: number | null;
+  seconds_per_step?: number | null;
   loss: string | null;
   expert?: string;
   phase_step?: number;
@@ -202,6 +203,12 @@ function TrainingProgress({
         Training elapsed {elapsed} ·{' '}
         {progress.eta_scope === 'phase' ? 'Phase ETA' : 'Training ETA'}{' '}
         {progress.eta ?? 'unknown'} · Loss {progress.loss ?? 'unknown'}
+      </p>
+      <p>
+        Seconds per step:{' '}
+        {progress.seconds_per_step == null
+          ? 'unknown'
+          : `${progress.seconds_per_step.toFixed(2)} s/step (trainer reported)`}
       </p>
       <p>
         Estimated training remaining to max steps:{' '}
@@ -425,6 +432,7 @@ export function Runs({
     runId: string;
     text: string;
     progress: Progress | null;
+    performance_available?: boolean;
   } | null>(null);
   // Deleted, perhaps from another tab, or never there: a stale link leaves nothing to show.
   const forgetRun = useEffectEvent(() => onSelect?.(undefined, true));
@@ -507,6 +515,7 @@ export function Runs({
         const result = await request<{
           text: string;
           progress: Progress | null;
+          performance_available?: boolean;
         }>(`/api/runs/${runId}/logs`, 'GET', undefined, controller.signal);
         if (!controller.signal.aborted) {
           setLive({ runId: runId!, ...result });
@@ -1056,6 +1065,14 @@ export function Runs({
                 <pre>{JSON.stringify(run.manifest, null, 2)}</pre>
               </details>
               <p>Output: {run.directory}</p>
+              {run.job.family === 'h3' && current?.performance_available && (
+                <p>
+                  <a href={`/api/runs/${run.id}/performance`} download>
+                    Download performance diagnostics
+                  </a>{' '}
+                  — timestamped GPU, memory and step measurements.
+                </p>
+              )}
               <details>
                 <summary>Full Run ID</summary>
                 <code>{run.id}</code>

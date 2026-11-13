@@ -17,7 +17,14 @@ def test_upstream_bar_reports_step_times_and_loss() -> None:
         "steps:  10%|█         | 60/600 [1:19:00<11:51:00, 79.00s/it, avr_loss=0.0812]\r"
         "steps:  10%|█         | 61/600 [1:20:19<11:49:41, 79.00s/it, avr_loss=7.5e-02]"
     )
-    assert parse_progress(log) == {"step": 61, "total": 600, "elapsed": "1:20:19", "eta": "11:49:41", "loss": "7.5e-02"}
+    assert parse_progress(log) == {
+        "step": 61,
+        "total": 600,
+        "elapsed": "1:20:19",
+        "eta": "11:49:41",
+        "loss": "7.5e-02",
+        "seconds_per_step": 79.0,
+    }
 
 
 def test_bar_before_the_first_step_leaves_the_eta_unknown() -> None:
@@ -27,12 +34,29 @@ def test_bar_before_the_first_step_leaves_the_eta_unknown() -> None:
         "elapsed": None,
         "eta": None,
         "loss": None,
+        "seconds_per_step": None,
     }
 
 
 def test_fixture_lines_report_steps_and_loss_without_times() -> None:
     log = "steps: 1/2 loss=0.0 (synthetic optimizer_step=1)\nsteps: 2/2 loss=0.0 (synthetic optimizer_step=2)\n"
-    assert parse_progress(log) == {"step": 2, "total": 2, "elapsed": None, "eta": None, "loss": "0.0"}
+    assert parse_progress(log) == {
+        "step": 2,
+        "total": 2,
+        "elapsed": None,
+        "eta": None,
+        "loss": "0.0",
+        "seconds_per_step": None,
+    }
+
+
+@pytest.mark.parametrize(
+    ("rate", "expected"), [("2.5it/s", 0.4), ("83.20s/it", 83.2), ("?it/s", None), ("0it/s", None), ("1..2s/it", None)]
+)
+def test_speed_uses_only_the_latest_training_bar(rate: str, expected: float | None) -> None:
+    progress = parse_progress(f"steps: 1/2 [00:02<00:02, 2s/it]\rsteps: 2/2 [00:04<00:00, {rate}]\nsampling: 99s/it")
+    assert progress is not None
+    assert progress["seconds_per_step"] == expected
 
 
 def test_missing_or_nonsense_steps_stay_unknown() -> None:

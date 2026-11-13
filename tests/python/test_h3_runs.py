@@ -68,5 +68,17 @@ def test_h3_training_outputs_a_checkpoint_and_decodable_video_with_audio(tmp_pat
         assert metadata["frames"] == 124
         assert metadata["audio"]["decoded_seconds"] >= 5
         assert completed["samples"][0]["status"] == "playable"
+        diagnostics = [
+            json.loads(line)
+            for line in Path(completed["directory"], "performance.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        assert {row["stage"] for row in diagnostics} == {"latent_cache", "text_cache", "train", "generate"}
+        assert sum(row["event"] == "monitor_stop" for row in diagnostics) == 4
+        assert all(row["fixture"] for row in diagnostics if row["event"] == "stage_start")
+        assert any(row["event"] == "sample" and row["host_available_bytes"] > 0 for row in diagnostics)
+        assert any(
+            row["stage"] == "train" and row["event"] == "progress_at_stop" and row["progress"]["step"] == 2
+            for row in diagnostics
+        )
     finally:
         service.close()
