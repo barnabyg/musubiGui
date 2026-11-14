@@ -13,6 +13,7 @@ for (const family of ['wan', 'h3'] as const) {
       const samples = page.getByRole('region', {
         name: 'Samples configuration',
       });
+      await page.getByRole('tab', { name: 'Samples', exact: true }).click();
       await expect(
         samples.getByLabel('Sample width', { exact: true }),
       ).toHaveValue('256');
@@ -26,9 +27,11 @@ for (const family of ['wan', 'h3'] as const) {
         exact: true,
       });
       if (family === 'h3') {
+        await page.getByRole('tab', { name: 'Samples', exact: true }).click();
         await duration.fill('1');
         await expect(duration).toHaveAttribute('aria-invalid', 'true');
       }
+      await page.getByRole('tab', { name: 'Samples', exact: true }).click();
       await duration.fill(family === 'wan' ? '2' : '6');
       const frames = family === 'wan' ? 33 : 141;
       await expect(samples).toContainText(`320 × 192 · ${frames} frames`);
@@ -48,6 +51,7 @@ for (const family of ['wan', 'h3'] as const) {
           () => document.documentElement.scrollWidth <= window.innerWidth,
         ),
       ).toBe(true);
+      await page.getByRole('tab', { name: 'Samples', exact: true }).click();
       await expect(duration).toHaveValue(family === 'wan' ? '2.0625' : '5.875');
       const exported = await (
         await page.request.get(`${app.url}/api/jobs/${job.id}/export`)
@@ -119,9 +123,11 @@ test('Wan image samples use independent geometry and remain available after swit
     const job = app.manifest.jobs.find((item) => item.family === 'wan')!;
     await page.goto(`${app.url}/#/jobs/${job.id}`);
     const samples = page.getByRole('region', { name: 'Samples configuration' });
+    await page.getByRole('tab', { name: 'Samples', exact: true }).click();
     await samples
       .getByLabel('Image sample (one frame)', { exact: true })
       .check();
+    await page.getByRole('tab', { name: 'Samples', exact: true }).click();
     await samples.getByLabel('Sample width', { exact: true }).fill('320');
     await expect(
       samples.getByLabel('Sample duration (seconds)', { exact: true }),

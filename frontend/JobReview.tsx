@@ -1,4 +1,5 @@
-import { Fragment, useEffect, useRef } from 'react';
+import { JobSection } from './JobSection';
+import { Fragment } from 'react';
 import { focusField, type JobFields } from './jobFields';
 import type { Job, Review } from './jobTypes';
 import { plural } from './labels';
@@ -41,16 +42,11 @@ export function JobReview({
   reviewField: JobFields['reviewField'];
   prepareReason: string;
 }) {
-  const reviewPanel = useRef<HTMLElement>(null);
   const frames = job.family === 'h3' ? job.config.frames : undefined;
-  useEffect(() => {
-    if (review) reviewPanel.current?.scrollIntoView({ block: 'start' });
-  }, [review]);
   return (
-    <section
-      ref={reviewPanel}
+    <JobSection
       id="job-section-review"
-      tabIndex={-1}
+
       className="panel job-review"
       aria-label="Configuration review"
     >
@@ -354,6 +350,6 @@ export function JobReview({
           </details>
         ))}
       </details>
-    </section>
+    </JobSection>
   );
 }

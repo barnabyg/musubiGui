@@ -64,7 +64,7 @@ From the repository root in PowerShell 7, prepare and launch an isolated CPU fix
 .\acceptance.cmd --workspace ".cache/cache-check-$([guid]::NewGuid().ToString('N'))"
 ```
 
-Open WAN acceptance 1, expand Advanced controls and find Caching. Prepare the job
+Open WAN acceptance 1, open Dataset preparation and find Caching. Prepare the job
 with the default policies. Change training steps to create another revision and
 prepare again: both cache stages should be reused. Set only text caching to Rebuild
 cache, save and prepare: latent caching should be reused and text caching should

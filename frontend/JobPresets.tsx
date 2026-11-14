@@ -1,3 +1,4 @@
+import { JobSection } from './JobSection';
 import type { Job, Preset } from './jobTypes';
 
 export function JobPresets({
@@ -34,7 +35,7 @@ export function JobPresets({
       ? 'Select a preset to apply it.'
       : '';
   return (
-    <section className="panel">
+    <JobSection className="panel" id="job-section-presets">
       <h2>Presets</h2>
       <div className="columns">
         <label className="field">
@@ -100,6 +101,6 @@ export function JobPresets({
           {applyPresetReason}
         </p>
       )}
-    </section>
+    </JobSection>
   );
 }

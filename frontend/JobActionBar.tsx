@@ -128,18 +128,39 @@ export function JobActionBar({
         </p>
       )}
       {job && (
-        <nav className="job-sections" aria-label="Job sections">
+        <div role="tablist" className="job-sections" aria-label="Job sections">
           {sections.map(({ id, label }) => (
             <button
               key={id}
               className="quiet"
-              aria-current={section === id ? 'true' : undefined}
+              role="tab"
+              id={`${id}-tab`}
+              aria-controls={id}
+              aria-selected={section === id}
+              tabIndex={section === id ? 0 : -1}
+              onKeyDown={(event) => {
+                const index = sections.findIndex((item) => item.id === id);
+                const next =
+                  event.key === 'Home'
+                    ? 0
+                    : event.key === 'End'
+                      ? sections.length - 1
+                      : event.key === 'ArrowRight'
+                        ? (index + 1) % sections.length
+                        : event.key === 'ArrowLeft'
+                          ? (index + sections.length - 1) % sections.length
+                          : undefined;
+                if (next === undefined) return;
+                event.preventDefault();
+                goToSection(sections[next].id);
+                document.getElementById(`${sections[next].id}-tab`)?.focus();
+              }}
               onClick={() => goToSection(id)}
             >
               {label}
             </button>
           ))}
-        </nav>
+        </div>
       )}
       {error && (
         <div role="alert" className="error">

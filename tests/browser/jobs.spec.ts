@@ -78,16 +78,18 @@ test('checkpoint retention persists and review explains protected saves', async 
     await page
       .getByRole('button', { name: 'New Wan job', exact: true })
       .click();
-    await page.getByText('Advanced controls', { exact: true }).click();
+
     const retention = page.getByLabel('Maximum checkpoint saves to keep', {
       exact: true,
     });
+    await page.getByRole('tab', { name: 'Checkpoints', exact: true }).click();
     await expect(retention).toHaveValue('0');
     await retention.fill('2');
     await page.getByRole('button', { name: 'Save draft', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('Draft saved');
     await page.reload();
-    await page.getByText('Advanced controls', { exact: true }).click();
+
+    await page.getByRole('tab', { name: 'Checkpoints', exact: true }).click();
     await expect(retention).toHaveValue('2');
     await page
       .getByRole('button', { name: 'Review configuration', exact: true })
@@ -127,8 +129,9 @@ test('the action bar stays visible, identity comes first and rare actions are in
     await expect.poll(inView).toBe(true);
 
     // Tabbing to a field below the bar scrolls it clear of the bar.
-    await page.getByText('Advanced controls', { exact: true }).click();
+
     const seed = page.getByLabel('Seed', { exact: true });
+    await page.getByRole('tab', { name: 'Samples', exact: true }).click();
     await seed.focus();
     await page.evaluate(() => window.scrollTo(0, 0));
     await page.getByLabel('Seed', { exact: true }).focus();
@@ -136,14 +139,9 @@ test('the action bar stays visible, identity comes first and rare actions are in
     const field = await seed.boundingBox();
     expect(field!.y).toBeGreaterThanOrEqual(bar!.y + bar!.height);
 
-    // Required job choices lead the editor; advanced presets follow them.
-    const headings = await page
-      .getByRole('heading', { level: 2 })
-      .allInnerTexts();
-    expect(headings.slice(0, 3)).toEqual([
+    await page.getByRole('tab', { name: 'Job & dataset', exact: true }).click();
+    await expect(page.getByRole('heading', { level: 2 })).toHaveText([
       'Job & dataset',
-      'Training',
-      'Samples',
     ]);
 
     const menu = page.getByRole('button', { name: 'More job actions' });
@@ -270,7 +268,7 @@ test('Review saves a dirty draft first, and disabled actions explain themselves'
     await page
       .getByRole('button', { name: 'New Wan job', exact: true })
       .click();
-    await page.getByText('Advanced controls', { exact: true }).click();
+
     const prepare = page.getByRole('button', {
       name: 'Prepare run',
       exact: true,
@@ -283,6 +281,7 @@ test('Review saves a dirty draft first, and disabled actions explain themselves'
     await expect(prepare).toHaveAccessibleDescription(
       'Choose Review configuration before preparing.',
     );
+    await page.getByRole('tab', { name: 'Presets', exact: true }).click();
     await expect(
       page.getByRole('button', { name: 'Save as preset', exact: true }),
     ).toHaveAccessibleDescription('Enter a preset name to save one.');
@@ -291,6 +290,7 @@ test('Review saves a dirty draft first, and disabled actions explain themselves'
     ).toHaveAccessibleDescription('Select a preset to apply it.');
 
     const steps = page.getByLabel('Training steps', { exact: true });
+    await page.getByRole('tab', { name: 'Training', exact: true }).click();
     await steps.fill('700');
     await expect(prepare).toHaveAccessibleDescription(/save these edits/);
     await expect(review).toBeEnabled();
@@ -310,6 +310,7 @@ test('Review saves a dirty draft first, and disabled actions explain themselves'
     await expect(page.getByRole('status')).toHaveText(
       'Save failed — edits retained',
     );
+    await page.getByRole('tab', { name: 'Training', exact: true }).click();
     await expect(steps).toHaveValue('700');
     await expect(
       page.getByRole('region', { name: 'Configuration review' }),
@@ -367,12 +368,14 @@ test('confirmation dialogs start on the safe choice, trap focus and cancel with 
     ).toBeVisible();
 
     // Unsaved edits ask first, on both routes away from the job.
+    await page.getByRole('tab', { name: 'Training', exact: true }).click();
     await page.getByLabel('Training steps', { exact: true }).fill('700');
     await page.getByRole('button', { name: 'New H3 job', exact: true }).click();
     const discard = page.getByRole('dialog', {
       name: 'Discard unsaved job edits?',
     });
     await discard.getByRole('button', { name: 'Keep editing' }).click();
+    await page.getByRole('tab', { name: 'Training', exact: true }).click();
     await expect(
       page.getByLabel('Training steps', { exact: true }),
     ).toHaveValue('700');
@@ -399,6 +402,7 @@ test('Jobs names components as Settings does and leaves out internal wording', a
       .click();
     await page.getByText('Model components', { exact: true }).click();
     const component = page.getByRole('textbox', { name: 'Wan low-noise DiT' });
+    await page.getByRole('tab', { name: 'Job & dataset', exact: true }).click();
     await expect(component).toBeVisible();
     await expect(page.getByText('wan_low', { exact: true })).toHaveCount(0);
     await expect(page.getByText('IMMUTABLE RUNS')).toHaveCount(0);
@@ -451,9 +455,16 @@ test('Wan draft controls, validation and reviewed native configuration survive s
     await page
       .getByRole('button', { name: 'New Wan job', exact: true })
       .click();
+    await page.getByRole('tab', { name: 'Job & dataset', exact: true }).click();
     await page.getByLabel('Job name', { exact: true }).fill('Browser Wan');
-    await page.getByText('Advanced controls', { exact: true }).click();
+
+    await page
+      .getByRole('tab', { name: 'LoRA & training', exact: true })
+      .click();
     await page.getByLabel('LoRA rank', { exact: true }).fill('16');
+    await page
+      .getByRole('tab', { name: 'Dataset preparation', exact: true })
+      .click();
     await page.getByRole('spinbutton', { name: /^Frames\b/ }).fill('18');
     await page.getByRole('button', { name: 'Save draft', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('Draft saved');
@@ -466,6 +477,9 @@ test('Wan draft controls, validation and reviewed native configuration survive s
     await expect(
       page.getByRole('button', { name: 'Prepare run', exact: true }),
     ).toBeDisabled();
+    await page
+      .getByRole('tab', { name: 'Dataset preparation', exact: true })
+      .click();
     await page.getByRole('spinbutton', { name: /^Frames\b/ }).fill('33');
     await page
       .getByLabel('Default training width', { exact: true })
@@ -510,10 +524,16 @@ test('Wan draft controls, validation and reviewed native configuration survive s
     await app.start();
     await openJobs(page, app.url);
     await page.getByRole('button', { name: /Browser Wan · WAN/ }).click();
-    await page.getByText('Advanced controls', { exact: true }).click();
+
+    await page
+      .getByRole('tab', { name: 'Dataset preparation', exact: true })
+      .click();
     await expect(
       page.getByRole('spinbutton', { name: /^Frames\b/ }),
     ).toHaveValue('33');
+    await page
+      .getByRole('tab', { name: 'LoRA & training', exact: true })
+      .click();
     await expect(page.getByLabel('LoRA rank', { exact: true })).toHaveValue(
       '16',
     );
@@ -531,16 +551,22 @@ test('a new draft starts realistic, warns about low steps and offers the smoke-t
     await page
       .getByRole('button', { name: 'New Wan job', exact: true })
       .click();
-    await page.getByText('Advanced controls', { exact: true }).click();
+
+    await page
+      .getByRole('tab', { name: 'Dataset preparation', exact: true })
+      .click();
     await expect(
       page.getByRole('spinbutton', { name: /^Default training width\b/ }),
     ).toHaveValue('832');
+    await page.getByRole('tab', { name: 'Training', exact: true }).click();
     await expect(
       page.getByLabel('Training steps', { exact: true }),
     ).toHaveValue('600');
+    await page.getByRole('tab', { name: 'Samples', exact: true }).click();
     await expect(
       page.getByRole('textbox', { name: 'Sample prompt' }),
     ).toHaveValue('');
+    await page.getByRole('tab', { name: 'Training', exact: true }).click();
     await page.getByLabel('Training steps', { exact: true }).fill('2');
     await page.getByRole('button', { name: 'Save draft', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('Draft saved');
@@ -549,15 +575,20 @@ test('a new draft starts realistic, warns about low steps and offers the smoke-t
       .click();
     await expect(page.getByText(/^Training steps: 2 steps/)).toBeVisible();
     await expect(page.getByText(/^Sampling: enter a prompt/)).toBeVisible();
+    await page.getByRole('tab', { name: 'Presets', exact: true }).click();
     await page
       .getByRole('combobox', { name: 'Compatible preset', exact: true })
       .selectOption({ label: 'Smoke test · Wan alternating · 4 steps' });
     await page
       .getByRole('button', { name: 'Apply preset', exact: true })
       .click();
+    await page
+      .getByRole('tab', { name: 'Dataset preparation', exact: true })
+      .click();
     await expect(
       page.getByRole('spinbutton', { name: /^Default training width\b/ }),
     ).toHaveValue('256');
+    await page.getByRole('tab', { name: 'Samples', exact: true }).click();
     await expect(
       page.getByRole('textbox', { name: 'Sample prompt' }),
     ).toHaveValue(/red square/);
@@ -614,13 +645,17 @@ test('Wan frame extraction controls persist and review counts cached windows aft
     await page
       .getByRole('button', { name: 'New Wan job', exact: true })
       .click();
+    await page.getByRole('tab', { name: 'Job & dataset', exact: true }).click();
     await page
       .getByRole('combobox', { name: 'Add a dataset' })
       .selectOption(dataset.id);
     await page
       .getByRole('button', { name: 'Add dataset', exact: true })
       .click();
-    await page.getByText('Advanced controls', { exact: true }).click();
+
+    await page
+      .getByRole('tab', { name: 'Dataset preparation', exact: true })
+      .click();
     await page.getByRole('spinbutton', { name: /^Frames\b/ }).fill('17');
     await page
       .getByRole('combobox', { name: /^Frame extraction\b/ })
@@ -645,7 +680,10 @@ test('Wan frame extraction controls persist and review counts cached windows aft
     await page.reload();
     await openJobs(page, app.url);
     await page.getByRole('button', { name: /New Wan job · WAN/ }).click();
-    await page.getByText('Advanced controls', { exact: true }).click();
+
+    await page
+      .getByRole('tab', { name: 'Dataset preparation', exact: true })
+      .click();
     await expect(
       page.getByRole('combobox', { name: /^Frame extraction\b/ }),
     ).toHaveValue('slide');
@@ -664,10 +702,14 @@ test('H3 editor keeps T2VA guidance stages and identifies invalid geometry', asy
   try {
     await openJobs(page, app.url);
     await page.getByRole('button', { name: 'New H3 job', exact: true }).click();
-    await page.getByText('Advanced controls', { exact: true }).click();
+
+    await page
+      .getByRole('tab', { name: 'Dataset preparation', exact: true })
+      .click();
     await expect(
       page.getByRole('spinbutton', { name: /^Frames\b/ }),
     ).toHaveValue('124');
+    await page.getByRole('tab', { name: 'Memory', exact: true }).click();
     await expect(
       page.getByLabel('H2D-only block swapping', { exact: false }),
     ).toBeChecked();
@@ -675,6 +717,9 @@ test('H3 editor keeps T2VA guidance stages and identifies invalid geometry', asy
       page.getByLabel('Runtime FP8 scaling', { exact: false }),
     ).toHaveCount(0);
     await expect(page.getByLabel(/negative prompt/i)).toHaveCount(0);
+    await page
+      .getByRole('tab', { name: 'Dataset preparation', exact: true })
+      .click();
     await page
       .getByLabel('Default training width', { exact: true })
       .fill('272');
@@ -711,35 +756,50 @@ test('duplication presets cancelled conversion and versioned export import keep 
     await page
       .getByRole('button', { name: 'New Wan job', exact: true })
       .click();
+    await page.getByRole('tab', { name: 'Job & dataset', exact: true }).click();
     await page.getByLabel('Job name', { exact: true }).fill('Reusable');
-    await page.getByText('Advanced controls', { exact: true }).click();
+
+    await page
+      .getByRole('tab', { name: 'LoRA & training', exact: true })
+      .click();
     await page.getByLabel('LoRA rank', { exact: true }).fill('16');
     await page.getByRole('button', { name: 'Save draft', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('Draft saved');
+    await page.getByRole('tab', { name: 'Presets', exact: true }).click();
     await page.getByLabel('Preset name', { exact: true }).fill('Sixteen');
     await page
       .getByRole('button', { name: 'Save as preset', exact: true })
       .click();
     await expect(page.getByRole('status')).toHaveText('Preset saved');
     await jobAction(page, 'Duplicate job');
+    await page.getByRole('tab', { name: 'Job & dataset', exact: true }).click();
     await expect(page.getByLabel('Job name', { exact: true })).toHaveValue(
       'Reusable copy',
     );
+    await page
+      .getByRole('tab', { name: 'LoRA & training', exact: true })
+      .click();
     await page.getByLabel('LoRA rank', { exact: true }).fill('32');
     await page.getByRole('button', { name: 'Save draft', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('Draft saved');
+    await page.getByRole('tab', { name: 'Presets', exact: true }).click();
     await page
       .getByRole('combobox', { name: 'Compatible preset', exact: true })
       .selectOption({ label: 'Sixteen' });
     await page
       .getByRole('button', { name: 'Apply preset', exact: true })
       .click();
+    await page
+      .getByRole('tab', { name: 'LoRA & training', exact: true })
+      .click();
     await expect(page.getByLabel('LoRA rank', { exact: true })).toHaveValue(
       '16',
     );
+    await page.getByRole('tab', { name: 'Training', exact: true }).click();
     await page.getByLabel('Training steps', { exact: true }).fill('800');
     await page.getByRole('button', { name: 'Save draft', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('Draft saved');
+    await page.getByRole('tab', { name: 'Presets', exact: true }).click();
     await page
       .getByRole('combobox', { name: 'Compatible preset', exact: true })
       .selectOption({
@@ -751,12 +811,16 @@ test('duplication presets cancelled conversion and versioned export import keep 
     await expect(page.getByRole('status')).toHaveText(
       'Preset applied as a new revision',
     );
+    await page
+      .getByRole('tab', { name: 'Dataset preparation', exact: true })
+      .click();
     await expect(
       page.getByRole('spinbutton', { name: /^Default training width\b/ }),
     ).toHaveValue('832');
     await expect(
       page.getByRole('spinbutton', { name: /^Frames\b/ }),
     ).toHaveValue('33');
+    await page.getByRole('tab', { name: 'Training', exact: true }).click();
     await expect(
       page.getByLabel('Training steps', { exact: true }),
     ).toHaveValue('800');
@@ -767,6 +831,7 @@ test('duplication presets cancelled conversion and versioned export import keep 
     await page
       .getByRole('button', { name: 'Cancel conversion', exact: true })
       .click();
+    await page.getByRole('tab', { name: 'Job & dataset', exact: true }).click();
     await expect(page.getByRole('combobox', { name: /^Recipe/ })).toHaveValue(
       'alternating',
     );
@@ -789,16 +854,23 @@ test('duplication presets cancelled conversion and versioned export import keep 
     await page
       .getByRole('button', { name: 'Import configuration', exact: true })
       .click();
+    await page.getByRole('tab', { name: 'Job & dataset', exact: true }).click();
     await expect(page.getByLabel('Job name', { exact: true })).toHaveValue(
       'Imported draft',
     );
     await page.getByRole('button', { name: /Reusable · WAN/ }).click();
+    await page
+      .getByRole('tab', { name: 'LoRA & training', exact: true })
+      .click();
     await expect(page.getByLabel('LoRA rank', { exact: true })).toHaveValue(
       '16',
     );
     await jobAction(page, 'Change model to H3 T2VA');
     await page
       .getByRole('button', { name: 'Accept conversion', exact: true })
+      .click();
+    await page
+      .getByRole('tab', { name: 'Dataset preparation', exact: true })
       .click();
     await expect(
       page.getByRole('spinbutton', { name: /^Frames\b/ }),
@@ -827,6 +899,7 @@ test('job actions wait for the initial load so it cannot replace new drafts', as
     await expect(create).toBeDisabled();
     release();
     await create.click();
+    await page.getByRole('tab', { name: 'Job & dataset', exact: true }).click();
     await page.getByLabel('Job name', { exact: true }).fill('After load');
     await page.getByRole('button', { name: 'Save draft', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('Draft saved');
@@ -848,15 +921,27 @@ test('the job form uses short fields for short values and shares rows between re
     await page
       .getByRole('button', { name: 'New Wan job', exact: true })
       .click();
-    const box = async (label: string) =>
-      (await page
+    const box = async (label: string) => {
+      await page
+        .getByRole('tab', {
+          name:
+            label === 'Blocks to swap'
+              ? 'Memory'
+              : label === 'Training steps'
+                ? 'Training'
+                : 'Dataset preparation',
+          exact: true,
+        })
+        .click();
+      return (await page
         .getByRole('spinbutton', { name: new RegExp(`^${label}`) })
         .boundingBox())!;
+    };
     // The compact setup stays shorter than the previous expanded form.
     expect(
       await page.evaluate(() => document.documentElement.scrollHeight),
     ).toBeLessThan(3200);
-    await page.getByText('Advanced controls', { exact: true }).click();
+
     for (const label of [
       'Blocks to swap',
       'Default training width',
@@ -873,74 +958,91 @@ test('the job form uses short fields for short values and shares rows between re
   }
 });
 
-test('the section menu reaches every section, marks the current one and keeps unsaved edits', async ({
-  page,
-}) => {
-  const app = await workspace();
-  try {
-    await page.setViewportSize({ width: 1000, height: 800 });
-    await openJobs(page, app.url);
-    await page
-      .getByRole('button', { name: 'New Wan job', exact: true })
-      .click();
-    const menu = page.getByRole('navigation', { name: 'Job sections' });
-    const go = (name: string) =>
-      menu.getByRole('button', { name, exact: true }).click();
-    const current = menu.locator('[aria-current="true"]');
-    const headings: [string, string][] = [
-      ['Training', 'Training'],
-      ['Samples', 'Samples'],
-      ['Dataset preparation', 'Dataset preparation'],
-      ['LoRA & training', 'LoRA & training'],
-      ['Memory', 'Memory'],
-      ['Checkpoints', 'Checkpoints'],
-      ['Review', 'Review'],
-      ['Job & dataset', 'Job & dataset'],
-    ];
-    const bar = page.locator('.job-action-bar');
-    for (const [item, heading] of headings) {
-      await go(item);
-      await expect(current).toHaveText(item);
-      const title = page.getByRole('heading', { name: heading, exact: true });
-      await expect(title).toBeInViewport();
-      const [top, barBox] = [
-        await title.boundingBox(),
-        await bar.boundingBox(),
+for (const family of ['wan', 'h3'] as const) {
+  test(`${family} job tabs show disjoint panels, support keyboard navigation and keep unsaved edits`, async ({
+    page,
+  }) => {
+    const app = await workspace();
+    try {
+      await page.setViewportSize({ width: 1000, height: 800 });
+      await openJobs(page, app.url);
+      await page
+        .getByRole('button', {
+          name: family === 'wan' ? 'New Wan job' : 'New H3 job',
+          exact: true,
+        })
+        .click();
+      const menu = page.getByRole('tablist', { name: 'Job sections' });
+      const go = (name: string) =>
+        menu.getByRole('tab', { name, exact: true }).click();
+      const current = menu.getByRole('tab', { selected: true });
+      const labels = [
+        'Job & dataset',
+        'Training',
+        'Samples',
+        'Dataset preparation',
+        'LoRA & training',
+        'Memory',
+        'Checkpoints',
+        'Presets',
+        'Review',
       ];
-      expect(top!.y).toBeGreaterThanOrEqual(barBox!.y + barBox!.height);
-      expect(barBox!.height).toBeLessThan(220);
+      const fields = new Set<string>();
+      for (const label of labels) {
+        await go(label);
+        await expect(current).toHaveText(label);
+        const panel = page.getByRole('tabpanel');
+        await expect(panel).toHaveCount(1);
+        await expect(panel).toHaveAccessibleName(label);
+        for (const id of await panel
+          .locator('input[id], select[id], textarea[id]')
+          .evaluateAll((elements) => elements.map((element) => element.id))) {
+          expect(
+            fields.has(id),
+            `Field ${id} appears in more than one tab`,
+          ).toBe(false);
+          fields.add(id);
+        }
+        // Scrolling within a tab never switches its selected group.
+        await page.evaluate(() =>
+          window.scrollTo(0, document.documentElement.scrollHeight),
+        );
+        await expect(current).toHaveText(label);
+      }
+      await current.focus();
+      await page.keyboard.press('Home');
+      await expect(current).toHaveText('Job & dataset');
+      await expect(current).toBeFocused();
+      await page.keyboard.press('ArrowLeft');
+      await expect(current).toHaveText('Review');
+      await page.keyboard.press('ArrowRight');
+      await expect(current).toHaveText('Job & dataset');
+      await page.keyboard.press('End');
+      await expect(current).toHaveText('Review');
+
+      await page.keyboard.press('Tab');
+      await expect(page.getByRole('tabpanel')).toBeFocused();
+
+      await go('Memory');
+      const blocks = page.getByRole('spinbutton', { name: /^Blocks to swap/ });
+      await blocks.fill('12');
+      await go('LoRA & training');
+      await go('Memory');
+      await expect(blocks).toHaveValue('12');
+      await expect(page.getByRole('status')).toHaveText('Unsaved draft');
+
+      expect(
+        await page.evaluate(
+          () =>
+            document.documentElement.scrollWidth <=
+            document.documentElement.clientWidth,
+        ),
+      ).toBe(true);
+    } finally {
+      await app.close();
     }
-
-    // Scrolling by hand moves the mark too.
-    await page
-      .getByRole('heading', { name: 'Memory', exact: true })
-      .evaluate((element) => {
-        const bottom = document
-          .querySelector('.job-action-bar')!
-          .getBoundingClientRect().bottom;
-        window.scrollBy(0, element.getBoundingClientRect().top - bottom - 4);
-      });
-    await expect(current).toHaveText('Memory');
-
-    await go('Memory');
-    const blocks = page.getByRole('spinbutton', { name: /^Blocks to swap/ });
-    await blocks.fill('12');
-    await go('LoRA & training');
-    await go('Memory');
-    await expect(blocks).toHaveValue('12');
-    await expect(page.getByRole('status')).toHaveText('Unsaved draft');
-
-    expect(
-      await page.evaluate(
-        () =>
-          document.documentElement.scrollWidth <=
-          document.documentElement.clientWidth,
-      ),
-    ).toBe(true);
-  } finally {
-    await app.close();
-  }
-});
+  });
+}
 
 test('invalid fields are flagged while typing and review errors lead to their field', async ({
   page,
@@ -951,8 +1053,11 @@ test('invalid fields are flagged while typing and review errors lead to their fi
     await page
       .getByRole('button', { name: 'New Wan job', exact: true })
       .click();
-    await page.getByText('Advanced controls', { exact: true }).click();
+
     const width = page.getByLabel('Default training width', { exact: true });
+    await page
+      .getByRole('tab', { name: 'Dataset preparation', exact: true })
+      .click();
     await expect(width).not.toHaveAttribute('aria-invalid', 'true');
     await width.fill('250');
     await expect(width).toHaveAttribute('aria-invalid', 'true');
@@ -967,6 +1072,7 @@ test('invalid fields are flagged while typing and review errors lead to their fi
     await expect(frames).toHaveAccessibleDescription(/4\*n\+1/);
     await frames.fill('33');
     const blocks = page.getByRole('spinbutton', { name: 'Blocks to swap' });
+    await page.getByRole('tab', { name: 'Memory', exact: true }).click();
     await blocks.fill('39');
     await expect(blocks).toHaveAccessibleDescription('Enter 0 to 38.');
     await blocks.fill('1.5');
@@ -974,9 +1080,15 @@ test('invalid fields are flagged while typing and review errors lead to their fi
     await blocks.fill('36');
 
     // Nothing is blocked: an invalid draft can still be saved.
+    await page
+      .getByRole('tab', { name: 'Dataset preparation', exact: true })
+      .click();
     await width.fill('250');
     await page.getByRole('button', { name: 'Save draft', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('Draft saved');
+    await page
+      .getByRole('tab', { name: 'Dataset preparation', exact: true })
+      .click();
     await width.fill('256');
 
     // A new draft has no dataset yet, so Review names it, beside the field and as a link.
@@ -1039,7 +1151,10 @@ test('a review size error leads to the dimension that is wrong', async ({
     await page
       .getByRole('button', { name: 'New Wan job', exact: true })
       .click();
-    await page.getByText('Advanced controls', { exact: true }).click();
+
+    await page
+      .getByRole('tab', { name: 'Dataset preparation', exact: true })
+      .click();
     await page
       .getByLabel('Default training height', { exact: true })
       .fill('250');
@@ -1050,6 +1165,9 @@ test('a review size error leads to the dimension that is wrong', async ({
     await expect(
       page.getByLabel('Default training height', { exact: true }),
     ).toBeFocused();
+    await page
+      .getByRole('tab', { name: 'Dataset preparation', exact: true })
+      .click();
     await expect(
       page.getByLabel('Default training width', { exact: true }),
     ).not.toHaveAttribute('aria-invalid', 'true');
@@ -1095,6 +1213,7 @@ test('a saved value Review rejects has a control to fix it, even where the form 
       .click();
     const toggle = page.getByRole('checkbox', { name: /^Runtime FP8 scaling/ });
     await expect(toggle).toBeFocused();
+    await page.getByRole('tab', { name: 'Memory', exact: true }).click();
     await toggle.click();
     await expect(toggle).toHaveCount(0);
   } finally {

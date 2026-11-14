@@ -1,4 +1,6 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
+import type { Review } from './jobTypes';
 
 export const sections = [
   { id: 'job-section-job', label: 'Job & dataset' },
@@ -8,15 +10,32 @@ export const sections = [
   { id: 'job-section-training', label: 'LoRA & training' },
   { id: 'job-section-memory', label: 'Memory' },
   { id: 'job-section-checkpoints', label: 'Checkpoints' },
+  { id: 'job-section-presets', label: 'Presets' },
   { id: 'job-section-review', label: 'Review' },
 ];
 
-export function useJobSections(hasJob: boolean) {
+export function useJobSections(
+  jobId: string | undefined,
+  review: Review | null,
+) {
   const actionBar = useRef<HTMLDivElement>(null);
-  const [section, setSection] = useState(sections[0].id);
-  // A chosen section stays current until the page scrolls away from where it landed: a short last
-  // section can't reach the top of the window.
-  const chosen = useRef<{ id: string; at: number } | null>(null);
+  const [selection, setSelection] = useState({
+    jobId,
+    review,
+    section: sections[0].id,
+  });
+  let { section } = selection;
+  if (selection.jobId !== jobId || selection.review !== review) {
+    section = review
+      ? 'job-section-review'
+      : selection.jobId !== jobId
+        ? sections[0].id
+        : section;
+    setSelection({ jobId, review, section });
+  }
+  function goToSection(id: string) {
+    setSelection({ jobId, review, section: id });
+  }
   // Keeps focused and scrolled-to content clear of the sticky bar, however far it has wrapped.
   useLayoutEffect(() => {
     const bar = actionBar.current;
@@ -31,47 +50,19 @@ export function useJobSections(hasJob: boolean) {
       root.style.scrollPaddingTop = '';
     };
   }, []);
-  useEffect(() => {
-    if (!hasJob) return;
-    const follow = () => {
-      if (chosen.current) {
-        if (Math.abs(window.scrollY - chosen.current.at) < 2) return;
-        chosen.current = null;
-      }
-      const line =
-        (actionBar.current?.getBoundingClientRect().bottom ?? 0) + 16;
-      const root = document.documentElement;
-      const atEnd =
-        window.scrollY + window.innerHeight >= root.scrollHeight - 2 &&
-        window.scrollY > 0;
-      let current = sections[0].id;
-      for (const { id } of sections) {
-        const target = document.getElementById(id);
-        if (
-          target?.checkVisibility() &&
-          target.getBoundingClientRect().top <= line
-        )
-          current = id;
-      }
-      setSection(atEnd ? sections[sections.length - 1].id : current);
+  // Error links reveal the owning panel before focusField focuses its control.
+  useLayoutEffect(() => {
+    const reveal = (event: Event) => {
+      const panel = (event.target as HTMLElement).closest<HTMLElement>(
+        '[role="tabpanel"]',
+      );
+      if (panel && sections.some(({ id }) => id === panel.id))
+        flushSync(() =>
+          setSelection((current) => ({ ...current, section: panel.id })),
+        );
     };
-    follow();
-    window.addEventListener('scroll', follow, { passive: true });
-    return () => window.removeEventListener('scroll', follow);
-  }, [hasJob]);
-  function goToSection(id: string) {
-    const target = document.getElementById(id);
-    if (!target) return;
-    for (
-      let parent = target.parentElement;
-      parent;
-      parent = parent.parentElement
-    )
-      if (parent instanceof HTMLDetailsElement) parent.open = true;
-    target.scrollIntoView({ block: 'start' });
-    target.focus({ preventScroll: true });
-    chosen.current = { id, at: window.scrollY };
-    setSection(id);
-  }
+    document.addEventListener('reveal-job-field', reveal);
+    return () => document.removeEventListener('reveal-job-field', reveal);
+  }, []);
   return { actionBar, section, goToSection };
 }

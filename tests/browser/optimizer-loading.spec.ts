@@ -20,14 +20,18 @@ test('jobs remain usable while optional optimizer detection is pending or fails'
     });
     const job = app.manifest.jobs.find((job) => job.family === 'wan')!;
     await page.goto(`${app.url}/#/jobs/${job.id}`);
+    await page.getByRole('tab', { name: 'Job & dataset', exact: true }).click();
     await expect(
       page.getByRole('textbox', { name: 'Job name', exact: true }),
     ).toHaveValue(job.name);
-    await page.getByText('Advanced controls', { exact: true }).click();
+
     const optimizer = page.getByRole('combobox', {
       name: 'Optimizer',
       exact: true,
     });
+    await page
+      .getByRole('tab', { name: 'LoRA & training', exact: true })
+      .click();
     await expect(optimizer).toHaveValue('AdamW');
     release();
     await expect(
@@ -35,6 +39,7 @@ test('jobs remain usable while optional optimizer detection is pending or fails'
         'Optimizer availability could not be checked. AdamW remains available.',
       ),
     ).toBeVisible();
+    await page.getByRole('tab', { name: 'Job & dataset', exact: true }).click();
     await page
       .getByRole('textbox', { name: 'Job name', exact: true })
       .fill('Still editable');

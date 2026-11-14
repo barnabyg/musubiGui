@@ -397,6 +397,7 @@ test('the URL keeps the screen and selection across navigation, refresh and brow
     await page
       .getByRole('button', { name: `${job.name} · WAN · r1`, exact: true })
       .click();
+    await page.getByRole('tab', { name: 'Job & dataset', exact: true }).click();
     await expect(jobName).toHaveValue(job.name);
     expect(new URL(page.url()).hash).toBe(`#/jobs/${job.id}`);
 
@@ -404,29 +405,36 @@ test('the URL keeps the screen and selection across navigation, refresh and brow
     await nav('Runs').click();
     await expect(page.getByRole('heading', { name: 'Runs' })).toBeVisible();
     await nav('Jobs').click();
+    await page.getByRole('tab', { name: 'Job & dataset', exact: true }).click();
     await expect(jobName).toHaveValue(job.name);
     await nav('Runs').click();
     await page.goBack();
+    await page.getByRole('tab', { name: 'Job & dataset', exact: true }).click();
     await expect(jobName).toHaveValue(job.name);
     await page.goForward();
     await expect(page.getByRole('heading', { name: 'Runs' })).toBeVisible();
     await page.goBack();
     await page.reload();
+    await page.getByRole('tab', { name: 'Job & dataset', exact: true }).click();
     await expect(jobName).toHaveValue(job.name);
 
     // Back moves between selections too.
     await page
       .getByRole('button', { name: `${other.name} · H3 · r1`, exact: true })
       .click();
+    await page.getByRole('tab', { name: 'Job & dataset', exact: true }).click();
     await expect(jobName).toHaveValue(other.name);
     await page.goBack();
+    await page.getByRole('tab', { name: 'Job & dataset', exact: true }).click();
     await expect(jobName).toHaveValue(job.name);
 
     // Unsaved edits ask first, on back as on the sidebar.
+    await page.getByRole('tab', { name: 'Training', exact: true }).click();
     await page.getByLabel('Training steps', { exact: true }).fill('33');
     await page.goBack();
     const leave = page.getByRole('dialog', { name: 'Leave this job?' });
     await leave.getByRole('button', { name: 'Keep editing' }).click();
+    await page.getByRole('tab', { name: 'Training', exact: true }).click();
     await expect(
       page.getByLabel('Training steps', { exact: true }),
     ).toHaveValue('33');
@@ -434,6 +442,7 @@ test('the URL keeps the screen and selection across navigation, refresh and brow
     // Keeping the edits leaves history as it was, including what lay ahead.
     await page.goBack();
     await leave.getByRole('button', { name: 'Keep editing' }).click();
+    await page.getByRole('tab', { name: 'Training', exact: true }).click();
     await expect(
       page.getByLabel('Training steps', { exact: true }),
     ).toHaveValue('33');
@@ -442,7 +451,9 @@ test('the URL keeps the screen and selection across navigation, refresh and brow
     await expect(jobName).toHaveCount(0);
     // Discarding really leaves: the next step back doesn't return to the discarded job.
     await page.goForward();
+    await page.getByRole('tab', { name: 'Job & dataset', exact: true }).click();
     await expect(jobName).toHaveValue(job.name);
+    await page.getByRole('tab', { name: 'Training', exact: true }).click();
     await expect(
       page.getByLabel('Training steps', { exact: true }),
     ).not.toHaveValue('33');
@@ -1302,6 +1313,9 @@ test('a finished Run keeps its final LoRA prominent and samples in a separate ta
     await page
       .getByRole('tab', { name: 'Overview', exact: true })
       .press('ArrowRight');
+    await page
+      .getByRole('tab', { name: 'Overview', exact: true })
+      .press('ArrowRight');
     await expect(
       page.getByRole('tab', { name: 'Samples', exact: true }),
     ).toBeFocused();
@@ -1477,7 +1491,8 @@ test('a Wan job combines an image dataset and a video dataset through review, re
     await page
       .getByRole('button', { name: 'New Wan job', exact: true })
       .click();
-    await page.getByText('Advanced controls', { exact: true }).click();
+
+    await page.getByRole('tab', { name: 'Presets', exact: true }).click();
     await page
       .getByRole('combobox', { name: 'Compatible preset' })
       .selectOption({ label: 'Smoke test · Wan alternating · 4 steps' });
@@ -1486,10 +1501,11 @@ test('a Wan job combines an image dataset and a video dataset through review, re
       .click();
     await expect(page.getByRole('status')).toContainText('Preset applied');
 
+    // The library lists by name: H3 acceptance, the mixed dataset, then Susan images.
     // By keyboard: arrow to the dataset, Tab to the button, Enter. Focus returns to add another.
     const add = page.getByRole('combobox', { name: 'Add a dataset' });
+    await page.getByRole('tab', { name: 'Job & dataset', exact: true }).click();
     await add.focus();
-    // The library lists by name: H3 acceptance, the mixed dataset, then Susan images.
     await add.press('ArrowDown');
     await add.press('ArrowDown');
     await add.press('ArrowDown');
@@ -1510,6 +1526,7 @@ test('a Wan job combines an image dataset and a video dataset through review, re
     await expect(add.getByRole('option', { name: /Susan images/ })).toHaveCount(
       0,
     );
+    await page.getByRole('tab', { name: 'Job & dataset', exact: true }).click();
     await add.selectOption({ label: 'Susan videos (1 video)' });
     await addButton.click();
     await expect(rows.getByRole('listitem')).toHaveCount(2);
@@ -1519,10 +1536,12 @@ test('a Wan job combines an image dataset and a video dataset through review, re
     await page.keyboard.press('Enter');
     await expect(rows.getByRole('listitem')).toHaveCount(1);
     await expect(add).toBeFocused();
+    await page.getByRole('tab', { name: 'Job & dataset', exact: true }).click();
     await add.selectOption({ label: 'Susan videos (1 video)' });
     await addButton.click();
 
     const imageRepeats = page.getByLabel('Repeats for Susan images');
+    await page.getByRole('tab', { name: 'Job & dataset', exact: true }).click();
     await expect(imageRepeats).toHaveAttribute('placeholder', '1');
     await imageRepeats.fill('2');
     await page
@@ -1572,6 +1591,7 @@ test('a Wan job combines an image dataset and a video dataset through review, re
     await app.start();
     await page.reload();
     await expect(rows.getByRole('listitem')).toHaveCount(2);
+    await page.getByRole('tab', { name: 'Job & dataset', exact: true }).click();
     await expect(page.getByLabel('Repeats for Susan images')).toHaveValue('2');
     await expect(page.getByLabel('Repeats for Susan videos')).toHaveValue('');
 
@@ -1623,6 +1643,7 @@ test('a review error about an empty dataset opens its gallery, and a deleted dat
       .getByRole('button', { name: 'New Wan job', exact: true })
       .click();
     const add = page.getByRole('combobox', { name: 'Add a dataset' });
+    await page.getByRole('tab', { name: 'Job & dataset', exact: true }).click();
     await add.selectOption(dataset.id);
     await page
       .getByRole('button', { name: 'Add dataset', exact: true })
@@ -1631,6 +1652,7 @@ test('a review error about an empty dataset opens its gallery, and a deleted dat
       .getByRole('button', { name: 'Review configuration', exact: true })
       .click();
     const repeats = page.getByLabel('Repeats for Nothing here');
+    await page.getByRole('tab', { name: 'Job & dataset', exact: true }).click();
     await expect(repeats).not.toHaveAttribute('aria-invalid', 'true');
     await page
       .getByRole('link', { name: /^Dataset "Nothing here": no valid/ })
@@ -1723,6 +1745,7 @@ test('an H3 job adds an image dataset, warns that it is experimental and uses th
     await expect(add.getByRole('option', { name: /Susan images/ })).toHaveCount(
       1,
     );
+    await page.getByRole('tab', { name: 'Job & dataset', exact: true }).click();
     await add.selectOption({ label: 'Susan images (1 image)' });
     await page
       .getByRole('button', { name: 'Add dataset', exact: true })
@@ -1748,6 +1771,7 @@ test('an H3 job adds an image dataset, warns that it is experimental and uses th
     await expect(args('train')).not.toContainText('--video_only');
 
     // Without the video dataset, training also turns off audio supervision.
+    await page.getByRole('tab', { name: 'Job & dataset', exact: true }).click();
     await page
       .getByRole('button', { name: 'Remove H3 acceptance', exact: true })
       .click();

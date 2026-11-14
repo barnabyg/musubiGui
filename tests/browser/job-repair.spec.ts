@@ -39,6 +39,7 @@ test('review opens the exact same-name media item for audio and caption repairs'
       )
       .toBe(1);
     await page.goto(`${app.url}/#/jobs/${job.id}`);
+    await page.getByRole('tab', { name: 'Job & dataset', exact: true }).click();
     await page
       .getByRole('combobox', { name: 'Add a dataset' })
       .selectOption(dataset.id);
@@ -114,7 +115,10 @@ test('H3 repair inspects and applies audio against the reviewed frame count', as
   try {
     const job = app.manifest.jobs.find((entry) => entry.family === 'h3')!;
     await page.goto(`${app.url}/#/jobs/${job.id}`);
-    await page.getByText('Advanced controls', { exact: true }).click();
+
+    await page
+      .getByRole('tab', { name: 'Dataset preparation', exact: true })
+      .click();
     await page
       .getByRole('spinbutton', { name: 'Frames', exact: true })
       .fill('141');

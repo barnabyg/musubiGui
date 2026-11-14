@@ -128,12 +128,9 @@
   padding: var(--space-2) var(--space-5);
   color: var(--color-text-muted);
 }
-.job-sections [aria-current='true'] {
+.job-sections [aria-selected='true'] {
   color: var(--color-accent-strong);
   background: var(--color-accent-surface);
-}
-.jobs-workspace .panel[tabindex='-1']:focus {
-  outline: none;
 }
 .action-menu {
   position: relative;

@@ -26,6 +26,7 @@ test('paired Wan previews show total steps and their own expert counts', async (
     });
     expect(updated.ok()).toBe(true);
     await page.goto(`${app.url}/#/jobs/${job.id}`);
+    await page.getByRole('tab', { name: 'Samples', exact: true }).click();
     await expect(
       page.getByText(/Extra boundaries restart the shuffled dataset pass/),
     ).toBeVisible();
@@ -38,7 +39,10 @@ test('paired Wan previews show total steps and their own expert counts', async (
     const first = page.getByRole('button', {
       name: /^Step 4 preview · paired Wan · low 4 \/ high 0 trained steps.*available$/,
     });
-    await page.getByRole('tab', { name: 'Samples', exact: true }).click();
+    await page
+      .getByRole('tablist', { name: 'Run views' })
+      .getByRole('tab', { name: 'Samples', exact: true })
+      .click();
     await expect(first).toBeVisible({ timeout: 240_000 });
     await first.click();
     const playing = page.getByLabel('Output video', { exact: true });
@@ -90,9 +94,11 @@ for (const family of ['wan', 'h3'] as const) {
     try {
       const job = app.manifest.jobs.find((item) => item.family === family)!;
       await page.goto(`${app.url}/#/jobs/${job.id}`);
+      await page.getByRole('tab', { name: 'Training', exact: true }).click();
       await page
         .getByRole('spinbutton', { name: 'Training steps', exact: true })
         .fill('60');
+      await page.getByRole('tab', { name: 'Samples', exact: true }).click();
       await page
         .getByRole('spinbutton', { name: 'Preview every N steps', exact: true })
         .fill('5');
