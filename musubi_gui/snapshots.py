@@ -4,7 +4,6 @@ import hashlib
 import json
 import shutil
 import subprocess  # nosec B404
-import uuid
 from dataclasses import dataclass
 from importlib import import_module
 from pathlib import Path
@@ -235,10 +234,10 @@ def materialize_snapshot(inputs: SnapshotIdentity) -> dict[str, Any]:
     job, settings, manifest = inputs.job, inputs.settings, inputs.manifest
     provenance, keys, identity = inputs.provenance, inputs.stage_keys, inputs.fingerprint
     store: Any = import_module("musubi_gui.datasets").DatasetStore(inputs.root)
-    token = uuid.uuid4().hex
     output_runs = within_root(Path(settings.output_root) / "runs", [Path(settings.output_root)])
     directory = create_run_directory(output_runs, job.name)
-    cache = within_root(Path(settings.cache_root) / "runs" / token, [Path(settings.cache_root)])
+    cache_runs = within_root(Path(settings.cache_root) / "runs", [Path(settings.cache_root)])
+    cache = create_run_directory(cache_runs, job.name)
     snapshot_record: dict[str, Any] = {
         "version": 1,
         "status": "materializing",
@@ -256,7 +255,6 @@ def materialize_snapshot(inputs: SnapshotIdentity) -> dict[str, Any]:
         atomic_json(directory / "provenance.json", provenance)
         media_directory = directory / "media"
         media_directory.mkdir()
-        cache.mkdir(parents=True)
         sections = plan_sections(job, manifest["items"], directory, cache)
         folders = section_folders(sections)
         for index, item in enumerate(manifest["items"]):

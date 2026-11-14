@@ -348,7 +348,10 @@ def test_a_video_only_h3_jobs_arguments_match_a_fixed_regression_value() -> None
         id="f" * 32, revision=1, name="n", family="h3", datasets=[JobDataset(dataset_id="d")], config=smoke_config("h3")
     )
     stages = build_stages(job, settings, Path("run"), Path("cache"), {"video"})
-    text = json.dumps([[stage.name, stage.args] for stage in stages])
+    train = next(stage for stage in stages if stage.name == "train")
+    assert train.args[train.args.index("--output_name") + 1] == "n-r1"
+    # Normalize only the intentional filename change, preserving the original recipe regression check.
+    text = json.dumps([[stage.name, stage.args] for stage in stages]).replace("n-r1", f"h3-{job.id}")
     # Computed before H3 accepted images. The paths use this platform's separators; the suite runs on Windows.
     expected = "e272a88e6eee7d18141e853b952f88ec5c0aea54fab1995b6724e3d4dbb97c96"  # pragma: allowlist secret
     assert hashlib.sha256(text.encode()).hexdigest() == expected

@@ -336,17 +336,24 @@ def test_graceful_stop_waits_for_descendants_still_exiting_after_the_launcher(tm
         service.close()
 
 
-def test_final_save_at_a_checkpoint_interval_is_stored_once(tmp_path: Path) -> None:
+@pytest.mark.parametrize("family", ["wan", "h3"])
+def test_final_save_at_a_checkpoint_interval_is_stored_once(tmp_path: Path, family: str) -> None:
     # The fixture job trains two steps with a checkpoint interval of one and saved state on.
     fixture = acceptance_workspace(tmp_path)
     service = RunService(Path(fixture["state"]), fixture_mode=True, device_path=tmp_path / "gpu.sqlite")
     try:
-        run = service.prepare(fixture["jobs"][0]["id"])
+        job = next(job for job in fixture["jobs"] if job["family"] == family)
+        run = service.prepare(job["id"])
         wait_for(service, run["id"], "prepared")
         service.start(run["id"])
         completed = wait_for(service, run["id"], "completed")
         train = next(stage["args"] for stage in completed["stages"] if stage["name"] == "train")
         name = train[train.index("--output_name") + 1]
+        from musubi_gui.run_paths import job_folder
+
+        assert name == f"{job_folder(job['name'])}-r1"
+        assert job["id"] not in name
+        assert Path(completed["cache"]).name.startswith(job_folder(job["name"]) + "-")
         checkpoints = Path(completed["directory"]) / "checkpoints"
         assert sorted(path.name for path in checkpoints.iterdir()) == [
             f"{name}-state",

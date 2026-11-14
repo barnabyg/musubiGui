@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import path from 'node:path';
-import { access } from 'node:fs/promises';
+import { access, readdir } from 'node:fs/promises';
 import { runWorkspace, type RunRecord } from './runHarness';
 
 test('Run and output folders keep readable frozen Job names without collisions', async ({
@@ -48,6 +48,10 @@ test('Run and output folders keep readable frozen Job names without collisions',
     await expect(download).toBeVisible({ timeout: 240_000 });
     const href = await download.getAttribute('href');
     expect((await fetch(app.url + href)).ok).toBe(true);
+    const files = await readdir(path.join(records[0].directory, 'checkpoints'));
+    expect(files).toContain('Summer---test-r2.safetensors');
+    expect(files).toContain('Summer---test-r2-state');
+    expect(files.every((name) => !name.includes(jobs[0].id))).toBe(true);
     await page.goto(`${app.url}/#/jobs/${jobs[0].id}`);
     await page.getByLabel('Job name', { exact: true }).fill('Renamed Job');
     await page.getByRole('button', { name: 'Save draft', exact: true }).click();

@@ -766,6 +766,7 @@ def build_stages(job: Job, settings: Settings, run: Path, cache: Path, kinds: se
 
     settings = effective_settings(job, settings)
     config = job.config
+    output_name = f"{job_folder(job.name)}-r{job.revision}"
     recipe_stages = wan_stages if job.family == "wan" else h3_stages
     sample_width, sample_height, sample_frames = sample_geometry(config)
     stages = [stage for stage in recipe_stages(settings, run, cache) if stage.name != "fixture"]
@@ -784,7 +785,7 @@ def build_stages(job: Job, settings: Settings, run: Path, cache: Path, kinds: se
                 ("--blocks_to_swap", config.blocks_to_swap),
                 ("--save_every_n_steps", config.save_every),
                 ("--seed", config.seed),
-                ("--output_name", f"{job.family}-{job.id}"),
+                ("--output_name", output_name),
             ]:
                 _set_argument(args, flag, str(value))
             if job.family == "wan":
@@ -816,7 +817,7 @@ def build_stages(job: Job, settings: Settings, run: Path, cache: Path, kinds: se
             _set_argument(args, "--video_length", str(sample_frames))
             index = args.index("--video_size")
             args[index + 1 : index + 3] = [str(sample_height), str(sample_width)]
-            _set_argument(args, "--lora_weight", str(run / "checkpoints" / f"{job.family}-{job.id}.safetensors"))
+            _set_argument(args, "--lora_weight", str(run / "checkpoints" / f"{output_name}.safetensors"))
     stages = [
         stage
         for stage in stages
@@ -1197,7 +1198,7 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
         )
     )
     output = Path(settings.output_root) / "runs" / f"{job_folder(job.name)}-{{timestamp}}"
-    cache = Path(settings.cache_root) / "jobs" / job.id
+    cache = Path(settings.cache_root) / "runs" / f"{job_folder(job.name)}-{{timestamp}}"
     snapshot = output
     _add_duplicate_warnings(datasets, effective_items, warnings)
     if job.family == "h3" and any(item["kind"] == "image" for item in effective_items):
