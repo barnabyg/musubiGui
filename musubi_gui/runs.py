@@ -290,7 +290,7 @@ class RunService:
             )
         self._verify_inputs(previous)
         directory = create_run_directory(Path(previous["directory"]).parent, previous["job"]["name"], "retry")
-        cache = Path(previous["cache"]).parent / ("retry-" + uuid.uuid4().hex)
+        cache = create_run_directory(Path(previous["cache"]).parent, previous["job"]["name"], "retry")
         # An H3 Run has one metadata file per video section.
         metadata = sorted(file.name for file in Path(previous["directory"]).glob("dataset*.jsonl"))
         native_names = ["dataset.toml", *metadata, "samples.txt", "previews.json"]

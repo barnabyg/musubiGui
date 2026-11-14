@@ -10,17 +10,22 @@ or arrow keys to switch views. Switching views keeps the selected sample and its
 player mounted, so returning preserves playback. New previews do not replace a
 selected sample. LoRA downloads remain visible on both tabs.
 
-New output folders use the Job name and a UTC timestamp, for example
-`My-Job-2026-11-12_12-30-00Z`. Retries and restored segments include `retry` or
-`restore` before the timestamp. Same-name Runs created in the same second get
+New output and cache folders use the Job name and a UTC timestamp, for example
+`My-Job-2026-11-12_12-30-00Z`. Retry folders include `retry` before the timestamp.
+Restored segments use `restore` in their output folder and share their source's cache.
+Same-name Runs created in the same second get
 numeric suffixes (`-2`, `-3`, …). Existing folders keep their paths; internal Run
-IDs and cache identities remain independent.
+IDs and cache fingerprints remain independent. Checkpoint files and saved-state folders
+use the Job name and revision, for example `My-Job-r2.safetensors` and `My-Job-r2-state`.
 
 To check folder naming, from the repository root run
 `.\acceptance.cmd --workspace ".cache/folder-check-$([guid]::NewGuid().ToString('N'))"`.
 Prepare a fixture Job and inspect the Output path on its Run. It should contain
 the Job name and timestamp, without a random suffix. The fixture needs no models
-or GPU; preparation creates synthetic training inputs.
+or GPU; preparation creates synthetic training inputs. Start training, download the final
+LoRA and inspect the Run's `checkpoints` folder. Checkpoint files and state folders should
+use the frozen Job name and revision, with no random job ID. Rename the Job and confirm
+the original Run still downloads and offers its saved states.
 
 ## History refresh and network traffic
 

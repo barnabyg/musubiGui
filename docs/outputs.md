@@ -7,8 +7,12 @@ as LoRAs. Select a file to inspect its originating Run, metadata and availabilit
 Image, video and audio samples play in the browser; Open output in browser and
 Download output use only the recorded file identity. Checkpoint downloads remain
 binary attachments, named after the job as `<job name>-r<revision>[-step<N>].safetensors`
-with unsafe filename characters replaced. Files on disk keep their job-ID names, because
-existing Runs and duplicate removal rely on them. Legacy `.pt`/`.pth`/`.ckpt` files are never unpickled.
+with unsafe filename characters replaced. New checkpoint files and saved-state folders on disk
+also use the Job name and frozen revision, for example `My-Job-r2.safetensors` and
+`My-Job-r2-state`. Step checkpoints add `-step<N>`; paired checkpoints retain their expert
+and phase suffixes. Each Run's separate output folder prevents same-name Jobs from
+overwriting each other. Existing Runs keep their recorded names and paths, including
+job-ID names. Legacy `.pt`/`.pth`/`.ckpt` files are never unpickled.
 
 Alternating Wan Runs show **Paired LoRAs** with separate low/high download links and
 each expert's cumulative optimizer steps. Download names include the expert and phase

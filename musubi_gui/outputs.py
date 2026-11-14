@@ -32,7 +32,7 @@ WINDOWS_RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"{port}{n}" for port in ["COM
 
 
 def download_name(job: dict[str, Any], file: Path) -> str:
-    """Name a downloaded LoRA after its job, since the name on disk carries only the job's ID."""
+    """Name downloads after the frozen job, including checkpoints with legacy ID-based names."""
     name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", str(job.get("name", ""))).strip(" .")[:120].strip(" .") or "job"
     if name.split(".")[0].strip().upper() in WINDOWS_RESERVED:
         name = "_" + name
@@ -41,7 +41,7 @@ def download_name(job: dict[str, Any], file: Path) -> str:
     source = file.parent.name.removesuffix("-state") if state else file.stem
     step = re.search(r"-step(\d+)$", source)
     tag = f"-step{int(step[1])}" if step else ""
-    phase = re.search(r"-(low|high)-phase(\d+)", source)
+    phase = re.search(r"-(low|high)-phase(\d+)(?:-step\d+)?$", source)
     if phase:
         tag = f"-{phase[1]}-phase{int(phase[2])}{tag}"
     elif source.endswith(("-low-source", "-high-source")):
