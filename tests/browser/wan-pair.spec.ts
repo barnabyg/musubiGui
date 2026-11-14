@@ -17,7 +17,7 @@ test('Wan offers only alternating training for new jobs and presets', async ({
         name: 'Choose alternating high/low training',
       }),
     ).toHaveAttribute('disabled', '');
-    await page.getByText('Advanced controls', { exact: true }).click();
+
     await expect(
       page
         .getByRole('combobox', { name: 'Compatible preset', exact: true })
@@ -26,21 +26,26 @@ test('Wan offers only alternating training for new jobs and presets', async ({
           exact: true,
         }),
     ).toHaveCount(0);
+    await page.getByRole('tab', { name: 'Presets', exact: true }).click();
     await page
       .getByRole('combobox', { name: 'Compatible preset', exact: true })
       .selectOption('smoke-wan-paired');
     await page
       .getByRole('button', { name: 'Apply preset', exact: true })
       .click();
+    await page.getByRole('tab', { name: 'Job & dataset', exact: true }).click();
     await expect(page.getByRole('combobox', { name: /^Recipe/ })).toHaveValue(
       'alternating',
     );
+    await page.getByRole('tab', { name: 'Training', exact: true }).click();
     await expect(
       page.getByLabel('Training steps', { exact: true }),
     ).toHaveValue('4');
+    await page.getByRole('tab', { name: 'Job & dataset', exact: true }).click();
     await expect(
       page.getByLabel('Steps per expert before switching', { exact: true }),
     ).toHaveValue('1');
+    await page.getByRole('tab', { name: 'Checkpoints', exact: true }).click();
     await expect(
       page.getByRole('checkbox', { name: /^Save optimizer\/training state/ }),
     ).toBeChecked();
@@ -58,11 +63,13 @@ test('Wan offers only alternating training for new jobs and presets', async ({
     await page
       .getByRole('button', { name: 'New Wan job', exact: true })
       .click();
+    await page.getByRole('tab', { name: 'Job & dataset', exact: true }).click();
     await expect(recipe).toHaveValue('alternating');
     await expect(recipe.getByRole('option')).toHaveCount(1);
     await expect(
       page.getByLabel('Steps per expert before switching', { exact: true }),
     ).toHaveValue('30');
+    await page.getByRole('tab', { name: 'Checkpoints', exact: true }).click();
     await expect(
       page.getByRole('checkbox', { name: /^Save optimizer\/training state/ }),
     ).toBeChecked();
@@ -78,15 +85,18 @@ test('alternating Wan settings persist, train both experts and restore the paire
   try {
     const job = app.manifest.jobs.find((item) => item.family === 'wan')!;
     await page.goto(`${app.url}/#/jobs/${job.id}`);
+    await page.getByRole('tab', { name: 'Job & dataset', exact: true }).click();
     await page
       .getByRole('combobox', { name: /^Recipe/ })
       .selectOption('alternating');
     await page
       .getByLabel('Steps per expert before switching', { exact: true })
       .fill('2');
+    await page.getByRole('tab', { name: 'Training', exact: true }).click();
     await page.getByLabel('Training steps', { exact: true }).fill('8');
     await page.getByRole('button', { name: 'Save draft', exact: true }).click();
     await page.reload();
+    await page.getByRole('tab', { name: 'Job & dataset', exact: true }).click();
     await expect(page.getByRole('combobox', { name: /^Recipe/ })).toHaveValue(
       'alternating',
     );
@@ -202,7 +212,10 @@ test('alternating Wan settings persist, train both experts and restore the paire
     await expect(page.getByLabel('Paired LoRA outputs')).toContainText(
       '4 optimizer steps',
     );
-    await page.getByRole('tab', { name: 'Samples', exact: true }).click();
+    await page
+      .getByRole('tablist', { name: 'Run views' })
+      .getByRole('tab', { name: 'Samples', exact: true })
+      .click();
     await page.getByRole('button', { name: /sample.mp4.*available/ }).click();
     await expect(page.getByLabel('Output video')).toBeVisible();
     const video = page.getByLabel('Output video');

@@ -1,3 +1,4 @@
+import { JobSection } from './JobSection';
 import type { RefObject } from 'react';
 import { JobDatasets } from './JobDatasets';
 import { JobDatasetResolutions } from './JobDatasetResolutions';
@@ -64,7 +65,7 @@ export function JobIdentity({
 }) {
   const { problemProps, problemText } = fields;
   return (
-    <section className="panel" id="job-section-job" tabIndex={-1}>
+    <JobSection className="panel" id="job-section-job">
       <h2>Job & dataset</h2>
       <label className="field">
         Job name
@@ -180,7 +181,7 @@ export function JobIdentity({
           />
         ))}
       </details>
-    </section>
+    </JobSection>
   );
 }
 
@@ -206,7 +207,7 @@ export function JobControls({
   const { problemProps, problemText, number, toggle } = fields;
   return (
     <>
-      <section className="panel" id="job-section-dataset" tabIndex={-1}>
+      <JobSection className="panel" id="job-section-dataset">
         <h2>Dataset preparation</h2>
         <h3>Default training resolution</h3>
         <p className="hint">
@@ -354,8 +355,8 @@ export function JobControls({
             </small>
           </label>
         )}
-      </section>
-      <section className="panel" id="job-section-training" tabIndex={-1}>
+      </JobSection>
+      <JobSection className="panel" id="job-section-training">
         <h2>LoRA & training</h2>
         <label className="field">
           Optimizer
@@ -453,8 +454,8 @@ export function JobControls({
           {number('Learning rate', 'learning_rate')}
           {number('Gradient accumulation', 'gradient_accumulation')}
         </div>
-      </section>
-      <section className="panel" id="job-section-memory" tabIndex={-1}>
+      </JobSection>
+      <JobSection className="panel" id="job-section-memory">
         <h2>Memory</h2>
         {number(
           'Blocks to swap',
@@ -492,8 +493,8 @@ export function JobControls({
               toggle('Offload inactive DiT', 'offload_inactive_dit')}
           </>
         )}
-      </section>
-      <section className="panel" id="job-section-checkpoints" tabIndex={-1}>
+      </JobSection>
+      <JobSection className="panel" id="job-section-checkpoints">
         <h2>Checkpoints</h2>
         <div className="number-row">
           {number('Save every N steps', 'save_every')}
@@ -508,7 +509,7 @@ export function JobControls({
           'save_state',
           'A LoRA checkpoint alone is not resumable optimizer state.',
         )}
-      </section>
+      </JobSection>
     </>
   );
 }

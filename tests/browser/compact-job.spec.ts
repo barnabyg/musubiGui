@@ -32,8 +32,10 @@ for (const family of ['wan', 'h3'] as const) {
           exact: true,
         })
         .click();
-      const advanced = page.getByText('Advanced controls', { exact: true });
-      await expect(advanced).toBeVisible();
+      await expect(
+        page.getByRole('tablist', { name: 'Job sections' }),
+      ).toBeVisible();
+      await page.getByRole('tab', { name: 'Training', exact: true }).click();
       await expect(page.getByLabel('LoRA rank', { exact: true })).toBeHidden();
       const required = page.getByRole('region', { name: 'Required choices' });
       await expect(required).toContainText('Select at least one dataset');
@@ -52,6 +54,7 @@ for (const family of ['wan', 'h3'] as const) {
         page.getByRole('list', { name: 'Datasets in this job' }),
       ).toContainText(family === 'wan' ? 'WAN acceptance' : 'H3 acceptance');
       const prompt = page.getByRole('textbox', { name: 'Sample prompt' });
+      await page.getByRole('tab', { name: 'Samples', exact: true }).click();
       await prompt.fill('A red square moves across a blue field.');
       const sample = page.getByRole('checkbox', {
         name: 'Generate a final sample',
@@ -60,13 +63,17 @@ for (const family of ['wan', 'h3'] as const) {
       await sample.focus();
       await sample.press('Space');
       await expect(prompt).toBeHidden();
+      await page.getByRole('tab', { name: 'Training', exact: true }).click();
       await expect(required).toContainText('Required choices are complete');
       if (family === 'wan') {
+        await page.getByRole('tab', { name: 'Samples', exact: true }).click();
         await sample.press('Space');
+        await page.getByRole('tab', { name: 'Samples', exact: true }).click();
         await expect(prompt).toHaveValue(
           'A red square moves across a blue field.',
         );
       }
+      await page.getByRole('tab', { name: 'Training', exact: true }).click();
       await expect(
         page.getByLabel('Training steps', { exact: true }),
       ).toHaveValue('600');
@@ -109,13 +116,18 @@ test('compact saved and imported jobs retain every advanced value and reveal hid
       ).json()) as Job;
     const original = await load(fixtureJob.id);
     await page.goto(`${app.url}/#/jobs/${fixtureJob.id}`);
-    const advanced = page.getByText('Advanced controls', { exact: true });
+
     await expect(page.getByLabel('LoRA rank', { exact: true })).toBeHidden();
-    await advanced.press('Enter');
+
+    await page
+      .getByRole('tab', { name: 'LoRA & training', exact: true })
+      .click();
     await page.getByLabel('LoRA rank', { exact: true }).fill('16');
+    await page.getByRole('tab', { name: 'Samples', exact: true }).click();
     await page.getByLabel('Seed', { exact: true }).fill('123');
+    await page.getByRole('tab', { name: 'Memory', exact: true }).click();
     await page.getByRole('spinbutton', { name: /^Blocks to swap/ }).fill('12');
-    await advanced.press('Enter');
+
     await page.getByRole('button', { name: 'Save draft', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('revision 2');
     const expected = {
@@ -127,15 +139,19 @@ test('compact saved and imported jobs retain every advanced value and reveal hid
     expect((await load(fixtureJob.id)).config).toEqual(expected);
     await page.reload();
     await expect(page.getByLabel('LoRA rank', { exact: true })).toBeHidden();
-    await advanced.press('Enter');
+
+    await page
+      .getByRole('tab', { name: 'LoRA & training', exact: true })
+      .click();
     await expect(page.getByLabel('LoRA rank', { exact: true })).toHaveValue(
       '16',
     );
+    await page.getByRole('tab', { name: 'Samples', exact: true }).click();
     await expect(page.getByLabel('Seed', { exact: true })).toHaveValue('123');
+    await page.getByRole('tab', { name: 'Memory', exact: true }).click();
     await expect(
       page.getByRole('spinbutton', { name: /^Blocks to swap/ }),
     ).toHaveValue('12');
-    await advanced.press('Enter');
 
     await page.getByRole('button', { name: 'More job actions' }).click();
     await page
@@ -166,6 +182,7 @@ test('compact saved and imported jobs retain every advanced value and reveal hid
     await page
       .getByRole('button', { name: 'Import configuration', exact: true })
       .click();
+    await page.getByRole('tab', { name: 'Job & dataset', exact: true }).click();
     await expect(page.getByLabel('Job name', { exact: true })).toHaveValue(
       'Imported advanced values',
     );
@@ -184,14 +201,16 @@ test('compact saved and imported jobs retain every advanced value and reveal hid
     await expect(
       page.getByLabel('Default training width', { exact: true }),
     ).toBeFocused();
+    await page
+      .getByRole('tab', { name: 'LoRA & training', exact: true })
+      .click();
     await expect(page.getByLabel('LoRA rank', { exact: true })).toHaveValue(
       '16',
     );
     await expect(
       page.getByLabel('Gradient accumulation', { exact: true }),
     ).toHaveValue('3');
-    await advanced.press('Enter');
-    await advanced.press('Enter');
+
     expect((await load(id)).config).toEqual(imported.config);
     expect((await load(id)).revision).toBe(1);
   } finally {

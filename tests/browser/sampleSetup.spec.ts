@@ -12,7 +12,9 @@ for (const family of ['wan', 'h3'] as const) {
       const samples = page.getByRole('region', {
         name: 'Samples configuration',
       });
+      await page.getByRole('tab', { name: 'Samples', exact: true }).click();
       await expect(samples).toBeVisible();
+      await page.getByRole('tab', { name: 'Samples', exact: true }).click();
       await samples
         .getByLabel('Sample prompt', { exact: true })
         .fill('A blue square moves.');
@@ -27,13 +29,14 @@ for (const family of ['wan', 'h3'] as const) {
         .getByRole('checkbox', { name: 'Generate a final sample', exact: true })
         .uncheck();
       await page
-        .getByRole('navigation', { name: 'Job sections' })
-        .getByRole('button', { name: 'Training', exact: true })
+        .getByRole('tablist', { name: 'Job sections' })
+        .getByRole('tab', { name: 'Training', exact: true })
         .click();
       await page
-        .getByRole('navigation', { name: 'Job sections' })
-        .getByRole('button', { name: 'Samples', exact: true })
+        .getByRole('tablist', { name: 'Job sections' })
+        .getByRole('tab', { name: 'Samples', exact: true })
         .click();
+      await page.getByRole('tab', { name: 'Samples', exact: true }).click();
       await expect(
         samples.getByLabel('Sample prompt', { exact: true }),
       ).toHaveValue('A blue square moves.');
@@ -44,6 +47,7 @@ for (const family of ['wan', 'h3'] as const) {
         page.getByText('Draft saved — revision 2', { exact: true }),
       ).toBeVisible();
       await page.reload();
+      await page.getByRole('tab', { name: 'Samples', exact: true }).click();
       await expect(samples.getByLabel('Seed', { exact: true })).toHaveValue(
         '123',
       );
@@ -66,6 +70,7 @@ for (const family of ['wan', 'h3'] as const) {
         'Sample prompt',
       ])
         await expect(page.getByLabel(name, { exact: true })).toHaveCount(1);
+      await page.getByRole('tab', { name: 'Samples', exact: true }).click();
       await samples
         .getByLabel('Preview every N steps', { exact: true })
         .fill('0');

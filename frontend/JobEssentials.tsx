@@ -1,3 +1,4 @@
+import { JobSection } from './JobSection';
 import { focusField, type JobFields } from './jobFields';
 import type { Job } from './jobTypes';
 import type { JobMedia } from './jobMedia';
@@ -38,7 +39,7 @@ export function JobEssentials({
           : 'Enter a sample prompt or turn off the final sample',
     });
   return (
-    <section className="panel" id="job-section-essentials" tabIndex={-1}>
+    <JobSection className="panel" id="job-section-essentials">
       <h2>Training</h2>
       <section aria-label="Required choices">
         {choices.length ? (
@@ -89,6 +90,6 @@ export function JobEssentials({
           ? 'Total optimizer updates across both experts, not steps per expert.'
           : undefined,
       )}
-    </section>
+    </JobSection>
   );
 }

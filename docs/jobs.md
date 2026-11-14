@@ -2,7 +2,7 @@
 
 ## Timestep strategy
 
-Advanced controls → LoRA & training offers **Shift**, **Sigmoid** and **Uniform**
+The LoRA & training tab offers **Shift**, **Sigmoid** and **Uniform**
 for Wan. Shift favours noisier timesteps using a shifted sigmoid distribution;
 Sigmoid concentrates draws around the middle; Uniform assigns equal probability
 across the active expert's range. Sigmoid scale controls spread for Shift and
@@ -40,7 +40,7 @@ From `C:/docs/git/musubiGui` in PowerShell 7:
 .\acceptance.cmd --workspace ".cache/timesteps-$([guid]::NewGuid().ToString('N'))" --wan-paired
 ```
 
-Open WAN acceptance 1, expand Advanced controls, select Sigmoid and set its scale
+Open WAN acceptance 1, open LoRA & training, select Sigmoid and set its scale
 to 1.5. Save and reload: the choice should remain. Review should pass and show
 Sigmoid with scale 1.5 and bounded mapping; Advanced command arrays should keep
 the appropriate low/high ranges. Prepare and start the four-step fixture, then
@@ -50,7 +50,7 @@ CPU orchestration test; no models or GPU are required.
 
 ## Optimizer selection
 
-Advanced controls → LoRA & training offers AdamW and, when the selected training
+The LoRA & training tab offers AdamW and, when the selected training
 Python can load a CUDA-enabled bitsandbytes optimizer, AdamW8bit. Both Wan and H3
 use the pinned trainer's shared optimizer implementation. AdamW remains the
 default for old and new jobs. A saved or imported unavailable choice stays visible
@@ -77,20 +77,23 @@ From `C:/docs/git/musubiGui` in PowerShell 7:
 .\acceptance.cmd --workspace ".cache/optimizer-$([guid]::NewGuid().ToString('N'))"
 ```
 
-Open WAN acceptance 1, expand Advanced controls, select AdamW8bit, save and reload.
+Open WAN acceptance 1, open LoRA & training, select AdamW8bit, save and reload.
 The selection should remain; Review configuration should show Optimizer: AdamW8bit.
 Repeat with H3 acceptance 1. The fixture explicitly labels optimizer execution as
 simulated. No model weights or GPU are required; real optimizer execution needs
 the existing pinned training environment, compatible model paths and CUDA hardware.
 
-A sticky menu above the form jumps to each section and marks the current one. Simple rules
+Tabs above the form show one group of fields at a time. Each field belongs to exactly one tab,
+and switching tabs preserves unsaved edits. Scrolling does not change the selected tab. Simple rules
 such as multiples, frame formulas and ranges are flagged beside their field while typing, and
 never block saving a draft. Review stays the authority: each of its errors about a field is
 a link that focuses that field.
 
 ## Compact job setup
 
-Jobs opens with Job & dataset, Training, and one **Samples** configuration section.
+Jobs opens on **Job & dataset**. Separate tabs contain Training, Samples, Dataset preparation,
+LoRA & training, Memory, Checkpoints, Presets and Review. Use Left/Right arrows to switch tabs,
+or Home/End to select the first/last tab. This follows the separate-panel behaviour of Runs tabs.
 Samples holds final-sample enablement, preview cadence, prompt, inference steps,
 resolution, duration and the shared training/sample seed.
 Previews and the final sample can be enabled independently and share these settings.
@@ -103,10 +106,10 @@ is enabled. Turn sampling off explicitly if no final sample is needed. The compa
 shows the draft's current size, frame count and rank; new drafts start from the measured
 target-PC defaults. Review still checks media, model files and every saved setting.
 
-Expand Advanced controls to use presets or change preparation, LoRA, memory and checkpoint
-settings. Collapsing the controls, reopening a saved job or importing a configuration
-preserves its values. Section jumps and review error links open hidden controls before
-focusing them. Generated configuration remains under Advanced in Configuration review.
+Open the relevant tab to change its fields. Reopening a saved job or importing a configuration
+preserves every value. Review configuration opens the Review tab when its result arrives.
+Review error links select the owning tab and open any collapsed details before focusing the
+field. Generated configuration remains under Advanced in Configuration review.
 
 To verify manually, run this from the repository root in PowerShell 7:
 
@@ -115,12 +118,15 @@ To verify manually, run this from the repository root in PowerShell 7:
 ```
 
 Create a Wan job, choose a dataset, and enter a sample prompt or turn off the final sample.
-For the fixture's short WAN acceptance clip, expand Advanced controls and apply its Smoke
+For the fixture's short WAN acceptance clip, open Presets and apply its Smoke
 test preset before review; normal 33-frame-or-longer clips use the new-job recipe directly.
 Repeat with H3 acceptance, which supports the default 124 frames. Review should pass without
-changing memory or optimizer settings. Change LoRA rank in Advanced controls, save, collapse
-and reopen the job, then expand it again: the saved rank should remain. Check keyboard
-operation and a window about 700 pixels wide; the form should stay within the window.
+changing memory or optimizer settings. In LoRA & training, change LoRA rank, switch to Memory
+and back: the edit should remain, with only the selected tab’s fields visible. Save, reload,
+and return to LoRA & training: the saved rank should remain. Set an invalid width in Dataset
+preparation, review, and follow the Geometry error: Dataset preparation should open with the
+width focused. Check arrow-key navigation and a window about 700 pixels wide; the form should
+stay within the window.
 
 ## Drafts and revisions
 
@@ -277,7 +283,7 @@ only for files of the same size.
 
 ### Caching
 
-Under Advanced controls, Dataset preparation offers separate latent and text
+The Dataset preparation tab offers separate latent and text
 embedding cache policies. **Reuse compatible cache** is the default; preparation
 copies verified compatible artifacts into the new Run's private cache, or builds
 them when none are usable. **Rebuild cache** always runs that encoder for the new
@@ -430,7 +436,7 @@ not real training or useful learning; see the [Wan reference](reference/wan.md).
 
 ### Checkpoint retention
 
-Under Advanced controls, Checkpoints, set **Maximum checkpoint saves to keep**.
+In the Checkpoints tab, set **Maximum checkpoint saves to keep**.
 Zero (the default, including older jobs) keeps unlimited history. A positive value keeps
 that many historical saves per expert plus the newest/final save. A save includes its
 LoRA and optimizer/training state when enabled. Wan protects the latest restorable pair,
@@ -461,8 +467,9 @@ To verify manually, run from the repository root in PowerShell 7:
 .\acceptance.cmd --workspace ".cache/retention-$([guid]::NewGuid().ToString('N'))" --wan-paired
 ```
 
-Open WAN acceptance 1, expand Advanced controls, set Training steps to 12, steps per expert
-to 2, Save every N steps to 1 and Maximum checkpoint saves to keep to 1. Review, then Prepare
+Open WAN acceptance 1, set Training steps to 12 in Training, then steps per expert
+to 2 in Job & dataset. In Checkpoints, set Save every N steps to 1 and Maximum checkpoint
+saves to keep to 1. Review, then Prepare
 and start. Expect older saves to be pruned while both final expert LoRAs and their latest
 restorable pair remain available. Inspect Run details for retention status, restore the latest
 pair for four additional steps, and confirm the new segment completes. Zero should retain
@@ -571,7 +578,7 @@ folders stay separate and reusable. A folder containing both images and videos
 also works. Dataset contents come from valid, included files; no media type needs
 to be chosen when creating a dataset.
 
-Under **Advanced controls → Dataset preparation**, width, height, bucketing and
+In the **Dataset preparation** tab, width, height, bucketing and
 repeats apply to both media kinds. Images always train as single frames. An
 image-only job hides frame extraction and H3 audio policy; saved video settings
 are retained for when a video dataset is added again. **Frames** applies to video
@@ -642,8 +649,8 @@ video-only and combined jobs for both model families:
 ```
 
 Open the printed URL (normally `http://127.0.0.1:8767`). In Jobs, compare **WAN
-images only**, **WAN acceptance 1** (videos) and **WAN images + videos**. Expand
-Advanced controls and check the applicable controls. Review and **Prepare run**
+images only**, **WAN acceptance 1** (videos) and **WAN images + videos**. Open
+each relevant tab and check the applicable controls. Review and **Prepare run**
 each job. Expect one image section, one video section, or both respectively; the
 combined job's images have repeats 2. Reopen the job and expect its dataset list
 and repeats to remain. Repeat for H3, checking its experimental image warning

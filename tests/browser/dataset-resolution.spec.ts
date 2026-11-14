@@ -9,6 +9,7 @@ test('dataset resolutions survive saving and preparation while sample geometry s
     const wan = app.manifest.jobs.find((job) => job.family === 'wan')!;
     const h3 = app.manifest.jobs.find((job) => job.family === 'h3')!;
     await page.goto(`${app.url}/#/jobs/${wan.id}`);
+    await page.getByRole('tab', { name: 'Job & dataset', exact: true }).click();
     await page
       .getByRole('combobox', { name: 'Add a dataset' })
       .selectOption(h3.dataset_id);
@@ -30,6 +31,9 @@ test('dataset resolutions survive saving and preparation while sample geometry s
     await expect(rows.first()).toContainText(
       'Effective training resolution: 256 × 256 · default',
     );
+    await page
+      .getByRole('tab', { name: 'Dataset preparation', exact: true })
+      .click();
     await preparation
       .getByLabel('Default training width', { exact: true })
       .fill('288');
@@ -59,11 +63,20 @@ test('dataset resolutions survive saving and preparation while sample geometry s
         })
         .fill(height);
     }
+    await page
+      .getByRole('tab', { name: 'Dataset preparation', exact: true })
+      .click();
     await expect(rows.first()).toContainText('320 × 256 · custom');
     await expect(rows.last()).toContainText('256 × 320 · custom');
+    await page
+      .getByRole('tab', { name: 'Dataset preparation', exact: true })
+      .click();
     await preparation
       .getByLabel('Default training height', { exact: true })
       .fill('288');
+    await page
+      .getByRole('tab', { name: 'Dataset preparation', exact: true })
+      .click();
     await expect(rows.first()).toContainText('320 × 256 · custom');
     await expect(rows.last()).toContainText('256 × 320 · custom');
     const inherit = rows.last().getByRole('checkbox');
@@ -85,11 +98,15 @@ test('dataset resolutions survive saving and preparation while sample geometry s
       })
       .fill('320');
     const samples = page.getByRole('region', { name: 'Samples configuration' });
+    await page.getByRole('tab', { name: 'Samples', exact: true }).click();
     await expect(
       samples.getByLabel('Sample width', { exact: true }),
     ).toHaveValue('288');
     await samples.getByLabel('Sample width', { exact: true }).fill('256');
     await samples.getByLabel('Sample height', { exact: true }).fill('256');
+    await page
+      .getByRole('tab', { name: 'Dataset preparation', exact: true })
+      .click();
     await expect(rows.first()).toContainText('320 × 256 · custom');
     const saved = page.waitForResponse(
       (response) =>
@@ -100,7 +117,10 @@ test('dataset resolutions survive saving and preparation while sample geometry s
     expect((await saved).ok()).toBe(true);
     await page.reload();
     await page
-      .getByRole('button', { name: 'Dataset preparation', exact: true })
+      .getByRole('tab', { name: 'Dataset preparation', exact: true })
+      .click();
+    await page
+      .getByRole('tab', { name: 'Dataset preparation', exact: true })
       .click();
     await expect(
       page.getByRole('spinbutton', {
@@ -114,7 +134,7 @@ test('dataset resolutions survive saving and preparation while sample geometry s
     });
     await width.fill('65');
     await expect(width).toHaveAttribute('aria-invalid', 'true');
-    await page.getByText('Advanced controls', { exact: true }).click();
+
     await page
       .getByRole('button', { name: 'Review configuration', exact: true })
       .click();
@@ -125,6 +145,9 @@ test('dataset resolutions survive saving and preparation while sample geometry s
       })
       .click();
     await expect(width).toBeFocused();
+    await page
+      .getByRole('tab', { name: 'Dataset preparation', exact: true })
+      .click();
     await width.fill('320');
     await page
       .getByRole('button', { name: 'Review configuration', exact: true })

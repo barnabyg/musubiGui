@@ -1,3 +1,4 @@
+import { JobSection } from './JobSection';
 import type { JobFields } from './jobFields';
 import { SampleGeometry } from './SampleGeometry';
 import { fieldId } from './jobRules';
@@ -16,11 +17,10 @@ export function JobSamples({
 }) {
   const enabled = job.config.sample_enabled || job.config.preview_every > 0;
   return (
-    <section
+    <JobSection
       className="panel"
       id="job-section-samples"
       aria-label="Samples configuration"
-      tabIndex={-1}
     >
       <h2>Samples</h2>
       <p>
@@ -69,6 +69,6 @@ export function JobSamples({
         'seed',
         'Shared by training and sample generation.',
       )}
-    </section>
+    </JobSection>
   );
 }

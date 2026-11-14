@@ -1,3 +1,4 @@
+import { JobSection, JobSectionContext } from './JobSection';
 import { JobActionBar } from './JobActionBar';
 import { JobEssentials } from './JobEssentials';
 import { JobSamples } from './JobSamples';
@@ -61,7 +62,7 @@ export function Jobs(props: JobsProps) {
     prepareReason,
     failedCaption,
   } = useJobEditor(props);
-  const { actionBar, section, goToSection } = useJobSections(!!job);
+  const { actionBar, section, goToSection } = useJobSections(job?.id, review);
   return (
     <div className="jobs-workspace">
       <section className="title">
@@ -163,7 +164,7 @@ export function Jobs(props: JobsProps) {
         />
       )}
       {job && (
-        <>
+        <JobSectionContext value={section}>
           <JobIdentity
             job={job}
             busy={busy}
@@ -177,36 +178,29 @@ export function Jobs(props: JobsProps) {
           />
           <JobEssentials media={media} job={job} busy={busy} fields={fields} />
           <JobSamples job={job} busy={busy} fields={fields} config={config} />
-          <details className="job-advanced">
-            <summary>Advanced controls</summary>
-            <p>
-              Presets, preparation, LoRA, memory and checkpoints. Every saved
-              value is kept when these controls are closed.
-            </p>
-            <JobPresets
-              job={job}
-              busy={busy}
-              dirty={dirty}
-              presets={presets}
-              presetName={presetName}
-              setPresetName={setPresetName}
-              presetId={presetId}
-              setPresetId={setPresetId}
-              savePreset={savePreset}
-              applyPreset={applyPreset}
-            />
-            <JobControls
-              edit={edit}
-              datasets={datasets}
-              trainingOptions={trainingOptions}
-              media={media}
-              job={job}
-              busy={busy}
-              fields={fields}
-              config={config}
-            />
-          </details>
-          {review && existingRun && (
+          <JobPresets
+            job={job}
+            busy={busy}
+            dirty={dirty}
+            presets={presets}
+            presetName={presetName}
+            setPresetName={setPresetName}
+            presetId={presetId}
+            setPresetId={setPresetId}
+            savePreset={savePreset}
+            applyPreset={applyPreset}
+          />
+          <JobControls
+            edit={edit}
+            datasets={datasets}
+            trainingOptions={trainingOptions}
+            media={media}
+            job={job}
+            busy={busy}
+            fields={fields}
+            config={config}
+          />
+          {section === 'job-section-review' && review && existingRun && (
             <p>
               This revision already has a Run with the same inputs (
               {runStatus(existingRun.status).label}), so no new Run was created.{' '}
@@ -216,13 +210,13 @@ export function Jobs(props: JobsProps) {
             </p>
           )}
           {!review && (
-            <section className="panel" id="job-section-review" tabIndex={-1}>
+            <JobSection className="panel" id="job-section-review">
               <h2>Review</h2>
               <p>
                 Choose Review configuration to check these settings before
                 preparing a Run.
               </p>
-            </section>
+            </JobSection>
           )}
           {review && (
             <JobReview
@@ -232,7 +226,7 @@ export function Jobs(props: JobsProps) {
               reviewField={fields.reviewField}
             />
           )}
-        </>
+        </JobSectionContext>
       )}
       {!job && (
         <p>

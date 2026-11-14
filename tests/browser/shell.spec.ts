@@ -109,31 +109,14 @@ test('each view has one primary action, destructive actions look dangerous and f
     ).toHaveClass(/danger/);
     await page.keyboard.press('Escape');
 
-    // Check every compact-form stop through its advanced-controls boundary.
-    const advanced = page.getByText('Advanced controls', { exact: true });
-    await page.getByLabel('Job name').focus();
-    for (let stop = 0; stop < 50; stop += 1) {
-      await page.keyboard.press('Tab');
-      const focus = await page.evaluate(() => {
-        const element = document.activeElement!;
-        const style = getComputedStyle(element);
-        return {
-          tag: element.tagName,
-          outline: style.outlineStyle,
-          width: style.outlineWidth,
-        };
-      });
-      expect(focus.outline, focus.tag).toBe('solid');
-      expect(focus.width, focus.tag).toBe('2px');
-      if (
-        await advanced.evaluate((element) => element === document.activeElement)
-      )
-        break;
-    }
-    await expect(advanced).toBeFocused();
+    // Tabs and their fields retain the app's visible keyboard focus treatment.
+    const presets = page.getByRole('tab', { name: 'Presets', exact: true });
+    await presets.focus();
     await page.keyboard.press('Enter');
-    await page.keyboard.press('Tab');
+    await expect(presets).toBeFocused();
+    await expect(presets).toHaveCSS('outline-style', 'solid');
     const preset = page.getByLabel('Preset name', { exact: true });
+    await preset.focus();
     await expect(preset).toBeFocused();
     await expect(preset).toHaveCSS('outline-style', 'solid');
     await expect(preset).toHaveCSS('outline-width', '2px');

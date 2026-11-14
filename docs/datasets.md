@@ -34,7 +34,7 @@ Use **Create training job → Create H3 job** from the prepared dataset. The han
 enables aspect-ratio bucketing with no upscaling when any included video differs
 from the default training shape. These settings keep prepared portrait videos from
 being cropped back to landscape by training. For a manually created or existing
-job, enable **Advanced controls → Dataset preparation → Enable bucketing** and
+job, enable **Dataset preparation → Enable bucketing** and
 **Do not upscale buckets**. Review warns when bucketing is off and videos would be
 centre-cropped to a different shape. Existing saved jobs are not changed.
 

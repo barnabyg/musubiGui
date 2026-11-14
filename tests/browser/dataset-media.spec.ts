@@ -60,6 +60,9 @@ for (const family of ['wan', 'h3'] as const) {
         await page.goto(`${app.url}/#/jobs/${saved.id}`);
         const add = async (id: string) => {
           await page
+            .getByRole('tab', { name: 'Job & dataset', exact: true })
+            .click();
+          await page
             .getByRole('combobox', { name: 'Add a dataset' })
             .selectOption(id);
           await page
@@ -68,10 +71,15 @@ for (const family of ['wan', 'h3'] as const) {
         };
         if (media !== 'videos') {
           await add(images.id);
+          await page
+            .getByRole('tab', { name: 'Job & dataset', exact: true })
+            .click();
           await page.getByLabel('Repeats for Character images').fill('2');
         }
-        if (media !== 'images') await add(original.dataset_id);
-        await page.getByText('Advanced controls', { exact: true }).click();
+        if (media !== 'images') {
+          await add(original.dataset_id);
+        }
+
         const extraction = page.getByRole('combobox', {
           name: 'Frame extraction',
           exact: true,
@@ -84,15 +92,25 @@ for (const family of ['wan', 'h3'] as const) {
           await expect(page.getByLabel('Frames', { exact: true })).toHaveCount(
             0,
           );
+          await page
+            .getByRole('tab', { name: 'Training', exact: true })
+            .click();
           await expect(
             page.getByText('Images train as single frames.', { exact: false }),
           ).toBeVisible();
         } else {
+          await page
+            .getByRole('tab', { name: 'Dataset preparation', exact: true })
+            .click();
           await expect(extraction).toBeVisible();
-          if (family === 'h3')
+          if (family === 'h3') {
+            await page
+              .getByRole('tab', { name: 'Dataset preparation', exact: true })
+              .click();
             await expect(
               page.getByRole('combobox', { name: 'Audio policy' }),
             ).toBeVisible();
+          }
         }
         await page
           .getByRole('button', { name: 'Save draft', exact: true })
@@ -106,10 +124,14 @@ for (const family of ['wan', 'h3'] as const) {
             .getByRole('list', { name: 'Datasets in this job' })
             .getByRole('listitem'),
         ).toHaveCount(media === 'combined' ? 2 : 1);
-        if (media !== 'videos')
+        if (media !== 'videos') {
+          await page
+            .getByRole('tab', { name: 'Job & dataset', exact: true })
+            .click();
           await expect(
             page.getByLabel('Repeats for Character images'),
           ).toHaveValue('2');
+        }
         await page
           .getByRole('button', { name: 'Review configuration', exact: true })
           .click();
@@ -181,10 +203,11 @@ test('image sample length and video controls return when needed without changing
       (job) => job.name === 'H3 acceptance 1',
     )!;
     await page.goto(`${app.url}/#/jobs/${images.id}`);
-    await page.getByText('Advanced controls', { exact: true }).click();
+
     const frames = page.getByLabel('Sample duration (seconds)', {
       exact: true,
     });
+    await page.getByRole('tab', { name: 'Samples', exact: true }).click();
     await expect(frames).toHaveValue('5.166667');
     await frames.fill('1');
     const inspect = page.getByRole('button', {
@@ -196,17 +219,22 @@ test('image sample length and video controls return when needed without changing
     await expect(review).toContainText('Sample duration: H3 requires');
     await review.getByRole('button', { name: /^Sample duration:/ }).click();
     await expect(frames).toBeFocused();
+    await page.getByRole('tab', { name: 'Samples', exact: true }).click();
     await page
       .getByRole('checkbox', { name: 'Generate a final sample', exact: true })
       .uncheck();
     await expect(frames).toHaveCount(0);
     await inspect.click();
     await expect(review).toContainText('Review passed');
+    await page.getByRole('tab', { name: 'Job & dataset', exact: true }).click();
     await page
       .getByRole('combobox', { name: 'Add a dataset' })
       .selectOption(videos.dataset_id);
     await page
       .getByRole('button', { name: 'Add dataset', exact: true })
+      .click();
+    await page
+      .getByRole('tab', { name: 'Dataset preparation', exact: true })
       .click();
     await expect(
       page.getByRole('combobox', { name: 'Frame extraction', exact: true }),
@@ -247,6 +275,7 @@ test('mixed folders and matching filenames keep separate captions and caches acr
     await app.post(`/api/datasets/${videos.dataset_id}/scan?wait=true`);
     await app.post(`/api/datasets/${images.dataset_id}/scan?wait=true`);
     await page.goto(`${app.url}/#/jobs/${videos.id}`);
+    await page.getByRole('tab', { name: 'Job & dataset', exact: true }).click();
     await page
       .getByRole('combobox', { name: 'Add a dataset' })
       .selectOption(images.dataset_id);

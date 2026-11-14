@@ -9,7 +9,6 @@ test('cache policies persist from the job form and review explains preparation',
   try {
     const fixtureJob = app.manifest.jobs.find((job) => job.family === 'wan')!;
     await page.goto(`${app.url}/#/jobs/${fixtureJob.id}`);
-    await page.getByText('Advanced controls', { exact: true }).click();
     const latent = page.getByRole('combobox', {
       name: 'Latent caching',
       exact: true,
@@ -18,13 +17,18 @@ test('cache policies persist from the job form and review explains preparation',
       name: 'Text embedding caching',
       exact: true,
     });
+    await page
+      .getByRole('tab', { name: 'Dataset preparation', exact: true })
+      .click();
     await expect(latent).toHaveValue('reuse');
     await expect(text).toHaveValue('reuse');
     await text.selectOption('rebuild');
     await page.getByRole('button', { name: 'Save draft', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('revision 2');
     await page.reload();
-    await page.getByText('Advanced controls', { exact: true }).click();
+    await page
+      .getByRole('tab', { name: 'Dataset preparation', exact: true })
+      .click();
     await expect(latent).toHaveValue('reuse');
     await expect(text).toHaveValue('rebuild');
     const saved = (await (
