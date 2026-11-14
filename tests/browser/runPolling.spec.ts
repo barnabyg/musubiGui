@@ -183,7 +183,15 @@ test('finished Runs transfer summaries without repeating frozen inputs or termin
     }
     const [run] = await app.records();
     const observation = observeRunTraffic(page);
-    await page.goto(`${app.url}/#/runs/${run.id}`);
+    // Load history before selecting a Run: its first change key legitimately refreshes
+    // an already-open detail. Measure idle polling after that startup work.
+    await page.goto(`${app.url}/#/runs`);
+    await page
+      .getByRole('button', {
+        name: `${run.job.name} · ${run.job.family.toUpperCase()} · r${run.job.revision}`,
+        exact: true,
+      })
+      .click();
     await expect(
       page.getByText('State: Completed', { exact: true }),
     ).toBeVisible();
