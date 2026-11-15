@@ -93,6 +93,12 @@ type CompletionEstimate = {
   unknown_components: string[];
 };
 
+function remainingDuration(seconds: number | null | undefined) {
+  return seconds == null
+    ? 'unknown'
+    : `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m ${seconds % 60}s`;
+}
+
 function RunCompletion({
   run,
   estimate,
@@ -104,12 +110,7 @@ function RunCompletion({
   const seconds = estimate?.remaining_seconds;
   return (
     <div className="run-progress" aria-label="Run completion estimate">
-      <p>
-        Estimated Run remaining:{' '}
-        {seconds == null
-          ? 'unknown'
-          : `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m ${seconds % 60}s`}
-      </p>
+      <p>Estimated Run remaining: {remainingDuration(seconds)}</p>
       <p>
         Estimated finish:{' '}
         {estimate?.finish_at
@@ -120,10 +121,8 @@ function RunCompletion({
         <>
           <p>
             Partial remaining estimate:{' '}
-            {Math.floor(estimate.accounted_remaining_seconds / 3600)}h{' '}
-            {Math.floor((estimate.accounted_remaining_seconds % 3600) / 60)}m{' '}
-            {estimate.accounted_remaining_seconds % 60}s (measured components
-            only)
+            {remainingDuration(estimate.accounted_remaining_seconds)} (measured
+            components only)
           </p>
           <p>
             Conditional finish for estimated components:{' '}
@@ -136,9 +135,7 @@ function RunCompletion({
       {estimate?.preview_remaining_seconds != null && (
         <p>
           Outstanding preview budget:{' '}
-          {Math.floor(estimate.preview_remaining_seconds / 3600)}h{' '}
-          {Math.floor((estimate.preview_remaining_seconds % 3600) / 60)}m{' '}
-          {estimate.preview_remaining_seconds % 60}s
+          {remainingDuration(estimate.preview_remaining_seconds)}
         </p>
       )}
       {estimate && (
@@ -335,9 +332,7 @@ function TrainingProgress({
       </p>
       <p>
         Estimated training remaining to max steps:{' '}
-        {progress.estimated_remaining_seconds == null
-          ? 'unknown'
-          : `${Math.floor(progress.estimated_remaining_seconds / 3600)}h ${Math.floor((progress.estimated_remaining_seconds % 3600) / 60)}m ${progress.estimated_remaining_seconds % 60}s`}
+        {remainingDuration(progress.estimated_remaining_seconds)}
       </p>
       <small>
         Assumes the current observed step speed for all remaining steps.
