@@ -44,6 +44,8 @@ def download_name(job: dict[str, Any], file: Path) -> str:
     phase = re.search(r"-(low|high)-phase(\d+)(?:-step\d+)?$", source)
     if phase:
         tag = f"-{phase[1]}-phase{int(phase[2])}{tag}"
+    elif expert := re.search(r"-(low|high)-step\d+$", source):
+        tag = f"-{expert[1]}{tag}"
     elif source.endswith(("-low-source", "-high-source")):
         tag = "-" + source.rsplit("-", 2)[1] + "-source"
     return f"{name}-r{job.get('revision', 0)}{tag}{f'-state-{file.stem}' if state else ''}{file.suffix}"

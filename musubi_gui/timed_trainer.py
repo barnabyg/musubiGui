@@ -11,10 +11,11 @@ from typing import Any
 
 # Accelerate executes this file in the separate managed environment.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from musubi_gui.checkpoint_names import expert_step_name  # noqa: E402
 from musubi_gui.training_timing import TrainingTiming  # noqa: E402
 
 
-def observe_trainer(trainer: Any, timing: TrainingTiming) -> None:
+def observe_trainer(trainer: Any, timing: TrainingTiming, *, expert_step_offset: int | None = None) -> None:
     before = trainer.on_before_sample_images
     sample = trainer.sample_images
     after = trainer.on_after_sample_images
@@ -54,7 +55,15 @@ def observe_trainer(trainer: Any, timing: TrainingTiming) -> None:
     def on_optimizer_step(self: Any, *args: Any, **kwargs: Any) -> Any:
         result = optimizer_step(self, *args, **kwargs)
         if args[4]:
-            timing.step(int(args[5]) + 1)
+            step = int(args[5]) + 1
+            timing.step(step)
+            if expert_step_offset is not None:
+                namespace = args[0]
+                namespace.output_name = expert_step_name(namespace.output_name, expert_step_offset, step)
+                if step == namespace.max_train_steps:
+                    # The mandatory train-end save writes this same checkpoint/state.
+                    # Avoid publishing it twice with different epoch/RNG metadata.
+                    namespace.save_every_n_steps = None
         return result
 
     trainer.on_before_sample_images = on_before
@@ -74,7 +83,16 @@ def main() -> None:
         name = "wan_train_network" if options.family == "wan" else "minimax_h3_train_network"
         module = importlib.import_module("musubi_tuner." + name)
         trainer = module.WanNetworkTrainer if options.family == "wan" else module.MiniMaxH3NetworkTrainer
-        observe_trainer(trainer, TrainingTiming(options.timing_file))
+        offset = os.environ.get("MUSUBI_EXPERT_STEP_OFFSET") if options.family == "wan" else None
+        if offset is not None:
+            train_utils: Any = importlib.import_module("musubi_tuner.utils.train_utils")
+            # Pinned trainer formats these at the save boundary. output_name already
+            # includes the cumulative expert step; str.format ignores the local step.
+            train_utils.STEP_FILE_NAME = "{}"
+            train_utils.STEP_STATE_NAME = "{}-state"
+        observe_trainer(
+            trainer, TrainingTiming(options.timing_file), expert_step_offset=int(offset) if offset is not None else None
+        )
     sys.argv = [options.upstream, *remaining]
     runpy.run_path(options.upstream, run_name="__main__")
 

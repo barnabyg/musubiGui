@@ -152,7 +152,17 @@ def test_download_names_are_safe_on_windows(name: str, expected: str) -> None:
     assert download_name({"name": name, "revision": 3}, Path("wan-id.safetensors")) == expected
 
 
-@pytest.mark.parametrize("suffix", ["", "-step00000010", "-high-phase00000020", "-high-phase00000020-step00000010"])
+@pytest.mark.parametrize(
+    "suffix",
+    [
+        "",
+        "-step00000010",
+        "-high-phase00000020",
+        "-high-phase00000020-step00000010",
+        "-high-step00000010",
+        "-low-step00000010",
+    ],
+)
 def test_job_names_do_not_pass_for_paired_checkpoint_suffixes(suffix: str) -> None:
     job = {"name": "Job-low-phase123", "revision": 2}
     expected = suffix.replace("00000020", "20").replace("00000010", "10")

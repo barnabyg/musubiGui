@@ -2,13 +2,13 @@
 
 import hashlib
 import json
-import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from threading import Event
 from typing import Any
 
+from musubi_gui.checkpoint_names import training_saves
 from musubi_gui.run_store import references_folder
 from musubi_gui.safetensors_file import complete_safetensors
 from musubi_gui.saved_state import inspect_state
@@ -35,21 +35,11 @@ def _saves(run: dict[str, Any], validated: dict[str, tuple[object, Save]], cance
         args = stage.get("args", [])
         if stage["name"] != "train" or "--output_name" not in args:
             continue
-        name = args[args.index("--output_name") + 1]
         phase = stage.get("training", {})
         expert = phase.get("expert", "model")
-        total = int(args[args.index("--max_train_steps") + 1])
-        for checkpoint in root.glob(f"{name}*.safetensors"):
+        for step, checkpoint in training_saves(stage, root, ".safetensors"):
             if cancelled is not None and cancelled.is_set():
                 return []
-            suffix = checkpoint.stem.removeprefix(name)
-            match = re.fullmatch(r"-step(\d+)", suffix)
-            if suffix == "":
-                step = total
-            elif match and 0 < int(match[1]) <= total:
-                step = int(match[1])
-            else:
-                continue
             try:
                 within_root(checkpoint, [root])
                 if checkpoint.is_symlink():

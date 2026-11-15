@@ -768,6 +768,9 @@ class RunService:
                 log_file = Path(run["directory"]) / stage_log(stage)
                 with log_file.open("a", encoding="utf-8") as log:
                     environment = reference_environment(Path(run["cache"]))
+                    environment.pop("MUSUBI_EXPERT_STEP_OFFSET", None)
+                    if (offset := stage.get("training", {}).get("checkpoint_step_offset")) is not None:
+                        environment["MUSUBI_EXPERT_STEP_OFFSET"] = str(offset)
                     if self._seed_wan_tokenizer(run):
                         environment["HF_HUB_OFFLINE"] = "1"
                         log.write("Using the shared Wan tokenizer; Hugging Face Hub access is off for this stage.\n")

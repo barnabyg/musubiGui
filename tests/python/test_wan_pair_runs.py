@@ -51,6 +51,11 @@ def test_review_training_both_experts_and_sampling_the_exact_pair(tmp_path: Path
         assert ["--resume" in stage["args"] for stage in phases] == [False, False, True, True]
         for stage in phases:
             expert = stage["training"]["expert"]
+            completed_steps = stage["training"][f"{expert}_before"] + stage["training"]["steps"]
+            assert (
+                Path(stage["training"]["checkpoint"]).name
+                == f"Paired-Wan-r1-{expert}-step{completed_steps:08d}.safetensors"
+            )
             assert argument(stage["args"], "--dit") == settings.models[f"wan_{expert}"]
             assert argument(stage["args"], "--min_timestep") == ("0" if expert == "low" else "875")
             assert argument(stage["args"], "--max_timestep") == ("875" if expert == "low" else "1000")
@@ -85,6 +90,16 @@ def test_review_training_both_experts_and_sampling_the_exact_pair(tmp_path: Path
             "low": 4,
             "high": 4,
         }
+        for stage in resumed["stages"]:
+            if phase := stage.get("training"):
+                count = phase[f"{phase['expert']}_before"] + phase["steps"]
+                assert Path(phase["checkpoint"]).name.endswith(f"-{phase['expert']}-step{count:08d}.safetensors")
+        for state in service.saved_states(restored["id"]):
+            assert state["valid"], state["error"]
+            for expert, source in state["sources"].items():
+                assert Path(source["checkpoint"]["path"]).name.endswith(
+                    f"-{expert}-step{source['optimizer_step']:08d}.safetensors"
+                )
     finally:
         service.close()
 
@@ -304,3 +319,37 @@ def test_per_expert_budget_can_be_shorter_than_switch_interval(tmp_path: Path) -
     assert [
         (stage["training"]["expert"], stage["training"]["steps"]) for stage in review["stages"] if stage.get("training")
     ] == [("low", 1), ("high", 1)]
+
+
+def test_legacy_phase_named_run_restores_using_completed_expert_step_names(tmp_path: Path) -> None:
+    root, job_id = paired_job(tmp_path, steps=4, expert_interval=2, save_every=1)
+    service = RunService(root, fixture_mode=True, device_path=tmp_path / "gpu.sqlite")
+    try:
+        run = service.prepare(job_id)
+        prepared = wait_for(service, run["id"], "prepared", device_released=True)
+        replacements = {}
+        for stage in prepared["stages"]:
+            if phase := stage.get("training"):
+                name = argument(stage["args"], "--output_name")
+                legacy = f"{name.rsplit('-', 2)[0]}-{phase['expert']}-phase{phase['start']:08d}"
+                replacements[name] = legacy
+                phase.pop("checkpoint_step_offset")
+        # Replay the frozen command/path format used by existing released Runs.
+        for stage in prepared["stages"]:
+            for new, old in replacements.items():
+                stage["args"] = [arg.replace(new, old) for arg in stage["args"]]
+                if phase := stage.get("training"):
+                    phase["checkpoint"] = phase["checkpoint"].replace(new, old)
+        service.store.update(run["id"], lambda r: r.update(stages=prepared["stages"]))
+        service.start(run["id"])
+        wait_for(service, run["id"], "completed", device_released=True)
+        states = service.saved_states(run["id"])
+        assert states and all(state["valid"] for state in states)
+        source = next(state for state in states if state["counts"] == {"low": 2, "high": 1})
+        restored = service.restore_state(run["id"], source["id"], 1, confirmed=True)
+        resumed = wait_for(service, restored["id"], "completed", device_released=True)
+        assert resumed["sample_pair"]["low"]["steps"] == resumed["sample_pair"]["high"]["steps"] == 2
+        assert Path(resumed["sample_pair"]["high"]["path"]).name == "Paired-Wan-r1-high-step00000002.safetensors"
+        assert all(state["valid"] for state in service.saved_states(restored["id"]))
+    finally:
+        service.close()

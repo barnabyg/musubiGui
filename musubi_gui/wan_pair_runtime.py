@@ -1,10 +1,10 @@
 """Validate phase outputs and keep paired checkpoints/state tied to their training schedule."""
 
 import hashlib
-import re
 from pathlib import Path
 from typing import Any
 
+from musubi_gui.checkpoint_names import training_saves
 from musubi_gui.safetensors_file import complete_safetensors
 from musubi_gui.saved_state import inspect_state
 from musubi_gui.settings import within_root
@@ -82,16 +82,7 @@ def paired_saved_states(run: dict[str, Any]) -> list[dict[str, Any]]:
         if not phase:
             continue
         output = Path(argument(stage["args"], "--output_dir"))
-        name = argument(stage["args"], "--output_name")
-        candidates: list[tuple[int, Path]] = []
-        for directory in output.glob(f"{name}*-state"):
-            suffix = directory.name.removeprefix(name)
-            match = re.fullmatch(r"-step(\d+)-state", suffix)
-            if suffix == "-state":
-                candidates.append((phase["steps"], directory))
-            elif match and 0 < int(match[1]) <= phase["steps"]:
-                candidates.append((int(match[1]), directory))
-        for steps, directory in sorted(candidates):
+        for steps, directory in training_saves(stage, output, "-state"):
             identity = hashlib.sha256(str(directory).encode()).hexdigest()[:24]
             entry: dict[str, Any] = {
                 "id": identity,

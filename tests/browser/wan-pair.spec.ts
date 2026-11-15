@@ -147,10 +147,7 @@ test('alternating Wan settings persist, train both experts and restore the paire
     await expect(
       page.getByText('State: Completed', { exact: true }),
     ).toBeVisible({ timeout: 240_000 });
-    for (const [expert, phase] of [
-      ['low', 14],
-      ['high', 15],
-    ] as const) {
+    for (const expert of ['low', 'high'] as const) {
       const downloaded = page.waitForEvent('download');
       await page
         .getByRole('link', {
@@ -159,7 +156,7 @@ test('alternating Wan settings persist, train both experts and restore the paire
         })
         .click();
       expect((await downloaded).suggestedFilename()).toMatch(
-        new RegExp(`-${expert}-phase${phase}\\.safetensors$`),
+        new RegExp(`-${expert}-step8\\.safetensors$`),
       );
     }
     const [run] = await app.records();

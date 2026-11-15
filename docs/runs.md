@@ -20,6 +20,31 @@ numeric suffixes (`-2`, `-3`, …). Existing folders keep their paths; internal 
 IDs and cache fingerprints remain independent. Checkpoint files and saved-state folders
 use the Job name and revision, for example `My-Job-r2.safetensors` and `My-Job-r2-state`.
 
+Alternating Wan adds the expert and its cumulative completed optimizer updates:
+`My-Job-r2-low-step00000100.safetensors` and
+`My-Job-r2-high-step00000100.safetensors` each contain 100 updates for that expert.
+Interval saves and restored segments use the same count, including updates made before
+restoration. Saved-state folders use the matching stem with `-state`. Download names
+retain the expert and step (without zero padding). Existing Runs keep their frozen names,
+including older `phase00000000` identifiers that record the phase's schedule start;
+they remain downloadable and restorable. Newly prepared Runs and restored segments use
+completed expert steps.
+
+To check Wan checkpoint naming, run this command from `C:/docs/git/musubiGui` in PowerShell 7:
+
+```powershell
+.\acceptance.cmd --workspace ".cache/wan-checkpoint-names-$([guid]::NewGuid().ToString('N'))"
+```
+
+This isolated CPU fixture needs Windows, Node.js/npm, uv and Edge; no GPU or models.
+Open **WAN acceptance 1**, set Training steps to 4, steps per expert before switching
+to 2, and Save every N steps to 1. Save, review, then **Prepare and start**. In the
+Run's output folder, expect each expert's checkpoints and state folders at steps 1,
+2, 3 and 4; the paired downloads should end in `-low-step4.safetensors` and
+`-high-step4.safetensors`. Inspect saved states and restore the pair at step 2 for two
+additional steps: the new segment's final files should both end in `-step00000004`.
+GPU training quality is outside this naming check.
+
 To check folder naming, from the repository root run
 `.\acceptance.cmd --workspace ".cache/folder-check-$([guid]::NewGuid().ToString('N'))"`.
 Prepare a fixture Job and inspect the Output path on its Run. It should contain
