@@ -72,6 +72,7 @@ def restored_pair(original: dict[str, Any], state: dict[str, Any], steps: int) -
         phase="train",
         fingerprint=original["fingerprint"] + ":restore:" + uuid.uuid4().hex,
         created=datetime.now(UTC).isoformat(),
+        execution_started=None,
         processes=[],
         error=None,
         resume_of=original["id"],

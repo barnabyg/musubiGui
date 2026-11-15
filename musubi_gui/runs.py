@@ -195,6 +195,7 @@ class RunService:
             "version": 1,
             "id": uuid.uuid4().hex,
             "created": utc_now(),
+            "execution_started": None,
             "job": plan.job,
             "settings": plan.settings.model_dump(),
             "manifest": plan.manifest,
@@ -449,7 +450,7 @@ class RunService:
     def cancel(self, run_id: str) -> dict[str, Any]:
         run = self.get(run_id)
         if run["status"] in {"pending_preparation", "pending_training"}:
-            return self.store.update(run_id, lambda r: r.update(status="cancelled"))
+            return self.store.update(run_id, lambda r: r.update(status="cancelled", finished=utc_now()))
         if run["status"] != "preparing":
             raise ValueError("Only queued preparation, queued training or active preparation can be cancelled.")
         return self.store.update(run_id, lambda r: r.update(cancel_requested=True))
@@ -567,6 +568,7 @@ class RunService:
             phase="train",
             fingerprint=original["fingerprint"] + ":restore:" + uuid.uuid4().hex,
             created=utc_now(),
+            execution_started=None,
             processes=[],
             error=None,
             resume_of=run_id,
@@ -593,6 +595,8 @@ class RunService:
             if stage["name"] not in {"train", "generate"}:
                 continue
             stage.update(status="pending")
+            stage.pop("started", None)
+            stage.pop("finished", None)
             args = stage["args"]
             for flag in ["--output_dir"] if stage["name"] == "train" else ["--save_path", "--lora_weight"]:
                 if flag in args:
@@ -682,6 +686,9 @@ class RunService:
         def claim(record: dict[str, Any]) -> None:
             if record["status"] in {"pending_preparation", "pending_training"}:
                 record.update(status="preparing" if preparing else "training", controller=self.identity)
+                if (not preparing or record.get("start_after_prepare")) and not record.get("execution_started"):
+                    record["execution_started"] = utc_now()
+                record.pop("finished", None)
 
         claimed = self.store.update(run_id, claim)
         if claimed["status"] not in {"preparing", "training"}:
@@ -839,7 +846,9 @@ class RunService:
                     return
                 if code:
                     if self.get(run_id).get("cancel_requested"):
-                        self.store.update(run_id, lambda r: r.update(status="cancelled", processes=[]))
+                        self.store.update(
+                            run_id, lambda r: r.update(status="cancelled", processes=[], finished=utc_now())
+                        )
                         return
                     raise ValueError(
                         f"{stage['name']} exited {code}. Inspect logs, then prepare a new Run from frozen inputs."
@@ -924,6 +933,7 @@ class RunService:
                 ):
                     # Atomic with the end of preparation: a crash can't leave it prepared but never started.
                     record.update(status="pending_training", phase="train", order=time.time_ns())
+                    record.pop("finished", None)
 
             self.store.update(run_id, finish)
         except Exception as error:

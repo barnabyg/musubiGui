@@ -18,7 +18,8 @@ test('training elapsed spans expert switches and survives reload independently o
         json: {
           ...record,
           status: failedDuringLaunch ? 'failed' : 'completed',
-          finished: '2026-11-11T10:01:30Z',
+          execution_started: '2026-11-11T09:59:30Z',
+          finished: '2026-11-11T10:02:00Z',
           stages: [
             {
               name: 'train',
@@ -55,10 +56,12 @@ test('training elapsed spans expert switches and survives reload independently o
     await page.goto(`${app.url}/#/runs/${run.id}`);
     const progress = page.getByLabel('Training progress');
     await expect(progress).toContainText('Training elapsed 01:30');
+    await expect(page.getByLabel('Run elapsed')).toContainText('02:30');
     await expect(progress).toContainText('Phase ETA 00:20');
     await expect(progress).toContainText('Seconds per step: 83.20 s/step');
     await page.reload();
     await expect(progress).toContainText('Training elapsed 01:30');
+    await expect(page.getByLabel('Run elapsed')).toContainText('02:30');
     await page.unroute(`**/api/runs/${run.id}/logs`);
     await page.route(`**/api/runs/${run.id}/logs`, (route) =>
       route.fulfill({
@@ -74,7 +77,56 @@ test('training elapsed spans expert switches and survives reload independently o
     await expect(progress).toContainText('Seconds per step: unknown');
     failedDuringLaunch = true;
     await page.reload();
-    await expect(progress).toContainText('Training elapsed 01:30');
+    await expect(progress).toContainText('Training elapsed 02:00');
+  } finally {
+    await app.close();
+  }
+});
+
+test('Run elapsed advances through final generation and freezes only at the Run end', async ({
+  page,
+}) => {
+  const app = await runWorkspace();
+  try {
+    const run = (await app.post('/api/runs/prepare', {
+      job_id: app.manifest.jobs[0].id,
+    })) as { id: string };
+    let status = 'generating';
+    await page.clock.setFixedTime('2026-11-15T10:02:00Z');
+    await page.route(`**/api/runs/${run.id}`, async (route) => {
+      const record = await (await route.fetch()).json();
+      await route.fulfill({
+        json: {
+          ...record,
+          status,
+          execution_started: '2026-11-15T10:00:00Z',
+          finished: status === 'completed' ? '2026-11-15T10:03:00Z' : undefined,
+          stages: [
+            {
+              name: 'train',
+              status: 'completed',
+              started: '2026-11-15T10:00:10Z',
+              finished: '2026-11-15T10:01:00Z',
+            },
+          ],
+        },
+      });
+    });
+    await page.goto(`${app.url}/#/runs/${run.id}`);
+    const elapsed = page.getByLabel('Run elapsed');
+    await expect(elapsed).toContainText('02:00');
+    await page.clock.setFixedTime('2026-11-15T10:02:30Z');
+    await expect(elapsed).toContainText('02:30');
+    await page.reload();
+    await expect(elapsed).toContainText('02:30');
+    status = 'completed';
+    await page.reload();
+    await expect(elapsed).toContainText('03:00');
+    await page.clock.setFixedTime('2026-11-15T11:00:00Z');
+    await expect(elapsed).toContainText('03:00');
+    status = 'interrupted';
+    await page.reload();
+    await expect(elapsed).toContainText('unknown (execution end unconfirmed)');
   } finally {
     await app.close();
   }

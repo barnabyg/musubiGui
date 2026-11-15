@@ -5,11 +5,14 @@ import time
 from pathlib import Path
 
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 from helpers import acceptance_workspace, wait_for
 
 from musubi_gui.recipe import Stage
 from musubi_gui.run_store import DeviceLease
 from musubi_gui.runs import ExecutionPlan, RunService
+from musubi_gui.runs_api import runs_router
 from musubi_gui.settings import Settings
 from musubi_gui.snapshots import checkout_identity
 
@@ -120,6 +123,39 @@ def training_plan(root: Path, name: str = "one", *, fail_cache: bool = False) ->
     if fail_cache:
         execution.stages.insert(0, Stage("text_cache", [sys.executable, "-c", "raise SystemExit(3)"]))
     return execution
+
+
+@pytest.mark.parametrize("together", [False, True])
+def test_execution_clock_excludes_queue_and_separate_preparation_and_survives_restart(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, together: bool
+) -> None:
+    now = "2026-11-15T09:00:00+00:00"
+    monkeypatch.setattr("musubi_gui.runs.utc_now", lambda: now)
+    root = tmp_path / "state"
+    device = tmp_path / "gpu.sqlite"
+    service = RunService(root, device_path=device, autostart=False)
+    app = FastAPI()
+    app.include_router(runs_router(service))
+    client = TestClient(app)
+    run = service.submit(training_plan(tmp_path), start_after_prepare=together)
+    assert client.get(f"/api/runs/{run['id']}").json().get("execution_started") is None
+    now = "2026-11-15T10:00:00+00:00"
+    service.start_worker()
+    try:
+        if not together:
+            prepared = wait_for(service, run["id"], "prepared")
+            assert prepared.get("execution_started") is None
+            now = "2026-11-15T12:00:00+00:00"
+            client.post(f"/api/runs/{run['id']}/start")
+        wait_for(service, run["id"], "completed")
+        record = client.get(f"/api/runs/{run['id']}").json()
+        assert record["execution_started"] == ("2026-11-15T10:00:00+00:00" if together else now)
+        assert record["finished"] == now
+    finally:
+        service.close()
+    restarted = RunService(root, device_path=device, autostart=False)
+    assert restarted.get(run["id"])["execution_started"] == record["execution_started"]
+    assert restarted.get(run["id"])["finished"] == record["finished"]
 
 
 def test_prepare_and_start_trains_without_another_request(tmp_path: Path) -> None:
@@ -291,6 +327,7 @@ def test_force_stop_requires_confirmation_and_releases_only_the_owned_worker(tmp
         service.stop(run["id"], force=True, confirmed=True)
         stopped = wait_for(service, run["id"], "stopped", device_released=True)
         assert stopped["stop_kind"] == "force"
+        assert stopped["execution_started"] <= stopped["finished"]
         assert next(stage for stage in stopped["stages"] if stage["name"] == "train")["status"] == "stopped"
         assert service.device.owner() is None
     finally:
@@ -327,6 +364,7 @@ def test_graceful_stop_waits_for_descendants_still_exiting_after_the_launcher(tm
         (work / "release").write_text("", encoding="utf-8")
         stopped = wait_for(service, run["id"], "stopped", device_released=True)
         assert stopped["stop_kind"] == "graceful"
+        assert stopped["execution_started"] <= stopped["finished"]
         assert stopped["processes"] == []
         assert next(stage for stage in stopped["stages"] if stage["name"] == "train")["status"] == "stopped"
     finally:
@@ -388,10 +426,12 @@ def test_saved_optimizer_state_restores_as_a_new_segment_and_rejects_tampering(t
         with pytest.raises(ValueError, match="confirm"):
             service.restore_state(run["id"], states[0]["id"], 1)
         restored = service.restore_state(run["id"], states[0]["id"], 1, confirmed=True)
+        assert restored["execution_started"] is None
         # Training results of the original run are not the new segment's.
         assert service.get(run["id"])["removed_duplicates"]
         assert "removed_duplicates" not in restored and "checkpoints" not in restored
-        wait_for(service, restored["id"], "completed")
+        resumed = wait_for(service, restored["id"], "completed")
+        assert resumed["execution_started"] > service.get(run["id"])["execution_started"]
         assert service.saved_states(restored["id"])[0]["optimizer_step"] == 3
         assert service.get(restored["id"])["resume_of"] == run["id"]
         assert service.get(restored["id"])["segment"]["counter_resets"]

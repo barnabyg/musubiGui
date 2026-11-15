@@ -21,6 +21,7 @@ type Run = {
   id: string;
   created: string;
   finished?: string;
+  execution_started?: string | null;
   status: string;
   error: string | null;
   retention?: {
@@ -134,6 +135,11 @@ function runSteps(run: Run) {
 }
 
 function duration(from: string, to?: string) {
+  if (
+    !Number.isFinite(Date.parse(from)) ||
+    (to && !Number.isFinite(Date.parse(to)))
+  )
+    return 'unknown';
   const seconds = Math.max(
     0,
     Math.round(((to ? Date.parse(to) : Date.now()) - Date.parse(from)) / 1000),
@@ -143,6 +149,45 @@ function duration(from: string, to?: string) {
   return minutes >= 60
     ? `${Math.floor(minutes / 60)}:${pad(minutes % 60)}:${pad(seconds % 60)}`
     : `${pad(minutes)}:${pad(seconds % 60)}`;
+}
+
+function RunElapsed({ run }: { run: Run }) {
+  const terminal = [
+    'completed',
+    'failed',
+    'stopped',
+    'cancelled',
+    'interrupted',
+  ].includes(run.status);
+  const uncertain = ['interrupted', 'orphaned', 'uncertain'].includes(
+    run.status,
+  );
+  // Old records did not distinguish automatic preparation from a separate Prepare.
+  const started =
+    run.execution_started === undefined
+      ? run.stages.find((stage) => stage.name === 'train' && stage.started)
+          ?.started
+      : run.execution_started;
+  const active = Boolean(started && !terminal && !uncertain);
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (!active) return;
+    const timer = setInterval(() => tick((value) => value + 1), 1000);
+    return () => clearInterval(timer);
+  }, [active]);
+  const elapsed = !started
+    ? 'not started'
+    : uncertain || (terminal && !run.finished)
+      ? 'unknown (execution end unconfirmed)'
+      : duration(started, terminal ? run.finished : undefined);
+  return (
+    <p aria-label="Run elapsed">
+      Run elapsed {elapsed}
+      {run.execution_started === undefined && started
+        ? ' (legacy: from first training start)'
+        : ''}
+    </p>
+  );
 }
 
 function TrainingProgress({
@@ -783,6 +828,7 @@ export function Runs({
                 <p>
                   State: <RunBadge status={run.status} />
                 </p>
+                <RunElapsed run={run} />
                 <TrainingProgress
                   run={run}
                   progress={current?.progress ?? null}

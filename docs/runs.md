@@ -100,6 +100,39 @@ Reload Overview and expect the download and reported speed to remain available.
 
 ## Remaining-time estimates and refresh
 
+**Run elapsed** measures execution start to now while work is active, and freezes
+at the Run's recorded completion, stop, cancellation or failure time. It includes
+model loads/unloads, expert transitions, saves, periodic previews and final sampling;
+it keeps advancing after the last training phase finishes. Initial queue waiting is
+excluded. **Prepare and start** starts the clock when preparation leaves the queue,
+so its caching belongs to that execution. With **Prepare**, followed later by
+**Start training**, the clock starts when training leaves the queue; separate
+preparation and the wait for Start are excluded. A restored segment or retry has
+its own clock and never inherits its source's elapsed time.
+
+The execution start is stored as nullable `execution_started` in each new Run;
+`finished` remains its terminal timestamp. These timestamps survive browser reloads
+and backend restart. An interrupted execution whose actual end was not observed
+shows unknown, as do uncertain/orphaned processes; recovery time is not presented
+as the actual finish time. Cancelled-before-start Runs show not started. Existing
+records remain readable: when the execution-start field is absent, the UI labels
+its fallback to the first recorded training start as legacy. It cannot reconstruct
+earlier preparation. Missing or invalid timestamps stay unknown.
+
+Manual timing check, from `C:/docs/git/musubiGui` in PowerShell 7:
+
+```powershell
+.\acceptance.cmd --workspace ".cache/run-timing-$([guid]::NewGuid().ToString('N'))"
+```
+
+Prerequisites: Windows, Node.js/npm, uv and Microsoft Edge; no GPU or models are
+needed for this isolated synthetic workspace. Enable previews on a fixture Job,
+use several steps and **Prepare and start**. Compare Run elapsed with a stopwatch
+from the Preparing state, reload during training/preview and final sampling, and
+confirm elapsed advances through the whole execution then stays fixed. Prepare a
+different revision without starting, wait, then Start: that Run's clock should
+exclude the wait and its earlier caching. CPU fixtures do not measure GPU speed.
+
 Training progress includes **Estimated training remaining to max steps**. It
 extrapolates the trainer's observed step speed over all remaining steps, including
 later alternating Wan phases and the requested steps of a restored segment.
@@ -290,8 +323,8 @@ failures. Checkpoint/sample locations stay associated with the originating Run.
 The top of a Run shows its stages as Caching, Training, Sample and Done, each marked
 done, in progress, not started, failed or stopped. Below them, Training shows the latest
 step count, elapsed time, ETA and loss from upstream's progress bar. Unreported
-values show as unknown, and elapsed time falls back to the stage's own start and
-finish times. A separately labelled estimate extrapolates the observed speed to
+values show as unknown. Training elapsed is explicitly scoped to the span of training
+stages; Run elapsed above it covers the full execution. A separately labelled estimate extrapolates the observed speed to
 maximum steps as described above. A restored segment counts its own steps, because
 upstream resets the displayed counter. Stage logs are collapsed below that, and open by
 themselves when a Run has failed.
