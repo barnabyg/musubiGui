@@ -1,5 +1,6 @@
-import { expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import { spawn, type ChildProcess } from 'node:child_process';
+import { appendFileSync, mkdirSync } from 'node:fs';
 import { createServer } from 'node:net';
 import path from 'node:path';
 import { stopBackendTree } from './processes';
@@ -30,6 +31,10 @@ export async function localBackend(options: {
 }) {
   const port = await reservePort();
   const url = `http://127.0.0.1:${port}`;
+  // Persist outside the fixture directory, which cleanup removes even on failure.
+  const logPath = test.info().outputPath(`backend-${port}.log`);
+  mkdirSync(path.dirname(logPath), { recursive: true });
+  const log = (message: string) => appendFileSync(logPath, message);
   const status = async () => {
     try {
       return (await fetch(url + options.readyRoute)).status;
@@ -39,6 +44,7 @@ export async function localBackend(options: {
   };
   let backend: ChildProcess | undefined;
   const start = async () => {
+    log(`\nStarting backend ${url}; state=${options.state}\n`);
     backend = spawn(
       python,
       [
@@ -52,6 +58,7 @@ export async function localBackend(options: {
         env: {
           ...process.env,
           ...options.env,
+          PYTHONUNBUFFERED: '1',
           MUSUBI_GUI_STATE: options.state,
         },
         stdio: 'pipe',
@@ -60,17 +67,23 @@ export async function localBackend(options: {
     // Reading the output keeps a full pipe from stalling the backend, and leaves evidence if it dies.
     let output = '';
     const keep = (chunk: Buffer) => {
+      log(chunk.toString());
       output = (output + chunk.toString()).slice(-4000);
     };
     backend.stdout?.on('data', keep);
     backend.stderr?.on('data', keep);
     const started = backend;
-    started.once('exit', (code, signal) => {
+    // Wait for stdio to drain as well as process exit before test output can be removed.
+    started.once('close', (code, signal) => {
+      log(`\nBackend exited (code ${code}, signal ${signal})\n`);
       if (backend === started)
         console.error(
           `Backend on port ${port} exited unexpectedly (code ${code}, signal ${signal}):\n${output}`,
         );
     });
+    started.once('error', (error) =>
+      log(`\nBackend spawn failed: ${error.message}\n`),
+    );
     await expect.poll(status, { timeout: options.readyTimeout }).toBe(200);
   };
   const running = () =>
@@ -84,7 +97,7 @@ export async function localBackend(options: {
     backend = undefined;
     if (!current || !wasRunning) return false;
     const exited = new Promise<void>((resolve) =>
-      current.once('exit', () => resolve()),
+      current.once('close', () => resolve()),
     );
     if (!current.pid) throw new Error('Missing backend PID');
     await terminate(current.pid);

@@ -13,10 +13,15 @@ export default defineConfig({
   // Upper bounds with deliberate margin; see docs/verification.md. A passing test never waits them out.
   timeout: 1_800_000,
   expect: { timeout: 60_000 },
+  preserveOutput: 'failures-only',
   use: {
+    // Actions must not consume the entire test budget when a control never appears.
+    actionTimeout: 240_000,
+    navigationTimeout: 240_000,
     browserName: 'chromium',
     channel: 'msedge',
     headless: true,
     screenshot: 'only-on-failure',
+    trace: 'retain-on-failure',
   },
 });
