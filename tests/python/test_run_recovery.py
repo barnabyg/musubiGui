@@ -14,14 +14,38 @@ from musubi_gui.settings import Settings
 from musubi_gui.windows_job import ProcessJob
 
 
+def held_process(work: Path) -> Path:
+    """Keep fixture work alive until explicitly released, with a hard leak deadline."""
+    script = work / "held_process.py"
+    script.write_text(
+        "import sys,time\nfrom pathlib import Path\n"
+        "print('alive',flush=True)\n"
+        "Path(__file__).with_suffix('.ready').touch()\n"
+        "deadline=time.monotonic()+900\n"
+        "while not Path(__file__).with_suffix('.release').exists():\n"
+        "    if time.monotonic() >= deadline: sys.exit('Fixture was not released within 900 seconds')\n"
+        "    time.sleep(.02)\n",
+        encoding="utf-8",
+    )
+    return script
+
+
 def test_descendant_surviving_the_grace_period_retains_gpu_ownership_after_its_launcher_exits(
     tmp_path: Path,
 ) -> None:
     work = tmp_path / "work"
     work.mkdir()
+    survivor = held_process(work)
     script = work / "launcher.py"
     script.write_text(
-        "import subprocess,sys,time,os\nsubprocess.Popen([sys.executable,'-c','import time;time.sleep(20)'])\ntime.sleep(.3)\nos._exit(0)\n",
+        "import subprocess,sys,time,os\nfrom pathlib import Path\n"
+        f"subprocess.Popen([sys.executable,{str(survivor)!r}])\n"
+        f"ready=Path({str(survivor.with_suffix('.ready'))!r})\n"
+        "deadline=time.monotonic()+180\n"
+        "while not ready.exists():\n"
+        "    if time.monotonic() >= deadline: sys.exit('Descendant did not become ready')\n"
+        "    time.sleep(.02)\n"
+        "os._exit(0)\n",
         encoding="utf-8",
     )
     service = RunService(tmp_path / "state", device_path=tmp_path / "device.sqlite", descendant_grace=0.5)
@@ -47,6 +71,7 @@ def test_descendant_surviving_the_grace_period_retains_gpu_ownership_after_its_l
         assert interrupted["processes"] == []
         assert service.device.owner() is None
     finally:
+        survivor.with_suffix(".release").touch()
         # Clean up only the exact process identities observed by this isolated worker.
         from musubi_gui.processes import terminate_owned
 
@@ -58,6 +83,7 @@ def test_restart_observes_surviving_work_and_does_not_launch_replacement(tmp_pat
     root, device = tmp_path / "state", tmp_path / "device.sqlite"
     work = tmp_path / "work"
     work.mkdir()
+    script = held_process(work)
     service = RunService(root, device_path=device)
     run = service.submit(
         ExecutionPlan(
@@ -66,19 +92,21 @@ def test_restart_observes_surviving_work_and_does_not_launch_replacement(tmp_pat
             manifest={"items": []},
             directory=work,
             cache=work,
-            stages=[
-                Stage("latent_cache", [sys.executable, "-c", "import time;print('alive',flush=True);time.sleep(20)"])
-            ],
+            stages=[Stage("latent_cache", [sys.executable, str(script)])],
             fingerprint="restart",
         )
     )
-    deadline = time.monotonic() + 180
-    while not service.get(run["id"]).get("processes") and time.monotonic() < deadline:
-        time.sleep(0.02)
-    assert service.get(run["id"])["processes"]
-    service.close()
-    restarted = RunService(root, device_path=device)
+    restarted = None
     try:
+        deadline = time.monotonic() + 180
+        while time.monotonic() < deadline:
+            if service.get(run["id"]).get("processes") and "alive" in service.logs(run["id"]):
+                break
+            time.sleep(0.02)
+        assert service.get(run["id"])["processes"]
+        assert "alive" in service.logs(run["id"])
+        service.close()
+        restarted = RunService(root, device_path=device)
         assert restarted.get(run["id"])["status"] == "orphaned"
         assert restarted.device.owner()["run_id"] == run["id"]
         assert "alive" in restarted.logs(run["id"])
@@ -88,8 +116,11 @@ def test_restart_observes_surviving_work_and_does_not_launch_replacement(tmp_pat
     finally:
         from musubi_gui.processes import terminate_owned
 
-        terminate_owned(restarted.get(run["id"]).get("processes", []), force=True)
-        restarted.close()
+        script.with_suffix(".release").touch()
+        owner = restarted or service
+        terminate_owned(owner.get(run["id"]).get("processes", []), force=True)
+        owner.close()
+        service.close()
 
 
 def test_stale_pid_and_device_lock_are_reconciled_without_touching_reused_process(tmp_path: Path) -> None:
@@ -261,7 +292,8 @@ def test_reconciling_an_already_interrupted_run_keeps_it_retryable_despite_a_sto
 def test_terminating_recovered_work_after_a_graceful_stop_records_a_forced_stop(tmp_path: Path) -> None:
     root, device = tmp_path / "state", tmp_path / "device.sqlite"
     service = RunService(root, device_path=device, autostart=False)
-    survivor = subprocess.Popen([sys.executable, "-c", "import time;time.sleep(20)"])
+    script = held_process(tmp_path)
+    survivor = subprocess.Popen([sys.executable, str(script)])
     try:
         run = service.submit(
             ExecutionPlan(
@@ -287,6 +319,8 @@ def test_terminating_recovered_work_after_a_graceful_stop_records_a_forced_stop(
         assert stopped["status"] == "stopped"
         assert stopped["stop_kind"] == "force"
     finally:
-        survivor.kill()
-        survivor.wait()
+        script.with_suffix(".release").touch()
+        if survivor.poll() is None:
+            survivor.kill()
+        survivor.wait(timeout=300)
         service.close()
