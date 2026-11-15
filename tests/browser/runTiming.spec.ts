@@ -18,7 +18,8 @@ test('training elapsed spans expert switches and survives reload independently o
         json: {
           ...record,
           status: failedDuringLaunch ? 'failed' : 'completed',
-          finished: '2026-11-11T10:01:30Z',
+          execution_started: '2026-11-11T09:59:30Z',
+          finished: '2026-11-11T10:02:00Z',
           stages: [
             {
               name: 'train',
@@ -55,10 +56,12 @@ test('training elapsed spans expert switches and survives reload independently o
     await page.goto(`${app.url}/#/runs/${run.id}`);
     const progress = page.getByLabel('Training progress');
     await expect(progress).toContainText('Training elapsed 01:30');
+    await expect(page.getByLabel('Run elapsed')).toContainText('02:30');
     await expect(progress).toContainText('Phase ETA 00:20');
     await expect(progress).toContainText('Seconds per step: 83.20 s/step');
     await page.reload();
     await expect(progress).toContainText('Training elapsed 01:30');
+    await expect(page.getByLabel('Run elapsed')).toContainText('02:30');
     await page.unroute(`**/api/runs/${run.id}/logs`);
     await page.route(`**/api/runs/${run.id}/logs`, (route) =>
       route.fulfill({
@@ -74,7 +77,146 @@ test('training elapsed spans expert switches and survives reload independently o
     await expect(progress).toContainText('Seconds per step: unknown');
     failedDuringLaunch = true;
     await page.reload();
-    await expect(progress).toContainText('Training elapsed 01:30');
+    await expect(progress).toContainText('Training elapsed 02:00');
+  } finally {
+    await app.close();
+  }
+});
+
+test('Run elapsed advances through final generation and freezes only at the Run end', async ({
+  page,
+}) => {
+  const app = await runWorkspace();
+  try {
+    const run = (await app.post('/api/runs/prepare', {
+      job_id: app.manifest.jobs[0].id,
+    })) as { id: string };
+    let status = 'generating';
+    await page.clock.setFixedTime('2026-11-15T10:02:00Z');
+    await page.route(`**/api/runs/${run.id}`, async (route) => {
+      const record = await (await route.fetch()).json();
+      await route.fulfill({
+        json: {
+          ...record,
+          status,
+          execution_started: '2026-11-15T10:00:00Z',
+          execution_end_unknown: status === 'stopped',
+          finished:
+            status === 'completed'
+              ? '2026-11-15T10:03:00Z'
+              : status === 'stopped'
+                ? '2026-11-15T11:00:00Z'
+                : undefined,
+          stages: [
+            {
+              name: 'train',
+              status: 'completed',
+              started: '2026-11-15T10:00:10Z',
+              finished: '2026-11-15T10:01:00Z',
+            },
+          ],
+        },
+      });
+    });
+    await page.goto(`${app.url}/#/runs/${run.id}`);
+    const elapsed = page.getByLabel('Run elapsed');
+    await expect(elapsed).toContainText('02:00');
+    await page.clock.setFixedTime('2026-11-15T10:02:30Z');
+    await expect(elapsed).toContainText('02:30');
+    await page.reload();
+    await expect(elapsed).toContainText('02:30');
+    status = 'completed';
+    await page.reload();
+    await expect(elapsed).toContainText('03:00');
+    await page.clock.setFixedTime('2026-11-15T11:00:00Z');
+    await expect(elapsed).toContainText('03:00');
+    status = 'interrupted';
+    await page.reload();
+    await expect(elapsed).toContainText('unknown (execution end unconfirmed)');
+    status = 'stopped';
+    await page.reload();
+    await expect(elapsed).toContainText('unknown (execution end unconfirmed)');
+  } finally {
+    await app.close();
+  }
+});
+
+test('whole-Run forecast refreshes after a measured preview independently of Phase ETA', async ({
+  page,
+}) => {
+  const app = await runWorkspace();
+  try {
+    const run = (await app.post('/api/runs/prepare', {
+      job_id: app.manifest.jobs[0].id,
+    })) as { id: string };
+    let measured = false;
+    let ended = false;
+    let finalUnmeasured = false;
+    await page.route(`**/api/runs/${run.id}`, async (route) => {
+      const record = await (await route.fetch()).json();
+      await route.fulfill({
+        json: {
+          ...record,
+          status: ended ? 'completed' : 'training',
+          execution_started: '2026-11-15T10:00:00Z',
+        },
+      });
+    });
+    await page.route(`**/api/runs/${run.id}/logs`, (route) =>
+      route.fulfill({
+        json: {
+          text: '',
+          progress: {
+            step: 2,
+            total: 20,
+            elapsed: '10:20',
+            eta: '1:33:00',
+            eta_scope: 'phase',
+            loss: null,
+          },
+          run_estimate: {
+            remaining_seconds: measured && !finalUnmeasured ? 5580 : null,
+            finish_at:
+              measured && !finalUnmeasured ? '2026-11-15T11:35:00Z' : null,
+            accounted_remaining_seconds: measured ? 5580 : null,
+            accounted_finish_at: measured ? '2026-11-15T11:35:00Z' : null,
+            completed_previews: measured ? 1 : 0,
+            outstanding_previews: measured ? 9 : 10,
+            outstanding_final_samples: 0,
+            unknown_components: [
+              'checkpoint/state saving and stage transitions',
+              ...(finalUnmeasured ? ['final sampling'] : []),
+            ],
+            preview_remaining_seconds: measured ? 5400 : null,
+          },
+        },
+      }),
+    );
+    await page.goto(`${app.url}/#/runs/${run.id}`);
+    const forecast = page.getByLabel('Run completion estimate');
+    await expect(forecast).toContainText('Estimated Run remaining: unknown');
+    measured = true;
+    await expect(forecast).toContainText('Estimated Run remaining: 1h 33m 0s');
+    await expect(forecast).toContainText('1 completed · 9 outstanding');
+    await expect(forecast).toContainText(
+      'Unestimated or assumed: checkpoint/state saving',
+    );
+    await page.reload();
+    await expect(forecast).toContainText('Estimated Run remaining: 1h 33m 0s');
+    finalUnmeasured = true;
+    await expect(forecast).toContainText(
+      'Partial remaining estimate: 1h 33m 0s',
+    );
+    await expect(forecast).toContainText(
+      'Outstanding preview budget: 1h 30m 0s',
+    );
+    await expect(forecast).toContainText(
+      'Conditional finish for estimated components:',
+    );
+    await expect(forecast).toContainText('final sampling');
+    ended = true;
+    await page.reload();
+    await expect(forecast).toHaveCount(0);
   } finally {
     await app.close();
   }

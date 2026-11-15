@@ -72,7 +72,9 @@ def test_review_training_both_experts_and_sampling_the_exact_pair(tmp_path: Path
         # Restore from inside the first high phase, not its final save.
         source = next(state for state in states if state["schedule_step"] == 3)
         restored = service.restore_state(run["id"], source["id"], 5, confirmed=True)
+        assert restored["execution_started"] is None
         resumed = wait_for(service, restored["id"], "completed", device_released=True)
+        assert resumed["execution_started"] > service.get(run["id"])["execution_started"]
         assert resumed["segment"]["schedule_start"] == 3
         assert [
             (stage["training"]["expert"], stage["training"]["steps"])

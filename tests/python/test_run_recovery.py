@@ -232,6 +232,7 @@ def test_reconciling_a_requested_stop_with_no_surviving_process_records_stopped(
         assert stopped["stop_kind"] == "graceful"
         assert stopped["processes"] == []
         assert stopped["error"] is None
+        assert stopped["execution_end_unknown"] is True
         assert [stage["status"] for stage in stopped["stages"]] == ["completed", "stopped"]
         assert service.device.owner() is None
     finally:

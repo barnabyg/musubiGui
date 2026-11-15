@@ -10,6 +10,7 @@ import {
   type Output,
 } from './Outputs';
 import { formatRoute } from './route';
+import { PreviewMemory, type PreviewMemoryChoice } from './PreviewMemory';
 import { RunJobLink } from './RunJobLink';
 import { refreshRunHistory, useRunHistory } from './runHistory';
 import { notificationsWanted, setNotificationsWanted } from './runSignals';
@@ -21,6 +22,8 @@ type Run = {
   id: string;
   created: string;
   finished?: string;
+  execution_started?: string | null;
+  execution_end_unknown?: boolean;
   status: string;
   error: string | null;
   retention?: {
@@ -48,6 +51,7 @@ type Run = {
     cache_reason?: string;
     started?: string;
     finished?: string;
+    preview_memory?: PreviewMemoryChoice;
   }[];
   directory: string;
   order: number;
@@ -79,6 +83,79 @@ type Progress = {
   phase_total?: number;
   expert_steps?: { low: number; high: number };
 };
+type CompletionEstimate = {
+  remaining_seconds: number | null;
+  finish_at: string | null;
+  accounted_remaining_seconds?: number | null;
+  accounted_finish_at?: string | null;
+  outstanding_previews: number;
+  completed_previews: number;
+  outstanding_final_samples: number;
+  preview_remaining_seconds: number | null;
+  unknown_components: string[];
+};
+
+function remainingDuration(seconds: number | null | undefined) {
+  return seconds == null
+    ? 'unknown'
+    : `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m ${seconds % 60}s`;
+}
+
+function RunCompletion({
+  run,
+  estimate,
+}: {
+  run: Run;
+  estimate?: CompletionEstimate;
+}) {
+  if (!['training', 'generating'].includes(run.status)) return null;
+  const seconds = estimate?.remaining_seconds;
+  return (
+    <div className="run-progress" aria-label="Run completion estimate">
+      <p>Estimated Run remaining: {remainingDuration(seconds)}</p>
+      <p>
+        Estimated finish:{' '}
+        {estimate?.finish_at
+          ? new Date(estimate.finish_at).toLocaleString()
+          : 'unknown'}
+      </p>
+      {seconds == null && estimate?.accounted_remaining_seconds != null && (
+        <>
+          <p>
+            Partial remaining estimate:{' '}
+            {remainingDuration(estimate.accounted_remaining_seconds)} (measured
+            components only)
+          </p>
+          <p>
+            Conditional finish for estimated components:{' '}
+            {estimate.accounted_finish_at
+              ? new Date(estimate.accounted_finish_at).toLocaleString()
+              : 'unknown'}
+          </p>
+        </>
+      )}
+      {estimate?.preview_remaining_seconds != null && (
+        <p>
+          Outstanding preview budget:{' '}
+          {remainingDuration(estimate.preview_remaining_seconds)}
+        </p>
+      )}
+      {estimate && (
+        <p>
+          Previews: {estimate.completed_previews} completed ·{' '}
+          {estimate.outstanding_previews} outstanding · Final samples
+          outstanding: {estimate.outstanding_final_samples}
+        </p>
+      )}
+      <small>
+        Based on measured step and sampling wall time.{' '}
+        {estimate?.unknown_components.length
+          ? `Unestimated or assumed: ${estimate.unknown_components.join('; ')}.`
+          : 'Timings vary between executions.'}
+      </small>
+    </div>
+  );
+}
 type StepState = 'pending' | 'current' | 'completed' | 'failed' | 'stopped';
 const stepLabels: Record<StepState, string> = {
   pending: 'Not started',
@@ -134,6 +211,11 @@ function runSteps(run: Run) {
 }
 
 function duration(from: string, to?: string) {
+  if (
+    !Number.isFinite(Date.parse(from)) ||
+    (to && !Number.isFinite(Date.parse(to)))
+  )
+    return 'unknown';
   const seconds = Math.max(
     0,
     Math.round(((to ? Date.parse(to) : Date.now()) - Date.parse(from)) / 1000),
@@ -143,6 +225,45 @@ function duration(from: string, to?: string) {
   return minutes >= 60
     ? `${Math.floor(minutes / 60)}:${pad(minutes % 60)}:${pad(seconds % 60)}`
     : `${pad(minutes)}:${pad(seconds % 60)}`;
+}
+
+function RunElapsed({ run }: { run: Run }) {
+  const terminal = [
+    'completed',
+    'failed',
+    'stopped',
+    'cancelled',
+    'interrupted',
+  ].includes(run.status);
+  const uncertain =
+    run.execution_end_unknown ||
+    ['interrupted', 'orphaned', 'uncertain'].includes(run.status);
+  // Old records did not distinguish automatic preparation from a separate Prepare.
+  const started =
+    run.execution_started === undefined
+      ? run.stages.find((stage) => stage.name === 'train' && stage.started)
+          ?.started
+      : run.execution_started;
+  const active = Boolean(started && !terminal && !uncertain);
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (!active) return;
+    const timer = setInterval(() => tick((value) => value + 1), 1000);
+    return () => clearInterval(timer);
+  }, [active]);
+  const elapsed = !started
+    ? 'not started'
+    : uncertain || (terminal && !run.finished)
+      ? 'unknown (execution end unconfirmed)'
+      : duration(started, terminal ? run.finished : undefined);
+  return (
+    <p aria-label="Run elapsed">
+      Run elapsed {elapsed}
+      {run.execution_started === undefined && started
+        ? ' (legacy: from first training start)'
+        : ''}
+    </p>
+  );
 }
 
 function TrainingProgress({
@@ -213,9 +334,7 @@ function TrainingProgress({
       </p>
       <p>
         Estimated training remaining to max steps:{' '}
-        {progress.estimated_remaining_seconds == null
-          ? 'unknown'
-          : `${Math.floor(progress.estimated_remaining_seconds / 3600)}h ${Math.floor((progress.estimated_remaining_seconds % 3600) / 60)}m ${progress.estimated_remaining_seconds % 60}s`}
+        {remainingDuration(progress.estimated_remaining_seconds)}
       </p>
       <small>
         Assumes the current observed step speed for all remaining steps.
@@ -434,6 +553,7 @@ export function Runs({
     text: string;
     progress: Progress | null;
     performance_available?: boolean;
+    run_estimate?: CompletionEstimate;
   } | null>(null);
   // Deleted, perhaps from another tab, or never there: a stale link leaves nothing to show.
   const forgetRun = useEffectEvent(() => onSelect?.(undefined, true));
@@ -517,6 +637,7 @@ export function Runs({
           text: string;
           progress: Progress | null;
           performance_available?: boolean;
+          run_estimate?: CompletionEstimate;
         }>(`/api/runs/${runId}/logs`, 'GET', undefined, controller.signal);
         if (!controller.signal.aborted) {
           setLive({ runId: runId!, ...result });
@@ -783,6 +904,9 @@ export function Runs({
                 <p>
                   State: <RunBadge status={run.status} />
                 </p>
+                <RunElapsed run={run} />
+                <RunCompletion run={run} estimate={current?.run_estimate} />
+                <PreviewMemory stages={run.stages} />
                 <TrainingProgress
                   run={run}
                   progress={current?.progress ?? null}

@@ -4,6 +4,7 @@ import { focusField, type JobFields } from './jobFields';
 import type { Job, Review } from './jobTypes';
 import { plural } from './labels';
 import { datasetItemRoute } from './route';
+import { PreviewMemory } from './PreviewMemory';
 
 function rateLabel(fps: number | null) {
   return fps === null ? 'unknown fps' : `${Number(fps.toPrecision(6))} fps`;
@@ -86,6 +87,7 @@ export function JobReview({
             seconds. Native previews use the pinned trainer's 24 fps frame grid.
           </p>
         )}
+      <PreviewMemory stages={review.stages} />
       {(['errors', 'warnings'] as const).map((level) => {
         const errors = level === 'errors';
         return (

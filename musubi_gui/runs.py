@@ -26,6 +26,7 @@ from musubi_gui.processes import identity_status, observed_tree, process_identit
 from musubi_gui.recipe import Stage, reference_environment
 from musubi_gui.redaction import redact
 from musubi_gui.run_deletion import failure_message, folder_bytes, output_index_file, plan_deletion, remove_folder
+from musubi_gui.run_estimate import freeze_training_timing
 from musubi_gui.run_paths import create_run_directory
 from musubi_gui.run_performance import RunPerformance, start_performance
 from musubi_gui.run_progress import estimated_remaining, parse_progress
@@ -195,6 +196,7 @@ class RunService:
             "version": 1,
             "id": uuid.uuid4().hex,
             "created": utc_now(),
+            "execution_started": None,
             "job": plan.job,
             "settings": plan.settings.model_dump(),
             "manifest": plan.manifest,
@@ -204,7 +206,10 @@ class RunService:
             "status": "pending_preparation",
             "phase": "prepare",
             "order": time.time_ns(),
-            "stages": [{**stage.record(), "status": "pending"} for stage in plan.stages],
+            "stages": [
+                freeze_training_timing({**stage.record(), "status": "pending"}, plan.job["family"], plan.directory)
+                for stage in plan.stages
+            ],
             "processes": [],
             "error": None,
             "fixture": self.fixture_mode,
@@ -333,7 +338,15 @@ class RunService:
             training = copy.deepcopy(stage.get("training"))
             if training:
                 training["checkpoint"] = training["checkpoint"].replace(previous["directory"], str(directory))
-            stages.append(Stage(stage["name"], args, training, stage.get("preview_step")))
+            stages.append(
+                Stage(
+                    stage["name"],
+                    args,
+                    training,
+                    stage.get("preview_step"),
+                    preview_memory=copy.deepcopy(stage.get("preview_memory")),
+                )
+            )
         plan = ExecutionPlan(
             copy.deepcopy(previous["job"]),
             Settings.model_validate(previous["settings"]),
@@ -413,7 +426,14 @@ class RunService:
                 if stage["status"] == "running":
                     stage.update(status="stopped" if requested else "interrupted", finished=utc_now())
             if requested:
-                record.update(status="stopped", stop_kind=requested, processes=[], error=None, finished=utc_now())
+                record.update(
+                    status="stopped",
+                    stop_kind=requested,
+                    processes=[],
+                    error=None,
+                    finished=utc_now(),
+                    execution_end_unknown=True,
+                )
                 return
             record.update(
                 status="interrupted",
@@ -449,7 +469,7 @@ class RunService:
     def cancel(self, run_id: str) -> dict[str, Any]:
         run = self.get(run_id)
         if run["status"] in {"pending_preparation", "pending_training"}:
-            return self.store.update(run_id, lambda r: r.update(status="cancelled"))
+            return self.store.update(run_id, lambda r: r.update(status="cancelled", finished=utc_now()))
         if run["status"] != "preparing":
             raise ValueError("Only queued preparation, queued training or active preparation can be cancelled.")
         return self.store.update(run_id, lambda r: r.update(cancel_requested=True))
@@ -547,6 +567,10 @@ class RunService:
             from musubi_gui.wan_pair_restore import restored_pair
 
             record = restored_pair(original, state, additional_steps)
+            record["stages"] = [
+                freeze_training_timing(stage, record["job"]["family"], Path(record["directory"]))
+                for stage in record["stages"]
+            ]
             self.store.create(record)
             atomic_json(
                 Path(record["directory"]) / "inputs.json",
@@ -567,6 +591,7 @@ class RunService:
             phase="train",
             fingerprint=original["fingerprint"] + ":restore:" + uuid.uuid4().hex,
             created=utc_now(),
+            execution_started=None,
             processes=[],
             error=None,
             resume_of=run_id,
@@ -583,6 +608,7 @@ class RunService:
             "stop_requested",
             "stop_kind",
             "finished",
+            "execution_end_unknown",
             "exit_code",
             "checkpoints",
             "removed_duplicates",
@@ -593,6 +619,8 @@ class RunService:
             if stage["name"] not in {"train", "generate"}:
                 continue
             stage.update(status="pending")
+            stage.pop("started", None)
+            stage.pop("finished", None)
             args = stage["args"]
             for flag in ["--output_dir"] if stage["name"] == "train" else ["--save_path", "--lora_weight"]:
                 if flag in args:
@@ -601,6 +629,9 @@ class RunService:
             if stage["name"] == "train":
                 args[args.index("--max_train_steps") + 1] = str(additional_steps)
                 args.extend(["--resume", state["path"]])
+        record["stages"] = [
+            freeze_training_timing(stage, record["job"]["family"], directory) for stage in record["stages"]
+        ]
         self.store.create(record)
         atomic_json(
             directory / "inputs.json",
@@ -682,6 +713,9 @@ class RunService:
         def claim(record: dict[str, Any]) -> None:
             if record["status"] in {"pending_preparation", "pending_training"}:
                 record.update(status="preparing" if preparing else "training", controller=self.identity)
+                if (not preparing or record.get("start_after_prepare")) and not record.get("execution_started"):
+                    record["execution_started"] = utc_now()
+                record.pop("finished", None)
 
         claimed = self.store.update(run_id, claim)
         if claimed["status"] not in {"preparing", "training"}:
@@ -839,7 +873,9 @@ class RunService:
                     return
                 if code:
                     if self.get(run_id).get("cancel_requested"):
-                        self.store.update(run_id, lambda r: r.update(status="cancelled", processes=[]))
+                        self.store.update(
+                            run_id, lambda r: r.update(status="cancelled", processes=[], finished=utc_now())
+                        )
                         return
                     raise ValueError(
                         f"{stage['name']} exited {code}. Inspect logs, then prepare a new Run from frozen inputs."
@@ -924,6 +960,7 @@ class RunService:
                 ):
                     # Atomic with the end of preparation: a crash can't leave it prepared but never started.
                     record.update(status="pending_training", phase="train", order=time.time_ns())
+                    record.pop("finished", None)
 
             self.store.update(run_id, finish)
         except Exception as error:

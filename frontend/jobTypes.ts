@@ -36,6 +36,7 @@ export type JobConfig = {
   save_state: boolean;
   sample_enabled: boolean;
   preview_every: number;
+  sample_memory_policy?: 'automatic' | 'conservative';
   sample_prompt: string;
   sample_steps: number;
   sample_width?: number | null;
@@ -129,7 +130,11 @@ export type Review = {
     latent_cache: 'reuse' | 'rebuild';
     text_cache: 'reuse' | 'rebuild';
   };
-  stages: { name: string; args: string[] }[];
+  stages: {
+    name: string;
+    args: string[];
+    preview_memory?: import('./PreviewMemory').PreviewMemoryChoice;
+  }[];
   expert_schedule?: {
     interval: number;
     counts: { low: number; high: number };

@@ -2,10 +2,13 @@
 
 import argparse
 import json
+import os
 import time
 import tomllib
 from pathlib import Path
 from typing import Any
+
+from musubi_gui.training_timing import TrainingTiming
 
 
 def tensor(file: Path, **metadata: str) -> None:
@@ -122,13 +125,22 @@ def main(stage: str | None = None) -> None:
 
         # Longer runs stay slow enough to be observed and stopped; the two-step default needn't wait.
         step_seconds = 0.5 if args.max_train_steps > 2 else 0
+        timing = (
+            TrainingTiming(Path(os.environ["MUSUBI_RUN_TIMING_FILE"]))
+            if os.environ.get("MUSUBI_RUN_TIMING_FILE")
+            else None
+        )
         for step in range(1, args.max_train_steps + 1):
             time.sleep(step_seconds)
+            if timing:
+                timing.step(step)
             print(
                 f"steps: {step}/{args.max_train_steps} loss=0.0 (synthetic optimizer_step={previous + step})",
                 flush=True,
             )
             if args.sample_every_n_steps and step % args.sample_every_n_steps == 0:
+                if timing:
+                    timing.preview_start(step)
                 if args.sample_prompts is None:
                     parser.error("--sample_prompts is required for previews")
                 prompt = json.loads(args.sample_prompts.read_text(encoding="utf-8"))[0]
@@ -153,6 +165,8 @@ def main(stage: str | None = None) -> None:
                         height=prompt["height"],
                     )
                 print(f"SYNTHETIC preview complete at step {step}", flush=True)
+                if timing:
+                    timing.preview_finish(completed=True)
             # Like upstream, interval saves stamp their own metadata and include the last step.
             if args.save_every_n_steps and step % args.save_every_n_steps == 0:
                 name = f"{args.output_name}-step{step:08d}"

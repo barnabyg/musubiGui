@@ -45,7 +45,7 @@ def restored_pair(original: dict[str, Any], state: dict[str, Any], steps: int) -
                 set_argument(args, "--output_name", stem)
             else:
                 set_argument(args, "--save_path", str(directory / "samples"))
-            templates.append(Stage(name, args))
+            templates.append(Stage(name, args, preview_memory=copy.deepcopy(old.get("preview_memory"))))
     models = {**original["settings"]["models"], **original["job"]["config"].get("components", {})}
     config = original["job"]["config"]
     stages = paired_stages(
@@ -72,6 +72,7 @@ def restored_pair(original: dict[str, Any], state: dict[str, Any], steps: int) -
         phase="train",
         fingerprint=original["fingerprint"] + ":restore:" + uuid.uuid4().hex,
         created=datetime.now(UTC).isoformat(),
+        execution_started=None,
         processes=[],
         error=None,
         resume_of=original["id"],
@@ -93,6 +94,7 @@ def restored_pair(original: dict[str, Any], state: dict[str, Any], steps: int) -
         "stop_requested",
         "stop_kind",
         "finished",
+        "execution_end_unknown",
         "exit_code",
         "checkpoints",
         "removed_duplicates",
