@@ -2,6 +2,41 @@ import { test, expect } from '@playwright/test';
 import { runWorkspace } from './runHarness';
 import type { Job } from '../../frontend/jobTypes';
 
+test('Wan image sample checkbox stays compact at desktop and narrow widths', async ({
+  page,
+}) => {
+  const app = await runWorkspace();
+  try {
+    const job = app.manifest.jobs.find((item) => item.family === 'wan')!;
+    await page.goto(`${app.url}/#/jobs/${job.id}`);
+    await page.getByRole('tab', { name: 'Samples', exact: true }).click();
+    const imageSample = page.getByRole('checkbox', {
+      name: 'Image sample (one frame)',
+      exact: true,
+    });
+    for (const width of [1366, 700]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect(imageSample).toBeVisible();
+      const bounds = (await imageSample.boundingBox())!;
+      expect(bounds.width).toBeLessThanOrEqual(32);
+      expect(bounds.width).toBeLessThanOrEqual(bounds.height * 1.5);
+      await imageSample.focus();
+      await imageSample.press('Space');
+      await expect(imageSample).toBeChecked();
+      await expect(
+        page.getByLabel('Sample duration (seconds)', { exact: true }),
+      ).toHaveCount(0);
+      await imageSample.press('Space');
+      await expect(imageSample).not.toBeChecked();
+      await expect(
+        page.getByLabel('Sample duration (seconds)', { exact: true }),
+      ).toBeVisible();
+    }
+  } finally {
+    await app.close();
+  }
+});
+
 for (const family of ['wan', 'h3'] as const) {
   test(`${family} sample resolution and duration persist through export and reach final and preview media`, async ({
     page,

@@ -85,7 +85,7 @@ export function SampleGeometry({
         })}
       </div>
       {job.family === 'wan' && (
-        <label className="field">
+        <label className="job-toggle">
           <input
             type="checkbox"
             disabled={busy}
