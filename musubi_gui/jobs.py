@@ -96,6 +96,7 @@ class JobConfig(BaseModel):
     save_state: bool = False
     sample_enabled: bool = True
     preview_every: int = 0
+    sample_memory_policy: Literal["automatic", "conservative"] = "automatic"
     sample_prompt: str = CAPTION
     sample_steps: int = 4
     # None preserves the resolved geometry of released version-one Jobs and exports.
@@ -771,6 +772,7 @@ def _set_argument(args: list[str], flag: str, value: str) -> None:
 
 def build_stages(job: Job, settings: Settings, run: Path, cache: Path, kinds: set[str]) -> list[Stage]:
     """Kinds are the included item kinds, because H3 images change its commands."""
+    from musubi_gui.preview_memory import resolve_preview_memory
     from musubi_gui.training_options import timestep_range_policy
 
     settings = effective_settings(job, settings)
@@ -816,17 +818,26 @@ def build_stages(job: Job, settings: Settings, run: Path, cache: Path, kinds: se
                 from musubi_gui.preview import preview_arguments
 
                 args.extend(preview_arguments(job, settings, run))
+                stage.preview_memory = resolve_preview_memory(job, settings, native=True)
         if stage.name == "generate":
             if job.family == "wan" and config.sample_frames == 1:
                 _set_argument(args, "--output_type", "images")
             _set_argument(args, "--prompt", config.sample_prompt)
             _set_argument(args, "--infer_steps", str(config.sample_steps))
             _set_argument(args, "--seed", str(config.seed))
-            _set_argument(args, "--blocks_to_swap", str(config.blocks_to_swap))
+            stage.preview_memory = resolve_preview_memory(job, settings, native=False)
+            _set_argument(args, "--blocks_to_swap", str(stage.preview_memory["blocks_to_swap"]))
             _set_argument(args, "--video_length", str(sample_frames))
             index = args.index("--video_size")
             args[index + 1 : index + 3] = [str(sample_height), str(sample_width)]
             _set_argument(args, "--lora_weight", str(run / "checkpoints" / f"{output_name}.safetensors"))
+            if stage.preview_memory["mode"] == "automatic":
+                args[4:4] = [
+                    str(Path(__file__).with_name("preview_generate.py")),
+                    "--fallback-blocks",
+                    str(stage.preview_memory["recovery"]["blocks_to_swap"]),
+                    "--",
+                ]
     stages = [
         stage
         for stage in stages

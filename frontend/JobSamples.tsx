@@ -28,6 +28,12 @@ export function JobSamples({
         steps and resolution. They can be enabled independently; effective
         durations are shown below.
       </p>
+      <p className="hint">
+        Standalone previews and final samples select their GPU memory preset
+        independently from training, with substantial reserved headroom. Unknown
+        hardware or unqualified sizes use the conservative family preset. In-run
+        previews retain the training model's residency.
+      </p>
       {fields.toggle('Generate a final sample', 'sample_enabled')}
       {fields.number(
         'Preview every N steps',
@@ -43,6 +49,27 @@ export function JobSamples({
       )}
       {enabled && (
         <>
+          <label className="field">
+            Generation memory policy
+            <select
+              aria-label="Generation memory policy"
+              disabled={busy}
+              value={job.config.sample_memory_policy ?? 'automatic'}
+              onChange={(event) =>
+                config(
+                  'sample_memory_policy',
+                  event.target.value === 'conservative'
+                    ? 'conservative'
+                    : 'automatic',
+                )
+              }
+            >
+              <option value="automatic">
+                Automatic with reserved headroom
+              </option>
+              <option value="conservative">Conservative family preset</option>
+            </select>
+          </label>
           <label className="field">
             Sample prompt
             <textarea

@@ -1,5 +1,12 @@
 # Job drafts and configuration review
 
+Standalone previews and final samples choose their GPU memory settings separately
+from training. Samples offers **Automatic with reserved headroom** or the
+**Conservative family preset**; review explains the choice. Native previews retain
+training residency. See [preview memory selection](reference/preview-memory.md)
+for measured profiles, conservative fallbacks, compatibility and an isolated
+manual comparison command.
+
 Use **Jobs** in the sidebar to select a saved job, create a Wan or H3 draft, or import a configuration. Opening or creating a job shows its dedicated editor without the job list. **Back to jobs** returns to the collection and asks before discarding unsaved edits.
 
 Jobs waits for its library data before enabling creation, selection or import. An initial read failure retries once automatically; if loading still fails, use **Retry loading jobs**.
