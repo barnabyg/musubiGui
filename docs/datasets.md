@@ -1,5 +1,7 @@
 # Dataset acceptance
 
+Use **Datasets** in the sidebar to open the library. Select a dataset to open its editor; **Back to datasets** returns to selection and creation.
+
 ## Preparing video sources for H3
 
 Open a source dataset, choose **Dataset settings → Prepare videos for H3**, and

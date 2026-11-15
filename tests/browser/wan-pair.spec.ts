@@ -61,6 +61,9 @@ test('Wan offers only alternating training for new jobs and presets', async ({
       }),
     ).toHaveCount(0);
     await page
+      .getByRole('button', { name: 'Back to jobs', exact: true })
+      .click();
+    await page
       .getByRole('button', { name: 'New Wan job', exact: true })
       .click();
     await page.getByRole('tab', { name: 'Job & dataset', exact: true }).click();

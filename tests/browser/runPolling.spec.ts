@@ -248,7 +248,9 @@ test('finished Runs transfer summaries without repeating frozen inputs or termin
       name: `${job.name} · WAN · r2`,
       exact: true,
     });
-    await expect(activeButton).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: 'Run history' }),
+    ).toHaveCount(0);
     observation.start();
     await new Promise((resolve) => setTimeout(resolve, 3250));
     const activeTraffic = await observation.finish();
@@ -274,6 +276,9 @@ test('finished Runs transfer summaries without repeating frozen inputs or termin
     expect(
       activeTraffic.filter((entry) => entry.path === `/api/runs/${active.id}`),
     ).toHaveLength(0);
+    await page
+      .getByRole('button', { name: 'Back to runs', exact: true })
+      .click();
     await activeButton.click();
     await expect(page.getByLabel('Training progress')).toContainText(
       /Step \d+\/12/,

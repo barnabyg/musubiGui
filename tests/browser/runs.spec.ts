@@ -111,6 +111,7 @@ test('deleting a Run and its Job goes from the UI to the disk and survives a bac
     await jobAction('Delete job');
     await expect(question).toContainText(job.name);
     await question.getByRole('button', { name: 'Delete job' }).click();
+    await expect(page.getByRole('status')).toHaveText('Job deleted');
     await expect(jobButton).toHaveCount(0);
     expect(await exists(path.join(app.manifest.state, 'jobs', job.id))).toBe(
       false,
@@ -276,6 +277,9 @@ test('live progress steps through stages, reports steps and loss, and shows a fa
     )!;
     await app.post('/api/runs/prepare', { job_id: other.id });
     await page
+      .getByRole('button', { name: 'Back to runs', exact: true })
+      .click();
+    await page
       .getByRole('button', { name: `${other.name} · WAN · r1`, exact: true })
       .click();
     await expect(
@@ -401,12 +405,15 @@ test('the URL keeps the screen and selection across navigation, refresh and brow
     await expect(jobName).toHaveValue(job.name);
     expect(new URL(page.url()).hash).toBe(`#/jobs/${job.id}`);
 
-    // Returning through the sidebar and browser back both reopen the job.
+    // The sidebar opens collections; browser back reopens the selected job.
     await nav('Runs').click();
     await expect(page.getByRole('heading', { name: 'Runs' })).toBeVisible();
     await nav('Jobs').click();
-    await page.getByRole('tab', { name: 'Job & dataset', exact: true }).click();
-    await expect(jobName).toHaveValue(job.name);
+    await expect(page.getByRole('table', { name: 'Saved jobs' })).toBeVisible();
+    await expect(jobName).toHaveCount(0);
+    await page
+      .getByRole('button', { name: `${job.name} · WAN · r1`, exact: true })
+      .click();
     await nav('Runs').click();
     await page.goBack();
     await page.getByRole('tab', { name: 'Job & dataset', exact: true }).click();
@@ -418,12 +425,15 @@ test('the URL keeps the screen and selection across navigation, refresh and brow
     await page.getByRole('tab', { name: 'Job & dataset', exact: true }).click();
     await expect(jobName).toHaveValue(job.name);
 
-    // Back moves between selections too.
+    // Back moves between collection and detail pages too.
+    await nav('Back to jobs').click();
     await page
       .getByRole('button', { name: `${other.name} · H3 · r1`, exact: true })
       .click();
     await page.getByRole('tab', { name: 'Job & dataset', exact: true }).click();
     await expect(jobName).toHaveValue(other.name);
+    await page.goBack();
+    await expect(page.getByRole('table', { name: 'Saved jobs' })).toBeVisible();
     await page.goBack();
     await page.getByRole('tab', { name: 'Job & dataset', exact: true }).click();
     await expect(jobName).toHaveValue(job.name);
@@ -1156,7 +1166,9 @@ test('a queued Run refuses delete and archive; archiving hides a job, keeps its 
     await expect(page.getByRole('alert')).toContainText('active Run', {
       timeout: 240_000,
     });
-    await expect(library).toBeVisible();
+    await expect(page.getByLabel('Job name', { exact: true })).toHaveValue(
+      job.name,
+    );
 
     await app.leaseGpu('release');
     await expect
@@ -1165,12 +1177,11 @@ test('a queued Run refuses delete and archive; archiving hides a job, keeps its 
     const [run] = await app.records();
 
     await archive();
+    await expect(page.getByRole('status')).toHaveText('Job archived');
     await expect(library).toHaveCount(0);
-    await page.getByRole('button', { name: 'More job actions' }).click();
     await expect(
-      page.getByRole('menuitem', { name: 'Archive job' }),
-    ).toBeDisabled();
-    await page.keyboard.press('Escape');
+      page.getByRole('button', { name: 'More job actions' }),
+    ).toHaveCount(0);
 
     // Still archived after a reload, and its Run stays browsable from Runs.
     await page.reload();
@@ -1226,15 +1237,15 @@ test('Runs read as labels and local times, and the GPU line links to the Run usi
     await page.goto(`${app.url}/#/runs`);
     const gpu = page.getByRole('status');
     await expect(gpu).toHaveText(`GPU in use by ${job.name}`);
-    await gpu.getByRole('link', { name: job.name }).click();
-    await expect(page).toHaveURL(new RegExp(`#/runs/${run.id}$`));
-
     const history = page.locator('section', {
       has: page.getByRole('heading', { name: 'Run history' }),
     });
     await expect(history.locator('.status-badge')).toHaveText('Ready to start');
     await expect(history).not.toContainText('+00:00');
     await expect(history).not.toContainText('prepared');
+    await gpu.getByRole('link', { name: job.name }).click();
+    await expect(page).toHaveURL(new RegExp(`#/runs/${run.id}$`));
+
     await expect(
       page.getByText(`Run ${run.id.slice(0, 8)}`, { exact: true }),
     ).toBeVisible();
@@ -1580,12 +1591,16 @@ test('a Wan job combines an image dataset and a video dataset through review, re
       ),
     ).toBe(true);
     await page.setViewportSize({ width: 1280, height: 720 });
+    await page
+      .getByRole('button', { name: 'Back to jobs', exact: true })
+      .click();
     await expect(
       page
         .getByRole('table', { name: 'Saved jobs' })
         .locator('tbody tr')
         .first(),
     ).toContainText('Susan images +1');
+    await page.getByRole('button', { name: /^New Wan job · WAN · r/ }).click();
 
     await app.crash();
     await app.start();
@@ -1602,7 +1617,9 @@ test('a Wan job combines an image dataset and a video dataset through review, re
     await page
       .getByRole('button', { name: 'Prepare run', exact: true })
       .click();
-    await expect(page.getByRole('heading', { name: 'Runs' })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: 'Run details' }),
+    ).toBeVisible();
     let prepared: RunRecord | undefined;
     await expect
       .poll(

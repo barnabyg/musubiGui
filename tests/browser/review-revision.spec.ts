@@ -10,6 +10,9 @@ test('a late review cannot authorize a different job at the same revision', asyn
     const [first, second] = app.manifest.jobs;
     await page.goto(`${app.url}/#/jobs/${first.id}`);
     await page
+      .getByRole('button', { name: 'Back to jobs', exact: true })
+      .click();
+    await page
       .getByRole('button', { name: `${second.name} · WAN · r1` })
       .click();
     const held = new Promise<void>((resolve) => {
@@ -23,6 +26,8 @@ test('a late review cannot authorize a different job at the same revision', asyn
     });
     await page.getByRole('button', { name: 'Review configuration' }).click();
     await reviewing;
+    await page.goBack();
+    await expect(page.getByRole('table', { name: 'Saved jobs' })).toBeVisible();
     await page.goBack();
     await expect(page.getByLabel('Job name')).toHaveValue(first.name);
     release();
@@ -86,14 +91,18 @@ test('a second tab changing a reviewed job blocks both prepare actions until the
     await page
       .getByRole('button', { name: 'Prepare run', exact: true })
       .click();
+    await expect(page.getByLabel('Run stages')).toBeVisible();
     await expect(
       page.getByRole('heading', { name: 'Run history' }),
-    ).toBeVisible();
+    ).toHaveCount(0);
+    await page
+      .getByRole('button', { name: 'Back to runs', exact: true })
+      .click();
     const recorded = page.getByRole('button', {
       name: 'Renamed in tab B 3 · WAN · r3',
       exact: true,
     });
-    await expect(recorded).toHaveAttribute('aria-pressed', 'true');
+    await expect(recorded).toBeVisible();
     expect((await app.records()).map((run) => run.job)).toMatchObject([
       { id: job.id, name: 'Renamed in tab B 3', revision: 3 },
     ]);

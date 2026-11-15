@@ -207,3 +207,82 @@ test('a configured app opens on Datasets, or on a Run in progress', async ({
     await app.close();
   }
 });
+
+test('collection navigation separates selection and creation from dataset, job and Run details', async ({
+  page,
+}) => {
+  const app = await runWorkspace();
+  try {
+    const job = app.manifest.jobs.find((item) => item.family === 'wan')!;
+    const button = (name: string) =>
+      page.getByRole('button', { name, exact: true });
+    await page.goto(`${app.url}/#/jobs`);
+    await expect(button('New Wan job')).toBeVisible();
+    await page
+      .getByRole('button', { name: `${job.name} · WAN · r1`, exact: true })
+      .click();
+    await expect(page.getByLabel('Job name', { exact: true })).toHaveValue(
+      job.name,
+    );
+    await expect(page.getByRole('table', { name: 'Saved jobs' })).toHaveCount(
+      0,
+    );
+    await expect(button('New Wan job')).toHaveCount(0);
+    await button('Back to jobs').click();
+    await expect(page).toHaveURL(/#\/jobs$/);
+    await expect(
+      page.getByRole('tablist', { name: 'Job sections' }),
+    ).toHaveCount(0);
+    await page.goBack();
+    await expect(page.getByLabel('Job name', { exact: true })).toHaveValue(
+      job.name,
+    );
+    await button('Jobs').click();
+    await expect(page.getByRole('table', { name: 'Saved jobs' })).toBeVisible();
+
+    await button('Datasets').click();
+    await expect(
+      page.getByRole('region', { name: 'Dataset library' }),
+    ).toBeVisible();
+    await page.getByRole('button', { name: /^WAN acceptance/ }).click();
+    await expect(button('Back to datasets')).toBeVisible();
+    await expect(
+      page.getByRole('region', { name: 'Dataset library' }),
+    ).toHaveCount(0);
+    await expect(button('New dataset')).toHaveCount(0);
+    await button('Datasets').click();
+    await expect(page).toHaveURL(/#\/datasets$/);
+    await expect(
+      page.getByRole('region', { name: 'Dataset library' }),
+    ).toBeVisible();
+
+    const run = (await app.post('/api/runs/prepare', { job_id: job.id })) as {
+      id: string;
+    };
+    await button('Runs').click();
+    await expect(
+      page.getByRole('heading', { name: 'Run history' }),
+    ).toBeVisible();
+    await page
+      .getByRole('button', { name: `${job.name} · WAN · r1`, exact: true })
+      .click();
+    await expect(page).toHaveURL(new RegExp(`#/runs/${run.id}$`));
+    await expect(page.getByLabel('Run stages')).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: 'Run history' }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole('heading', { name: 'Pending queue' }),
+    ).toHaveCount(0);
+    await page.reload();
+    await expect(page.getByLabel('Run stages')).toBeVisible();
+    await button('Back to runs').click();
+    await expect(page).toHaveURL(/#\/runs$/);
+    await expect(page.getByLabel('Run stages')).toHaveCount(0);
+    await expect(
+      page.getByRole('link', { name: 'Open jobs to prepare a Run' }),
+    ).toBeVisible();
+  } finally {
+    await app.close();
+  }
+});

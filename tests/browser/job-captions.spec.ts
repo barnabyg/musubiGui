@@ -59,6 +59,9 @@ test('preparation waits for selected dataset captions and freezes the resolved d
     await expect(start).toBeDisabled();
     expect(await app.records()).toHaveLength(0);
 
+    await page
+      .getByRole('button', { name: 'Back to jobs', exact: true })
+      .click();
     await chooseJob(h3);
     await prepare.click();
     await expect(

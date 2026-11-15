@@ -136,6 +136,9 @@ test('Wan and H3 output playback comparison download and missing states retain r
     ).toBeVisible();
     expect((await page.request.get(url + checkpointUrl)).status()).toBe(404);
     await page
+      .getByRole('button', { name: 'Back to runs', exact: true })
+      .click();
+    await page
       .getByRole('button', { name: 'wan-revision-1 · WAN · r1', exact: true })
       .click();
     await page.getByRole('tab', { name: 'Samples', exact: true }).click();

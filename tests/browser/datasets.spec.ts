@@ -42,7 +42,6 @@ test('register mixed media, preview, and recover library after service restart',
     await app.stop();
     await app.start();
     await page.reload();
-    await page.getByRole('button', { name: 'Datasets', exact: true }).click();
     await expect(
       page.getByRole('heading', { level: 1, name: 'Mixed library' }),
     ).toBeVisible();
