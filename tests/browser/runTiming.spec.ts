@@ -151,6 +151,7 @@ test('whole-Run forecast refreshes after a measured preview independently of Pha
     })) as { id: string };
     let measured = false;
     let ended = false;
+    let finalUnmeasured = false;
     await page.route(`**/api/runs/${run.id}`, async (route) => {
       const record = await (await route.fetch()).json();
       await route.fulfill({
@@ -174,13 +175,17 @@ test('whole-Run forecast refreshes after a measured preview independently of Pha
             loss: null,
           },
           run_estimate: {
-            remaining_seconds: measured ? 5580 : null,
-            finish_at: measured ? '2026-11-15T11:35:00Z' : null,
+            remaining_seconds: measured && !finalUnmeasured ? 5580 : null,
+            finish_at:
+              measured && !finalUnmeasured ? '2026-11-15T11:35:00Z' : null,
+            accounted_remaining_seconds: measured ? 5580 : null,
+            accounted_finish_at: measured ? '2026-11-15T11:35:00Z' : null,
             completed_previews: measured ? 1 : 0,
             outstanding_previews: measured ? 9 : 10,
             outstanding_final_samples: 0,
             unknown_components: [
               'checkpoint/state saving and stage transitions',
+              ...(finalUnmeasured ? ['final sampling'] : []),
             ],
             preview_remaining_seconds: measured ? 5400 : null,
           },
@@ -198,6 +203,17 @@ test('whole-Run forecast refreshes after a measured preview independently of Pha
     );
     await page.reload();
     await expect(forecast).toContainText('Estimated Run remaining: 1h 33m 0s');
+    finalUnmeasured = true;
+    await expect(forecast).toContainText(
+      'Partial remaining estimate: 1h 33m 0s',
+    );
+    await expect(forecast).toContainText(
+      'Outstanding preview budget: 1h 30m 0s',
+    );
+    await expect(forecast).toContainText(
+      'Conditional finish for estimated components:',
+    );
+    await expect(forecast).toContainText('final sampling');
     ended = true;
     await page.reload();
     await expect(forecast).toHaveCount(0);

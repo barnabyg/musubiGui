@@ -94,6 +94,18 @@ def test_native_preview_forecast_uses_measured_wall_time_without_counting_it_twi
         )
     else:
         assert estimate["finish_at"] is None
+    if completed == 1 and step == 2:
+        service.store.update(
+            run["id"], lambda r: r["stages"].append({"name": "generate", "args": [], "status": "pending"})
+        )
+        partial = forecast(service)
+        assert partial["remaining_seconds"] is None
+        assert partial["finish_at"] is None
+        assert partial["preview_remaining_seconds"] == 5400
+        assert partial["accounted_remaining_seconds"] == 5580
+        assert partial["accounted_finish_at"] == "2026-11-15T11:35:00+00:00"
+        assert "final sampling" in partial["unknown_components"]
+        service.store.update(run["id"], lambda r: r["stages"].pop())
     restarted = RunService(root, device_path=tmp_path / "device.sqlite", autostart=False)
     assert forecast(restarted)["remaining_seconds"] == remaining
 

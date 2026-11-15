@@ -84,6 +84,8 @@ type Progress = {
 type CompletionEstimate = {
   remaining_seconds: number | null;
   finish_at: string | null;
+  accounted_remaining_seconds?: number | null;
+  accounted_finish_at?: string | null;
   outstanding_previews: number;
   completed_previews: number;
   outstanding_final_samples: number;
@@ -114,6 +116,31 @@ function RunCompletion({
           ? new Date(estimate.finish_at).toLocaleString()
           : 'unknown'}
       </p>
+      {seconds == null && estimate?.accounted_remaining_seconds != null && (
+        <>
+          <p>
+            Partial remaining estimate:{' '}
+            {Math.floor(estimate.accounted_remaining_seconds / 3600)}h{' '}
+            {Math.floor((estimate.accounted_remaining_seconds % 3600) / 60)}m{' '}
+            {estimate.accounted_remaining_seconds % 60}s (measured components
+            only)
+          </p>
+          <p>
+            Conditional finish for estimated components:{' '}
+            {estimate.accounted_finish_at
+              ? new Date(estimate.accounted_finish_at).toLocaleString()
+              : 'unknown'}
+          </p>
+        </>
+      )}
+      {estimate?.preview_remaining_seconds != null && (
+        <p>
+          Outstanding preview budget:{' '}
+          {Math.floor(estimate.preview_remaining_seconds / 3600)}h{' '}
+          {Math.floor((estimate.preview_remaining_seconds % 3600) / 60)}m{' '}
+          {estimate.preview_remaining_seconds % 60}s
+        </p>
+      )}
       {estimate && (
         <p>
           Previews: {estimate.completed_previews} completed ·{' '}

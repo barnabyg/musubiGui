@@ -173,12 +173,19 @@ budget, less time already spent loading, until its first update. An unmeasured e
 explicit assumption until it reports its own measurements. Forecasts identify
 unestimated components such as future loading/switching and final state saves;
 they are partial estimates, not finish-time promises. Before step or preview
-measurements exist, the affected budget and whole-Run finish remain unknown. Native
+measurements exist, the affected budget and whole-Run finish remain unknown.
+When only part of the work is measured, Overview shows the outstanding preview
+budget and a **Partial remaining estimate**, with a conditional finish for those
+estimated components. Unmeasured work, including a separate final generator, is
+listed as excluded/assumed. This is a partial prediction, not a guaranteed lower
+bound. The full remaining/finish values stay unknown until their components have
+measurements. Native
 and standalone samples use separate timing pools because their residency costs
 differ; a native preview cannot qualify a separate final generator's budget.
 
 `GET /api/runs/{id}/logs` adds `run_estimate`, including nullable
 `remaining_seconds`, `finish_at`, training/preview/final-sampling budgets, observed
+`accounted_remaining_seconds`/`accounted_finish_at` for a partial forecast,
 overhead, outstanding/completed preview counts, and `unknown_components`. It
 refreshes while training/generation is active even when a training phase has ended.
 Persisted Jobs, exports and existing Runs remain readable. New native training

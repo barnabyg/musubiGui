@@ -105,6 +105,8 @@ def completion_estimate(run: dict[str, Any], progress: dict[str, Any] | None, no
         "as_of": now,
         "remaining_seconds": None,
         "finish_at": None,
+        "accounted_remaining_seconds": None,
+        "accounted_finish_at": None,
         "training_remaining_seconds": None,
         "preview_remaining_seconds": None,
         "sampling_remaining_seconds": None,
@@ -280,10 +282,14 @@ def completion_estimate(run: dict[str, Any], progress: dict[str, Any] | None, no
         overhead_remaining_seconds=math.ceil(overhead),
         unknown_components=sorted(gaps),
     )
-    if training_known and previews_known and sampling_known:
-        remaining_seconds = math.ceil(training_seconds + preview_seconds + sampling_seconds + overhead)
+    accounted = math.ceil(training_seconds + preview_seconds + sampling_seconds + overhead)
+    all_known = training_known and previews_known and sampling_known
+    if accounted > 0 or all_known:
+        finish = (datetime.fromisoformat(now).astimezone(UTC) + timedelta(seconds=accounted)).isoformat()
+        result.update(accounted_remaining_seconds=accounted, accounted_finish_at=finish)
+    if all_known:
         result.update(
-            remaining_seconds=remaining_seconds,
-            finish_at=(datetime.fromisoformat(now).astimezone(UTC) + timedelta(seconds=remaining_seconds)).isoformat(),
+            remaining_seconds=accounted,
+            finish_at=result["accounted_finish_at"],
         )
     return result
