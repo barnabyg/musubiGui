@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from musubi_gui.recipe import Stage
-from musubi_gui.run_paths import create_run_directory
+from musubi_gui.run_paths import create_run_directory, job_folder
 from musubi_gui.snapshots import digest_file
 from musubi_gui.wan_pair_plan import argument, paired_stages, set_argument
 
@@ -30,7 +30,8 @@ def restored_pair(original: dict[str, Any], state: dict[str, Any], steps: int) -
     copies = []
     for expert, source in sources.items():
         checkpoint = source["checkpoint"]
-        target = directory / "checkpoints" / f"wan-{original['job']['id']}-{expert}-source.safetensors"
+        stem = f"{job_folder(original['job']['name'])}-r{original['job']['revision']}"
+        target = directory / "checkpoints" / f"{stem}-{expert}-step{checkpoint['steps']:08d}.safetensors"
         copies.append((checkpoint["path"], target, checkpoint["sha256"]))
         source["checkpoint"] = {**checkpoint, "path": str(target)}
         files[str(target)] = checkpoint["sha256"]

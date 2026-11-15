@@ -74,7 +74,8 @@ def paired_stages(
     )
     for phase in phases:
         args = list(template.args)
-        name = f"{stem}-{phase.expert}-phase{phase.start:08d}"
+        before = phase.low_before if phase.expert == "low" else phase.high_before
+        name = f"{stem}-{phase.expert}-step{before + phase.steps:08d}"
         for flag, value in [
             ("--dit", models[f"wan_{phase.expert}"]),
             ("--min_timestep", "0" if phase.expert == "low" else "875"),
@@ -94,14 +95,19 @@ def paired_stages(
                 index = args.index("--resume")
                 del args[index : index + 2]
         checkpoint = str(output / f"{name}.safetensors")
-        before = phase.low_before if phase.expert == "low" else phase.high_before
         checkpoints[phase.expert] = {"path": checkpoint, "steps": before + phase.steps}
         states[phase.expert] = {"path": str(output / f"{name}-state")}
         result.append(
             Stage(
                 "train",
                 args,
-                {**phase.record(), "interval": interval, "checkpoint": checkpoint, "per_expert": per_expert},
+                {
+                    **phase.record(),
+                    "interval": interval,
+                    "checkpoint": checkpoint,
+                    "per_expert": per_expert,
+                    "checkpoint_step_offset": before,
+                },
             )
         )
         end = phase.start + phase.steps

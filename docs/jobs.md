@@ -516,7 +516,8 @@ The estimate uses sizes measured on the target PC
   checkpoint.
 - The save count is `floor(steps / save_every) + 1`. This is the peak: when the last step
   falls on the interval, the duplicate exists until training succeeds and it is removed,
-  so a successful Run keeps one set fewer.
+  so a successful Run keeps one set fewer. New alternating Wan Runs write that final
+  step once, so this remains a conservative estimate for their checkpoint/state storage.
 - Wan latents are computed from size and frames, and H3 latents are fitted to two measured
   sizes at 124 frames. H3 image latents use the same rate, and were measured at one size. Each
   cached video window or image adds one latent file, and repeats add none.

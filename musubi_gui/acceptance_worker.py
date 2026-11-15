@@ -8,6 +8,7 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
+from musubi_gui.checkpoint_names import expert_step_name
 from musubi_gui.training_timing import TrainingTiming
 
 
@@ -168,8 +169,17 @@ def main(stage: str | None = None) -> None:
                 if timing:
                     timing.preview_finish(completed=True)
             # Like upstream, interval saves stamp their own metadata and include the last step.
-            if args.save_every_n_steps and step % args.save_every_n_steps == 0:
-                name = f"{args.output_name}-step{step:08d}"
+            offset = os.environ.get("MUSUBI_EXPERT_STEP_OFFSET")
+            if (
+                args.save_every_n_steps
+                and step % args.save_every_n_steps == 0
+                and not (offset is not None and step == args.max_train_steps)
+            ):
+                name = (
+                    expert_step_name(args.output_name, int(offset), step)
+                    if offset is not None
+                    else f"{args.output_name}-step{step:08d}"
+                )
                 tensor(args.output_dir / f"{name}.safetensors", saved=f"step {step}")
                 if args.save_state:
                     save_state(args.output_dir / f"{name}-state", step)
