@@ -418,7 +418,14 @@ class RunService:
                 if stage["status"] == "running":
                     stage.update(status="stopped" if requested else "interrupted", finished=utc_now())
             if requested:
-                record.update(status="stopped", stop_kind=requested, processes=[], error=None, finished=utc_now())
+                record.update(
+                    status="stopped",
+                    stop_kind=requested,
+                    processes=[],
+                    error=None,
+                    finished=utc_now(),
+                    execution_end_unknown=True,
+                )
                 return
             record.update(
                 status="interrupted",
@@ -593,6 +600,7 @@ class RunService:
             "stop_requested",
             "stop_kind",
             "finished",
+            "execution_end_unknown",
             "exit_code",
             "checkpoints",
             "removed_duplicates",

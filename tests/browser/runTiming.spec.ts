@@ -100,7 +100,13 @@ test('Run elapsed advances through final generation and freezes only at the Run 
           ...record,
           status,
           execution_started: '2026-11-15T10:00:00Z',
-          finished: status === 'completed' ? '2026-11-15T10:03:00Z' : undefined,
+          execution_end_unknown: status === 'stopped',
+          finished:
+            status === 'completed'
+              ? '2026-11-15T10:03:00Z'
+              : status === 'stopped'
+                ? '2026-11-15T11:00:00Z'
+                : undefined,
           stages: [
             {
               name: 'train',
@@ -125,6 +131,9 @@ test('Run elapsed advances through final generation and freezes only at the Run 
     await page.clock.setFixedTime('2026-11-15T11:00:00Z');
     await expect(elapsed).toContainText('03:00');
     status = 'interrupted';
+    await page.reload();
+    await expect(elapsed).toContainText('unknown (execution end unconfirmed)');
+    status = 'stopped';
     await page.reload();
     await expect(elapsed).toContainText('unknown (execution end unconfirmed)');
   } finally {

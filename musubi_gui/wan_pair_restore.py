@@ -94,6 +94,7 @@ def restored_pair(original: dict[str, Any], state: dict[str, Any], steps: int) -
         "stop_requested",
         "stop_kind",
         "finished",
+        "execution_end_unknown",
         "exit_code",
         "checkpoints",
         "removed_duplicates",

@@ -114,7 +114,10 @@ The execution start is stored as nullable `execution_started` in each new Run;
 `finished` remains its terminal timestamp. These timestamps survive browser reloads
 and backend restart. An interrupted execution whose actual end was not observed
 shows unknown, as do uncertain/orphaned processes; recovery time is not presented
-as the actual finish time. Cancelled-before-start Runs show not started. Existing
+as the actual finish time. Recovered stops carry `execution_end_unknown: true`:
+their `finished` value records reconciliation, because the actual process exit
+was not observed, so their elapsed value also stays unknown. Restored segments
+clear that marker. Cancelled-before-start Runs show not started. Existing
 records remain readable: when the execution-start field is absent, the UI labels
 its fallback to the first recorded training start as legacy. It cannot reconstruct
 earlier preparation. Missing or invalid timestamps stay unknown.

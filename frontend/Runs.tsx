@@ -22,6 +22,7 @@ type Run = {
   created: string;
   finished?: string;
   execution_started?: string | null;
+  execution_end_unknown?: boolean;
   status: string;
   error: string | null;
   retention?: {
@@ -208,9 +209,9 @@ function RunElapsed({ run }: { run: Run }) {
     'cancelled',
     'interrupted',
   ].includes(run.status);
-  const uncertain = ['interrupted', 'orphaned', 'uncertain'].includes(
-    run.status,
-  );
+  const uncertain =
+    run.execution_end_unknown ||
+    ['interrupted', 'orphaned', 'uncertain'].includes(run.status);
   // Old records did not distinguish automatic preparation from a separate Prepare.
   const started =
     run.execution_started === undefined
