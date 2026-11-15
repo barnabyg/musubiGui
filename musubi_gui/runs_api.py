@@ -8,7 +8,8 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict
 
-from musubi_gui.runs import RunService
+from musubi_gui.run_estimate import completion_estimate
+from musubi_gui.runs import RunService, utc_now
 
 
 class PrepareRequest(BaseModel):
@@ -99,9 +100,11 @@ def runs_router(service: RunService) -> APIRouter:
     def logs(run_id: str) -> dict[str, Any]:
         with run_errors():
             run = service.get(run_id)
+            progress = service.progress(run_id)
             return {
                 "text": service.logs(run_id),
-                "progress": service.progress(run_id),
+                "progress": progress,
+                "run_estimate": completion_estimate(run, progress, utc_now()),
                 "performance_available": (Path(run["directory"]) / "performance.jsonl").is_file(),
             }
 

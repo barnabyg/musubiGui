@@ -48,6 +48,12 @@ def test_native_previews_are_frozen_discovered_and_do_not_require_final_sampling
         assert all(output["status"] == "available" for output in previews)
         assert all(output["kind"] == ("image" if frames == 1 else "video") for output in previews)
         assert completed["checkpoints"]
+        timing = json.loads(Path(completed["directory"], "timing-train.json").read_text(encoding="utf-8"))
+        assert timing["previews"]["completed"] == 3
+        assert timing["previews"]["seconds"] > 0
+        assert timing["previews"]["active"] is None
+        assert timing["training"]["step"] == 6
+        assert timing["training"]["intervals"] == 5
         assert all(output["metadata"]["preview"]["prompt"] == config.sample_prompt for output in previews)
         last = Path(completed["directory"]) / previews[-1]["path"]
         last.unlink()

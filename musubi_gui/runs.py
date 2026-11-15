@@ -26,6 +26,7 @@ from musubi_gui.processes import identity_status, observed_tree, process_identit
 from musubi_gui.recipe import Stage, reference_environment
 from musubi_gui.redaction import redact
 from musubi_gui.run_deletion import failure_message, folder_bytes, output_index_file, plan_deletion, remove_folder
+from musubi_gui.run_estimate import freeze_training_timing
 from musubi_gui.run_paths import create_run_directory
 from musubi_gui.run_performance import RunPerformance, start_performance
 from musubi_gui.run_progress import estimated_remaining, parse_progress
@@ -205,7 +206,10 @@ class RunService:
             "status": "pending_preparation",
             "phase": "prepare",
             "order": time.time_ns(),
-            "stages": [{**stage.record(), "status": "pending"} for stage in plan.stages],
+            "stages": [
+                freeze_training_timing({**stage.record(), "status": "pending"}, plan.job["family"], plan.directory)
+                for stage in plan.stages
+            ],
             "processes": [],
             "error": None,
             "fixture": self.fixture_mode,
@@ -548,6 +552,10 @@ class RunService:
             from musubi_gui.wan_pair_restore import restored_pair
 
             record = restored_pair(original, state, additional_steps)
+            record["stages"] = [
+                freeze_training_timing(stage, record["job"]["family"], Path(record["directory"]))
+                for stage in record["stages"]
+            ]
             self.store.create(record)
             atomic_json(
                 Path(record["directory"]) / "inputs.json",
@@ -605,6 +613,9 @@ class RunService:
             if stage["name"] == "train":
                 args[args.index("--max_train_steps") + 1] = str(additional_steps)
                 args.extend(["--resume", state["path"]])
+        record["stages"] = [
+            freeze_training_timing(stage, record["job"]["family"], directory) for stage in record["stages"]
+        ]
         self.store.create(record)
         atomic_json(
             directory / "inputs.json",

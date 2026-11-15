@@ -80,6 +80,55 @@ type Progress = {
   phase_total?: number;
   expert_steps?: { low: number; high: number };
 };
+type CompletionEstimate = {
+  remaining_seconds: number | null;
+  finish_at: string | null;
+  outstanding_previews: number;
+  completed_previews: number;
+  outstanding_final_samples: number;
+  preview_remaining_seconds: number | null;
+  unknown_components: string[];
+};
+
+function RunCompletion({
+  run,
+  estimate,
+}: {
+  run: Run;
+  estimate?: CompletionEstimate;
+}) {
+  if (!['training', 'generating'].includes(run.status)) return null;
+  const seconds = estimate?.remaining_seconds;
+  return (
+    <div className="run-progress" aria-label="Run completion estimate">
+      <p>
+        Estimated Run remaining:{' '}
+        {seconds == null
+          ? 'unknown'
+          : `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m ${seconds % 60}s`}
+      </p>
+      <p>
+        Estimated finish:{' '}
+        {estimate?.finish_at
+          ? new Date(estimate.finish_at).toLocaleString()
+          : 'unknown'}
+      </p>
+      {estimate && (
+        <p>
+          Previews: {estimate.completed_previews} completed ·{' '}
+          {estimate.outstanding_previews} outstanding · Final samples
+          outstanding: {estimate.outstanding_final_samples}
+        </p>
+      )}
+      <small>
+        Based on measured step and sampling wall time.{' '}
+        {estimate?.unknown_components.length
+          ? `Unestimated or assumed: ${estimate.unknown_components.join('; ')}.`
+          : 'Timings vary between executions.'}
+      </small>
+    </div>
+  );
+}
 type StepState = 'pending' | 'current' | 'completed' | 'failed' | 'stopped';
 const stepLabels: Record<StepState, string> = {
   pending: 'Not started',
@@ -479,6 +528,7 @@ export function Runs({
     text: string;
     progress: Progress | null;
     performance_available?: boolean;
+    run_estimate?: CompletionEstimate;
   } | null>(null);
   // Deleted, perhaps from another tab, or never there: a stale link leaves nothing to show.
   const forgetRun = useEffectEvent(() => onSelect?.(undefined, true));
@@ -562,6 +612,7 @@ export function Runs({
           text: string;
           progress: Progress | null;
           performance_available?: boolean;
+          run_estimate?: CompletionEstimate;
         }>(`/api/runs/${runId}/logs`, 'GET', undefined, controller.signal);
         if (!controller.signal.aborted) {
           setLive({ runId: runId!, ...result });
@@ -829,6 +880,7 @@ export function Runs({
                   State: <RunBadge status={run.status} />
                 </p>
                 <RunElapsed run={run} />
+                <RunCompletion run={run} estimate={current?.run_estimate} />
                 <TrainingProgress
                   run={run}
                   progress={current?.progress ?? null}

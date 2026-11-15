@@ -132,6 +132,71 @@ test('Run elapsed advances through final generation and freezes only at the Run 
   }
 });
 
+test('whole-Run forecast refreshes after a measured preview independently of Phase ETA', async ({
+  page,
+}) => {
+  const app = await runWorkspace();
+  try {
+    const run = (await app.post('/api/runs/prepare', {
+      job_id: app.manifest.jobs[0].id,
+    })) as { id: string };
+    let measured = false;
+    let ended = false;
+    await page.route(`**/api/runs/${run.id}`, async (route) => {
+      const record = await (await route.fetch()).json();
+      await route.fulfill({
+        json: {
+          ...record,
+          status: ended ? 'completed' : 'training',
+          execution_started: '2026-11-15T10:00:00Z',
+        },
+      });
+    });
+    await page.route(`**/api/runs/${run.id}/logs`, (route) =>
+      route.fulfill({
+        json: {
+          text: '',
+          progress: {
+            step: 2,
+            total: 20,
+            elapsed: '10:20',
+            eta: '1:33:00',
+            eta_scope: 'phase',
+            loss: null,
+          },
+          run_estimate: {
+            remaining_seconds: measured ? 5580 : null,
+            finish_at: measured ? '2026-11-15T11:35:00Z' : null,
+            completed_previews: measured ? 1 : 0,
+            outstanding_previews: measured ? 9 : 10,
+            outstanding_final_samples: 0,
+            unknown_components: [
+              'checkpoint/state saving and stage transitions',
+            ],
+            preview_remaining_seconds: measured ? 5400 : null,
+          },
+        },
+      }),
+    );
+    await page.goto(`${app.url}/#/runs/${run.id}`);
+    const forecast = page.getByLabel('Run completion estimate');
+    await expect(forecast).toContainText('Estimated Run remaining: unknown');
+    measured = true;
+    await expect(forecast).toContainText('Estimated Run remaining: 1h 33m 0s');
+    await expect(forecast).toContainText('1 completed · 9 outstanding');
+    await expect(forecast).toContainText(
+      'Unestimated or assumed: checkpoint/state saving',
+    );
+    await page.reload();
+    await expect(forecast).toContainText('Estimated Run remaining: 1h 33m 0s');
+    ended = true;
+    await page.reload();
+    await expect(forecast).toHaveCount(0);
+  } finally {
+    await app.close();
+  }
+});
+
 test('H3 diagnostics download contains measurements from the completed fixture run', async ({
   page,
 }) => {

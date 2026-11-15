@@ -141,11 +141,64 @@ finish-time promise: future model loading, previews and final sampling are exclu
 and expert speeds may differ. The trainer's own Training ETA or Phase ETA remains
 visible separately. The logs API adds nullable `estimated_remaining_seconds`.
 
+**Estimated Run remaining** and **Estimated finish** are separate forecasts. New
+Runs observe native Wan/H3 previews from before the trainer's sampling setup hook
+through its return-to-training cleanup hook, including inference, decoding and
+saving. Standalone paired-Wan previews use the whole generation-stage wall time,
+including process/model loading and expert transitions. Sampling measurements are
+retained in each Run's `timing-*.json` observations and stage timestamps, so reloads,
+reopening, backend restart and expert switches keep them. Existing frozen commands
+are unchanged; missing historical native timings cannot be reconstructed.
+
+The forecast uses the mean completed duration for comparable native previews or
+standalone generation, separately. It counts outstanding work from the frozen stage
+schedule, including per-expert Wan and restored segments, and subtracts actual
+completions. A final-boundary periodic preview and a separately requested final
+sample are separate operations. For example, one 10-minute preview with nine
+remaining adds 90 minutes, plus remaining training and measured overhead. Subsequent
+completions refine the mean. An active preview's elapsed portion is subtracted from
+its budget, clamped at zero; overruns are identified rather than producing negative
+remaining time. Terminal/stopping/interrupted Runs have no future finish prediction.
+
+Step intervals are measured outside the preview hooks and preview wall time is
+removed before extrapolation. The upstream progress bar can include previews and
+reset its timing; it is never used as a preview-free rate for this whole-Run forecast.
+Observed inter-step saves remain in the step rate. Completed phases can supply
+startup and final-save overhead for later comparable phases, without adding their
+first update twice. An unmeasured expert uses the observed expert's rate with an
+explicit assumption until it reports its own measurements. Forecasts identify
+unestimated components such as future loading/switching and final state saves;
+they are partial estimates, not finish-time promises. Before step or preview
+measurements exist, the affected budget and whole-Run finish remain unknown. Native
+and standalone samples use separate timing pools because their residency costs
+differ; a native preview cannot qualify a separate final generator's budget.
+
+`GET /api/runs/{id}/logs` adds `run_estimate`, including nullable
+`remaining_seconds`, `finish_at`, training/preview/final-sampling budgets, observed
+overhead, outstanding/completed preview counts, and `unknown_components`. It
+refreshes while training/generation is active even when a training phase has ended.
+Persisted Jobs, exports and existing Runs remain readable. New native training
+commands use an app-owned wrapper around the pinned trainer's existing hooks;
+it changes no training/sampling arguments or model residency. CPU fixtures exercise
+the same timing storage, but their durations are not GPU measurements.
+
+For manual forecast verification use the isolated launch command above. Set a
+fixture Job to at least 20 steps and preview every 2, disable final sampling, then
+Prepare and start. Expect the Run forecast to appear after step and first-preview
+measurements; its outstanding count should fall after each preview. Reload during
+training and confirm the count/estimate survive. The fixed 10-minute/nine-preview
+case is covered deterministically through the API rather than making a fixture
+sleep for ten minutes. For a real-GPU stopwatch check, use `.\launch.cmd` with
+configured models and a dataset, and allow for unestimated overhead and variable
+expert speed.
+
 Manual check from the repository root: run `.\launch.cmd`, start a prepared Job
 with several training steps and confirm the estimate appears once step timing is
 reported. For alternating Wan, confirm it covers the total remaining steps while
 Phase ETA covers only the current phase. Requires installed training dependencies,
 models and a dataset; the CPU fixture has no timing and should show unknown.
+Its upstream Training/Phase ETA stays unknown; its separate Run forecast uses
+synthetic wall-clock observations.
 
 History, queue updates and completion notifications share lightweight Run summaries.
 The selected Run's frozen inputs are loaded separately, again only when its recorded

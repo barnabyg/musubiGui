@@ -125,6 +125,20 @@ for (const family of ['wan', 'h3'] as const) {
         name: /^Step 5 preview.*available$/,
       });
       await expect(first).toBeVisible({ timeout: 240_000 });
+      await expect
+        .poll(async () => {
+          const response = await page.request.get(
+            `${app.url}/api/runs/${run.id}/logs`,
+          );
+          const forecast = (await response.json()).run_estimate;
+          return (
+            forecast.completed_previews > 0 &&
+            forecast.completed_previews + forecast.outstanding_previews ===
+              12 &&
+            forecast.remaining_seconds !== null
+          );
+        })
+        .toBe(true);
       await expect(
         page.getByText('State: Training', { exact: true }),
       ).toBeVisible();
