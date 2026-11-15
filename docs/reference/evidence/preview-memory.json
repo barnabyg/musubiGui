@@ -1,0 +1,1647 @@
+{
+  "version": 1,
+  "date": "2026-11-15",
+  "issue": "https://github.com/barnabyg/musubiGui/issues/164",
+  "application_revision": "7aee2574959035dbe07ab44f7acc9fb25ee1d4fa",
+  "source_note": "Qualification used the issue164 working tree based on application_revision. Its exact preview_memory/preview_generate changes are in the commit carrying this record; installed upstream files were unchanged. Native probes separately used the timing wrapper revision below.",
+  "timing_wrapper": {
+    "application_revision": "555a763",
+    "source": "musubi_gui/timed_trainer.py + musubi_gui/training_timing.py in root checkout"
+  },
+  "upstream_revision": "f8a1b03794a49239a3539015075f5123d6c07d66",
+  "hardware": {
+    "gpu": "NVIDIA GeForce RTX 3090",
+    "vram_bytes": 25769803776,
+    "host_ram_class_gb": 96,
+    "os": "Windows11",
+    "owner_power_fan_settings_changed": false
+  },
+  "method": {
+    "serial_gpu_operations": true,
+    "sample_interval_seconds": 0.5,
+    "stage_deadline_seconds": 1800,
+    "rss_guard_gib": 60,
+    "whole_host_guard_gib": 85,
+    "whole_device_guard_gib": 21,
+    "input_assets_read_only": true,
+    "isolated_outputs_cache": true,
+    "native_monitor": "existing reference.stage_run;60GiB RSS guard and1800s deadline"
+  },
+  "models": {
+    "wan_low": {
+      "path": "C:\\docs\\git\\musubiGui\\models\\wan-dit\\split_files\\diffusion_models\\wan2.2_t2v_low_noise_14B_fp16.safetensors",
+      "bytes": 28577095592,
+      "header_sha256": "557849b1370b34969f6e8152a3516a04277960f834069e6e08e763b4e28b3bd3"
+    },
+    "wan_high": {
+      "path": "C:\\docs\\git\\musubiGui\\models\\wan-dit\\split_files\\diffusion_models\\wan2.2_t2v_high_noise_14B_fp16.safetensors",
+      "bytes": 28577095592,
+      "header_sha256": "557849b1370b34969f6e8152a3516a04277960f834069e6e08e763b4e28b3bd3"
+    },
+    "wan_vae": {
+      "path": "C:\\docs\\git\\musubiGui\\models\\wan-vae\\split_files\\vae\\wan_2.1_vae.safetensors",
+      "bytes": 253815318,
+      "header_sha256": "dd36427bd861f8e91f87b193b016e44bb02ab1a56c40a12c22fb3fa99845e655"
+    },
+    "wan_t5": {
+      "path": "C:\\docs\\git\\musubiGui\\models\\wan-t5\\models_t5_umt5-xxl-enc-bf16.pth",
+      "bytes": 11361920418
+    },
+    "h3_dit": {
+      "path": "C:\\ai\\ai-toolkit\\models\\diffusion_models\\minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "bytes": 20970379616,
+      "header_sha256": "0a322b8e787b3829fb1c1ed6060fd83fd73d60fdae09073a81c92a31d020eddd"
+    },
+    "h3_text": {
+      "path": "C:\\ai\\ai-toolkit\\models\\text_encoders\\qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+      "bytes": 15687142551,
+      "header_sha256": "daa64a4a98f613359ed2d8477f9a1f2522f28c734f11069827c2bf0291b9e37e"
+    },
+    "h3_video_vae": {
+      "path": "C:\\ai\\ai-toolkit\\models\\vae\\minimax_h3_video_vae_fp16.safetensors",
+      "bytes": 5207808496,
+      "header_sha256": "2ef9553415717f9c4faa5e85bb773ab6ed39741cfb95c61661d3227fff641e6c"
+    },
+    "h3_audio_vae": {
+      "path": "C:\\ai\\ai-toolkit\\models\\vae\\minimax_h3_audio_vae_fp32.safetensors",
+      "bytes": 605254808,
+      "header_sha256": "04ba7f9f6f406eb6213262c6fe0b3c0d9a598a13167d0b9077056e19721d8c37"
+    }
+  },
+  "standalone": [
+    {
+      "case": "h3-baseline-cached",
+      "args": [
+        "C:\\docs\\git\\musubiGui\\musubi-tuner\\.venv\\Scripts\\python.exe",
+        "-X",
+        "utf8",
+        "-B",
+        "C:\\docs\\git\\musubiGui\\musubi-tuner\\minimax_h3_generate_video.py",
+        "--task",
+        "t2va",
+        "--dit",
+        "C:\\ai\\ai-toolkit\\models\\diffusion_models\\minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+        "--video_vae",
+        "C:\\ai\\ai-toolkit\\models\\vae\\minimax_h3_video_vae_fp16.safetensors",
+        "--audio_vae",
+        "C:\\ai\\ai-toolkit\\models\\vae\\minimax_h3_audio_vae_fp32.safetensors",
+        "--text_encoder",
+        "C:\\ai\\ai-toolkit\\models\\text_encoders\\qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+        "--text_encoder_blocks_to_swap",
+        "50",
+        "--attn_mode",
+        "sdpa",
+        "--prompt",
+        "A red square moves across a blue background. A steady sine tone plays.",
+        "--video_size",
+        "256",
+        "256",
+        "--video_length",
+        "124",
+        "--infer_steps",
+        "4",
+        "--seed",
+        "42",
+        "--blocks_to_swap",
+        "48",
+        "--lora_weight",
+        "C:\\docs\\git\\musubiGui\\.cache\\preview-gpu-probe-1794320225688484900\\outputs\\runs\\62174721546945bfaf12ac0b273047eb\\checkpoints\\h3-f8f174d506f9415c826b5c9508865e0e.safetensors",
+        "--save_path",
+        "C:\\docs\\git\\musubiGui\\.worktrees\\preview-vram-164\\.cache\\preview-qualification\\h3-baseline-cached\\samples\\sample.mp4"
+      ],
+      "wall_seconds": 81.109,
+      "exit_code": 0,
+      "termination": null,
+      "family": "h3",
+      "geometry": [256, 256, 124],
+      "swapped_blocks": 48,
+      "seed": 42,
+      "sample_steps": 4,
+      "adapter_rank": 4,
+      "peak_process_tree_rss_bytes": 37327073280,
+      "peak_host_used_bytes": 49141207040,
+      "peak_device_vram_bytes": 7227834368,
+      "sampled_free_headroom_bytes": 18541969408,
+      "received_log_windows": [
+        {
+          "phase": "load",
+          "seconds": 67.14099999999962
+        },
+        {
+          "phase": "decode",
+          "seconds": 12.375
+        },
+        {
+          "phase": "save/return",
+          "seconds": 1.5929999999971187
+        }
+      ],
+      "media": [
+        {
+          "path": "h3-baseline-cached\\samples\\sample.mp4",
+          "audio": {
+            "sample_rate": 32000,
+            "channels": 2,
+            "duration": 5.167,
+            "start": 0.0,
+            "codec": "aac"
+          },
+          "format": "mov,mp4,m4a,3gp,3g2,mj2",
+          "width": 256,
+          "height": 256,
+          "frames": 124,
+          "fps": 24.0,
+          "duration": 5.166666666666667,
+          "video_start": 0.0,
+          "decoded_video_frames": 124,
+          "decoded_audio_samples": 165888
+        }
+      ]
+    },
+    {
+      "case": "h3-candidate32",
+      "args": [
+        "C:\\docs\\git\\musubiGui\\musubi-tuner\\.venv\\Scripts\\python.exe",
+        "-X",
+        "utf8",
+        "-B",
+        "C:\\docs\\git\\musubiGui\\musubi-tuner\\minimax_h3_generate_video.py",
+        "--task",
+        "t2va",
+        "--dit",
+        "C:\\ai\\ai-toolkit\\models\\diffusion_models\\minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+        "--video_vae",
+        "C:\\ai\\ai-toolkit\\models\\vae\\minimax_h3_video_vae_fp16.safetensors",
+        "--audio_vae",
+        "C:\\ai\\ai-toolkit\\models\\vae\\minimax_h3_audio_vae_fp32.safetensors",
+        "--text_encoder",
+        "C:\\ai\\ai-toolkit\\models\\text_encoders\\qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+        "--text_encoder_blocks_to_swap",
+        "50",
+        "--attn_mode",
+        "sdpa",
+        "--prompt",
+        "A red square moves across a blue background. A steady sine tone plays.",
+        "--video_size",
+        "256",
+        "256",
+        "--video_length",
+        "124",
+        "--infer_steps",
+        "4",
+        "--seed",
+        "42",
+        "--blocks_to_swap",
+        "32",
+        "--lora_weight",
+        "C:\\docs\\git\\musubiGui\\.cache\\preview-gpu-probe-1794320225688484900\\outputs\\runs\\62174721546945bfaf12ac0b273047eb\\checkpoints\\h3-f8f174d506f9415c826b5c9508865e0e.safetensors",
+        "--save_path",
+        "C:\\docs\\git\\musubiGui\\.worktrees\\preview-vram-164\\.cache\\preview-qualification\\h3-candidate32\\samples\\sample.mp4"
+      ],
+      "wall_seconds": 46.547,
+      "exit_code": 0,
+      "termination": null,
+      "family": "h3",
+      "geometry": [256, 256, 124],
+      "swapped_blocks": 32,
+      "seed": 42,
+      "sample_steps": 4,
+      "adapter_rank": 4,
+      "peak_process_tree_rss_bytes": 36015845376,
+      "peak_host_used_bytes": 47869923328,
+      "peak_device_vram_bytes": 12020875264,
+      "sampled_free_headroom_bytes": 13748928512,
+      "received_log_windows": [
+        {
+          "phase": "load",
+          "seconds": 31.375
+        },
+        {
+          "phase": "inference",
+          "seconds": 9.0
+        },
+        {
+          "phase": "decode",
+          "seconds": 4.765999999999622
+        },
+        {
+          "phase": "save/return",
+          "seconds": 1.4059999999990396
+        }
+      ],
+      "media": [
+        {
+          "path": "h3-candidate32\\samples\\sample.mp4",
+          "audio": {
+            "sample_rate": 32000,
+            "channels": 2,
+            "duration": 5.167,
+            "start": 0.0,
+            "codec": "aac"
+          },
+          "format": "mov,mp4,m4a,3gp,3g2,mj2",
+          "width": 256,
+          "height": 256,
+          "frames": 124,
+          "fps": 24.0,
+          "duration": 5.166666666666667,
+          "video_start": 0.0,
+          "decoded_video_frames": 124,
+          "decoded_audio_samples": 165888
+        }
+      ]
+    },
+    {
+      "case": "h3-production-baseline",
+      "args": [
+        "C:\\docs\\git\\musubiGui\\musubi-tuner\\.venv\\Scripts\\python.exe",
+        "-X",
+        "utf8",
+        "-B",
+        "C:\\docs\\git\\musubiGui\\musubi-tuner\\minimax_h3_generate_video.py",
+        "--task",
+        "t2va",
+        "--dit",
+        "C:\\ai\\ai-toolkit\\models\\diffusion_models\\minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+        "--video_vae",
+        "C:\\ai\\ai-toolkit\\models\\vae\\minimax_h3_video_vae_fp16.safetensors",
+        "--audio_vae",
+        "C:\\ai\\ai-toolkit\\models\\vae\\minimax_h3_audio_vae_fp32.safetensors",
+        "--text_encoder",
+        "C:\\ai\\ai-toolkit\\models\\text_encoders\\qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+        "--text_encoder_blocks_to_swap",
+        "50",
+        "--attn_mode",
+        "sdpa",
+        "--prompt",
+        "A red square moves across a blue background. A steady sine tone plays.",
+        "--video_size",
+        "352",
+        "640",
+        "--video_length",
+        "124",
+        "--infer_steps",
+        "4",
+        "--seed",
+        "42",
+        "--blocks_to_swap",
+        "48",
+        "--lora_weight",
+        "C:\\docs\\git\\musubiGui\\.cache\\preview-gpu-probe-1794320225688484900\\outputs\\runs\\62174721546945bfaf12ac0b273047eb\\checkpoints\\h3-f8f174d506f9415c826b5c9508865e0e.safetensors",
+        "--save_path",
+        "C:\\docs\\git\\musubiGui\\.worktrees\\preview-vram-164\\.cache\\preview-qualification\\h3-production-baseline\\samples\\sample.mp4"
+      ],
+      "wall_seconds": 80.828,
+      "exit_code": 0,
+      "termination": null,
+      "family": "h3",
+      "geometry": [640, 352, 124],
+      "swapped_blocks": 48,
+      "seed": 42,
+      "sample_steps": 4,
+      "adapter_rank": 4,
+      "peak_process_tree_rss_bytes": 37251678208,
+      "peak_host_used_bytes": 49112428544,
+      "peak_device_vram_bytes": 10196353024,
+      "sampled_free_headroom_bytes": 15573450752,
+      "received_log_windows": [
+        {
+          "phase": "load",
+          "seconds": 39.28100000000268
+        },
+        {
+          "phase": "inference",
+          "seconds": 27.187999999998283
+        },
+        {
+          "phase": "decode",
+          "seconds": 12.593000000000757
+        },
+        {
+          "phase": "save/return",
+          "seconds": 1.7659999999996217
+        }
+      ],
+      "media": [
+        {
+          "path": "h3-production-baseline\\samples\\sample.mp4",
+          "audio": {
+            "sample_rate": 32000,
+            "channels": 2,
+            "duration": 5.167,
+            "start": 0.0,
+            "codec": "aac"
+          },
+          "format": "mov,mp4,m4a,3gp,3g2,mj2",
+          "width": 640,
+          "height": 352,
+          "frames": 124,
+          "fps": 24.0,
+          "duration": 5.166666666666667,
+          "video_start": 0.0,
+          "decoded_video_frames": 124,
+          "decoded_audio_samples": 165888
+        }
+      ]
+    },
+    {
+      "case": "h3-production-candidate32",
+      "args": [
+        "C:\\docs\\git\\musubiGui\\musubi-tuner\\.venv\\Scripts\\python.exe",
+        "-X",
+        "utf8",
+        "-B",
+        "C:\\docs\\git\\musubiGui\\musubi-tuner\\minimax_h3_generate_video.py",
+        "--task",
+        "t2va",
+        "--dit",
+        "C:\\ai\\ai-toolkit\\models\\diffusion_models\\minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+        "--video_vae",
+        "C:\\ai\\ai-toolkit\\models\\vae\\minimax_h3_video_vae_fp16.safetensors",
+        "--audio_vae",
+        "C:\\ai\\ai-toolkit\\models\\vae\\minimax_h3_audio_vae_fp32.safetensors",
+        "--text_encoder",
+        "C:\\ai\\ai-toolkit\\models\\text_encoders\\qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+        "--text_encoder_blocks_to_swap",
+        "50",
+        "--attn_mode",
+        "sdpa",
+        "--prompt",
+        "A red square moves across a blue background. A steady sine tone plays.",
+        "--video_size",
+        "352",
+        "640",
+        "--video_length",
+        "124",
+        "--infer_steps",
+        "4",
+        "--seed",
+        "42",
+        "--blocks_to_swap",
+        "32",
+        "--lora_weight",
+        "C:\\docs\\git\\musubiGui\\.cache\\preview-gpu-probe-1794320225688484900\\outputs\\runs\\62174721546945bfaf12ac0b273047eb\\checkpoints\\h3-f8f174d506f9415c826b5c9508865e0e.safetensors",
+        "--save_path",
+        "C:\\docs\\git\\musubiGui\\.worktrees\\preview-vram-164\\.cache\\preview-qualification\\h3-production-candidate32\\samples\\sample.mp4"
+      ],
+      "wall_seconds": 83.422,
+      "exit_code": 0,
+      "termination": null,
+      "family": "h3",
+      "geometry": [640, 352, 124],
+      "swapped_blocks": 32,
+      "seed": 42,
+      "sample_steps": 4,
+      "adapter_rank": 4,
+      "peak_process_tree_rss_bytes": 36806733824,
+      "peak_host_used_bytes": 49595932672,
+      "peak_device_vram_bytes": 16413360128,
+      "sampled_free_headroom_bytes": 9356443648,
+      "received_log_windows": [
+        {
+          "phase": "load",
+          "seconds": 40.63999999999942
+        },
+        {
+          "phase": "inference",
+          "seconds": 28.01600000000326
+        },
+        {
+          "phase": "decode",
+          "seconds": 13.140999999999622
+        },
+        {
+          "phase": "save/return",
+          "seconds": 1.625
+        }
+      ],
+      "media": [
+        {
+          "path": "h3-production-candidate32\\samples\\sample.mp4",
+          "audio": {
+            "sample_rate": 32000,
+            "channels": 2,
+            "duration": 5.167,
+            "start": 0.0,
+            "codec": "aac"
+          },
+          "format": "mov,mp4,m4a,3gp,3g2,mj2",
+          "width": 640,
+          "height": 352,
+          "frames": 124,
+          "fps": 24.0,
+          "duration": 5.166666666666667,
+          "video_start": 0.0,
+          "decoded_video_frames": 124,
+          "decoded_audio_samples": 165888
+        }
+      ]
+    },
+    {
+      "case": "h3-warm-automatic32-phases",
+      "args": [
+        "C:\\docs\\git\\musubiGui\\musubi-tuner\\.venv\\Scripts\\python.exe",
+        "-X",
+        "utf8",
+        "-B",
+        "C:\\docs\\git\\musubiGui\\.worktrees\\preview-vram-164\\musubi_gui\\preview_generate.py",
+        "--fallback-blocks",
+        "48",
+        "--",
+        "C:\\docs\\git\\musubiGui\\.worktrees\\preview-vram-164\\.cache\\preview-qualification\\phases.py",
+        "h3",
+        "C:\\docs\\git\\musubiGui\\musubi-tuner\\minimax_h3_generate_video.py",
+        "--task",
+        "t2va",
+        "--dit",
+        "C:\\ai\\ai-toolkit\\models\\diffusion_models\\minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+        "--video_vae",
+        "C:\\ai\\ai-toolkit\\models\\vae\\minimax_h3_video_vae_fp16.safetensors",
+        "--audio_vae",
+        "C:\\ai\\ai-toolkit\\models\\vae\\minimax_h3_audio_vae_fp32.safetensors",
+        "--text_encoder",
+        "C:\\ai\\ai-toolkit\\models\\text_encoders\\qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+        "--text_encoder_blocks_to_swap",
+        "50",
+        "--attn_mode",
+        "sdpa",
+        "--prompt",
+        "A red square moves across a blue background. A steady sine tone plays.",
+        "--video_size",
+        "256",
+        "256",
+        "--video_length",
+        "124",
+        "--infer_steps",
+        "4",
+        "--seed",
+        "42",
+        "--blocks_to_swap",
+        "32",
+        "--lora_weight",
+        "C:\\docs\\git\\musubiGui\\.cache\\preview-gpu-probe-1794320225688484900\\outputs\\runs\\62174721546945bfaf12ac0b273047eb\\checkpoints\\h3-f8f174d506f9415c826b5c9508865e0e.safetensors",
+        "--save_path",
+        "C:\\docs\\git\\musubiGui\\.worktrees\\preview-vram-164\\.cache\\preview-qualification\\h3-warm-automatic32-phases\\samples\\sample.mp4"
+      ],
+      "wall_seconds": 47.235,
+      "exit_code": 0,
+      "termination": null,
+      "family": "h3",
+      "geometry": [256, 256, 124],
+      "swapped_blocks": 32,
+      "seed": 42,
+      "sample_steps": 4,
+      "adapter_rank": 4,
+      "peak_process_tree_rss_bytes": 36650250240,
+      "peak_host_used_bytes": 48744116224,
+      "peak_device_vram_bytes": 11989417984,
+      "sampled_free_headroom_bytes": 13780385792,
+      "received_log_windows": [
+        {
+          "phase": "load",
+          "seconds": 32.07800000000134
+        },
+        {
+          "phase": "inference",
+          "seconds": 8.921999999998661
+        },
+        {
+          "phase": "decode",
+          "seconds": 4.84400000000096
+        },
+        {
+          "phase": "save/return",
+          "seconds": 1.3909999999996217
+        }
+      ],
+      "synchronized_phase_calls": [
+        {
+          "function": "load_h3_text_encoder",
+          "phase": "text_load",
+          "seconds": 4.852509600001213,
+          "exclusive_seconds": 4.852509600001213
+        },
+        {
+          "function": "_encode_text",
+          "phase": "text_conditioning",
+          "seconds": 6.470921299998736,
+          "exclusive_seconds": 1.618411699997523
+        },
+        {
+          "function": "_load_transformer",
+          "phase": "transformer_load",
+          "seconds": 9.550156699999206,
+          "exclusive_seconds": 9.550156699999206
+        },
+        {
+          "function": "_sample_latents",
+          "phase": "inference",
+          "seconds": 27.19880110000304,
+          "exclusive_seconds": 17.648644400003832
+        },
+        {
+          "function": "load_video_vae",
+          "phase": "video_vae_load",
+          "seconds": 1.9323270999993838,
+          "exclusive_seconds": 1.9323270999993838
+        },
+        {
+          "function": "load_audio_vae",
+          "phase": "audio_vae_load",
+          "seconds": 0.33782670000073267,
+          "exclusive_seconds": 0.33782670000073267
+        },
+        {
+          "function": "write_joint_av",
+          "phase": "media_save",
+          "seconds": 0.24668129999918165,
+          "exclusive_seconds": 0.24668129999918165
+        },
+        {
+          "function": "_decode_and_save",
+          "phase": "decode",
+          "seconds": 4.89284420000331,
+          "exclusive_seconds": 2.376009100004012
+        }
+      ],
+      "media": [
+        {
+          "path": "h3-warm-automatic32-phases\\samples\\sample.mp4",
+          "audio": {
+            "sample_rate": 32000,
+            "channels": 2,
+            "duration": 5.167,
+            "start": 0.0,
+            "codec": "aac"
+          },
+          "format": "mov,mp4,m4a,3gp,3g2,mj2",
+          "width": 256,
+          "height": 256,
+          "frames": 124,
+          "fps": 24.0,
+          "duration": 5.166666666666667,
+          "video_start": 0.0,
+          "decoded_video_frames": 124,
+          "decoded_audio_samples": 165888
+        }
+      ]
+    },
+    {
+      "case": "h3-warm-baseline-phases",
+      "args": [
+        "C:\\docs\\git\\musubiGui\\musubi-tuner\\.venv\\Scripts\\python.exe",
+        "-X",
+        "utf8",
+        "-B",
+        "C:\\docs\\git\\musubiGui\\.worktrees\\preview-vram-164\\.cache\\preview-qualification\\phases.py",
+        "h3",
+        "C:\\docs\\git\\musubiGui\\musubi-tuner\\minimax_h3_generate_video.py",
+        "--task",
+        "t2va",
+        "--dit",
+        "C:\\ai\\ai-toolkit\\models\\diffusion_models\\minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+        "--video_vae",
+        "C:\\ai\\ai-toolkit\\models\\vae\\minimax_h3_video_vae_fp16.safetensors",
+        "--audio_vae",
+        "C:\\ai\\ai-toolkit\\models\\vae\\minimax_h3_audio_vae_fp32.safetensors",
+        "--text_encoder",
+        "C:\\ai\\ai-toolkit\\models\\text_encoders\\qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+        "--text_encoder_blocks_to_swap",
+        "50",
+        "--attn_mode",
+        "sdpa",
+        "--prompt",
+        "A red square moves across a blue background. A steady sine tone plays.",
+        "--video_size",
+        "256",
+        "256",
+        "--video_length",
+        "124",
+        "--infer_steps",
+        "4",
+        "--seed",
+        "42",
+        "--blocks_to_swap",
+        "48",
+        "--lora_weight",
+        "C:\\docs\\git\\musubiGui\\.cache\\preview-gpu-probe-1794320225688484900\\outputs\\runs\\62174721546945bfaf12ac0b273047eb\\checkpoints\\h3-f8f174d506f9415c826b5c9508865e0e.safetensors",
+        "--save_path",
+        "C:\\docs\\git\\musubiGui\\.worktrees\\preview-vram-164\\.cache\\preview-qualification\\h3-warm-baseline-phases\\samples\\sample.mp4"
+      ],
+      "wall_seconds": 80.063,
+      "exit_code": 0,
+      "termination": null,
+      "family": "h3",
+      "geometry": [256, 256, 124],
+      "swapped_blocks": 48,
+      "seed": 42,
+      "sample_steps": 4,
+      "adapter_rank": 4,
+      "peak_process_tree_rss_bytes": 37274800128,
+      "peak_host_used_bytes": 49292562432,
+      "peak_device_vram_bytes": 7139753984,
+      "sampled_free_headroom_bytes": 18630049792,
+      "received_log_windows": [
+        {
+          "phase": "load",
+          "seconds": 57.5470000000023
+        },
+        {
+          "phase": "inference",
+          "seconds": 8.21900000000096
+        },
+        {
+          "phase": "decode",
+          "seconds": 12.28099999999904
+        },
+        {
+          "phase": "save/return",
+          "seconds": 2.0159999999996217
+        }
+      ],
+      "synchronized_phase_calls": [
+        {
+          "function": "load_h3_text_encoder",
+          "phase": "text_load",
+          "seconds": 14.828820300001098,
+          "exclusive_seconds": 14.828820300001098
+        },
+        {
+          "function": "_encode_text",
+          "phase": "text_conditioning",
+          "seconds": 16.722492700002476,
+          "exclusive_seconds": 1.8936724000013783
+        },
+        {
+          "function": "_load_transformer",
+          "phase": "transformer_load",
+          "seconds": 23.668730700002925,
+          "exclusive_seconds": 23.668730700002925
+        },
+        {
+          "function": "_sample_latents",
+          "phase": "inference",
+          "seconds": 41.738491399999475,
+          "exclusive_seconds": 18.06976069999655
+        },
+        {
+          "function": "load_video_vae",
+          "phase": "video_vae_load",
+          "seconds": 8.131378699999914,
+          "exclusive_seconds": 8.131378699999914
+        },
+        {
+          "function": "load_audio_vae",
+          "phase": "audio_vae_load",
+          "seconds": 1.0726648999989266,
+          "exclusive_seconds": 1.0726648999989266
+        },
+        {
+          "function": "write_joint_av",
+          "phase": "media_save",
+          "seconds": 0.2504606000002241,
+          "exclusive_seconds": 0.2504606000002241
+        },
+        {
+          "function": "_decode_and_save",
+          "phase": "decode",
+          "seconds": 12.32899080000061,
+          "exclusive_seconds": 2.8744866000015463
+        }
+      ],
+      "media": [
+        {
+          "path": "h3-warm-baseline-phases\\samples\\sample.mp4",
+          "audio": {
+            "sample_rate": 32000,
+            "channels": 2,
+            "duration": 5.167,
+            "start": 0.0,
+            "codec": "aac"
+          },
+          "format": "mov,mp4,m4a,3gp,3g2,mj2",
+          "width": 256,
+          "height": 256,
+          "frames": 124,
+          "fps": 24.0,
+          "duration": 5.166666666666667,
+          "video_start": 0.0,
+          "decoded_video_frames": 124,
+          "decoded_audio_samples": 165888
+        }
+      ]
+    },
+    {
+      "case": "wan-baseline-offline",
+      "args": [
+        "C:\\docs\\git\\musubiGui\\musubi-tuner\\.venv\\Scripts\\python.exe",
+        "-X",
+        "utf8",
+        "-B",
+        "C:\\docs\\git\\musubiGui\\musubi-tuner\\wan_generate_video.py",
+        "--task",
+        "t2v-A14B",
+        "--dit",
+        "C:\\docs\\git\\musubiGui\\models\\wan-dit\\split_files\\diffusion_models\\wan2.2_t2v_low_noise_14B_fp16.safetensors",
+        "--dit_high_noise",
+        "C:\\docs\\git\\musubiGui\\models\\wan-dit\\split_files\\diffusion_models\\wan2.2_t2v_high_noise_14B_fp16.safetensors",
+        "--vae",
+        "C:\\docs\\git\\musubiGui\\models\\wan-vae\\split_files\\vae\\wan_2.1_vae.safetensors",
+        "--t5",
+        "C:\\docs\\git\\musubiGui\\models\\wan-t5\\models_t5_umt5-xxl-enc-bf16.pth",
+        "--fp8",
+        "--fp8_scaled",
+        "--fp8_t5",
+        "--blocks_to_swap",
+        "36",
+        "--lazy_loading",
+        "--attn_mode",
+        "torch",
+        "--video_size",
+        "256",
+        "256",
+        "--video_length",
+        "17",
+        "--fps",
+        "16",
+        "--infer_steps",
+        "4",
+        "--seed",
+        "42",
+        "--prompt",
+        "A red square moves across a blue background.",
+        "--lora_weight",
+        "C:\\docs\\git\\musubiGui\\.cache\\paired-preview-gpu-probe-1794321441007006700\\outputs\\runs\\4281492b1aa84d7eb8045b2423f4a9f2\\checkpoints\\wan-884641821298414896e563ba5508dd73-low-phase00000006.safetensors",
+        "--save_path",
+        "C:\\docs\\git\\musubiGui\\.worktrees\\preview-vram-164\\.cache\\preview-qualification\\wan-baseline-offline\\samples",
+        "--output_type",
+        "video",
+        "--lora_weight_high_noise",
+        "C:\\docs\\git\\musubiGui\\.cache\\paired-preview-gpu-probe-1794321441007006700\\outputs\\runs\\4281492b1aa84d7eb8045b2423f4a9f2\\checkpoints\\wan-884641821298414896e563ba5508dd73-high-phase00000004.safetensors"
+      ],
+      "wall_seconds": 91.719,
+      "exit_code": 0,
+      "termination": null,
+      "family": "wan",
+      "geometry": [256, 256, 17],
+      "swapped_blocks": 36,
+      "seed": 42,
+      "sample_steps": 4,
+      "adapter_rank": 8,
+      "peak_process_tree_rss_bytes": 20286988288,
+      "peak_host_used_bytes": 32831651840,
+      "peak_device_vram_bytes": 9037676544,
+      "sampled_free_headroom_bytes": 16732127232,
+      "received_log_windows": [
+        {
+          "phase": "load",
+          "seconds": 15.890999999999622
+        },
+        {
+          "phase": "inference",
+          "seconds": 71.25
+        },
+        {
+          "phase": "decode",
+          "seconds": 1.5
+        },
+        {
+          "phase": "save/return",
+          "seconds": 3.0780000000013388
+        }
+      ],
+      "expert_file_loading_seconds_from_received_logs": [17.203, 18.485],
+      "media": [
+        {
+          "path": "wan-baseline-offline\\samples\\20261115-173356-078_42_.mp4",
+          "audio": null,
+          "format": "mov,mp4,m4a,3gp,3g2,mj2",
+          "width": 256,
+          "height": 256,
+          "frames": 17,
+          "fps": 16.0,
+          "duration": 1.0625,
+          "video_start": 0.0,
+          "decoded_video_frames": 17,
+          "decoded_audio_samples": 0
+        }
+      ]
+    },
+    {
+      "case": "wan-candidate16",
+      "args": [
+        "C:\\docs\\git\\musubiGui\\musubi-tuner\\.venv\\Scripts\\python.exe",
+        "-X",
+        "utf8",
+        "-B",
+        "C:\\docs\\git\\musubiGui\\musubi-tuner\\wan_generate_video.py",
+        "--task",
+        "t2v-A14B",
+        "--dit",
+        "C:\\docs\\git\\musubiGui\\models\\wan-dit\\split_files\\diffusion_models\\wan2.2_t2v_low_noise_14B_fp16.safetensors",
+        "--dit_high_noise",
+        "C:\\docs\\git\\musubiGui\\models\\wan-dit\\split_files\\diffusion_models\\wan2.2_t2v_high_noise_14B_fp16.safetensors",
+        "--vae",
+        "C:\\docs\\git\\musubiGui\\models\\wan-vae\\split_files\\vae\\wan_2.1_vae.safetensors",
+        "--t5",
+        "C:\\docs\\git\\musubiGui\\models\\wan-t5\\models_t5_umt5-xxl-enc-bf16.pth",
+        "--fp8",
+        "--fp8_scaled",
+        "--fp8_t5",
+        "--blocks_to_swap",
+        "16",
+        "--lazy_loading",
+        "--attn_mode",
+        "torch",
+        "--video_size",
+        "256",
+        "256",
+        "--video_length",
+        "17",
+        "--fps",
+        "16",
+        "--infer_steps",
+        "4",
+        "--seed",
+        "42",
+        "--prompt",
+        "A red square moves across a blue background.",
+        "--lora_weight",
+        "C:\\docs\\git\\musubiGui\\.cache\\paired-preview-gpu-probe-1794321441007006700\\outputs\\runs\\4281492b1aa84d7eb8045b2423f4a9f2\\checkpoints\\wan-884641821298414896e563ba5508dd73-low-phase00000006.safetensors",
+        "--save_path",
+        "C:\\docs\\git\\musubiGui\\.worktrees\\preview-vram-164\\.cache\\preview-qualification\\wan-candidate16\\samples",
+        "--output_type",
+        "video",
+        "--lora_weight_high_noise",
+        "C:\\docs\\git\\musubiGui\\.cache\\paired-preview-gpu-probe-1794321441007006700\\outputs\\runs\\4281492b1aa84d7eb8045b2423f4a9f2\\checkpoints\\wan-884641821298414896e563ba5508dd73-high-phase00000004.safetensors"
+      ],
+      "wall_seconds": 73.875,
+      "exit_code": 0,
+      "termination": null,
+      "family": "wan",
+      "geometry": [256, 256, 17],
+      "swapped_blocks": 16,
+      "seed": 42,
+      "sample_steps": 4,
+      "adapter_rank": 8,
+      "peak_process_tree_rss_bytes": 20298575872,
+      "peak_host_used_bytes": 32046239744,
+      "peak_device_vram_bytes": 12602834944,
+      "sampled_free_headroom_bytes": 13166968832,
+      "received_log_windows": [
+        {
+          "phase": "load",
+          "seconds": 22.04699999999866
+        },
+        {
+          "phase": "inference",
+          "seconds": 49.78099999999904
+        },
+        {
+          "phase": "decode",
+          "seconds": 0.6720000000022992
+        },
+        {
+          "phase": "save/return",
+          "seconds": 1.375
+        }
+      ],
+      "expert_file_loading_seconds_from_received_logs": [9.844, 10.0],
+      "media": [
+        {
+          "path": "wan-candidate16\\samples\\20261115-173536-416_42_.mp4",
+          "audio": null,
+          "format": "mov,mp4,m4a,3gp,3g2,mj2",
+          "width": 256,
+          "height": 256,
+          "frames": 17,
+          "fps": 16.0,
+          "duration": 1.0625,
+          "video_start": 0.0,
+          "decoded_video_frames": 17,
+          "decoded_audio_samples": 0
+        }
+      ]
+    },
+    {
+      "case": "wan-production-automatic18",
+      "args": [
+        "C:\\docs\\git\\musubiGui\\musubi-tuner\\.venv\\Scripts\\python.exe",
+        "-X",
+        "utf8",
+        "-B",
+        "C:\\docs\\git\\musubiGui\\.worktrees\\preview-vram-164\\musubi_gui\\preview_generate.py",
+        "--fallback-blocks",
+        "36",
+        "--",
+        "C:\\docs\\git\\musubiGui\\musubi-tuner\\wan_generate_video.py",
+        "--task",
+        "t2v-A14B",
+        "--dit",
+        "C:\\docs\\git\\musubiGui\\models\\wan-dit\\split_files\\diffusion_models\\wan2.2_t2v_low_noise_14B_fp16.safetensors",
+        "--dit_high_noise",
+        "C:\\docs\\git\\musubiGui\\models\\wan-dit\\split_files\\diffusion_models\\wan2.2_t2v_high_noise_14B_fp16.safetensors",
+        "--vae",
+        "C:\\docs\\git\\musubiGui\\models\\wan-vae\\split_files\\vae\\wan_2.1_vae.safetensors",
+        "--t5",
+        "C:\\docs\\git\\musubiGui\\models\\wan-t5\\models_t5_umt5-xxl-enc-bf16.pth",
+        "--fp8",
+        "--fp8_scaled",
+        "--fp8_t5",
+        "--blocks_to_swap",
+        "18",
+        "--lazy_loading",
+        "--attn_mode",
+        "torch",
+        "--video_size",
+        "480",
+        "832",
+        "--video_length",
+        "33",
+        "--fps",
+        "16",
+        "--infer_steps",
+        "4",
+        "--seed",
+        "42",
+        "--prompt",
+        "A red square moves across a blue background.",
+        "--lora_weight",
+        "C:\\docs\\git\\musubiGui\\.cache\\paired-preview-gpu-probe-1794321441007006700\\outputs\\runs\\4281492b1aa84d7eb8045b2423f4a9f2\\checkpoints\\wan-884641821298414896e563ba5508dd73-low-phase00000006.safetensors",
+        "--save_path",
+        "C:\\docs\\git\\musubiGui\\.worktrees\\preview-vram-164\\.cache\\preview-qualification\\wan-production-automatic18\\samples",
+        "--output_type",
+        "video",
+        "--lora_weight_high_noise",
+        "C:\\docs\\git\\musubiGui\\.cache\\paired-preview-gpu-probe-1794321441007006700\\outputs\\runs\\4281492b1aa84d7eb8045b2423f4a9f2\\checkpoints\\wan-884641821298414896e563ba5508dd73-high-phase00000004.safetensors"
+      ],
+      "wall_seconds": 202.625,
+      "exit_code": 0,
+      "termination": null,
+      "family": "wan",
+      "geometry": [832, 480, 33],
+      "swapped_blocks": 18,
+      "seed": 42,
+      "sample_steps": 4,
+      "adapter_rank": 8,
+      "peak_process_tree_rss_bytes": 19805097984,
+      "peak_host_used_bytes": 31747637248,
+      "peak_device_vram_bytes": 17309892608,
+      "sampled_free_headroom_bytes": 8459911168,
+      "received_log_windows": [
+        {
+          "phase": "load",
+          "seconds": 21.875
+        },
+        {
+          "phase": "inference",
+          "seconds": 173.78200000000288
+        },
+        {
+          "phase": "decode",
+          "seconds": 4.875
+        },
+        {
+          "phase": "save/return",
+          "seconds": 2.0929999999971187
+        }
+      ],
+      "expert_file_loading_seconds_from_received_logs": [30.844, 31.719],
+      "media": [
+        {
+          "path": "wan-production-automatic18\\samples\\20261115-180208-532_42_.mp4",
+          "audio": null,
+          "format": "mov,mp4,m4a,3gp,3g2,mj2",
+          "width": 832,
+          "height": 480,
+          "frames": 33,
+          "fps": 16.0,
+          "duration": 2.06201171875,
+          "video_start": 0.0,
+          "decoded_video_frames": 33,
+          "decoded_audio_samples": 0
+        }
+      ]
+    },
+    {
+      "case": "wan-production-baseline",
+      "args": [
+        "C:\\docs\\git\\musubiGui\\musubi-tuner\\.venv\\Scripts\\python.exe",
+        "-X",
+        "utf8",
+        "-B",
+        "C:\\docs\\git\\musubiGui\\musubi-tuner\\wan_generate_video.py",
+        "--task",
+        "t2v-A14B",
+        "--dit",
+        "C:\\docs\\git\\musubiGui\\models\\wan-dit\\split_files\\diffusion_models\\wan2.2_t2v_low_noise_14B_fp16.safetensors",
+        "--dit_high_noise",
+        "C:\\docs\\git\\musubiGui\\models\\wan-dit\\split_files\\diffusion_models\\wan2.2_t2v_high_noise_14B_fp16.safetensors",
+        "--vae",
+        "C:\\docs\\git\\musubiGui\\models\\wan-vae\\split_files\\vae\\wan_2.1_vae.safetensors",
+        "--t5",
+        "C:\\docs\\git\\musubiGui\\models\\wan-t5\\models_t5_umt5-xxl-enc-bf16.pth",
+        "--fp8",
+        "--fp8_scaled",
+        "--fp8_t5",
+        "--blocks_to_swap",
+        "36",
+        "--lazy_loading",
+        "--attn_mode",
+        "torch",
+        "--video_size",
+        "480",
+        "832",
+        "--video_length",
+        "33",
+        "--fps",
+        "16",
+        "--infer_steps",
+        "4",
+        "--seed",
+        "42",
+        "--prompt",
+        "A red square moves across a blue background.",
+        "--lora_weight",
+        "C:\\docs\\git\\musubiGui\\.cache\\paired-preview-gpu-probe-1794321441007006700\\outputs\\runs\\4281492b1aa84d7eb8045b2423f4a9f2\\checkpoints\\wan-884641821298414896e563ba5508dd73-low-phase00000006.safetensors",
+        "--save_path",
+        "C:\\docs\\git\\musubiGui\\.worktrees\\preview-vram-164\\.cache\\preview-qualification\\wan-production-baseline\\samples",
+        "--output_type",
+        "video",
+        "--lora_weight_high_noise",
+        "C:\\docs\\git\\musubiGui\\.cache\\paired-preview-gpu-probe-1794321441007006700\\outputs\\runs\\4281492b1aa84d7eb8045b2423f4a9f2\\checkpoints\\wan-884641821298414896e563ba5508dd73-high-phase00000004.safetensors"
+      ],
+      "wall_seconds": 208.282,
+      "exit_code": 0,
+      "termination": null,
+      "family": "wan",
+      "geometry": [832, 480, 33],
+      "swapped_blocks": 36,
+      "seed": 42,
+      "sample_steps": 4,
+      "adapter_rank": 8,
+      "peak_process_tree_rss_bytes": 20058251264,
+      "peak_host_used_bytes": 32040644608,
+      "peak_device_vram_bytes": 11331960832,
+      "sampled_free_headroom_bytes": 14437842944,
+      "received_log_windows": [
+        {
+          "phase": "load",
+          "seconds": 23.43800000000192
+        },
+        {
+          "phase": "inference",
+          "seconds": 178.92199999999866
+        },
+        {
+          "phase": "decode",
+          "seconds": 4.639999999999418
+        },
+        {
+          "phase": "save/return",
+          "seconds": 1.2820000000028813
+        }
+      ],
+      "expert_file_loading_seconds_from_received_logs": [35.843, 32.328],
+      "media": [
+        {
+          "path": "wan-production-baseline\\samples\\20261115-174959-123_42_.mp4",
+          "audio": null,
+          "format": "mov,mp4,m4a,3gp,3g2,mj2",
+          "width": 832,
+          "height": 480,
+          "frames": 33,
+          "fps": 16.0,
+          "duration": 2.06201171875,
+          "video_start": 0.0,
+          "decoded_video_frames": 33,
+          "decoded_audio_samples": 0
+        }
+      ]
+    },
+    {
+      "case": "wan-production-candidate16",
+      "args": [
+        "C:\\docs\\git\\musubiGui\\musubi-tuner\\.venv\\Scripts\\python.exe",
+        "-X",
+        "utf8",
+        "-B",
+        "C:\\docs\\git\\musubiGui\\.worktrees\\preview-vram-164\\musubi_gui\\preview_generate.py",
+        "--fallback-blocks",
+        "36",
+        "--",
+        "C:\\docs\\git\\musubiGui\\musubi-tuner\\wan_generate_video.py",
+        "--task",
+        "t2v-A14B",
+        "--dit",
+        "C:\\docs\\git\\musubiGui\\models\\wan-dit\\split_files\\diffusion_models\\wan2.2_t2v_low_noise_14B_fp16.safetensors",
+        "--dit_high_noise",
+        "C:\\docs\\git\\musubiGui\\models\\wan-dit\\split_files\\diffusion_models\\wan2.2_t2v_high_noise_14B_fp16.safetensors",
+        "--vae",
+        "C:\\docs\\git\\musubiGui\\models\\wan-vae\\split_files\\vae\\wan_2.1_vae.safetensors",
+        "--t5",
+        "C:\\docs\\git\\musubiGui\\models\\wan-t5\\models_t5_umt5-xxl-enc-bf16.pth",
+        "--fp8",
+        "--fp8_scaled",
+        "--fp8_t5",
+        "--blocks_to_swap",
+        "16",
+        "--lazy_loading",
+        "--attn_mode",
+        "torch",
+        "--video_size",
+        "480",
+        "832",
+        "--video_length",
+        "33",
+        "--fps",
+        "16",
+        "--infer_steps",
+        "4",
+        "--seed",
+        "42",
+        "--prompt",
+        "A red square moves across a blue background.",
+        "--lora_weight",
+        "C:\\docs\\git\\musubiGui\\.cache\\paired-preview-gpu-probe-1794321441007006700\\outputs\\runs\\4281492b1aa84d7eb8045b2423f4a9f2\\checkpoints\\wan-884641821298414896e563ba5508dd73-low-phase00000006.safetensors",
+        "--save_path",
+        "C:\\docs\\git\\musubiGui\\.worktrees\\preview-vram-164\\.cache\\preview-qualification\\wan-production-candidate16\\samples",
+        "--output_type",
+        "video",
+        "--lora_weight_high_noise",
+        "C:\\docs\\git\\musubiGui\\.cache\\paired-preview-gpu-probe-1794321441007006700\\outputs\\runs\\4281492b1aa84d7eb8045b2423f4a9f2\\checkpoints\\wan-884641821298414896e563ba5508dd73-high-phase00000004.safetensors"
+      ],
+      "wall_seconds": 150.5,
+      "exit_code": 0,
+      "termination": null,
+      "family": "wan",
+      "geometry": [832, 480, 33],
+      "swapped_blocks": 16,
+      "seed": 42,
+      "sample_steps": 4,
+      "adapter_rank": 8,
+      "peak_process_tree_rss_bytes": 19888115712,
+      "peak_host_used_bytes": 32086675456,
+      "peak_device_vram_bytes": 18026070016,
+      "sampled_free_headroom_bytes": 7743733760,
+      "received_log_windows": [
+        {
+          "phase": "load",
+          "seconds": 14.0
+        },
+        {
+          "phase": "inference",
+          "seconds": 130.6720000000023
+        },
+        {
+          "phase": "decode",
+          "seconds": 4.625
+        },
+        {
+          "phase": "save/return",
+          "seconds": 1.2029999999977008
+        }
+      ],
+      "expert_file_loading_seconds_from_received_logs": [10.906, 10.109],
+      "media": [
+        {
+          "path": "wan-production-candidate16\\samples\\20261115-175255-673_42_.mp4",
+          "audio": null,
+          "format": "mov,mp4,m4a,3gp,3g2,mj2",
+          "width": 832,
+          "height": 480,
+          "frames": 33,
+          "fps": 16.0,
+          "duration": 2.06201171875,
+          "video_start": 0.0,
+          "decoded_video_frames": 33,
+          "decoded_audio_samples": 0
+        }
+      ]
+    }
+  ],
+  "native": [
+    {
+      "case": "h3-native",
+      "args": [
+        "C:\\docs\\git\\musubiGui\\musubi-tuner\\.venv\\Scripts\\python.exe",
+        "-X",
+        "utf8",
+        "-B",
+        "-m",
+        "accelerate.commands.launch",
+        "--num_processes",
+        "1",
+        "--num_machines",
+        "1",
+        "--mixed_precision",
+        "bf16",
+        "--dynamo_backend",
+        "no",
+        "--num_cpu_threads_per_process",
+        "1",
+        "C:\\docs\\git\\musubiGui\\musubi_gui\\timed_trainer.py",
+        "--timing-file",
+        "C:\\docs\\git\\musubiGui\\.worktrees\\preview-vram-164\\.cache\\preview-qualification\\h3-native\\train-timing.json",
+        "--family",
+        "h3",
+        "--upstream",
+        "C:\\docs\\git\\musubiGui\\musubi-tuner\\minimax_h3_train_network.py",
+        "--dataset_config",
+        "C:\\docs\\git\\musubiGui\\.worktrees\\preview-vram-164\\.cache\\preview-qualification\\h3-native\\dataset.toml",
+        "--task",
+        "t2va",
+        "--dit",
+        "C:\\ai\\ai-toolkit\\models\\diffusion_models\\minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+        "--network_module",
+        "networks.lora_minimax_h3",
+        "--network_dim",
+        "4",
+        "--network_alpha",
+        "4",
+        "--sdpa",
+        "--mixed_precision",
+        "bf16",
+        "--gradient_checkpointing",
+        "--block_swap_h2d_only",
+        "--blocks_to_swap",
+        "48",
+        "--optimizer_type",
+        "AdamW",
+        "--learning_rate",
+        "0.0001",
+        "--max_train_steps",
+        "2",
+        "--save_every_n_steps",
+        "1",
+        "--max_data_loader_n_workers",
+        "0",
+        "--seed",
+        "42",
+        "--output_dir",
+        "C:\\docs\\git\\musubiGui\\.worktrees\\preview-vram-164\\.cache\\preview-qualification\\h3-native\\checkpoints",
+        "--output_name",
+        "h3-native",
+        "--h3_guidance_loss_scale",
+        "4",
+        "--h3_guidance_loss_sigma_min",
+        "0.15",
+        "--h3_guidance_loss_uncond_cache",
+        "C:\\docs\\git\\musubiGui\\.worktrees\\preview-vram-164\\.cache\\preview-qualification\\h3-native\\cache\\uncond.safetensors",
+        "--one_frame",
+        "--video_only",
+        "--gradient_accumulation_steps",
+        "1",
+        "--save_state",
+        "--save_state_on_train_end",
+        "--sample_every_n_steps",
+        "1",
+        "--sample_prompts",
+        "C:\\docs\\git\\musubiGui\\.worktrees\\preview-vram-164\\.cache\\preview-qualification\\h3-native\\previews.json",
+        "--text_encoder",
+        "C:\\ai\\ai-toolkit\\models\\text_encoders\\qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+        "--text_encoder_blocks_to_swap",
+        "50",
+        "--video_vae",
+        "C:\\ai\\ai-toolkit\\models\\vae\\minimax_h3_video_vae_fp16.safetensors",
+        "--audio_vae",
+        "C:\\ai\\ai-toolkit\\models\\vae\\minimax_h3_audio_vae_fp32.safetensors"
+      ],
+      "wall_seconds": 102.61,
+      "exit_code": 0,
+      "termination": null,
+      "peak_process_tree_rss_bytes": 41179254784,
+      "peak_host_used_bytes": 53083598848,
+      "peak_device_vram_bytes": 10595860480,
+      "timing": {
+        "version": 1,
+        "training": {
+          "step": 2,
+          "intervals": 1,
+          "seconds": 4.7189999999973224,
+          "first_step_at": "2026-11-15T17:57:53.692481+00:00",
+          "last_step_at": "2026-11-15T17:58:15.286865+00:00"
+        },
+        "previews": {
+          "completed": 2,
+          "seconds": 29.781000000002678,
+          "active": null,
+          "failed": 0,
+          "last_finished": "2026-11-15T17:58:28.191841+00:00"
+        }
+      },
+      "checkpoint_tensor_payload_changed_after_first_preview": true,
+      "media": [
+        {
+          "path": "h3-native\\checkpoints\\sample\\h3-native_000001_00_20261115175809_42.mp4",
+          "audio": {
+            "sample_rate": 32000,
+            "channels": 2,
+            "duration": 5.167,
+            "start": 0.0,
+            "codec": "aac"
+          },
+          "format": "mov,mp4,m4a,3gp,3g2,mj2",
+          "width": 256,
+          "height": 256,
+          "frames": 124,
+          "fps": 24.0,
+          "duration": 5.166666666666667,
+          "video_start": 0.0,
+          "decoded_video_frames": 124,
+          "decoded_audio_samples": 165888
+        },
+        {
+          "path": "h3-native\\checkpoints\\sample\\h3-native_000002_00_20261115175827_42.mp4",
+          "audio": {
+            "sample_rate": 32000,
+            "channels": 2,
+            "duration": 5.167,
+            "start": 0.0,
+            "codec": "aac"
+          },
+          "format": "mov,mp4,m4a,3gp,3g2,mj2",
+          "width": 256,
+          "height": 256,
+          "frames": 124,
+          "fps": 24.0,
+          "duration": 5.166666666666667,
+          "video_start": 0.0,
+          "decoded_video_frames": 124,
+          "decoded_audio_samples": 165888
+        }
+      ]
+    },
+    {
+      "case": "wan-native",
+      "args": [
+        "C:\\docs\\git\\musubiGui\\musubi-tuner\\.venv\\Scripts\\python.exe",
+        "-X",
+        "utf8",
+        "-B",
+        "-m",
+        "accelerate.commands.launch",
+        "--num_processes",
+        "1",
+        "--num_machines",
+        "1",
+        "--dynamo_backend",
+        "no",
+        "--num_cpu_threads_per_process",
+        "1",
+        "--mixed_precision",
+        "fp16",
+        "C:\\docs\\git\\musubiGui\\musubi_gui\\timed_trainer.py",
+        "--timing-file",
+        "C:\\docs\\git\\musubiGui\\.worktrees\\preview-vram-164\\.cache\\preview-qualification\\wan-native\\train-timing.json",
+        "--family",
+        "wan",
+        "--upstream",
+        "C:\\docs\\git\\musubiGui\\musubi-tuner\\wan_train_network.py",
+        "--task",
+        "t2v-A14B",
+        "--dit",
+        "C:\\docs\\git\\musubiGui\\models\\wan-dit\\split_files\\diffusion_models\\wan2.2_t2v_low_noise_14B_fp16.safetensors",
+        "--dataset_config",
+        "C:\\docs\\git\\musubiGui\\.worktrees\\preview-vram-164\\.cache\\preview-qualification\\wan-native\\dataset.toml",
+        "--sdpa",
+        "--mixed_precision",
+        "fp16",
+        "--fp8_base",
+        "--fp8_scaled",
+        "--blocks_to_swap",
+        "36",
+        "--gradient_checkpointing",
+        "--optimizer_type",
+        "AdamW",
+        "--learning_rate",
+        "0.0001",
+        "--max_data_loader_n_workers",
+        "0",
+        "--network_module",
+        "networks.lora_wan",
+        "--network_dim",
+        "8",
+        "--network_alpha",
+        "8",
+        "--timestep_sampling",
+        "shift",
+        "--discrete_flow_shift",
+        "3.0",
+        "--min_timestep",
+        "0",
+        "--max_timestep",
+        "875",
+        "--preserve_distribution_shape",
+        "--max_train_steps",
+        "2",
+        "--save_every_n_steps",
+        "1",
+        "--seed",
+        "42",
+        "--output_dir",
+        "C:\\docs\\git\\musubiGui\\.worktrees\\preview-vram-164\\.cache\\preview-qualification\\wan-native\\checkpoints",
+        "--output_name",
+        "wan-native",
+        "--gradient_accumulation_steps",
+        "1",
+        "--save_state",
+        "--save_state_on_train_end",
+        "--sample_every_n_steps",
+        "1",
+        "--sample_prompts",
+        "C:\\docs\\git\\musubiGui\\.worktrees\\preview-vram-164\\.cache\\preview-qualification\\wan-native\\previews.json",
+        "--t5",
+        "C:\\docs\\git\\musubiGui\\models\\wan-t5\\models_t5_umt5-xxl-enc-bf16.pth",
+        "--fp8_t5",
+        "--vae",
+        "C:\\docs\\git\\musubiGui\\models\\wan-vae\\split_files\\vae\\wan_2.1_vae.safetensors",
+        "--vae_cache_cpu"
+      ],
+      "wall_seconds": 90.0,
+      "exit_code": 0,
+      "termination": null,
+      "peak_process_tree_rss_bytes": 19175391232,
+      "peak_host_used_bytes": 31990300672,
+      "peak_device_vram_bytes": 8968470528,
+      "timing": {
+        "version": 1,
+        "training": {
+          "step": 2,
+          "intervals": 1,
+          "seconds": 4.40599999999904,
+          "first_step_at": "2026-11-15T17:54:44.885217+00:00",
+          "last_step_at": "2026-11-15T17:55:10.260666+00:00"
+        },
+        "previews": {
+          "completed": 2,
+          "seconds": 41.68800000000192,
+          "active": null,
+          "failed": 0,
+          "last_finished": "2026-11-15T17:55:30.975362+00:00"
+        }
+      },
+      "checkpoint_tensor_payload_changed_after_first_preview": true,
+      "media": [
+        {
+          "path": "wan-native\\checkpoints\\sample\\wan-native_000001_00_20261115175503_42.mp4",
+          "audio": null,
+          "format": "mov,mp4,m4a,3gp,3g2,mj2",
+          "width": 256,
+          "height": 256,
+          "frames": 17,
+          "fps": 24.0,
+          "duration": 0.7083333333333334,
+          "video_start": 0.0,
+          "decoded_video_frames": 17,
+          "decoded_audio_samples": 0
+        },
+        {
+          "path": "wan-native\\checkpoints\\sample\\wan-native_000002_00_20261115175529_42.mp4",
+          "audio": null,
+          "format": "mov,mp4,m4a,3gp,3g2,mj2",
+          "width": 256,
+          "height": 256,
+          "frames": 17,
+          "fps": 24.0,
+          "duration": 0.7083333333333334,
+          "video_start": 0.0,
+          "decoded_video_frames": 17,
+          "decoded_audio_samples": 0
+        }
+      ]
+    }
+  ],
+  "limits": [
+    "Whole-device VRAM and whole-host RAM include desktop and other applications; sampled peaks can miss transients. RSS sums may double-count shared pages.",
+    "Short 4-step, rank8Wan/rank4H3 trials prove mechanics/capacity for these settings, not learning quality, longer-run stability or a general speedup.",
+    "OS file caches, device/kernel warm-up and power/temperature were not controlled. Model loading explains part of the wall-time differences; do not attribute the full difference to swapping.",
+    "Received tqdm log windows can lag actual inference because carriage-return output is buffered. Synchronized phase probes use nested-call exclusive timings instead.",
+    "Native preview timing includes existing before/sample/after hooks and residency restoration. A separate return-to-training duration is not observable; the next optimizer step and changed checkpoint payload establish continuation.",
+    "No real-GPU OOM was induced. One-attempt capacity recovery, non-capacity failure, output preservation and persistence are covered by public subprocess/Run/browser regressions.",
+    "CPU fixtures do not establish GPU memory safety or performance. Unqualified settings fall back, and new GPU consumers after freezing are not predictable."
+  ],
+  "qualification_warning_exception": {
+    "module": "einops/einops.py:847",
+    "diagnostic": "SyntaxWarning: invalid escape sequence '\\s'",
+    "reason": "Third-party mathematical docstring under Python3.12/-B; installed dependencies preserved. First raw report retained in local logs. No application verification filter added.",
+    "review_condition": "Revisit on einops, Python or pinned recipe update."
+  },
+  "preflight_failures": "Initial private caches lacked tokenizer/processor assets. Attempts failed or were stopped before inference. Existing verified local files were copied into private caches; H3 private processor/config.json={} reproduces the online absent-config fallback. No models/dependencies downloaded or installed.",
+  "retained_raw_evidence": "C:\\docs\\git\\musubiGui\\.worktrees\\preview-vram-164\\.cache\\preview-qualification",
+  "automatic_examples": [
+    {
+      "version": 1,
+      "family": "wan",
+      "geometry": {
+        "width": 256,
+        "height": 256,
+        "frames": 17
+      },
+      "representation": "wan-a14b-fp16-runtime-scaled-fp8",
+      "training_blocks_to_swap": 36,
+      "reserve_bytes": 5368709120,
+      "blocks_to_swap": 16,
+      "supported_swap_range": [0, 38],
+      "qualification_limits": {
+        "max_rank": 8,
+        "max_sample_steps": 4,
+        "max_prompt_characters": 256
+      },
+      "mode": "automatic",
+      "reason": "A measured profile matches this model, output size and RTX 3090. The budget retains at least 5 GiB for transient allocations, text/decoding, allocator overhead and other GPU consumers. Training memory settings are unchanged.",
+      "hardware": {
+        "name": "NVIDIA GeForce RTX 3090",
+        "total_bytes": 25769803776,
+        "free_bytes": 24696061952
+      },
+      "estimated_peak_bytes": 17716740096,
+      "qualification": "preview-memory-20261115",
+      "recovery": {
+        "attempts": 1,
+        "blocks_to_swap": 38,
+        "trigger": "CUDA memory-capacity failure"
+      }
+    },
+    {
+      "version": 1,
+      "family": "wan",
+      "geometry": {
+        "width": 832,
+        "height": 480,
+        "frames": 33
+      },
+      "representation": "wan-a14b-fp16-runtime-scaled-fp8",
+      "training_blocks_to_swap": 36,
+      "reserve_bytes": 5368709120,
+      "blocks_to_swap": 18,
+      "supported_swap_range": [0, 38],
+      "qualification_limits": {
+        "max_rank": 8,
+        "max_sample_steps": 4,
+        "max_prompt_characters": 256
+      },
+      "mode": "automatic",
+      "reason": "A measured profile matches this model, output size and RTX 3090. The budget retains at least 5 GiB for transient allocations, text/decoding, allocator overhead and other GPU consumers. Training memory settings are unchanged.",
+      "hardware": {
+        "name": "NVIDIA GeForce RTX 3090",
+        "total_bytes": 25769803776,
+        "free_bytes": 24696061952
+      },
+      "estimated_peak_bytes": 20132659200,
+      "qualification": "preview-memory-20261115",
+      "recovery": {
+        "attempts": 1,
+        "blocks_to_swap": 38,
+        "trigger": "CUDA memory-capacity failure"
+      }
+    },
+    {
+      "version": 1,
+      "family": "h3",
+      "geometry": {
+        "width": 256,
+        "height": 256,
+        "frames": 124
+      },
+      "representation": "h3-pruned-convrot-int8",
+      "training_blocks_to_swap": 48,
+      "reserve_bytes": 5368709120,
+      "blocks_to_swap": 32,
+      "supported_swap_range": [0, 48],
+      "qualification_limits": {
+        "max_rank": 4,
+        "max_sample_steps": 4,
+        "max_prompt_characters": 256
+      },
+      "mode": "automatic",
+      "reason": "A measured profile matches this model, output size and RTX 3090. The budget retains at least 5 GiB for transient allocations, text/decoding, allocator overhead and other GPU consumers. Training memory settings are unchanged.",
+      "hardware": {
+        "name": "NVIDIA GeForce RTX 3090",
+        "total_bytes": 25769803776,
+        "free_bytes": 24696061952
+      },
+      "estimated_peak_bytes": 18253611008,
+      "qualification": "preview-memory-20261115",
+      "recovery": {
+        "attempts": 1,
+        "blocks_to_swap": 48,
+        "trigger": "CUDA memory-capacity failure"
+      }
+    }
+  ],
+  "adapters": {
+    "C:\\docs\\git\\musubiGui\\.cache\\preview-gpu-probe-1794320225688484900\\outputs\\runs\\62174721546945bfaf12ac0b273047eb\\checkpoints\\h3-f8f174d506f9415c826b5c9508865e0e.safetensors": {
+      "bytes": 74617488,
+      "checkpoint_sha256": "32b531d9aebc05663dcf694fd1248c17d199f798e637ddbd350f20ea0b520ff1"
+    },
+    "C:\\docs\\git\\musubiGui\\.cache\\paired-preview-gpu-probe-1794321441007006700\\outputs\\runs\\4281492b1aa84d7eb8045b2423f4a9f2\\checkpoints\\wan-884641821298414896e563ba5508dd73-low-phase00000006.safetensors": {
+      "bytes": 153492368,
+      "checkpoint_sha256": "4bf580ca01f1419b8392fb6d9c3d4264e391d949fb44034063076c36bb61a313"
+    },
+    "C:\\docs\\git\\musubiGui\\.cache\\paired-preview-gpu-probe-1794321441007006700\\outputs\\runs\\4281492b1aa84d7eb8045b2423f4a9f2\\checkpoints\\wan-884641821298414896e563ba5508dd73-high-phase00000004.safetensors": {
+      "bytes": 153492368,
+      "checkpoint_sha256": "020adf605eee716f12773e9550821459a65ae6232b54c76a6ccdc2b77409c9b4"
+    }
+  }
+}

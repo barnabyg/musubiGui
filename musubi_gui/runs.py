@@ -338,7 +338,15 @@ class RunService:
             training = copy.deepcopy(stage.get("training"))
             if training:
                 training["checkpoint"] = training["checkpoint"].replace(previous["directory"], str(directory))
-            stages.append(Stage(stage["name"], args, training, stage.get("preview_step")))
+            stages.append(
+                Stage(
+                    stage["name"],
+                    args,
+                    training,
+                    stage.get("preview_step"),
+                    preview_memory=copy.deepcopy(stage.get("preview_memory")),
+                )
+            )
         plan = ExecutionPlan(
             copy.deepcopy(previous["job"]),
             Settings.model_validate(previous["settings"]),

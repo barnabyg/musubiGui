@@ -18,6 +18,7 @@ class Stage:
     args: list[str]
     training: dict[str, Any] | None = None
     preview_step: int | None = None
+    preview_memory: dict[str, Any] | None = None
 
     def record(self) -> dict[str, Any]:
         return {
@@ -25,6 +26,7 @@ class Stage:
             "args": self.args,
             **({"training": self.training} if self.training else {}),
             **({"preview_step": self.preview_step} if self.preview_step is not None else {}),
+            **({"preview_memory": self.preview_memory} if self.preview_memory is not None else {}),
         }
 
 

@@ -10,6 +10,7 @@ import {
   type Output,
 } from './Outputs';
 import { formatRoute } from './route';
+import { PreviewMemory, type PreviewMemoryChoice } from './PreviewMemory';
 import { RunJobLink } from './RunJobLink';
 import { refreshRunHistory, useRunHistory } from './runHistory';
 import { notificationsWanted, setNotificationsWanted } from './runSignals';
@@ -50,6 +51,7 @@ type Run = {
     cache_reason?: string;
     started?: string;
     finished?: string;
+    preview_memory?: PreviewMemoryChoice;
   }[];
   directory: string;
   order: number;
@@ -904,6 +906,7 @@ export function Runs({
                 </p>
                 <RunElapsed run={run} />
                 <RunCompletion run={run} estimate={current?.run_estimate} />
+                <PreviewMemory stages={run.stages} />
                 <TrainingProgress
                   run={run}
                   progress={current?.progress ?? null}
