@@ -63,3 +63,50 @@ def alternating_phases(steps: int, interval: int, *, start: int = 0, preview_eve
         )
         position += phase_steps
     return phases
+
+
+def paired_phases(
+    steps: int,
+    interval: int,
+    *,
+    save_every: int,
+    preview_every: int = 0,
+    start: int = 0,
+    counts: dict[str, int] | None = None,
+) -> list[ExpertPhase]:
+    """Train both experts to the same target, meeting at save/preview boundaries.
+
+    Starts remain raw update positions for compatibility with recorded Runs.
+    """
+    if steps < 1 or interval < 1 or save_every < 1 or preview_every < 0 or start < 0:
+        raise ValueError("Expert interval: steps and save/switch intervals must be positive.")
+    current = dict(counts or {"low": 0, "high": 0})
+    target = max(current.values()) + steps
+    phases: list[ExpertPhase] = []
+    position = start
+    while min(current.values()) < target:
+        expert: Literal["low", "high"] = "low" if current["low"] <= current["high"] else "high"
+        before = current[expert]
+        end = min(target, (before // interval + 1) * interval, (before // save_every + 1) * save_every)
+        if preview_every:
+            end = min(end, (before // preview_every + 1) * preview_every)
+        other = current["high" if expert == "low" else "low"]
+        if other > before:
+            end = min(end, other)
+        if len(phases) >= MAX_PHASES:
+            raise ValueError(
+                f"Expert interval: increase save, preview or switch intervals to stay within {MAX_PHASES} phases."
+            )
+        phases.append(ExpertPhase(expert, position, end - before, current["low"], current["high"]))
+        position += end - before
+        current[expert] = end
+    return phases
+
+
+def phase_counts(phase: dict[str, Any], steps: int) -> dict[str, int]:
+    """Read counts from a frozen phase, including older schedules."""
+    if "low_before" not in phase:
+        return expert_steps(phase["start"] + steps, phase["interval"])
+    counts = {expert: phase[f"{expert}_before"] for expert in EXPERTS}
+    counts[phase["expert"]] += steps
+    return counts

@@ -1,6 +1,6 @@
 import pytest
 
-from musubi_gui.wan_pair import alternating_phases, expert_steps
+from musubi_gui.wan_pair import alternating_phases, expert_steps, paired_phases
 
 
 def test_low_first_schedule_and_per_expert_counts() -> None:
@@ -37,3 +37,14 @@ def test_invalid_schedule_is_rejected(steps: int, interval: int, start: int) -> 
 def test_excessive_phase_count_is_rejected_before_building_commands() -> None:
     with pytest.raises(ValueError, match="within 10000 phases"):
         alternating_phases(1_000_000, 1)
+
+
+@pytest.mark.parametrize("steps,interval,save", [(1000, 30, 100), (7, 30, 3), (13, 4, 5)])
+def test_paired_steps_and_save_boundaries(steps: int, interval: int, save: int) -> None:
+    phases = paired_phases(steps, interval, save_every=save)
+    for expert in ("low", "high"):
+        own = [phase for phase in phases if phase.expert == expert]
+        assert sum(phase.steps for phase in own) == steps
+        ends = {getattr(phase, f"{expert}_before") + phase.steps for phase in own}
+        assert set(range(save, steps + 1, save)) <= ends
+    assert phases[-1].start + phases[-1].steps == steps * 2

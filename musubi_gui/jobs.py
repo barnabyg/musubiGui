@@ -29,7 +29,7 @@ from musubi_gui.settings import Settings, atomic_json, validate_paths, within_ro
 from musubi_gui.training_sections import dataset_resolution, dataset_toml, plan_sections, section_balance
 from musubi_gui.video_sampling import plan_windows
 from musubi_gui.wan import validate_wan, wan_stages
-from musubi_gui.wan_pair import MAX_PHASES, PAIRED_RECIPE, alternating_phases, expert_steps
+from musubi_gui.wan_pair import MAX_PHASES, PAIRED_RECIPE, alternating_phases, expert_steps, paired_phases
 
 _lock = threading.RLock()
 
@@ -61,6 +61,7 @@ class JobConfig(BaseModel):
 
     recipe: str = "low-noise"
     expert_interval: int = 30
+    wan_steps_per_expert: bool = True
     components: dict[str, str] = Field(default_factory=dict)
     width: int = 256
     height: int = 256
@@ -667,7 +668,7 @@ def configuration_errors(job: Job, *, has_videos: bool = True) -> list[str]:
                 errors.append("Expert interval: enter a positive integer.")
             elif math.ceil(config.steps / config.expert_interval) > MAX_PHASES:
                 errors.append(f"Expert interval: increase it to keep the Run within {MAX_PHASES} phases.")
-            elif config.steps <= config.expert_interval:
+            elif not config.wan_steps_per_expert and config.steps <= config.expert_interval:
                 errors.append(
                     "Steps: paired training must include at least one update of each expert; increase steps or reduce the expert interval."
                 )
@@ -741,9 +742,17 @@ def configuration_errors(job: Job, *, has_videos: bool = True) -> list[str]:
         errors.append("Preview interval: enter zero (off) or a positive number of optimizer steps.")
     if config.keep_checkpoints < 0:
         errors.append("Checkpoint retention: enter zero (unlimited) or a positive number of saves.")
-    if config.preview_every > 0 and config.recipe == PAIRED_RECIPE and config.steps > 0 and config.expert_interval > 0:
+    if config.recipe == PAIRED_RECIPE and config.steps > 0 and config.expert_interval > 0 and config.save_every > 0:
         try:
-            alternating_phases(config.steps, config.expert_interval, preview_every=config.preview_every)
+            if config.wan_steps_per_expert:
+                paired_phases(
+                    config.steps,
+                    config.expert_interval,
+                    save_every=config.save_every,
+                    preview_every=config.preview_every,
+                )
+            else:
+                alternating_phases(config.steps, config.expert_interval, preview_every=config.preview_every)
         except ValueError as error:
             errors.append(str(error))
     if (config.sample_enabled or config.preview_every) and not config.sample_prompt.strip():
@@ -835,6 +844,7 @@ def build_stages(job: Job, settings: Settings, run: Path, cache: Path, kinds: se
             config.expert_interval,
             preview_every=config.preview_every,
             final_sample=config.sample_enabled,
+            per_expert=config.wan_steps_per_expert,
         )
     return stages
 
@@ -1269,11 +1279,24 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
         "expert_schedule": (
             {
                 "interval": job.config.expert_interval,
-                "counts": expert_steps(job.config.steps, job.config.expert_interval),
+                "counts": (
+                    {"low": job.config.steps, "high": job.config.steps}
+                    if job.config.wan_steps_per_expert
+                    else expert_steps(job.config.steps, job.config.expert_interval)
+                ),
                 "phases": [
                     phase.record()
-                    for phase in alternating_phases(
-                        job.config.steps, job.config.expert_interval, preview_every=job.config.preview_every
+                    for phase in (
+                        paired_phases(
+                            job.config.steps,
+                            job.config.expert_interval,
+                            save_every=job.config.save_every,
+                            preview_every=job.config.preview_every,
+                        )
+                        if job.config.wan_steps_per_expert
+                        else alternating_phases(
+                            job.config.steps, job.config.expert_interval, preview_every=job.config.preview_every
+                        )
                     )
                 ],
             }
@@ -1282,7 +1305,8 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
             and job.config.expert_interval > 0
             and job.config.steps > 0
             and math.ceil(job.config.steps / job.config.expert_interval) <= MAX_PHASES
-            and not any(message.startswith("Preview interval:") for message in errors)
+            and not any(message.startswith(("Preview interval:", "Expert interval:")) for message in errors)
+            and job.config.save_every > 0
             else None
         ),
     }

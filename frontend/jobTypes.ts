@@ -2,6 +2,7 @@ import type { ItemView } from './route';
 export type JobConfig = {
   recipe: string;
   expert_interval: number;
+  wan_steps_per_expert?: boolean;
   components: Record<string, string>;
   width: number;
   height: number;

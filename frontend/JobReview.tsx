@@ -176,9 +176,10 @@ export function JobReview({
         <section aria-label="Expert training schedule">
           <h3>Alternating expert schedule</h3>
           <p>
-            Switch every {review.expert_schedule.interval} optimizer updates,
-            low-noise first. Low-noise: {review.expert_schedule.counts.low}{' '}
-            steps · High-noise: {review.expert_schedule.counts.high} steps ·{' '}
+            Switch after at most {review.expert_schedule.interval} optimizer
+            updates, low-noise first. Low-noise:{' '}
+            {review.expert_schedule.counts.low} steps · High-noise:{' '}
+            {review.expert_schedule.counts.high} steps ·{' '}
             {review.expert_schedule.phases.length} phases.
           </p>
           <p>

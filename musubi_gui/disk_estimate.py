@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from musubi_gui.settings import Settings
-from musubi_gui.wan_pair import PAIRED_RECIPE, alternating_phases
+from musubi_gui.wan_pair import PAIRED_RECIPE, alternating_phases, paired_phases
 
 if TYPE_CHECKING:
     from musubi_gui.jobs import JobConfig
@@ -68,9 +68,18 @@ def estimate_disk(family: str, config: "JobConfig", items: list[dict[str, Any]],
         saves = whole_phases * (config.expert_interval // config.save_every + 1)
         if remaining:
             saves += remaining // config.save_every + 1
-        if config.preview_every > 0:
+        if config.preview_every > 0 or config.wan_steps_per_expert:
             try:
-                phases = alternating_phases(config.steps, config.expert_interval, preview_every=config.preview_every)
+                phases = (
+                    paired_phases(
+                        config.steps,
+                        config.expert_interval,
+                        save_every=config.save_every,
+                        preview_every=config.preview_every,
+                    )
+                    if config.wan_steps_per_expert
+                    else alternating_phases(config.steps, config.expert_interval, preview_every=config.preview_every)
+                )
             except ValueError:
                 pass  # Invalid, over-limit schedules are refused by review; retain the base estimate.
             else:

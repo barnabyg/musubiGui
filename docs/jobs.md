@@ -302,7 +302,7 @@ See [the pinned upstream investigation and manual test](reference/caching.md).
 Set **Preview every N steps** in Samples. Zero (the default for new and
 existing jobs) disables previews. Exports store this as `config.preview_every`; older
 files that omit it keep previews off. The interval counts optimizer updates after gradient
-accumulation, independently of checkpoint saving. Previews share the sample prompt,
+accumulation, per expert for alternating Wan, independently of checkpoint saving. Previews share the sample prompt,
 seed, inference steps and geometry. The final sample checkbox is independent: previews
 can run with final sampling off. Review requires a prompt for either choice.
 
@@ -318,7 +318,7 @@ trained low-noise expert throughout inference; they are diagnostic samples and d
 from the final two-expert video.
 With Wan Frames set to 1, native periodic previews are still PNG images.
 
-Alternating Wan previews use both experts at total schedule steps, independently of
+Alternating Wan previews use both experts at matching per-expert steps, independently of
 the expert-switch interval. Training saves and exits at each preview boundary, releasing
 its GPU process before the existing two-expert generator loads. The next phase restores
 the expert's optimizer, scheduler and RNG state. **Every extra preview boundary restarts
@@ -329,7 +329,7 @@ disk use. The GPU lease remains held throughout, preventing another Run from ove
 An expert with no updates yet uses its base weights. Each preview records and displays
 the low/high trained-step counts (zero for an untrained expert) and retains its own pair
 identity even after later updates. Final sampling is still independent. On restore,
-paired previews continue at absolute schedule multiples rather than resetting the cadence.
+paired previews continue at absolute per-expert multiples rather than resetting the cadence.
 Full paired-preview hardware qualification remains tracked in #129.
 
 Completed previews appear automatically on the active Run within about five seconds
@@ -391,10 +391,15 @@ configuration with N = 1 and state saving enabled. It is the only Wan smoke pres
 
 Choose **Wan alternating low/high experts** under Recipe. **Steps per expert before
 switching** is a positive integer N, counted in optimizer updates after gradient
-accumulation. **Training steps** is the total across both experts. For N = 30 and
-120 total steps the phases are low 30 → high 30 → low 30 → high 30, giving each expert
-60 updates. The final phase can be shorter. A new paired job must train both experts;
-its total must exceed N. Review shows the allocation and exact commands before preparation.
+accumulation. **Training steps** applies to each expert: 1,000 steps trains low to
+1,000 and high to 1,000, for 2,000 optimizer updates. A budget shorter than N still
+trains both experts. Phases end early at checkpoint and preview boundaries so the
+experts meet at the same trained step. Saving every 100 steps produces both low
+and high checkpoints at 100, 200, 300, and so on, plus a final pair when needed.
+Phase transitions retain additional recovery checkpoints. Review shows the exact
+allocation and commands before preparation. Recorded Runs retain their frozen
+plans. Explicit legacy configurations with wan_steps_per_expert set to false
+retain the shared budget.
 An alternating Run is limited to 10,000 phases to bound its stored command plan.
 
 Optimizer/training state saving is required. Every phase has a distinct checkpoint
@@ -415,17 +420,25 @@ with both checkpoint identities and step counts recorded. Alternating Runs also 
 [periodic paired previews](#previews-during-training).
 
 From the repository root in PowerShell 7, this command prepares and launches an isolated
-four-step CPU demonstration at `http://127.0.0.1:8767`:
+four-steps-per-expert CPU demonstration at `http://127.0.0.1:8767`:
 
 ```powershell
 .\acceptance.cmd --workspace ".cache/wan-pair-$([guid]::NewGuid().ToString('N'))" --wan-paired
 ```
 
-Open **WAN acceptance 1**, review the schedule, and choose **Prepare and start**.
-Expect low 1 → high 1 → low 1 → high 1, two steps per expert, two LoRA download links
+To check checkpoint alignment, open **WAN acceptance 1** and set Training steps to 7,
+Steps per expert before switching to 4, Save every N steps to 3, and Preview every N
+steps to 3. Review must show seven steps for each expert. Choose **Prepare and start**;
+expect matching saved pairs at 3, 6 and 7, previews at 3 and 6 with equal low/high
+counts, and final progress 7/7. This CPU fixture needs no models or GPU.
+
+For the unchanged four-step preset, open **WAN acceptance 1**, review the schedule,
+and choose **Prepare and start**.
+Expect four steps per expert, eight optimizer updates, two LoRA download links,
 and a playable synthetic video. Close/reopen the browser and inspect the saved paired
-states. Restore schedule step 3 with one additional step: high finishes and both
-outputs remain available. To exercise stopping, edit a new paired job to 24 steps
+states. Restore a matching pair with one additional step; both experts advance by one.
+An interrupted unmatched pair first catches its lagging expert up. To exercise
+stopping, edit a new paired job to 24 steps
 with N = 6, start it, and stop during training. Inspect states and restore a complete
 save; expect the remaining part of that phase before the next expert.
 
@@ -554,7 +567,7 @@ Size, frames, rank and sample steps are the largest configurations measured in t
 production trial (see [measured presets](#duplicates-and-presets)). 600 steps is the
 owner's experience of where samples first change visibly, and is not a measured
 learning result: the trial's human review of learning is still open. At the measured
-step times 600 steps takes about 12–16 hours. The sample prompt starts empty, so
+step times 600 total optimizer updates takes about 12–16 hours. The sample prompt starts empty, so
 review asks for one.
 
 Review warns when steps are below 600, because a shorter Run can check that training
@@ -563,7 +576,7 @@ works but is not expected to change samples. It also warns when H3 is larger tha
 
 The **Smoke test** built-in presets use 256×256, 17 frames for Wan or 124 for H3,
 batch one, rank/alpha eight for Wan or four for H3 and a four-step sample with a
-synthetic prompt. Wan alternates experts every step for four total steps, with
+synthetic prompt. Wan alternates experts every step for four steps per expert, with
 optimizer state saving enabled. H3 uses two steps without optimizer state saving.
 Both save a checkpoint every step. The internal single-expert acceptance fixtures
 remain available for isolated orchestration checks; they are not a job creation option.

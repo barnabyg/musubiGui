@@ -294,7 +294,7 @@ def main() -> None:
     parser.add_argument(
         "--wan-paired",
         action="store_true",
-        help="Prepare four Wan steps: low, high, low, high, with state saving and a paired sample.",
+        help="Prepare four steps per Wan expert, with state saving and a paired sample.",
     )
     parser.add_argument("--port", type=int, default=8767)
     parser.add_argument(

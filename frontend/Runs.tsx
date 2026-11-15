@@ -378,7 +378,7 @@ function SavedStates({
                 body: (
                   <p>
                     {state.paired &&
-                      'Both expert states and the alternating schedule continue from this saved position. Additional steps count across both experts. '}
+                      'Both expert states and the alternating schedule continue from this saved position. New paired runs extend each expert by the requested steps after catching up an interrupted pair; legacy runs count total updates. '}
                     The displayed step counter and data position restart.
                     Original run inputs are preserved.
                   </p>

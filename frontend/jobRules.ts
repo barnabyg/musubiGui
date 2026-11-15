@@ -116,7 +116,10 @@ export function fieldProblems(
     else if (Math.ceil((config.steps as number) / interval) > 10_000)
       problems.expert_interval =
         'Increase the interval to stay within 10000 phases.';
-    else if ((config.steps as number) <= interval)
+    else if (
+      config.wan_steps_per_expert === false &&
+      (config.steps as number) <= interval
+    )
       problems.steps =
         'Train both experts: steps must exceed the expert interval.';
     if (!config.save_state)
