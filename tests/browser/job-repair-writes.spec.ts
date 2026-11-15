@@ -76,6 +76,9 @@ test('leaving a pending bulk caption repair via Jobs waits before preparation an
     await posted;
     await page.getByRole('button', { name: 'Jobs', exact: true }).click();
     await page
+      .getByRole('button', { name: `${job.name} · WAN · r1`, exact: true })
+      .click();
+    await page
       .getByRole('button', { name: 'Review configuration', exact: true })
       .click();
     await expect(page.getByText('Review passed for revision 1')).toBeVisible();

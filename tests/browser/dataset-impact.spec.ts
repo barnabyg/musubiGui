@@ -34,7 +34,8 @@ test('returning from a new training draft refreshes the affected jobs before exc
       await held;
       await route.continue();
     });
-    await page.getByRole('button', { name: 'Datasets', exact: true }).click();
+    // Browser Back returns to the dataset editor; the sidebar opens the library.
+    await page.goBack();
     await expect(impact).toContainText('Loading affected jobs…');
     await page.getByLabel('Select motion.mp4', { exact: true }).focus();
     await page.keyboard.press('Space');

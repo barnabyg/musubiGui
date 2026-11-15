@@ -219,6 +219,13 @@ export function useJobEditor({
     if (dirty && !(await confirmDiscard('open another job'))) return;
     select(value);
   }
+  async function back() {
+    if (dirty && !(await confirmDiscard('return to jobs'))) return;
+    setDirty(false);
+    setReview(null);
+    setTransferOpen(false);
+    show(null);
+  }
   function show(value: Job | null) {
     setJob(value);
     onSelect?.(value?.id);
@@ -555,6 +562,7 @@ export function useJobEditor({
     edit,
     config,
     choose,
+    back,
     create,
     save,
     inspect,

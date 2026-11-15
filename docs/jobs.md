@@ -1,5 +1,7 @@
 # Job drafts and configuration review
 
+Use **Jobs** in the sidebar to select a saved job, create a Wan or H3 draft, or import a configuration. Opening or creating a job shows its dedicated editor without the job list. **Back to jobs** returns to the collection and asks before discarding unsaved edits.
+
 ## Timestep strategy
 
 The LoRA & training tab offers **Shift**, **Sigmoid** and **Uniform**
@@ -871,3 +873,14 @@ feedback, duplication, presets, cancelled/accepted conversion and configuration
 round-trip. These UI scenarios intentionally do not launch GPU work; the separate
 release-acceptance fixtures exercise execution and real hardware evidence remains
 separate.
+
+To check collection navigation manually, run `./launch.cmd` from the repository root
+(`C:/docs/git/musubiGui`). This prepares and launches the application. In Jobs,
+create a draft and confirm the editor shows no saved-job list or creation buttons.
+Edit its name, choose Back to jobs, and check that Keep editing preserves the edit.
+Save the draft and return to Jobs; it should appear in the collection. Open it again
+and use browser Back/Forward and reload to check navigation. In Datasets, open an
+existing dataset and return to its library. With a prepared Run available, open it
+from Runs and check that history and the pending queue appear only after returning
+to Runs. Dataset and Run checks require an existing dataset and a reviewed job with
+configured model paths respectively.

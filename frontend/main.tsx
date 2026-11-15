@@ -140,7 +140,7 @@ function App() {
   const landingPending = useRef(landing);
   const [route, setRoute] = useState(initialRoute);
   const screen = route.screen;
-  // Each screen's selection, kept while elsewhere so that returning reopens it.
+  // Keep background editors alive while another screen is open; sidebar navigation opens collections.
   const [selection, setSelection] = useState<Partial<Record<Screen, string>>>(
     initialRoute.id ? { [initialRoute.screen]: initialRoute.id } : {},
   );
@@ -204,7 +204,7 @@ function App() {
     landingPending.current = false;
     setLanding(false);
     if (screen === 'Jobs' && jobDirty && !(await confirmLeaveJob())) return;
-    go(name, selection[name], replace);
+    go(name, undefined, replace);
   }
   const followHistory = useEffectEvent(async () => {
     if (window.location.hash === currentHash.current) return;

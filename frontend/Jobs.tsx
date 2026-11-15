@@ -1,3 +1,4 @@
+import { ArrowLeft } from 'lucide-react';
 import { JobSection, JobSectionContext } from './JobSection';
 import { JobActionBar } from './JobActionBar';
 import { JobEssentials } from './JobEssentials';
@@ -46,6 +47,7 @@ export function Jobs(props: JobsProps) {
     edit,
     config,
     choose,
+    back,
     create,
     save,
     inspect,
@@ -65,30 +67,38 @@ export function Jobs(props: JobsProps) {
   const { actionBar, section, goToSection } = useJobSections(job?.id, review);
   return (
     <div className="jobs-workspace">
+      {job && (
+        <button className="quiet" disabled={busy} onClick={() => void back()}>
+          <ArrowLeft /> Back to jobs
+        </button>
+      )}
       <section className="title">
-        <h1>Jobs</h1>
+        <h1>{job ? job.name : 'Jobs'}</h1>
         <p>
           Set up a LoRA training job, review it, then prepare a Run. A Run keeps
           the settings it was prepared with, so later edits don't change it.
         </p>
-        <button disabled={busy} onClick={() => void create('wan')}>
-          New Wan job
-        </button>{' '}
-        <button disabled={busy} onClick={() => void create('h3')}>
-          New H3 job
-        </button>
+        {!job && (
+          <>
+            <button disabled={busy} onClick={() => void create('wan')}>
+              New Wan job
+            </button>{' '}
+            <button disabled={busy} onClick={() => void create('h3')}>
+              New H3 job
+            </button>
+          </>
+        )}
       </section>
-      {jobs.length > 0 && (
+      {!job && jobs.length > 0 && (
         <JobTable
           jobs={jobs}
           summaries={summaries}
           datasets={datasets}
-          selectedId={job?.id}
           disabled={busy}
           onSelect={(value) => void choose(value)}
         />
       )}
-      {archived.length > 0 && (
+      {!job && archived.length > 0 && (
         <details className="panel">
           <summary>Archived jobs ({archived.length})</summary>
           <p>
@@ -114,42 +124,57 @@ export function Jobs(props: JobsProps) {
           </ul>
         </details>
       )}
-      <JobActionBar
-        actionBar={actionBar}
-        status={status}
-        job={job}
-        dirty={dirty}
-        busy={busy}
-        review={review}
-        prepareReason={prepareReason}
-        captionRepair={
-          job &&
-          failedCaption && (
-            <a
-              href={datasetItemRoute(
-                failedCaption.datasetId,
-                failedCaption.item.id,
-                'caption',
-                job.id,
-                job.family === 'h3' ? job.config.frames : undefined,
-              )}
-            >
-              Resolve caption for {failedCaption.item.name}
-            </a>
-          )
-        }
-        error={error}
-        section={section}
-        goToSection={goToSection}
-        save={save}
-        inspect={inspect}
-        prepare={prepare}
-        duplicate={duplicate}
-        convert={convert}
-        archive={archive}
-        deleteJob={deleteJob}
-        setTransferOpen={setTransferOpen}
-      />
+      {!job && (
+        <>
+          <p role="status">{status}</p>
+          {error && (
+            <p role="alert" className="error">
+              {error}
+            </p>
+          )}
+          <button disabled={busy} onClick={() => setTransferOpen(true)}>
+            Import configuration
+          </button>
+        </>
+      )}
+      {job && (
+        <JobActionBar
+          actionBar={actionBar}
+          status={status}
+          job={job}
+          dirty={dirty}
+          busy={busy}
+          review={review}
+          prepareReason={prepareReason}
+          captionRepair={
+            job &&
+            failedCaption && (
+              <a
+                href={datasetItemRoute(
+                  failedCaption.datasetId,
+                  failedCaption.item.id,
+                  'caption',
+                  job.id,
+                  job.family === 'h3' ? job.config.frames : undefined,
+                )}
+              >
+                Resolve caption for {failedCaption.item.name}
+              </a>
+            )
+          }
+          error={error}
+          section={section}
+          goToSection={goToSection}
+          save={save}
+          inspect={inspect}
+          prepare={prepare}
+          duplicate={duplicate}
+          convert={convert}
+          archive={archive}
+          deleteJob={deleteJob}
+          setTransferOpen={setTransferOpen}
+        />
+      )}
       {transferOpen && (
         <JobTransfer
           busy={busy}

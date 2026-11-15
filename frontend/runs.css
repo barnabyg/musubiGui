@@ -1,16 +1,12 @@
 .runs-layout {
   display: grid;
-  grid-template-columns: 300px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   align-items: start;
   gap: var(--space-7);
 }
 .runs-layout .panel {
   margin: 0 0 var(--space-7);
   padding: var(--space-7) var(--space-8);
-}
-.run-history {
-  max-height: 60vh;
-  overflow: auto;
 }
 .run-history > div {
   margin: var(--space-4) 0;
@@ -19,10 +15,6 @@
   width: 100%;
   text-align: left;
   overflow-wrap: anywhere;
-}
-.run-history [aria-pressed='true'] {
-  border-color: var(--color-accent);
-  background: var(--color-accent-surface);
 }
 .run-history small {
   margin-left: var(--space-2);
@@ -34,14 +26,6 @@
 }
 .state-files li {
   overflow-wrap: anywhere;
-}
-@media (max-width: 1100px) {
-  .runs-layout {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .run-history {
-    max-height: 30vh;
-  }
 }
 .run-stepper {
   display: grid;

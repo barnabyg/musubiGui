@@ -1,6 +1,8 @@
 # Runs
 
-Runs lists the queue and history beside the selected Run. Statuses read as labels such as
+Use **Runs** in the sidebar to browse Run history and manage the pending queue. Select a Run to open its dedicated detail page; **Back to runs** returns to history. Prepare new Runs from a saved, reviewed job using the link to Jobs. Direct links, reloads and browser back/forward keep the selected detail page.
+
+The Runs collection lists the queue and history. Opening a Run shows only its details. Statuses read as labels such as
 Preparing or Ready to start, and the stored values are unchanged. The GPU line names the job
 using the GPU and links to its Run.
 
@@ -311,7 +313,7 @@ kept in that browser only.
 
 The address bar names the screen and its selection, such as `#/runs/<id>` or
 `#/jobs/<id>`, so refresh, browser back and forward and saved links return to the same
-place. The sidebar reopens each screen's last selection. Leaving a job with unsaved edits
+place. The sidebar opens the collection for Datasets, Jobs or Runs. Leaving a job with unsaved edits
 asks first, whichever way you leave.
 
 The Last Run status in each saved job row links directly to that Run. Run details show

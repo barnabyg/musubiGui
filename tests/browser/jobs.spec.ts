@@ -175,7 +175,7 @@ test('the action bar stays visible, identity comes first and rare actions are in
   }
 });
 
-test('the job table sorts, marks the selected job and keeps new draft names apart', async ({
+test('the job collection sorts, opens separate editors and keeps new draft names apart', async ({
   page,
 }) => {
   const app = await workspace();
@@ -189,10 +189,22 @@ test('the job table sorts, marks the selected job and keeps new draft names apar
     const name = page.getByLabel('Job name', { exact: true });
     await expect(name).toHaveValue('New Wan job');
     await expect(name).toBeFocused();
+    await page
+      .getByRole('button', { name: 'Back to jobs', exact: true })
+      .click();
     await create.click();
     await expect(name).toHaveValue('New Wan job 2');
+    await page
+      .getByRole('button', { name: 'Back to jobs', exact: true })
+      .click();
     await page.getByRole('button', { name: 'New H3 job', exact: true }).click();
     await expect(name).toHaveValue('New H3 job');
+    await expect(page.getByRole('table', { name: 'Saved jobs' })).toHaveCount(
+      0,
+    );
+    await page
+      .getByRole('button', { name: 'Back to jobs', exact: true })
+      .click();
 
     const table = page.getByRole('table', { name: 'Saved jobs' });
     const rows = table.locator('tbody tr');
@@ -212,11 +224,6 @@ test('the job table sorts, marks the selected job and keeps new draft names apar
     await expect(
       table.getByRole('columnheader', { name: 'Last edited' }),
     ).toHaveAttribute('aria-sort', 'descending');
-    await expect(rows.first()).toHaveClass('selected');
-    await expect(
-      rows.first().getByRole('button', { name: /^New H3 job/ }),
-    ).toHaveAttribute('aria-pressed', 'true');
-
     await table.getByRole('button', { name: 'Name', exact: true }).click();
     await expect(rows.first()).toContainText('New H3 job');
     await expect(rows.last()).toContainText('New Wan job 2');
@@ -322,7 +329,7 @@ test('Review saves a dirty draft first, and disabled actions explain themselves'
       'Review failed for revision 2',
     );
     await expect(
-      page.getByRole('button', { name: /^New Wan job · WAN · r2$/ }),
+      page.getByRole('heading', { name: 'New Wan job', exact: true }),
     ).toBeVisible();
     await expect(prepare).toHaveAccessibleDescription(
       'Resolve the review errors before preparing.',
@@ -363,14 +370,16 @@ test('confirmation dialogs start on the safe choice, trap focus and cancel with 
     await page.keyboard.press('Escape');
     await expect(question).toHaveCount(0);
     await expect(menu).toBeFocused();
-    await expect(
-      page.getByRole('button', { name: /^New Wan job · WAN/ }),
-    ).toBeVisible();
+    await expect(page.getByLabel('Job name', { exact: true })).toHaveValue(
+      'New Wan job',
+    );
 
     // Unsaved edits ask first, on both routes away from the job.
     await page.getByRole('tab', { name: 'Training', exact: true }).click();
     await page.getByLabel('Training steps', { exact: true }).fill('700');
-    await page.getByRole('button', { name: 'New H3 job', exact: true }).click();
+    await page
+      .getByRole('button', { name: 'Back to jobs', exact: true })
+      .click();
     const discard = page.getByRole('dialog', {
       name: 'Discard unsaved job edits?',
     });
@@ -382,7 +391,9 @@ test('confirmation dialogs start on the safe choice, trap focus and cancel with 
     await page.getByRole('button', { name: 'Runs', exact: true }).click();
     const leave = page.getByRole('dialog', { name: 'Leave this job?' });
     await leave.getByRole('button', { name: 'Keep editing' }).click();
-    await expect(page.getByRole('heading', { name: 'Jobs' })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: 'New Wan job', exact: true }),
+    ).toBeVisible();
     await page.getByRole('button', { name: 'Runs', exact: true }).click();
     await leave.getByRole('button', { name: 'Discard changes' }).click();
     await expect(page.getByRole('heading', { name: 'Runs' })).toBeVisible();
@@ -423,11 +434,12 @@ test('job actions explain themselves with no job open, and conversion names fiel
   const app = await workspace();
   try {
     await openJobs(page, app.url);
-    await page.getByRole('button', { name: 'More job actions' }).click();
-    await expect(page.getByRole('menu')).toContainText(
-      'Open a job to use the job actions.',
-    );
-    await page.getByRole('menuitem', { name: /^Import/ }).click();
+    await expect(
+      page.getByRole('button', { name: 'More job actions' }),
+    ).toHaveCount(0);
+    await page
+      .getByRole('button', { name: 'Import configuration', exact: true })
+      .click();
     await expect(page.getByText('Open a job to export it.')).toBeVisible();
     await expect(
       page.getByText('Choose a file or paste JSON to import it.'),
@@ -858,6 +870,9 @@ test('duplication presets cancelled conversion and versioned export import keep 
     await expect(page.getByLabel('Job name', { exact: true })).toHaveValue(
       'Imported draft',
     );
+    await page
+      .getByRole('button', { name: 'Back to jobs', exact: true })
+      .click();
     await page.getByRole('button', { name: /Reusable · WAN/ }).click();
     await page
       .getByRole('tab', { name: 'LoRA & training', exact: true })
@@ -903,6 +918,9 @@ test('job actions wait for the initial load so it cannot replace new drafts', as
     await page.getByLabel('Job name', { exact: true }).fill('After load');
     await page.getByRole('button', { name: 'Save draft', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('Draft saved');
+    await page
+      .getByRole('button', { name: 'Back to jobs', exact: true })
+      .click();
     await expect(
       page.getByRole('button', { name: 'After load · WAN · r2', exact: true }),
     ).toBeVisible();
