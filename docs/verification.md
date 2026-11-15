@@ -23,8 +23,14 @@ it is given a single spec file. Running `playwright test` directly skips that bu
 request helper in Node with a stubbed `fetch`, to reach error responses the backend doesn't produce.
 Python that browser tests run lives in `tests/browser/helper.py`, under the same format, lint and type checks.
 CI uses the same command. When it fails, CI keeps Playwright's `test-results`
-(page snapshots and failure screenshots of synthetic fixtures) as the
+(traces, page snapshots, failure screenshots and per-backend logs of synthetic fixtures) as the
 `playwright-results` artifact for 14 days. Registry access is required by vulnerability and lock checks.
+Successful tests discard their diagnostic output. Traces record browser actions, DOM snapshots,
+console messages and network requests/responses; backend logs survive fixture cleanup and include
+startup, stdout/stderr and exit details, including across backend restarts. Download and extract
+the artifact, then run `npx.cmd playwright show-trace <path-to-trace.zip>` from the repository root
+to inspect the action and network history around a failure. Retries remain disabled, so the
+trace belongs to the original failure.
 All diagnostics and warnings must be resolved; pytest warnings and ESLint warnings fail.
 
 When `CI` is set, pytest and Playwright each stop at their first failure, so a failing run
@@ -43,13 +49,18 @@ crawls. Hosted runs have taken over 45 seconds to scan four media files, and ove
 for an H3 inspection scenario that takes 10 seconds locally. Deadlines are never set just
 above an observed time.
 
-Browser assertions wait up to 60 seconds, because they exercise real backend requests,
+Browser actions and navigation each have a 240-second limit, so a missing option or control
+cannot consume the entire test budget. This leaves headroom for slow hosted uploads and native
+folder-picker interactions. Browser assertions wait up to 60 seconds, because they exercise real backend requests,
 SQLite writes and media subprocesses. Long upload, scan, inspection, preparation and training
 operations use explicit 240-second waits. Each test has a single 30-minute budget, which
 exceeds the sum of its waits. Pytest polls for Run states for up to 180 seconds, and its
 subprocesses and requests have 300 seconds. The cost is that a truly hung test takes longer
 to fail, up to the job limit in CI. This is a correctness suite, not a latency benchmark: assertions still require the
 exact expected result.
+Recovery tests keep synthetic processes alive until explicitly released or terminated, rather
+than assuming assertions finish within a short sleep. They wait for startup evidence before
+restarting the service and retain a 900-second emergency deadline to bound leaked fixtures.
 
 The gallery/inline-caption virtual scrolling fixtures use eight real media files and
 a narrow viewport that forces cards to unmount. This tests recycling and retained
