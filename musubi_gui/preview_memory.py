@@ -18,6 +18,9 @@ MAX_BLOCKS = {"wan": 38, "h3": 48}
 FALLBACK_BLOCKS = MAX_BLOCKS
 BASELINE_BLOCKS = {"wan": 36, "h3": 48}
 RESERVE_BYTES = 5 * GIB
+MAX_QUALIFIED_RANK = {"wan": 8, "h3": 4}
+MAX_QUALIFIED_SAMPLE_STEPS = 4
+MAX_QUALIFIED_PROMPT_CHARACTERS = 256
 
 
 @dataclass(frozen=True)
@@ -94,9 +97,9 @@ def select_preview_memory(
         "blocks_to_swap": FALLBACK_BLOCKS[family],
         "supported_swap_range": [0, MAX_BLOCKS[family]],
         "qualification_limits": {
-            "max_rank": 8 if family == "wan" else 4,
-            "max_sample_steps": 4,
-            "max_prompt_characters": 256,
+            "max_rank": MAX_QUALIFIED_RANK[family],
+            "max_sample_steps": MAX_QUALIFIED_SAMPLE_STEPS,
+            "max_prompt_characters": MAX_QUALIFIED_PROMPT_CHARACTERS,
         },
         "mode": "fallback",
         "reason": "GPU capacity or model representation is unknown or outside the qualified preview range; using the conservative family preset.",
@@ -207,9 +210,9 @@ def resolve_preview_memory(job: "Job", settings: Settings, *, native: bool) -> d
         frames = native_preview_frames(job.family, job.config)
     representation = _representation(job, settings)
     if (
-        len(job.config.sample_prompt) > 256
-        or job.config.rank > (8 if job.family == "wan" else 4)
-        or job.config.sample_steps > 4
+        len(job.config.sample_prompt) > MAX_QUALIFIED_PROMPT_CHARACTERS
+        or job.config.rank > MAX_QUALIFIED_RANK[job.family]
+        or job.config.sample_steps > MAX_QUALIFIED_SAMPLE_STEPS
     ):
         representation = "unknown"
     choice = select_preview_memory(
