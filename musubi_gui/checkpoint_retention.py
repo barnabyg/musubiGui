@@ -14,7 +14,7 @@ from musubi_gui.safetensors_file import complete_safetensors
 from musubi_gui.saved_state import inspect_state
 from musubi_gui.settings import atomic_json, within_root
 from musubi_gui.snapshots import digest_file
-from musubi_gui.wan_pair import expert_steps
+from musubi_gui.wan_pair import phase_counts
 from musubi_gui.wan_pair_runtime import is_paired
 
 
@@ -108,11 +108,12 @@ def retention_candidates(
         keep.update(str(save.checkpoint) for save in ordered if save.step in steps)
     protected: set[str] = set()
     if is_paired(run):
-        interval = run["job"]["config"]["expert_interval"]
+        phases = [stage["training"] for stage in run["stages"] if stage.get("training")]
         for save in saves:
             if str(save.checkpoint) not in keep:
                 continue
-            for expert, count in expert_steps(save.step, interval).items():
+            phase = next(phase for phase in phases if phase["start"] < save.step <= phase["start"] + phase["steps"])
+            for expert, count in phase_counts(phase, save.step - phase["start"]).items():
                 if not count:
                     continue
                 matches = [

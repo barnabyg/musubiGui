@@ -9,7 +9,7 @@ from musubi_gui.safetensors_file import complete_safetensors
 from musubi_gui.saved_state import inspect_state
 from musubi_gui.settings import within_root
 from musubi_gui.snapshots import digest_file
-from musubi_gui.wan_pair import PAIRED_RECIPE, expert_steps
+from musubi_gui.wan_pair import PAIRED_RECIPE, phase_counts
 from musubi_gui.wan_pair_plan import argument
 
 
@@ -117,7 +117,13 @@ def paired_saved_states(run: dict[str, Any]) -> list[dict[str, Any]]:
                 # not prevent reconstructing a later complete pair from two valid states.
                 latest = {**latest, phase["expert"]: state}
                 sources = dict(latest)
-                counts = expert_steps(entry["schedule_step"], phase["interval"])
+                counts = phase_counts(phase, steps)
+                if phase.get("per_expert"):
+                    entry["name"] = (
+                        f"Paired step {counts['low']}"
+                        if counts["low"] == counts["high"]
+                        else f"Paired recovery: low {counts['low']} / high {counts['high']}"
+                    )
                 for expert, count in counts.items():
                     if count and (expert not in sources or sources[expert]["optimizer_step"] != count):
                         raise ValueError("The other expert's matching saved state is missing or invalid.")

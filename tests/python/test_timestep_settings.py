@@ -68,13 +68,11 @@ def test_wan_timestep_commands_preserve_defaults_and_bound_custom_expert_ranges(
     assert review["timestep_sampling"] == sampling
     assert review["timestep_range_policy"] == ("original" if original else "bounded")
     trains = [stage["args"] for stage in review["stages"] if stage["name"] == "train"]
-    assert len(trains) == 4
+    assert len(trains) == 8
     assert [(args[args.index("--min_timestep") + 1], args[args.index("--max_timestep") + 1]) for args in trains] == [
         ("0", "875"),
         ("875", "1000"),
-        ("0", "875"),
-        ("875", "1000"),
-    ]
+    ] * 4
     for args in trains:
         assert args[args.index("--timestep_sampling") + 1] == sampling
         assert ("--preserve_distribution_shape" in args) == original

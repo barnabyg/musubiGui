@@ -87,7 +87,9 @@ export function JobEssentials({
         'Training steps',
         'steps',
         job.config.recipe === 'alternating'
-          ? 'Total optimizer updates across both experts, not steps per expert.'
+          ? job.config.wan_steps_per_expert === false
+            ? 'Legacy budget: total optimizer updates across both experts.'
+            : 'Steps for each expert: 1,000 trains low and high to 1,000 each (2,000 optimizer updates).'
           : undefined,
       )}
     </JobSection>

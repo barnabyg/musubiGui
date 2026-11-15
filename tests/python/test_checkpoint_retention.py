@@ -119,11 +119,11 @@ def test_retention_prunes_old_saves_but_preserves_the_final_restorable_pair(tmp_
         assert completed["retention"]["errors"] == []
         assert all(Path(state["path"]).is_dir() for state in completed["expert_states"].values())
         assert all(state["valid"] for state in states), states
-        assert states[-1]["valid"] and states[-1]["counts"] == {"low": 4, "high": 4}
+        assert states[-1]["valid"] and states[-1]["counts"] == {"low": 8, "high": 8}
         assert all("missing or moved" not in state["error"] for state in states)
         restored = service.restore_state(run["id"], states[-1]["id"], 4, confirmed=True)
         finished = wait_for(service, restored["id"], "completed", device_released=True)
-        assert finished["expert_states"]["high"]["optimizer_step"] == 6
+        assert finished["expert_states"]["high"]["optimizer_step"] == 12
     finally:
         service.close()
 

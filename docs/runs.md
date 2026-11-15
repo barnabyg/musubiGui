@@ -178,7 +178,8 @@ The logs API keeps `progress.eta` in its upstream time format and adds
 
 **Inspect saved states** lists paired schedule positions, including interval saves
 partway through a phase. Restoration freezes both available expert states as a new
-segment and continues the schedule at that position. Additional steps are total updates
+segment and continues the schedule at that position. For newly prepared per-expert Runs, additional steps extend both experts equally after
+catching up an interrupted unmatched pair. Legacy Runs retain total updates
 across both experts. An early save before high-noise first trains records high at zero;
 high starts fresh when its phase arrives. Restored checkpoints include a local copy
 of the inactive expert's source LoRA, so both downloads are available even if only one

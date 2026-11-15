@@ -246,7 +246,7 @@ class RunService:
             progress = parse_progress(stream.read().decode("utf-8", errors="replace"))
         if progress and stage.get("training"):
             phase = stage["training"]
-            from musubi_gui.wan_pair import expert_steps
+            from musubi_gui.wan_pair import phase_counts
 
             absolute = phase["start"] + progress["step"]
             progress.update(
@@ -254,12 +254,23 @@ class RunService:
                 phase_step=progress["step"],
                 phase_total=progress["total"],
                 step=absolute - run.get("segment", {}).get("schedule_start", 0),
-                total=run.get("segment", {}).get("additional_steps", run["job"]["config"]["steps"]),
-                expert_steps=expert_steps(absolute, phase["interval"]),
+                total=(
+                    sum(item["training"]["steps"] for item in run["stages"] if item.get("training"))
+                    if phase.get("per_expert")
+                    else run.get("segment", {}).get("additional_steps", run["job"]["config"]["steps"])
+                ),
+                expert_steps=phase_counts(phase, progress["step"]),
                 eta_scope="phase",
             )
         if progress:
             progress["estimated_remaining_seconds"] = estimated_remaining(progress)
+            if stage.get("training", {}).get("per_expert"):
+                initial = run.get("pair_sources", {})
+                initial_steps = min(initial.get(expert, {}).get("optimizer_step", 0) for expert in ("low", "high"))
+                last = next(item["training"] for item in reversed(run["stages"]) if item.get("training"))
+                target = min(phase_counts(last, last["steps"]).values())
+                progress["step"] = min(progress["expert_steps"].values()) - initial_steps
+                progress["total"] = target - initial_steps
         return progress
 
     def close(self) -> None:

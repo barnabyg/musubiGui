@@ -112,8 +112,8 @@ test('alternating Wan settings persist, train both experts and restore the paire
     const schedule = page.getByRole('region', {
       name: 'Expert training schedule',
     });
-    await expect(schedule).toContainText('Low-noise: 4 steps');
-    await expect(schedule).toContainText('High-noise: 4 steps');
+    await expect(schedule).toContainText('Low-noise: 8 steps');
+    await expect(schedule).toContainText('High-noise: 8 steps');
     await expect(schedule).toContainText('fresh dataset pass');
     await page
       .getByRole('button', { name: 'Prepare run', exact: true })
@@ -132,7 +132,7 @@ test('alternating Wan settings persist, train both experts and restore the paire
       .getByRole('button', { name: 'Start training', exact: true })
       .click();
     await expect(page.getByLabel('Paired LoRA outputs')).toContainText(
-      '4 optimizer steps',
+      '8 optimizer steps',
       { timeout: 240_000 },
     );
     await expect(
@@ -148,8 +148,8 @@ test('alternating Wan settings persist, train both experts and restore the paire
       page.getByText('State: Completed', { exact: true }),
     ).toBeVisible({ timeout: 240_000 });
     for (const [expert, phase] of [
-      ['low', 4],
-      ['high', 6],
+      ['low', 14],
+      ['high', 15],
     ] as const) {
       const downloaded = page.waitForEvent('download');
       await page
@@ -169,13 +169,15 @@ test('alternating Wan settings persist, train both experts and restore the paire
       sample_pair: Record<string, { steps: number; path: string }>;
       stages: { name: string; args: string[]; training?: { expert: string } }[];
     };
-    expect(full.sample_pair.low.steps).toBe(4);
-    expect(full.sample_pair.high.steps).toBe(4);
+    expect(full.sample_pair.low.steps).toBe(8);
+    expect(full.sample_pair.high.steps).toBe(8);
     expect(
       full.stages
         .filter((stage) => stage.training)
         .map((stage) => stage.training!.expert),
-    ).toEqual(['low', 'high', 'low', 'high']);
+    ).toEqual(
+      Array.from({ length: 16 }, (_, index) => (index % 2 ? 'high' : 'low')),
+    );
     await app.crash();
     await app.start();
     await page.reload();
@@ -187,7 +189,7 @@ test('alternating Wan settings persist, train both experts and restore the paire
       .click();
     const partial = page
       .locator('p')
-      .filter({ hasText: /^Paired schedule step 3 ·/ });
+      .filter({ hasText: /^Paired recovery: low 2 \/ high 1 ·/ });
     await expect(partial).toContainText(
       'low-noise 2 steps · high-noise 1 steps',
       { timeout: 240_000 },
@@ -206,14 +208,14 @@ test('alternating Wan settings persist, train both experts and restore the paire
       .getByRole('button', { name: 'Restore as new segment', exact: true })
       .click();
     await expect(page.getByLabel('Training progress')).toContainText(
-      'Step 5/5',
+      'Step 6/6',
       { timeout: 240_000 },
     );
     await expect(
       page.getByText('State: Completed', { exact: true }),
     ).toBeVisible({ timeout: 240_000 });
     await expect(page.getByLabel('Paired LoRA outputs')).toContainText(
-      '4 optimizer steps',
+      '7 optimizer steps',
     );
     await page
       .getByRole('tablist', { name: 'Run views' })

@@ -498,6 +498,12 @@ export function JobControls({
         <h2>Checkpoints</h2>
         <div className="number-row">
           {number('Save every N steps', 'save_every')}
+          {job.config.recipe === 'alternating' &&
+            job.config.wan_steps_per_expert !== false && (
+              <p className="hint">
+                Both experts save at each interval in their own trained steps.
+              </p>
+            )}
           {number(
             'Maximum checkpoint saves to keep',
             'keep_checkpoints',

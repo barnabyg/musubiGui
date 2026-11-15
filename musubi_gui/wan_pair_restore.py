@@ -57,6 +57,7 @@ def restored_pair(original: dict[str, Any], state: dict[str, Any], steps: int) -
         sources=sources,
         preview_every=config.get("preview_every", 0),
         final_sample=config.get("sample_enabled", True),
+        per_expert=any(stage.get("training", {}).get("per_expert") for stage in original["stages"]),
     )
     (directory / "checkpoints").mkdir()
     for source_path, target, expected_hash in copies:

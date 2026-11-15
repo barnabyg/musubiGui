@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from musubi_gui.recipe import Stage
-from musubi_gui.wan_pair import alternating_phases
+from musubi_gui.wan_pair import alternating_phases, paired_phases, phase_counts
 
 
 def argument(args: list[str], flag: str) -> str:
@@ -29,6 +29,7 @@ def paired_stages(
     sources: dict[str, Any] | None = None,
     preview_every: int = 0,
     final_sample: bool = True,
+    per_expert: bool = False,
 ) -> list[Stage]:
     """Each phase has its own output name; no later phase can overwrite an earlier state."""
     template = next(stage for stage in stages if stage.name == "train")
@@ -59,7 +60,19 @@ def paired_stages(
             set_argument(generated.args, "--save_path", str(destination))
         result.append(generated)
 
-    for phase in alternating_phases(steps, interval, start=start, preview_every=preview_every):
+    phases = (
+        paired_phases(
+            steps,
+            interval,
+            start=start,
+            counts={expert: (sources or {}).get(expert, {}).get("optimizer_step", 0) for expert in ("low", "high")},
+            save_every=int(argument(template.args, "--save_every_n_steps")),
+            preview_every=preview_every,
+        )
+        if per_expert
+        else alternating_phases(steps, interval, start=start, preview_every=preview_every)
+    )
+    for phase in phases:
         args = list(template.args)
         name = f"{stem}-{phase.expert}-phase{phase.start:08d}"
         for flag, value in [
@@ -84,9 +97,23 @@ def paired_stages(
         before = phase.low_before if phase.expert == "low" else phase.high_before
         checkpoints[phase.expert] = {"path": checkpoint, "steps": before + phase.steps}
         states[phase.expert] = {"path": str(output / f"{name}-state")}
-        result.append(Stage("train", args, {**phase.record(), "interval": interval, "checkpoint": checkpoint}))
+        result.append(
+            Stage(
+                "train",
+                args,
+                {**phase.record(), "interval": interval, "checkpoint": checkpoint, "per_expert": per_expert},
+            )
+        )
         end = phase.start + phase.steps
-        if preview_every and end % preview_every == 0:
+        if per_expert:
+            end = before + phase.steps
+            if (
+                preview_every
+                and len(set(phase_counts(phase.record(), phase.steps).values())) == 1
+                and end % preview_every == 0
+            ):
+                sample(end)
+        elif preview_every and end % preview_every == 0:
             sample(end)
     if final_sample:
         sample(None)

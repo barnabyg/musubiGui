@@ -21,7 +21,14 @@ def paired_job(tmp_path: Path, **config: object) -> tuple[Path, str]:
             name="Paired Wan",
             datasets=[JobDataset(dataset_id=dataset)],
             config=JobConfig.model_validate(
-                {"recipe": "alternating", "steps": 8, "expert_interval": 2, "save_state": True, **config}
+                {
+                    "recipe": "alternating",
+                    "wan_steps_per_expert": False,
+                    "steps": 8,
+                    "expert_interval": 2,
+                    "save_state": True,
+                    **config,
+                }
             ),
         )
     )
@@ -247,3 +254,51 @@ def test_smoke_presets_select_a_complete_expert_recipe(tmp_path: Path) -> None:
     assert paired.config.recipe == "alternating"
     assert (paired.config.steps, paired.config.expert_interval, paired.config.save_state) == (4, 1, True)
     assert configuration_errors(paired) == []
+
+
+def test_per_expert_job_saves_matching_pairs_and_restores(tmp_path: Path) -> None:
+    root, job_id = paired_job(
+        tmp_path, steps=7, expert_interval=4, save_every=3, preview_every=3, wan_steps_per_expert=True
+    )
+    review = review_job(root, JobStore(root).get(job_id), load_settings(root), fixture_mode=True)
+    assert review["valid"], review["errors"]
+    assert review["expert_schedule"]["counts"] == {"low": 7, "high": 7}
+    service = RunService(root, fixture_mode=True, device_path=tmp_path / "gpu.sqlite")
+    try:
+        run = service.prepare(job_id, start=True)
+        completed = wait_for(service, run["id"], "completed", device_released=True)
+        assert {expert: state["optimizer_step"] for expert, state in completed["expert_states"].items()} == {
+            "low": 7,
+            "high": 7,
+        }
+        states = service.saved_states(run["id"])
+        assert all(state["valid"] for state in states)
+        for step in (3, 6, 7):
+            assert any(state["counts"] == {"low": step, "high": step} for state in states)
+        previews = [sample for sample in completed["samples"] if "preview_step" in sample]
+        assert [
+            (sample["preview_step"], sample["lora_pair"]["low"]["steps"], sample["lora_pair"]["high"]["steps"])
+            for sample in previews
+        ] == [(3, 3, 3), (6, 6, 6)]
+        progress = service.progress(run["id"])
+        assert progress and (progress["step"], progress["total"]) == (7, 7)
+        source = next(state for state in states if state["counts"] == {"low": 3, "high": 3})
+        restored = service.restore_state(run["id"], source["id"], 2, confirmed=True)
+        resumed = wait_for(service, restored["id"], "completed", device_released=True)
+        assert {expert: state["optimizer_step"] for expert, state in resumed["expert_states"].items()} == {
+            "low": 5,
+            "high": 5,
+        }
+        assert service.progress(restored["id"])["step"] == 2
+    finally:
+        service.close()
+
+
+def test_per_expert_budget_can_be_shorter_than_switch_interval(tmp_path: Path) -> None:
+    root, job_id = paired_job(tmp_path, steps=1, expert_interval=30, save_every=100, wan_steps_per_expert=True)
+    review = review_job(root, JobStore(root).get(job_id), load_settings(root), fixture_mode=True)
+    assert review["valid"], review["errors"]
+    assert review["expert_schedule"]["counts"] == {"low": 1, "high": 1}
+    assert [
+        (stage["training"]["expert"], stage["training"]["steps"]) for stage in review["stages"] if stage.get("training")
+    ] == [("low", 1), ("high", 1)]

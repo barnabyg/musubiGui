@@ -1,9 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { runWorkspace } from './runHarness';
 
-test('paired Wan previews show total steps and their own expert counts', async ({
-  page,
-}) => {
+test('paired Wan previews show matching per-expert steps', async ({ page }) => {
   const app = await runWorkspace({ previewImages: true });
   try {
     const job = app.manifest.jobs.find((item) => item.family === 'wan')!;
@@ -37,7 +35,7 @@ test('paired Wan previews show total steps and their own expert counts', async (
       .getByRole('button', { name: 'Prepare and start', exact: true })
       .click();
     const first = page.getByRole('button', {
-      name: /^Step 4 preview · paired Wan · low 4 \/ high 0 trained steps.*available$/,
+      name: /^Step 4 preview · paired Wan · low 4 \/ high 4 trained steps.*available$/,
     });
     await page
       .getByRole('tablist', { name: 'Run views' })
@@ -56,7 +54,7 @@ test('paired Wan previews show total steps and their own expert counts', async (
     });
     await expect(
       page.getByRole('button', {
-        name: /^Step 12 preview · paired Wan · low 7 \/ high 5 trained steps.*available$/,
+        name: /^Step 12 preview · paired Wan · low 12 \/ high 12 trained steps.*available$/,
       }),
     ).toBeVisible({ timeout: 240_000 });
     await expect(first).toHaveAttribute('aria-pressed', 'true');
@@ -72,7 +70,7 @@ test('paired Wan previews show total steps and their own expert counts', async (
       .toBe(true);
     await expect(
       page.getByRole('button', {
-        name: /^Step 24 preview · paired Wan · low 14 \/ high 10 trained steps.*available$/,
+        name: /^Step 24 preview · paired Wan · low 24 \/ high 24 trained steps.*available$/,
       }),
     ).toBeVisible();
     await expect(
