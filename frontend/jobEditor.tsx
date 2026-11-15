@@ -64,8 +64,10 @@ export function useJobEditor({
   const [dirty, setDirty] = useState(false);
   // Busy until the initial load lands, so it cannot replace drafts created meanwhile.
   const [loading, setLoading] = useState(true);
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const [loadError, setLoadError] = useState('');
   const [working, setBusy] = useState(false);
-  const busy = loading || working;
+  const busy = loading || working || !!loadError;
   const [status, setStatus] = useState('Loading jobs…');
   const [error, setError] = useState('');
   const [reviewResult, setReview] = useState<Review | null>(null);
@@ -90,17 +92,22 @@ export function useJobEditor({
   const [existingRun, setExistingRun] = useState<PreparedRun | null>(null);
 
   useEffect(() => {
+    const controller = new AbortController();
+    let retry: number | undefined;
+    const read = <T,>(path: string) =>
+      request<T>(path, 'GET', undefined, controller.signal);
     void Promise.all([
-      request<Job[]>('/api/jobs'),
-      request<DatasetOption[]>('/api/datasets'),
-      request<{ models: Record<string, string>; model_roots: string[] }>(
+      read<Job[]>('/api/jobs'),
+      read<DatasetOption[]>('/api/datasets'),
+      read<{ models: Record<string, string>; model_roots: string[] }>(
         '/api/settings',
       ),
-      request<Preset[]>('/api/jobs/presets'),
-      request<Job[]>('/api/jobs/archived'),
-      request<JobSummary[]>('/api/jobs/summaries'),
+      read<Preset[]>('/api/jobs/presets'),
+      read<Job[]>('/api/jobs/archived'),
+      read<JobSummary[]>('/api/jobs/summaries'),
     ])
       .then(([items, library, settings, savedPresets, hidden, info]) => {
+        if (controller.signal.aborted) return;
         setJobs(items);
         setSummaries(info);
         setArchived(hidden);
@@ -109,10 +116,24 @@ export function useJobEditor({
         setModelRoots(settings.model_roots);
         setPresets(savedPresets);
         setStatus('Jobs loaded');
+        setLoading(false);
       })
-      .catch((reason: Error) => setError(reason.message))
-      .finally(() => setLoading(false));
-  }, []);
+      .catch((reason: Error) => {
+        if (controller.signal.aborted) return;
+        if (loadAttempt === 0) {
+          setStatus('Retrying jobs…');
+          retry = window.setTimeout(() => setLoadAttempt(1), 1000);
+        } else {
+          setLoadError(reason.message);
+          setStatus('Jobs could not be loaded');
+          setLoading(false);
+        }
+      });
+    return () => {
+      controller.abort();
+      window.clearTimeout(retry);
+    };
+  }, [loadAttempt]);
   useEffect(() => {
     let active = true;
     void request<TrainingOptions>('/api/jobs/training-options')
@@ -185,6 +206,12 @@ export function useJobEditor({
     return () => window.removeEventListener('beforeunload', protect);
   }, [dirty]);
 
+  function retryLoad() {
+    setLoading(true);
+    setLoadError('');
+    setStatus('Loading jobs…');
+    setLoadAttempt((value) => value + 1);
+  }
   async function reloadJobs() {
     const [items, info] = await Promise.all([
       request<Job[]>('/api/jobs'),
@@ -532,6 +559,8 @@ export function useJobEditor({
     return '';
   }
   return {
+    loadError,
+    retryLoad,
     jobs,
     archived,
     summaries,

@@ -2,6 +2,8 @@
 
 Use **Jobs** in the sidebar to select a saved job, create a Wan or H3 draft, or import a configuration. Opening or creating a job shows its dedicated editor without the job list. **Back to jobs** returns to the collection and asks before discarding unsaved edits.
 
+Jobs waits for its library data before enabling creation, selection or import. An initial read failure retries once automatically; if loading still fails, use **Retry loading jobs**.
+
 ## Timestep strategy
 
 The LoRA & training tab offers **Shift**, **Sigmoid** and **Uniform**

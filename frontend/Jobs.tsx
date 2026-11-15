@@ -17,6 +17,8 @@ import './jobs.css';
 export function Jobs(props: JobsProps) {
   const { onRun } = props;
   const {
+    loadError,
+    retryLoad,
     jobs,
     archived,
     summaries,
@@ -89,6 +91,12 @@ export function Jobs(props: JobsProps) {
           </>
         )}
       </section>
+      {loadError && (
+        <div role="alert" className="error">
+          <p>{loadError}</p>
+          <button onClick={retryLoad}>Retry loading jobs</button>
+        </div>
+      )}
       {!job && jobs.length > 0 && (
         <JobTable
           jobs={jobs}
