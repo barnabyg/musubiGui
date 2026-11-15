@@ -209,9 +209,16 @@ def completion_estimate(run: dict[str, Any], progress: dict[str, Any] | None, no
                         gaps.add("training rate includes first-update loading (no steady interval yet)")
                     rate = sum(s for s, _ in measured) / sum(n for _, n in measured)
                     training_seconds += remaining * rate
-                    if stage["status"] == "pending" and first_steps.get(key):
+                    if step == 0 and first_steps.get(key):
                         # The first update already belongs to the measured full startup interval.
-                        overhead += max(0, mean(first_steps[key]) - rate)
+                        startup = max(0, mean(first_steps[key]) - rate)
+                        elapsed_startup = (
+                            seconds_between(stage.get("started"), now) if stage["status"] == "running" else 0
+                        )
+                        if elapsed_startup is None:
+                            gaps.add("active model loading start time")
+                            elapsed_startup = 0
+                        overhead += max(0, startup - elapsed_startup)
                     elif stage["status"] == "pending":
                         gaps.add("future model loading and expert switching")
                 elif remaining:

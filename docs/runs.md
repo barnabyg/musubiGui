@@ -168,7 +168,8 @@ removed before extrapolation. The upstream progress bar can include previews and
 reset its timing; it is never used as a preview-free rate for this whole-Run forecast.
 Observed inter-step saves remain in the step rate. Completed phases can supply
 startup and final-save overhead for later comparable phases, without adding their
-first update twice. An unmeasured expert uses the observed expert's rate with an
+first update twice. A phase that is still loading retains its measured startup
+budget, less time already spent loading, until its first update. An unmeasured expert uses the observed expert's rate with an
 explicit assumption until it reports its own measurements. Forecasts identify
 unestimated components such as future loading/switching and final state saves;
 they are partial estimates, not finish-time promises. Before step or preview

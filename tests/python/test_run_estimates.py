@@ -264,3 +264,57 @@ def test_single_update_wan_phases_budget_loading_and_final_save_once(tmp_path: P
     assert estimate["overhead_remaining_seconds"] == 1
     assert estimate["preview_remaining_seconds"] == 600
     assert estimate["remaining_seconds"] == 611
+
+
+@pytest.mark.parametrize(("status", "expected_overhead"), [("pending", 601), ("running", 481)])
+def test_measured_loading_budget_remains_while_a_later_phase_starts(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    status: str,
+    expected_overhead: int,
+) -> None:
+    monkeypatch.setattr("musubi_gui.runs_api.utc_now", lambda: "2026-11-15T10:02:00Z")
+    service = RunService(tmp_path / "state", device_path=tmp_path / "device.sqlite", autostart=False)
+    run = service.submit(
+        ExecutionPlan(
+            job={"id": "loading", "name": "Loading", "family": "wan", "revision": 1},
+            settings=Settings(),
+            manifest={"items": []},
+            directory=tmp_path / "run",
+            cache=tmp_path / "cache",
+            fingerprint="loading",
+            stages=[
+                Stage("train", ["python", "trainer.py", "--max_train_steps", "100"], {"expert": "low", "start": start})
+                for start in [0, 200]
+            ],
+        )
+    )
+
+    def update(record: dict) -> None:
+        record.update(status="training")
+        record["stages"][0].update(status="completed", started="2026-11-15T09:00:00Z", finished="2026-11-15T09:26:41Z")
+        record["stages"][1].update(status=status, started="2026-11-15T10:00:00Z" if status == "running" else None)
+
+    service.store.update(run["id"], update)
+    (tmp_path / "run/timing-train-low-00000000.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "training": {
+                    "step": 100,
+                    "intervals": 99,
+                    "seconds": 990,
+                    "first_step_at": "2026-11-15T09:10:10Z",
+                    "last_step_at": "2026-11-15T09:26:40Z",
+                },
+                "previews": {"completed": 0, "seconds": 0, "active": None},
+            }
+        ),
+        encoding="utf-8",
+    )
+    app = FastAPI()
+    app.include_router(runs_router(service))
+    estimate = TestClient(app).get(f"/api/runs/{run['id']}/logs").json()["run_estimate"]
+    assert estimate["training_remaining_seconds"] == 1000
+    assert estimate["overhead_remaining_seconds"] == expected_overhead
+    assert estimate["remaining_seconds"] == 1000 + expected_overhead
