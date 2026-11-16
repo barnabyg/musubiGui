@@ -85,9 +85,11 @@ def main() -> None:
         code_checks(python, npm)
     if args.part in (None, "python"):
         # CI stops at the first failure; local runs report every failure. Hosted runners get fewer workers.
-        workers = ["--maxfail=1", "-n", "2"] if os.environ.get("CI") else ["-n", "4"]
+        # CI also keeps each test's hosted duration for balancing shards.
+        durations = str(Path(".cache/durations/python.xml").resolve())
+        options = ["--maxfail=1", "-n", "2", f"--junitxml={durations}"] if os.environ.get("CI") else ["-n", "4"]
         # The explicit path loads tests/python/conftest.py before options parse, so --shard exists.
-        run(python, "-m", "pytest", "tests/python", "-q", *workers, *shard)
+        run(python, "-m", "pytest", "tests/python", "-q", *options, *shard)
     if args.part in (None, "browser"):
         # Builds the UI first through pretest:browser; packaging below ships that same bundle.
         test_list = ["--", f"--test-list={browser_shard_list(args.shard)}"] if args.shard else []
