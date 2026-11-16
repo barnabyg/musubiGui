@@ -75,11 +75,7 @@ is missing, the wrong type or outside its root. Browse lists names only, through
 endpoint that never reads file contents. Saving and running enforce the same rules, including
 symlink and junction containment.
 
-Manual setup scenario: install the supported version in Settings, configure storage and model
-paths, save, and run diagnostics. Click Update to supported version again to confirm setup
-is repeatable; expect the installed revision to match the supported revision. Stop the backend, relaunch, and confirm that
-the fields persist. Change a field without saving: diagnostics require a save and closing
-the tab prompts about unsaved edits. A failed save retains edits and reports the failure.
+To check setup by hand, follow the [managed setup scenario](docs/verification.md#managed-setup).
 
 `npm.cmd run verify` is the canonical check; see [verification](docs/verification.md).
 Browser tests exercise real UI → API → disk → backend restart and supervised process
