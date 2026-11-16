@@ -484,31 +484,33 @@ export function RunComparison({
           {error}
         </p>
       )}
-      <label className="field">
-        Compare with run
-        <select
-          aria-label="Compare with run"
-          value={other}
-          disabled={busy}
-          onChange={(event) => {
-            setOther(event.target.value);
-            setComparison(null);
-          }}
-        >
-          <option value="">Select another run</option>
-          {outputs.runs
-            .filter((run) => run.id !== runId && run.status !== 'deleting')
-            .map((run) => (
-              <option key={run.id} value={run.id}>
-                {run.job.name} · {run.job.family.toUpperCase()} · r
-                {run.job.revision} · {run.id.slice(0, 8)}
-              </option>
-            ))}
-        </select>
-      </label>
-      <button disabled={busy || !other} onClick={() => void compare()}>
-        Compare inputs
-      </button>
+      <div className="run-compare-picker">
+        <label className="field">
+          Compare with run
+          <select
+            aria-label="Compare with run"
+            value={other}
+            disabled={busy}
+            onChange={(event) => {
+              setOther(event.target.value);
+              setComparison(null);
+            }}
+          >
+            <option value="">Select another run</option>
+            {outputs.runs
+              .filter((run) => run.id !== runId && run.status !== 'deleting')
+              .map((run) => (
+                <option key={run.id} value={run.id}>
+                  {run.job.name} · {run.job.family.toUpperCase()} · r
+                  {run.job.revision} · {run.id.slice(0, 8)}
+                </option>
+              ))}
+          </select>
+        </label>
+        <button disabled={busy || !other} onClick={() => void compare()}>
+          Compare inputs
+        </button>
+      </div>
       {comparison && comparison.before === runId && (
         <div className="output-comparison" aria-label="Run comparison">
           <p>{comparison.note}</p>

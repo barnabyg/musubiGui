@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
 import { mkdtemp, readFile, rm, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -11,6 +11,50 @@ import {
   runPanelLabelled,
   runTabPanel,
 } from './runHarness';
+
+// The Run picker sizes to its content, capped so long Job names cannot stretch it to the
+// section width, with Compare inputs beside it at desktop width. On a phone they stack
+// without horizontal scrolling.
+async function expectCompareControls(page: Page, panel: Locator) {
+  const select = panel.getByLabel('Compare with run', { exact: true });
+  const button = panel.getByRole('button', {
+    name: 'Compare inputs',
+    exact: true,
+  });
+  const box = async (locator: Locator) => (await locator.boundingBox())!;
+  await page.setViewportSize({ width: 1366, height: 768 });
+  const section = await box(panel);
+  let picker = await box(select);
+  let action = await box(button);
+  expect(picker.width).toBeLessThan(section.width / 2);
+  expect(action.x).toBeGreaterThanOrEqual(picker.x + picker.width);
+  expect(action.y).toBeLessThan(picker.y + picker.height);
+  expect(picker.y).toBeLessThan(action.y + action.height);
+  // A long Job name truncates in the closed picker instead of widening it.
+  await select.evaluate((element) => {
+    const option = document.createElement('option');
+    option.className = 'long-run-name';
+    option.textContent = 'a-very-long-job-name-'.repeat(10);
+    element.append(option);
+  });
+  expect((await box(select)).width).toBeLessThan(section.width / 2);
+  await select.evaluate((element) =>
+    element.querySelector('.long-run-name')!.remove(),
+  );
+  await page.setViewportSize({ width: 375, height: 812 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+  picker = await box(select);
+  action = await box(button);
+  expect(picker.x).toBeGreaterThanOrEqual(0);
+  expect(picker.x + picker.width).toBeLessThanOrEqual(375);
+  expect(picker.width).toBeGreaterThan(150);
+  expect(action.y).toBeGreaterThanOrEqual(picker.y + picker.height);
+  await page.setViewportSize({ width: 1366, height: 768 });
+}
 
 test('comparison plays both Runs and keeps provenance and downloads when a sample is missing', async ({
   page,
@@ -85,9 +129,11 @@ test('comparison plays both Runs and keeps provenance and downloads when a sampl
       await openRunTab(page, 'samples');
       await expect(runPanelLabelled(page, 'compare')).toBeHidden();
       await openRunTab(page, 'overview');
-      await runPanel(runTabPanel(page, 'overview'), 'compare')
+      const comparePanel = runPanel(runTabPanel(page, 'overview'), 'compare');
+      await comparePanel
         .getByLabel('Compare with run', { exact: true })
         .selectOption(after.id);
+      await expectCompareControls(page, comparePanel);
       await page
         .getByRole('button', { name: 'Compare inputs', exact: true })
         .click();

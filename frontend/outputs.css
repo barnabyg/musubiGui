@@ -80,6 +80,23 @@
 .comparison-samples .button-link {
   margin-top: var(--space-4);
 }
+/* The Run picker sizes to its options, capped so long Job names truncate rather than
+   stretching it across the section, with Compare inputs beside it. */
+.run-compare-picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0 var(--space-5);
+  margin: var(--space-7) 0;
+}
+.run-compare-picker .field {
+  margin: 0;
+}
+/* Outranks .field select, whatever order the bundle loads the stylesheets in. */
+.run-compare-picker .field select {
+  width: auto;
+  max-width: min(100%, 45ch);
+}
 @media (max-width: 700px) {
   .comparison-media {
     grid-template-columns: minmax(0, 1fr);
@@ -91,5 +108,14 @@
   .output-comparison pre {
     white-space: pre-wrap;
     overflow-wrap: anywhere;
+  }
+  .run-compare-picker {
+    display: block;
+  }
+  .run-compare-picker .field {
+    margin-bottom: var(--space-5);
+  }
+  .run-compare-picker .field select {
+    width: 100%;
   }
 }
