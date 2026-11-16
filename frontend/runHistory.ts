@@ -1,6 +1,27 @@
 import { useSyncExternalStore } from 'react';
 import { apiClient } from './api';
 
+// A Run's place in its chain of resumed segments, as the backend defines it (musubi_gui/run_chains.py).
+export type ChainPlace = {
+  // The chain's first segment.
+  id: string;
+  size: number;
+  // 1-based, in creation order.
+  position: number;
+  latest: string;
+  // On the path from the first segment to the latest; other segments are side branches.
+  on_line: boolean;
+  source: string | null;
+  missing_source: string | null;
+  later_segments: number;
+  steps: {
+    start: number;
+    target: number;
+    end: number | null;
+    legacy: boolean;
+  };
+};
+
 export type RunSummary = {
   id: string;
   created: string;
@@ -8,6 +29,7 @@ export type RunSummary = {
   order: number;
   job: { id: string; name: string; family: string; revision: number };
   stages: { name: string; status: string }[];
+  chain: ChainPlace;
   change_key: string;
 };
 

@@ -271,17 +271,43 @@ A delete is refused, with the reason, in these cases. Nothing is removed.
 - A Run that is prepared or active still needs its files. A restored segment reads its
   source's saved state, frozen media and dataset files, and a retry reads the frozen media
   of the Run it came from. Cancel or delete that Run first.
+- Later segments of its training continue from it. Delete the whole training, or its later
+  segments first.
 - Its folders aren't exactly `<root>/runs/<token>` under the current Settings roots after
   resolving symlinks and junctions, or a folder is itself a link. A Run recorded under a
   root that is no longer configured stays visible until you restore that root in Settings;
   it can't be deleted or forgotten before then.
 
-A finished Run doesn't block the delete of the Run it came from, and the confirmation
-warns when there are any. The later Run keeps its own logs, checkpoints, samples and saved
-states, and its `resume_of`, `retry_of` and `reused_from` fields keep the deleted ID. The
-Runs screen doesn't show those IDs, apart from "verified cache reused", so nothing there
-dangles. Its frozen inputs are gone, so Retry and Restore as new segment on it are refused
-with the frozen-inputs message; use Prepare for a new Run instead.
+A finished retry doesn't block the delete of the Run it came from, and the confirmation
+warns when there are any. The retry keeps its own logs, checkpoints, samples and saved
+states, and its `retry_of` and `reused_from` fields keep the deleted ID. The Runs screen
+doesn't show those IDs, apart from "verified cache reused", so nothing there dangles. Its
+frozen inputs are gone, so Retry and Restore as new segment on it are refused with the
+frozen-inputs message; use Prepare for a new Run instead. A segment whose source an earlier
+version deleted on its own behaves the same way and starts its training in Runs.
+
+### Deleting a training resumed in segments
+
+Runs shows a training resumed in segments as one row (see
+[chains of segments](runs-details.md#trainings-resumed-in-segments)). **Delete training**, on
+that row or in the Actions of any of its segments, removes every segment after one
+confirmation that lists them with their steps, revision and status. Each segment's folders
+go as for Delete run, latest segment first, and the cache they share goes with the first
+segment unless a Run outside the training still uses it. It is refused, with nothing removed,
+while any segment is queued, preparing, training, sampling or stopping, or still records
+processes, and when a Run outside the training is prepared or active and needs its files.
+A delete that fails partway stops at that segment and leaves it and the earlier segments
+listed; Delete training again finishes it.
+
+Only the latest segment can be deleted on its own: **Delete segment** in the expanded row or
+its Actions. An earlier segment is the source of a later one, so it goes with the training or
+once the segments after it are gone. On a branched training each segment nothing continued
+from, including a side branch's last segment, can go on its own.
+
+`GET /api/runs/{id}/delete-preview?chain=true` returns the training's `chain` (its first
+segment), `segments` and the combined `folders`, `bytes`, `shared_cache`, `dependents` and
+`refusal`. `POST /api/runs/{id}/delete {"confirmed": true, "chain": true}` deletes it and
+returns `deleted_ids`, latest first, and `freed_bytes`.
 
 A restored segment shares its source's cache folder. That folder stays until the last Run
 using it is deleted, and the confirmation says so and leaves it out of the space freed.

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Download } from 'lucide-react';
 import { apiClient } from './api';
+import { trainingOf, trainings } from './runChains';
 import { useRunHistory } from './runHistory';
 import { sizeLabel } from './runStatus';
 import './outputs.css';
@@ -16,6 +17,15 @@ export type Output = {
   file_url?: string;
   error?: string | null;
   metadata?: Record<string, unknown>;
+  // In a training's merged list: the segment the file came from and its global step.
+  segment?: Segment;
+  step?: number;
+};
+type Segment = {
+  run_id: string;
+  position: number;
+  revision: number;
+  status: string;
 };
 type OutputList = {
   run_id: string;
@@ -29,10 +39,13 @@ type OutputList = {
   outputs: Output[];
   warnings: string[];
   note: string;
+  // Listed with `chain`: the training's segments and its latest one.
+  segments?: Segment[];
+  latest?: string;
 };
 type Comparison = {
-  before: string;
-  after: string;
+  // The picker choices compared, so a changed choice hides a stale result.
+  key: string;
   changes: { path: string; before: unknown; after: unknown }[];
   note: string;
   samples: [OutputList, OutputList];
@@ -40,8 +53,9 @@ type Comparison = {
 
 const read = apiClient('Output records could not be read. Refresh and retry.');
 
-// What a Run's files are for. Weights inside a saved state's folder are not a LoRA.
-function grouped(outputs: Output[]) {
+// What a Run's files are for. Weights inside a saved state's folder are not a LoRA. In a
+// training's merged list, the final LoRA is the latest segment's.
+function grouped(outputs: Output[], latest?: string) {
   const samples = outputs.filter((item) =>
     ['image', 'video', 'audio'].includes(item.kind ?? ''),
   );
@@ -51,7 +65,9 @@ function grouped(outputs: Output[]) {
     .map((item) => ({ item, step: checkpointStep(item.name) }));
   const final = checkpoints.find(
     ({ item, step }) =>
-      step === null && !/-(low|high)-(phase\d+|source)/.test(item.name),
+      step === null &&
+      !/-(low|high)-(phase\d+|source)/.test(item.name) &&
+      (!latest || item.run_id === latest),
   )?.item;
   const preview =
     samples.find(
@@ -67,17 +83,33 @@ function grouped(outputs: Output[]) {
   return { samples, stateFiles, checkpoints, final, preview };
 }
 
+// Whether a list merges more than one segment of a training.
+function merged(result: OutputList | null | undefined) {
+  return (result?.segments?.length ?? 1) > 1;
+}
+
+// How a file reads in the comparison's sample list: in a merged list, with the segment it came from.
+function outputLabel(item: Output, result: OutputList | null | undefined) {
+  const segment =
+    merged(result) && item.segment ? ` · segment ${item.segment.position}` : '';
+  return `${item.name} · ${item.status}${segment}`;
+}
+
 function checkpointStep(name: string) {
   const match = /-step(\d+)\.[^.]+$/.exec(name);
   return match ? Number(match[1]) : null;
 }
 
-function checkpointLabel(item: Output, step: number | null) {
+function checkpointLabel(item: Output, step: number | null, final?: Output) {
   const phase = /-(low|high)-phase(\d+)/.exec(item.name);
   if (phase)
     return `${phase[1]}-noise · phase from ${Number(phase[2])} · ${step === null ? 'phase end' : `local step ${step}`}`;
   const source = /-(low|high)-source/.exec(item.name);
-  return source ? `${source[1]}-noise · source checkpoint` : (step ?? 'Final');
+  if (source) return `${source[1]}-noise · source checkpoint`;
+  // An earlier segment's own final save sits at that segment's step in a merged list.
+  if (step === null && final && item !== final && item.step !== undefined)
+    return `Step ${item.step}`;
+  return step ?? 'Final';
 }
 
 function byteLabel(item: Output) {
@@ -123,7 +155,7 @@ function ComparisonSamples({
   result: OutputList;
   label: string;
 }) {
-  const { samples, preview, final } = grouped(result.outputs);
+  const { samples, preview, final } = grouped(result.outputs, result.latest);
   const [selected, setSelected] = useState('');
   const sample =
     samples.find((item) => item.id === selected) ?? preview ?? samples[0];
@@ -136,7 +168,11 @@ function ComparisonSamples({
         <strong>{result.job.name}</strong> · {result.job.family.toUpperCase()} ·
         revision {result.job.revision}
       </p>
-      <p className="comparison-run-id">Run {result.run_id}</p>
+      <p className="comparison-run-id">
+        {merged(result)
+          ? `Training of ${result.segments?.length} segments · latest Run ${result.latest}`
+          : `Run ${result.run_id}`}
+      </p>
       <p>
         Recorded sample prompt (Run settings):{' '}
         {result.job.config?.sample_prompt ?? 'Not recorded'}
@@ -158,16 +194,14 @@ function ComparisonSamples({
             >
               {samples.map((item) => (
                 <option key={item.id} value={item.id}>
-                  {item.name} · {item.status}
+                  {outputLabel(item, result)}
                 </option>
               ))}
             </select>
           </label>
           {sample && (
             <>
-              <p>
-                {sample.name} · {sample.status}
-              </p>
+              <p>{outputLabel(sample, result)}</p>
               {sample.error && <p className="error">{sample.error}</p>}
               <MediaPreview key={sample.id} output={sample} />
             </>
@@ -199,7 +233,11 @@ const settledStates = [
 
 // Keeps one list of a Run's files for the Overview and Samples tabs. A selection is kept per
 // kind, so choosing a checkpoint on Overview leaves the selected sample on Samples alone.
-export function useRunOutputs(runId: string | undefined, runState: string) {
+export function useRunOutputs(
+  runId: string | undefined,
+  runState: string,
+  chain = false,
+) {
   const [result, setResult] = useState<OutputList | null>(null);
   const [selection, setSelection] = useState<{
     runId: string;
@@ -220,8 +258,9 @@ export function useRunOutputs(runId: string | undefined, runState: string) {
     );
     const poll = () => {
       controller = new AbortController();
+      // A training resumed in segments lists every segment's files; a single Run, its own.
       void read<OutputList>(
-        `/api/runs/${runId}/outputs`,
+        `/api/runs/${runId}/outputs${chain ? '?chain=true' : ''}`,
         'GET',
         undefined,
         controller.signal,
@@ -245,7 +284,7 @@ export function useRunOutputs(runId: string | undefined, runState: string) {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [runId, runState, refresh]);
+  }, [runId, runState, chain, refresh]);
   const chosen = selection?.runId === runId ? selection : undefined;
   return {
     selected: { sample: chosen?.sample, checkpoint: chosen?.checkpoint },
@@ -265,8 +304,11 @@ export function useRunOutputs(runId: string | undefined, runState: string) {
   };
 }
 
-export function stateFiles(outputs: RunOutputs) {
-  return grouped(outputs.result?.outputs ?? []).stateFiles;
+// The saved-state files of one segment, whose states it inspects and resumes.
+export function stateFiles(outputs: RunOutputs, runId: string) {
+  return grouped(outputs.result?.outputs ?? []).stateFiles.filter(
+    (item) => item.run_id === runId,
+  );
 }
 
 export type RunOutputs = ReturnType<typeof useRunOutputs>;
@@ -315,6 +357,12 @@ function OutputDetail({ output, label }: { output: Output; label: string }) {
       <p>
         {output.status} · {byteLabel(output)} · from Run{' '}
         {output.run_id.slice(0, 8)}
+        {output.segment && output.step !== undefined && (
+          <>
+            {' '}
+            · segment {output.segment.position} · step {output.step}
+          </>
+        )}
       </p>
       {output.error && <p className="error">{output.error}</p>}
       <MediaPreview output={output} />
@@ -355,7 +403,8 @@ function LoadError({ outputs }: { outputs: RunOutputs }) {
 // The Overview's view of a Run's files: its LoRA checkpoints, and the way to re-read them all.
 export function RunCheckpoints({ outputs }: { outputs: RunOutputs }) {
   const { result } = outputs;
-  const { checkpoints } = grouped(result?.outputs ?? []);
+  const { checkpoints, final } = grouped(result?.outputs ?? [], result?.latest);
+  const many = merged(result);
   const output = checkpoints.find(
     ({ item }) => item.id === outputs.selected.checkpoint,
   )?.item;
@@ -363,7 +412,10 @@ export function RunCheckpoints({ outputs }: { outputs: RunOutputs }) {
     <section className="panel" aria-label="Checkpoints">
       <h2>Checkpoints</h2>
       <p>
-        Checkpoints from this Run. Open the Samples tab for generated media.
+        {many
+          ? `Checkpoints from all ${result?.segments?.length} segments of this training, by step.`
+          : 'Checkpoints from this Run.'}{' '}
+        Open the Samples tab for generated media.
       </p>
       <button disabled={outputs.busy} onClick={outputs.reload}>
         Refresh outputs
@@ -388,6 +440,7 @@ export function RunCheckpoints({ outputs }: { outputs: RunOutputs }) {
                 <thead>
                   <tr>
                     <th scope="col">Step</th>
+                    {many && <th scope="col">Segment</th>}
                     <th scope="col">Size</th>
                     <th scope="col">File</th>
                   </tr>
@@ -395,7 +448,8 @@ export function RunCheckpoints({ outputs }: { outputs: RunOutputs }) {
                 <tbody>
                   {checkpoints.map(({ item, step }) => (
                     <tr key={item.id}>
-                      <td>{checkpointLabel(item, step)}</td>
+                      <td>{checkpointLabel(item, step, final)}</td>
+                      {many && <td>{item.segment?.position}</td>}
                       <td>{byteLabel(item)}</td>
                       <td>
                         <Chooser item={item} outputs={outputs} />
@@ -424,6 +478,12 @@ export function RunSamples({ outputs }: { outputs: RunOutputs }) {
   return (
     <section className="panel" aria-label="Samples">
       <h2>Samples</h2>
+      {merged(result) && (
+        <p>
+          Samples from all {result?.segments?.length} segments of this training,
+          in step order.
+        </p>
+      )}
       <LoadError outputs={outputs} />
       {result && samples.length === 0 && (
         <p>
@@ -436,6 +496,9 @@ export function RunSamples({ outputs }: { outputs: RunOutputs }) {
           {samples.map((item) => (
             <span key={item.id}>
               <Chooser item={item} outputs={outputs} />
+              {merged(result) && item.segment && (
+                <small> Segment {item.segment.position}</small>
+              )}
             </span>
           ))}
         </div>
@@ -453,23 +516,49 @@ export function RunComparison({
   outputs: RunOutputs;
 }) {
   const [other, setOther] = useState('');
+  const [side, setSide] = useState<'training' | 'segment'>('training');
   const [comparison, setComparison] = useState<Comparison | null>(null);
   const [error, setError] = useState('');
   const [comparing, setComparing] = useState(false);
   const busy = outputs.busy || comparing;
+  const own = trainingOf(outputs.runs, runId);
+  const ownTraining = own && own.segments.length > 1 ? own : undefined;
+  const fromTraining = Boolean(ownTraining) && side === 'training';
+  // A training compares as its latest segment's inputs, with samples from every segment.
+  const others = trainings(outputs.runs).filter(
+    (training) =>
+      training.segments.length > 1 &&
+      training.id !== own?.id &&
+      training.latest.status !== 'deleting',
+  );
+  const key = `${runId}|${fromTraining}|${other}`;
+  function resolve(choice: string) {
+    const training = others.find((item) => `chain:${item.id}` === choice);
+    return training
+      ? { id: training.latest.id, chain: true }
+      : { id: choice, chain: false };
+  }
   async function compare() {
     if (!other) return;
     setComparing(true);
     setError('');
+    const before = fromTraining
+      ? { id: ownTraining!.latest.id, chain: true }
+      : { id: runId, chain: false };
+    const after = resolve(other);
+    const list = (side: { id: string; chain: boolean }) =>
+      read<OutputList>(
+        `/api/runs/${side.id}/outputs${side.chain ? '?chain=true' : ''}`,
+      );
     try {
-      const [changes, before, after] = await Promise.all([
-        read<Omit<Comparison, 'samples'>>(
-          `/api/runs/${runId}/compare/${other}`,
+      const [changes, first, second] = await Promise.all([
+        read<Omit<Comparison, 'samples' | 'key'>>(
+          `/api/runs/${before.id}/compare/${after.id}`,
         ),
-        read<OutputList>(`/api/runs/${runId}/outputs`),
-        read<OutputList>(`/api/runs/${other}/outputs`),
+        list(before),
+        list(after),
       ]);
-      setComparison({ ...changes, samples: [before, after] });
+      setComparison({ ...changes, key, samples: [first, second] });
     } catch (reason) {
       setError((reason as Error).message);
     } finally {
@@ -484,6 +573,25 @@ export function RunComparison({
           {error}
         </p>
       )}
+      {ownTraining && (
+        <label className="field">
+          Compare from
+          <select
+            aria-label="Compare from"
+            value={side}
+            disabled={busy}
+            onChange={(event) => {
+              setSide(event.target.value as 'training' | 'segment');
+              setComparison(null);
+            }}
+          >
+            <option value="training">
+              This training ({ownTraining.segments.length} segments)
+            </option>
+            <option value="segment">This segment only</option>
+          </select>
+        </label>
+      )}
       <div className="run-compare-picker">
         <label className="field">
           Compare with run
@@ -497,6 +605,14 @@ export function RunComparison({
             }}
           >
             <option value="">Select another run</option>
+            {others.map((training) => (
+              <option key={training.id} value={`chain:${training.id}`}>
+                Training: {training.latest.job.name} ·{' '}
+                {training.latest.job.family.toUpperCase()} · r
+                {training.latest.job.revision} · {training.segments.length}{' '}
+                segments
+              </option>
+            ))}
             {outputs.runs
               .filter((run) => run.id !== runId && run.status !== 'deleting')
               .map((run) => (
@@ -511,13 +627,13 @@ export function RunComparison({
           Compare inputs
         </button>
       </div>
-      {comparison && comparison.before === runId && (
+      {comparison && comparison.key === key && (
         <div className="output-comparison" aria-label="Run comparison">
           <p>{comparison.note}</p>
           <div className="comparison-media">
             {comparison.samples.map((result, index) => (
               <ComparisonSamples
-                key={result.run_id}
+                key={`${index}-${result.run_id}`}
                 result={result}
                 label={
                   index === 0 ? 'Current Run samples' : 'Compared Run samples'

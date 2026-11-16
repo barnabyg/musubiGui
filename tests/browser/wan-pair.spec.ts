@@ -204,13 +204,21 @@ test('alternating Wan settings persist, train both experts and restore the paire
     await expect(
       page.getByText('State: Completed', { exact: true }),
     ).toBeVisible({ timeout: 240_000 });
+    // The training's merged list also has the source's step-7 low checkpoint; the segment's is last.
     await expect(
-      (await openCheckpointPanel(page)).getByRole('button', {
-        name: /-low-step0*7\.safetensors · available$/,
-      }),
+      (await openCheckpointPanel(page))
+        .getByRole('row')
+        .filter({ has: page.getByRole('cell', { name: '2', exact: true }) })
+        .getByRole('button', {
+          name: /-low-step0*7\.safetensors · available$/,
+        }),
     ).toBeVisible();
     await openRunTab(page, 'samples');
-    await page.getByRole('button', { name: /sample.mp4.*available/ }).click();
+    // The source Run's final sample comes first in the training's merged list.
+    await page
+      .getByRole('button', { name: /sample.mp4.*available/ })
+      .last()
+      .click();
     await expect(page.getByLabel('Output video')).toBeVisible();
     const video = page.getByLabel('Output video');
     await video.evaluate(async (element) => {

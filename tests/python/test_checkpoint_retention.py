@@ -270,3 +270,126 @@ def test_failed_pruning_is_hidden_and_retried_without_losing_newer_state(
     recovered = service.get(run["id"])["retention"]
     assert recovered["errors"] == [] and recovered["pending"] == []
     assert not (output / ".retention" / "lora-step00000001-state").exists()
+
+
+def saves(output: Path, steps: tuple[int, ...]) -> None:
+    for step in steps:
+        file = output / f"lora-step{step:08d}.safetensors"
+        checkpoint(file)
+        state = file.with_name(file.stem + "-state")
+        state.mkdir()
+        checkpoint(state / "model.safetensors")
+        for name in ("optimizer.bin", "scheduler.bin", "random_states_0.pkl"):
+            (state / name).write_bytes(b"synthetic")
+        (state / "trainer_state.json").write_text(
+            json.dumps({"version": 1, "synthetic": True, "optimizer_step": step - 3}), encoding="utf-8"
+        )
+
+
+def resumed_segment(
+    tmp_path: Path, service: RunService, source: dict, *, keep: int = 1, legacy: bool = False
+) -> tuple[dict, Path]:
+    """A segment resumed from the source's state at step 3, saving at global steps 4, 5 and 6."""
+    directory = tmp_path / "output" / "runs" / "two"
+    plan = ExecutionPlan(
+        job={"id": "one", "revision": 2, "family": "h3", "config": {"save_state": True, "keep_checkpoints": keep}},
+        settings=Settings(checkout=str(tmp_path), python=sys.executable, output_root=str(tmp_path / "output")),
+        manifest={"items": []},
+        directory=directory,
+        cache=tmp_path / "cache",
+        fingerprint="two",
+        stages=[
+            Stage(
+                "train",
+                [
+                    "trainer",
+                    "--output_name",
+                    "lora",
+                    "--output_dir",
+                    str(directory / "checkpoints"),
+                    "--max_train_steps",
+                    "4",
+                ],
+            )
+        ],
+    )
+    run = service.submit(plan)
+    resumed = Path(source["directory"]) / "checkpoints" / "lora-step00000003-state"
+    segment = {"additional_steps": 4} if legacy else {"step_offset": 3, "target_steps": 7, "additional_steps": 4}
+    run = service.store.update(
+        run["id"],
+        lambda record: record.update(
+            status="completed",
+            resume_of=source["id"],
+            segment=segment,
+            state_source={"path": str(resumed), "files": {}},
+        ),
+    )
+    output = directory / "checkpoints"
+    saves(output, (1, 2, 3) if legacy else (4, 5, 6))
+    return run, output
+
+
+def test_retention_counts_a_chain_by_global_step_and_keeps_the_state_a_segment_resumed_from(tmp_path: Path) -> None:
+    service, source, first = submitted_history(tmp_path, save_state=True)
+    try:
+        service.store.update(source["id"], lambda record: record.update(status="stopped"))
+        segment, second = resumed_segment(tmp_path, service, source)
+        service.retain_checkpoints(segment["id"])
+        # One historical save plus the newest across the chain: steps 5 and 6 of the segment.
+        assert sorted(path.name for path in second.glob("*.safetensors")) == [
+            "lora-step00000005.safetensors",
+            "lora-step00000006.safetensors",
+        ]
+        assert [path.name for path in first.glob("*.safetensors")] == ["lora-step00000003.safetensors"]
+        # The segment resumed from step 3, so that save and its state stay beyond the limit.
+        assert (first / "lora-step00000003-state").is_dir()
+        assert not (first / "lora-step00000001-state").exists()
+        status = service.get(source["id"])["retention"]
+        assert sorted(status["removed"]) == sorted(
+            [f"lora-step0000000{step}{suffix}" for step in (1, 2) for suffix in (".safetensors", "-state")]
+        )
+        assert set(status["protected"]) == {"lora-step00000003.safetensors", "lora-step00000003-state"}
+        assert service.get(segment["id"])["retention"]["removed"] == [
+            "lora-step00000004.safetensors",
+            "lora-step00000004-state",
+        ]
+        # Inspecting the source's saved states applies the chain's count too, and keeps the resumed state.
+        names = [state["name"] for state in service.saved_states(source["id"]) if state["valid"]]
+        assert names == ["lora-step00000003-state"]
+    finally:
+        service.close()
+
+
+def test_the_latest_segment_sets_the_chains_limit(tmp_path: Path) -> None:
+    service, source, first = submitted_history(tmp_path, save_state=True)
+    try:
+        service.store.update(source["id"], lambda record: record.update(status="stopped"))
+        segment, second = resumed_segment(tmp_path, service, source, keep=0)
+        service.retain_checkpoints(segment["id"])
+        service.retain_checkpoints(source["id"])
+        assert len(list(first.glob("*.safetensors"))) == 3
+        assert len(list(second.glob("*.safetensors"))) == 3
+    finally:
+        service.close()
+
+
+def test_a_chain_with_a_segment_restored_before_continuous_numbering_counts_each_segment(tmp_path: Path) -> None:
+    service, source, first = submitted_history(tmp_path, save_state=True)
+    try:
+        service.store.update(source["id"], lambda record: record.update(status="stopped"))
+        segment, second = resumed_segment(tmp_path, service, source, legacy=True)
+        service.retain_checkpoints(segment["id"])
+        assert sorted(path.name for path in second.glob("*.safetensors")) == [
+            "lora-step00000002.safetensors",
+            "lora-step00000003.safetensors",
+        ]
+        # The source is pruned only by its own count, which keeps its last two saves.
+        assert len(list(first.glob("*.safetensors"))) == 3
+        service.retain_checkpoints(source["id"])
+        assert sorted(path.name for path in first.glob("*.safetensors")) == [
+            "lora-step00000002.safetensors",
+            "lora-step00000003.safetensors",
+        ]
+    finally:
+        service.close()

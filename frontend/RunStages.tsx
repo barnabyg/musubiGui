@@ -74,7 +74,7 @@ export function RunStages({ run }: { run: Run }) {
 }
 
 // Whether each cache was rebuilt or reused, and what checkpoint retention pruned.
-export function RunCaching({ run }: { run: Run }) {
+export function RunCaching({ run, chained }: { run: Run; chained: boolean }) {
   return (
     <section className="panel" aria-label="Cache preparation results">
       <h2>Caching</h2>
@@ -102,6 +102,14 @@ export function RunCaching({ run }: { run: Run }) {
             pruned; {run.retention.protected?.length ?? 0} protected artifacts
             retained beyond the limit.
           </p>
+          {(run.resume_of || chained) && (
+            <p>
+              This Run is a segment of a resumed training: its saves count
+              toward the newest kept across all segments by step, and a saved
+              state a later segment resumed from is kept. Alternating Wan and
+              segments restored by older versions count each segment on its own.
+            </p>
+          )}
           {run.retention.errors?.map((error) => (
             <p className="error" key={error}>
               {error}

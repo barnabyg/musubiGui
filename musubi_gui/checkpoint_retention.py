@@ -85,6 +85,43 @@ def _saves(run: dict[str, Any], validated: dict[str, tuple[object, Save]], cance
     return saves
 
 
+def retention_scope(runs: list[dict[str, Any]], run_id: str) -> list[dict[str, Any]]:
+    """The Runs whose saves count together toward `run_id`'s limit: its training's line, or just itself.
+
+    A training resumed in segments keeps the newest saves across its line by global step, under the latest
+    segment's limit. Alternating Wan pairs, and chains with a segment restored before continuous numbering, keep
+    counting each segment on its own, as a Run that was never resumed does.
+    """
+    from musubi_gui.run_chains import chain_of
+
+    chain = chain_of(runs, run_id)
+    by_id = {run["id"]: run for run in chain.segments}
+    line = [by_id[member] for member in chain.line]
+    if (
+        len(line) < 2
+        or run_id not in chain.line
+        or any(is_paired(member) for member in line)
+        or any("target_steps" not in member.get("segment", {}) for member in line[1:])
+    ):
+        return [by_id[run_id]]
+    return line
+
+
+def chain_retention_candidates(
+    scope: list[dict[str, Any]], validated: dict[str, tuple[object, Save]], cancelled: Event | None = None
+) -> dict[str, list[Save]]:
+    """Per Run of a chain's line, the saves outside the newest across the whole line, by global step.
+
+    The latest segment's limit applies: N historical saves plus the newest, as for a single Run.
+    """
+    limit = scope[-1]["job"].get("config", {}).get("keep_checkpoints", 0)
+    if limit <= 0:
+        return {run["id"]: [] for run in scope}
+    saves = {run["id"]: _saves(run, validated, cancelled) for run in scope}
+    steps = sorted({save.step for group in saves.values() for save in group})[-(limit + 1) :]
+    return {run_id: [save for save in group if save.step not in steps] for run_id, group in saves.items()}
+
+
 def retention_candidates(
     run: dict[str, Any], validated: dict[str, tuple[object, Save]], cancelled: Event | None = None
 ) -> tuple[list[Save], set[str]]:

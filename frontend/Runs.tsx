@@ -19,7 +19,9 @@ import { RunRecords } from './RunRecords';
 import { RunCaching } from './RunStages';
 import { RunTabs, type RunTab } from './RunTabs';
 import { RunCompletion, RunElapsed, TrainingProgress } from './RunTiming';
+import { trainingOf } from './runChains';
 import { refreshRunHistory, useRunHistory } from './runHistory';
+import { RunSegments } from './RunSegments';
 import { notificationsWanted } from './runSignals';
 import { sizeLabel } from './runStatus';
 import type {
@@ -80,6 +82,9 @@ export function Runs({
   const forgetRun = useEffectEvent(() => onSelect?.(undefined, true));
   const summary = runs.find((record) => record.id === selected);
   const changeKey = summary?.change_key;
+  const training = selected ? trainingOf(runs, selected) : undefined;
+  const segments =
+    training && training.segments.length > 1 ? training.segments : [];
   useEffect(() => {
     const controller = new AbortController();
     if (!selected) return;
@@ -196,10 +201,18 @@ export function Runs({
     (detailFailure?.runId === selected ? detailFailure.message : '') ||
     (logFailure && logFailure.runId === run?.id ? logFailure.message : '');
   const showFiles = run && run.status !== 'deleting' && run.id !== deleting;
-  // Changes whenever the Run or one of its stages does, so finished work appears without a click.
+  // Changes whenever the Run, one of its stages or another segment of its training does, so
+  // finished work appears without a click.
   const outputs = useRunOutputs(
     showFiles ? run.id : undefined,
-    run ? [run.status, ...run.stages.map((stage) => stage.status)].join() : '',
+    run
+      ? [
+          run.status,
+          ...run.stages.map((stage) => stage.status),
+          ...segments.map((segment) => `${segment.id}:${segment.status}`),
+        ].join()
+      : '',
+    segments.length > 1,
   );
   async function action(name: string, body: object = {}) {
     if (!run) return;
@@ -222,31 +235,40 @@ export function Runs({
       setBusy(false);
     }
   }
-  async function deleteRun() {
-    if (!run) return;
+  // Deletes one Run, or with `chain` every segment of the training it belongs to.
+  async function remove(runId: string, chain: boolean) {
+    const target =
+      runs.find((record) => record.id === runId) ??
+      (run?.id === runId ? run : undefined);
+    if (!target) return;
     setBusy(true);
     setError('');
     setNotice('');
     try {
       const preview = await request<DeletePreview>(
-        `/api/runs/${run.id}/delete-preview`,
+        `/api/runs/${runId}/delete-preview${chain ? '?chain=true' : ''}`,
       );
       if (preview.refusal) throw new Error(preview.refusal);
-      if (!(await confirmDelete(run, preview))) return;
-      setNotice('Deleting run…');
+      if (!(await confirmDelete(target, preview))) return;
+      setNotice(chain ? 'Deleting training…' : 'Deleting run…');
       // Unmounting the outputs closes any preview stream holding one of the files open.
-      setDeleting(run.id);
+      setDeleting(chain ? selected || runId : runId);
       const result = await request<DeleteResult>(
-        `/api/runs/${run.id}/delete`,
+        `/api/runs/${runId}/delete`,
         'POST',
-        { confirmed: true },
+        { confirmed: true, chain },
       );
       setNotice(
         result.deleted
-          ? `Run deleted. Freed ${sizeLabel(result.freed_bytes ?? 0)}.`
+          ? `${chain ? 'Training' : 'Run'} deleted. Freed ${sizeLabel(result.freed_bytes ?? 0)}.`
           : '',
       );
-      if (result.deleted) onSelect?.();
+      if (
+        result.deleted &&
+        selected &&
+        (selected === runId || result.deleted_ids?.includes(selected))
+      )
+        onSelect?.();
       await refreshRunHistory();
     } catch (reason) {
       setNotice('');
@@ -332,6 +354,8 @@ export function Runs({
             selected={selected}
             onSelect={onSelect}
             moveEarlier={moveEarlier}
+            onDelete={remove}
+            busy={busy}
             notify={notify}
             setNotify={setNotify}
           />
@@ -369,19 +393,27 @@ export function Runs({
                   />
                   <RunJobLink key={run.id} frozen={run.job} />
                 </section>
+                {segments.length > 1 && (
+                  <RunSegments
+                    runId={run.id}
+                    segments={segments}
+                    progress={current?.progress ?? null}
+                  />
+                )}
                 <RunActions
                   run={run}
                   progress={current?.progress ?? null}
                   busy={busy}
                   pairedStarted={Boolean(pairedStarted)}
+                  segments={segments}
                   action={action}
-                  deleteRun={deleteRun}
+                  deleteRun={(chain) => remove(run.id, chain)}
                 />
                 {showFiles && (
                   <SavedStates
                     key={`states-${run.id}`}
                     runId={run.id}
-                    files={stateFiles(outputs)}
+                    files={stateFiles(outputs, run.id)}
                     config={run.job.config}
                     onRestore={(stateId, steps) =>
                       action('restore-state', {
@@ -400,7 +432,7 @@ export function Runs({
                     )}
                   </SavedStates>
                 )}
-                <RunCaching run={run} />
+                <RunCaching run={run} chained={segments.length > 1} />
                 {showFiles && <RunCheckpoints outputs={outputs} />}
                 {showFiles && (
                   <RunComparison

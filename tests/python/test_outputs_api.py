@@ -323,3 +323,94 @@ def test_output_folder_junction_cannot_deliver_files_outside_the_run(tmp_path: P
     assert outputs[0]["status"] == "blocked"
     assert client.get(f"/api/runs/{run['id']}/outputs/{outputs[0]['id']}/file").status_code == 403
     assert (outside / "private.safetensors").is_file()
+
+
+def preview_image(directory: Path, step: int) -> None:
+    folder = directory / "checkpoints" / "sample"
+    folder.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (8, 8), "red").save(folder / f"lora_{step:06d}_00_20261116120000.png")
+
+
+def chain_of_three(client: TestClient, service: RunService, root: Path) -> list[dict[str, Any]]:
+    """A training stopped at 120, resumed until it stopped at 250 and resumed again until 400."""
+    first = submit_run(service, root, "first")
+    second = submit_run(service, root, "second")
+    third = submit_run(service, root, "third")
+    details = [
+        {"status": "stopped"},
+        {"status": "stopped", "resume_of": first["id"], "segment": {"step_offset": 120, "target_steps": 300}},
+        {"status": "completed", "resume_of": second["id"], "segment": {"step_offset": 250, "target_steps": 400}},
+    ]
+    runs = []
+    for run, change in zip([first, second, third], details):
+        runs.append(service.store.update(str(run["id"]), lambda record: record.update(change)))
+    first_dir, second_dir, third_dir = (Path(run["directory"]) for run in runs)
+    for step in (50, 100):
+        preview_image(first_dir, step)
+    checkpoint(first_dir / "checkpoints" / "lora-step00000120.safetensors")
+    for step in (150, 200, 250):
+        preview_image(second_dir, step)
+    checkpoint(second_dir / "checkpoints" / "lora-step00000200.safetensors")
+    for step in (300, 350, 400):
+        preview_image(third_dir, step)
+    checkpoint(third_dir / "checkpoints" / "lora.safetensors")
+    return runs
+
+
+def test_a_chain_merges_its_segments_outputs_in_global_step_order(tmp_path: Path) -> None:
+    client, service = output_client(tmp_path)
+    first, second, third = chain_of_three(client, service, tmp_path)
+
+    for viewed in (first, second, third):
+        merged = client.get(f"/api/runs/{viewed['id']}/outputs", params={"chain": True}).json()
+        assert merged["run_id"] == viewed["id"]
+        assert merged["latest"] == third["id"]
+        assert merged["status"] == "completed"
+        assert [segment["run_id"] for segment in merged["segments"]] == [first["id"], second["id"], third["id"]]
+        previews = [entry for entry in merged["outputs"] if entry["kind"] == "image"]
+        assert [entry["step"] for entry in previews] == [50, 100, 150, 200, 250, 300, 350, 400]
+        assert [entry["metadata"]["preview"]["step"] for entry in previews] == [50, 100, 150, 200, 250, 300, 350, 400]
+        assert previews[0]["segment"]["position"] == 1 and previews[-1]["segment"]["position"] == 3
+        # Each file is still served by its own Run.
+        assert previews[0]["file_url"].startswith(f"/api/runs/{first['id']}/")
+        assert client.get(previews[0]["file_url"]).status_code == 200
+        checkpoints = [(entry["step"], entry["name"]) for entry in merged["outputs"] if entry["kind"] == "checkpoint"]
+        assert checkpoints == [
+            (120, "lora-step00000120.safetensors"),
+            (200, "lora-step00000200.safetensors"),
+            (400, "lora.safetensors"),
+        ]
+    # Without `chain`, a segment lists its own files as before.
+    own = client.get(f"/api/runs/{second['id']}/outputs").json()
+    assert {entry["run_id"] for entry in own["outputs"]} == {second["id"]}
+    assert "segments" not in own
+
+
+def test_a_single_run_lists_the_same_outputs_with_or_without_chain(tmp_path: Path) -> None:
+    client, service = output_client(tmp_path)
+    run = submit_run(service, tmp_path, "only")
+    checkpoint(Path(str(run["directory"])) / "checkpoints" / "lora.safetensors")
+    plain = client.get(f"/api/runs/{run['id']}/outputs").json()
+    chained = client.get(f"/api/runs/{run['id']}/outputs", params={"chain": True}).json()
+    assert [entry["path"] for entry in chained["outputs"]] == [entry["path"] for entry in plain["outputs"]]
+    assert chained["latest"] == run["id"] and len(chained["segments"]) == 1
+    assert chained["note"] == plain["note"]
+
+
+def test_a_legacy_segment_orders_its_own_step_names_after_its_saved_step(tmp_path: Path) -> None:
+    client, service = output_client(tmp_path)
+    first, second = submit_run(service, tmp_path, "first"), submit_run(service, tmp_path, "second")
+    service.store.update(str(first["id"]), lambda record: record.update(status="stopped"))
+    service.store.update(
+        str(second["id"]),
+        lambda record: record.update(
+            status="completed",
+            resume_of=first["id"],
+            segment={"additional_steps": 100, "optimizer_step_before": 100, "counter_resets": True},
+        ),
+    )
+    preview_image(Path(str(first["directory"])), 80)
+    # Restored before continuous numbering: its step 50 is the training's step 150.
+    preview_image(Path(str(second["directory"])), 50)
+    merged = client.get(f"/api/runs/{second['id']}/outputs", params={"chain": True}).json()
+    assert [(entry["step"], entry["segment"]["position"]) for entry in merged["outputs"]] == [(80, 1), (150, 2)]

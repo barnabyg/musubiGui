@@ -2,10 +2,17 @@
 
 import threading
 from pathlib import Path
+from typing import Any
 
-from musubi_gui.checkpoint_retention import Save, apply_retention, retention_candidates
+from musubi_gui.checkpoint_retention import (
+    Save,
+    apply_retention,
+    chain_retention_candidates,
+    retention_candidates,
+    retention_scope,
+)
 from musubi_gui.redaction import redact
-from musubi_gui.run_store import RunStore
+from musubi_gui.run_store import RunStore, is_active
 
 
 class RetentionScheduler:
@@ -60,18 +67,15 @@ class RetentionScheduler:
                 continue
 
     def _retain(self, run_id: str) -> None:
-        run = self.store.get(run_id)
+        scope = retention_scope(self.store.list(), run_id)
+        if len(scope) > 1:
+            self._retain_chain(run_id, scope)
+            return
+        run = scope[0]
         if run["job"].get("config", {}).get("keep_checkpoints", 0) <= 0:
             return
         try:
-            root = Path(run["directory"]) / "checkpoints"
-            stamp = tuple(
-                sorted(
-                    (str(path), path.stat().st_mtime_ns, path.stat().st_size)
-                    for path in root.rglob("*")
-                    if path.is_file() and ".retention" not in path.parts
-                )
-            )
+            stamp = self._stamp([run])
             if self.stamps.get(run_id) == stamp and not run.get("retention", {}).get("pending"):
                 return
             candidates, protected = retention_candidates(run, self.validation, self.stopping)
@@ -82,5 +86,51 @@ class RetentionScheduler:
             )
             self.stamps[run_id] = stamp
         except (OSError, ValueError) as error:
-            message = redact(str(error))
-            self.store.update(run_id, lambda record: record.setdefault("retention", {}).update(errors=[message]))
+            self._failed(run_id, error)
+
+    def _retain_chain(self, run_id: str, scope: list[dict[str, Any]]) -> None:
+        """Count the line's saves together, pruning in `run_id` and in each ended segment of the line.
+
+        A segment still training prunes its own folder when its own check runs. Saved states that a later
+        segment resumed from, and anything a queued or prepared Run reads, stay protected by `apply_retention`.
+        """
+        if scope[-1]["job"].get("config", {}).get("keep_checkpoints", 0) <= 0:
+            return
+        try:
+            stamp = self._stamp(scope)
+            if self.stamps.get(run_id) == stamp and not any(
+                member.get("retention", {}).get("pending") for member in scope
+            ):
+                return
+            candidates = chain_retention_candidates(scope, self.validation, self.stopping)
+            if self.stopping.is_set():
+                return
+        except (OSError, ValueError) as error:
+            self._failed(run_id, error)
+            return
+        for member in scope:
+            if member["id"] != run_id and is_active(member):
+                continue
+            pruned = candidates[member["id"]]
+            try:
+                self.store.update_with_others(
+                    member["id"], lambda record, others: apply_retention(record, others, pruned, set())
+                )
+            except (OSError, ValueError) as error:
+                self._failed(member["id"], error)
+        self.stamps[run_id] = stamp
+
+    def _stamp(self, runs: list[dict[str, Any]]) -> tuple[tuple[str, int, int], ...]:
+        stamp = []
+        for run in runs:
+            root = Path(run["directory"]) / "checkpoints"
+            stamp += [
+                (str(path), path.stat().st_mtime_ns, path.stat().st_size)
+                for path in root.rglob("*")
+                if path.is_file() and ".retention" not in path.parts
+            ]
+        return tuple(sorted(stamp))
+
+    def _failed(self, run_id: str, error: BaseException) -> None:
+        message = redact(str(error))
+        self.store.update(run_id, lambda record: record.setdefault("retention", {}).update(errors=[message]))

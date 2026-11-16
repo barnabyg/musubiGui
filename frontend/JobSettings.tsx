@@ -406,7 +406,7 @@ export function JobControls({
           {number(
             'Maximum checkpoint saves to keep',
             'keep_checkpoints',
-            '0 keeps all saves. Applies per expert; final results and states needed for restoration are protected and may exceed the limit.',
+            '0 keeps all saves. Applies per expert; final results and states needed for restoration are protected and may exceed the limit. A training resumed in segments counts its saves across all segments by step, and its latest segment’s limit applies.',
           )}
         </div>
         {toggle(

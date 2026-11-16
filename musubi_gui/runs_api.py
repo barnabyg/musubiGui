@@ -40,6 +40,8 @@ class ControlRequest(BaseModel):
 class DeleteRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     confirmed: bool = False
+    # Every segment of the training the Run belongs to, latest first.
+    chain: bool = False
 
 
 class RestoreRequest(BaseModel):
@@ -211,13 +213,15 @@ def runs_router(service: RunService) -> APIRouter:
             return service.cancel(run_id)
 
     @router.get("/{run_id}/delete-preview")
-    def delete_preview(run_id: str) -> dict[str, Any]:
+    def delete_preview(run_id: str, chain: bool = False) -> dict[str, Any]:
         with run_errors():
-            return service.deletion_preview(run_id)
+            return service.chain_deletion_preview(run_id) if chain else service.deletion_preview(run_id)
 
     @router.post("/{run_id}/delete")
     def delete(run_id: str, request: DeleteRequest) -> dict[str, Any]:
         with run_errors():
+            if request.chain:
+                return service.delete_chain(run_id, confirmed=request.confirmed)
             return service.delete(run_id, confirmed=request.confirmed)
 
     return router

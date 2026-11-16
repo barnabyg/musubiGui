@@ -12,6 +12,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from musubi_gui.run_chains import chain_fields
+
 # Runs that are queued, working or not yet reconciled, so their job stays in the list.
 ACTIVE_STATUSES = frozenset(
     {
@@ -119,23 +121,29 @@ class RunStore:
             return [json.loads(row[0]) for row in connection.execute("SELECT data FROM records ORDER BY rowid DESC")]
 
     def summaries(self) -> builtins.list[dict[str, Any]]:
-        """History without frozen inputs; the content key invalidates selected detail after any update."""
+        """History without frozen inputs; the content key invalidates selected detail after any update.
+
+        Each summary also gives its Run's place in its chain of resumed segments, so history can show one row per
+        training.
+        """
         with database(self.path) as connection:
-            result = []
-            for (raw,) in connection.execute("SELECT data FROM records ORDER BY rowid DESC"):
-                run = json.loads(raw)
-                result.append(
-                    {
-                        "id": run["id"],
-                        "created": run["created"],
-                        "status": run["status"],
-                        "order": run["order"],
-                        "job": {key: run["job"][key] for key in ("id", "name", "family", "revision")},
-                        "stages": [{"name": stage["name"], "status": stage["status"]} for stage in run["stages"]],
-                        "change_key": hashlib.sha256(raw.encode()).hexdigest(),
-                    }
-                )
-            return result
+            rows = [
+                (json.loads(raw), raw) for (raw,) in connection.execute("SELECT data FROM records ORDER BY rowid DESC")
+            ]
+        chain = chain_fields(run for run, _ in rows)
+        return [
+            {
+                "id": run["id"],
+                "created": run["created"],
+                "status": run["status"],
+                "order": run["order"],
+                "job": {key: run["job"][key] for key in ("id", "name", "family", "revision")},
+                "stages": [{"name": stage["name"], "status": stage["status"]} for stage in run["stages"]],
+                "chain": chain[run["id"]],
+                "change_key": hashlib.sha256(raw.encode()).hexdigest(),
+            }
+            for run, raw in rows
+        ]
 
     def has_active_run(self, job_id: str) -> bool:
         return any(run["job"]["id"] == job_id and is_active(run) for run in self.list())

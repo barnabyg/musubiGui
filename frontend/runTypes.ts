@@ -66,8 +66,21 @@ export type DeletePreview = {
   bytes?: number;
   shared_cache?: string | null;
   dependents?: { id: string; status: string }[];
+  // Deleting a whole training: its segments in creation order.
+  chain?: string;
+  segments?: {
+    id: string;
+    status: string;
+    job: { name: string; revision: number };
+    position: number;
+    steps: { start: number; target: number; end: number | null };
+  }[];
 };
-export type DeleteResult = { deleted: boolean; freed_bytes?: number };
+export type DeleteResult = {
+  deleted: boolean;
+  freed_bytes?: number;
+  deleted_ids?: string[];
+};
 export type Progress = {
   step: number;
   total: number;

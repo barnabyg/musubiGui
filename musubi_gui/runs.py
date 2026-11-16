@@ -19,6 +19,7 @@ from musubi_gui.recipe import Stage
 from musubi_gui.redaction import redact
 from musubi_gui.resume_compat import ResumeIncompatible, compatibility, refusal
 from musubi_gui.run_cache import reuse_cache
+from musubi_gui.run_chains import chain_fields, chain_of
 from musubi_gui.run_control import request as request_control
 from musubi_gui.run_control import unsaved_steps
 from musubi_gui.run_deletion import failure_message, folder_bytes, output_index_file, plan_deletion, remove_folder
@@ -29,7 +30,14 @@ from musubi_gui.run_recovery import RECONCILED_STATUSES, reconcile, terminate_or
 from musubi_gui.run_restore import create_segment, restored_segment, resume_step
 from musubi_gui.run_retention import RetentionScheduler
 from musubi_gui.run_retry import retried_plan
-from musubi_gui.run_store import DeviceLease, RunStore, blocks_revision, preparation_transaction, utc_now
+from musubi_gui.run_store import (
+    DeviceLease,
+    RunStore,
+    blocks_revision,
+    is_active,
+    preparation_transaction,
+    utc_now,
+)
 from musubi_gui.saved_state import discover_states
 from musubi_gui.settings import Settings, atomic_json, load_settings, managed_settings
 from musubi_gui.snapshots import identify_snapshot, materialize_snapshot, verify_inputs
@@ -441,6 +449,85 @@ class RunService:
             return {"run_id": run_id, "refusal": str(refusal)}
         size = sum(folder_bytes(Path(folder)) for folder in plan["folders"])
         return {**plan, "run_id": run_id, "refusal": None, "bytes": size}
+
+    def chain_deletion_preview(self, run_id: str) -> dict[str, Any]:
+        """What deleting the whole training `run_id` belongs to removes: every segment, or why it can't be deleted."""
+        for member in chain_of(self.list(), run_id).segments:
+            self.reconcile(member["id"])
+        runs = self.list()
+        chain = chain_of(runs, run_id)
+        fields = chain_fields(runs)
+        segments = [
+            {
+                "id": member["id"],
+                "status": member["status"],
+                "job": {key: member["job"][key] for key in ("name", "revision")},
+                "position": fields[member["id"]]["position"],
+                "steps": fields[member["id"]]["steps"],
+            }
+            for member in chain.segments
+        ]
+        base = {"run_id": run_id, "chain": chain.id, "segments": segments}
+        try:
+            plan = self._chain_plan(chain.segments, runs)
+        except ValueError as refusal:
+            return {**base, "refusal": str(refusal)}
+        size = sum(folder_bytes(Path(folder)) for folder in plan["folders"])
+        return {**base, **plan, "refusal": None, "bytes": size}
+
+    def _chain_plan(
+        self, segments: builtins.list[dict[str, Any]], runs: builtins.list[dict[str, Any]]
+    ) -> dict[str, Any]:
+        """Every segment's deletion plan together, or a ValueError naming the first segment that refuses it."""
+        for member in segments:
+            if is_active(member):
+                if member.get("processes"):
+                    raise ValueError(
+                        f"Segment {member['id'][:8]} still records processes. "
+                        "Choose Check for leftover processes on it before deleting this training."
+                    )
+                raise ValueError(
+                    f"Segment {member['id'][:8]} is active ({member['status']}). "
+                    "Stop or cancel it before deleting this training."
+                )
+        ids = {member["id"] for member in segments}
+        outside = [run for run in runs if run["id"] not in ids]
+        settings = load_settings(self.root)
+        folders: builtins.list[str] = []
+        shared: builtins.list[str] = []
+        dependents: builtins.list[dict[str, Any]] = []
+        for member in segments:
+            plan = plan_deletion(member, outside, settings)
+            folders += [folder for folder in plan["folders"] if folder not in folders]
+            if plan["shared_cache"] and plan["shared_cache"] not in shared:
+                shared.append(plan["shared_cache"])
+            dependents += [item for item in plan["dependents"] if item not in dependents]
+        return {
+            "folders": [folder for folder in folders if folder not in shared],
+            "shared_cache": shared[0] if shared else None,
+            "dependents": dependents,
+        }
+
+    def delete_chain(self, run_id: str, *, confirmed: bool = False) -> dict[str, Any]:
+        """Delete every segment of the training `run_id` belongs to, latest first, so each goes as a leaf.
+
+        Nothing is removed unless every segment can be deleted; a delete that fails partway stops there, leaving
+        the earlier segments and the unfinished one listed to delete again.
+        """
+        if not confirmed:
+            raise ValueError("Explicit confirmation is required to permanently delete a training.")
+        preview = self.chain_deletion_preview(run_id)
+        if preview["refusal"]:
+            raise ValueError(preview["refusal"])
+        deleted: builtins.list[str] = []
+        freed = 0
+        for member in reversed(preview["segments"]):
+            result = self.delete(member["id"], confirmed=True)
+            if not result["deleted"]:
+                return {**result, "deleted_ids": deleted}
+            deleted.append(member["id"])
+            freed += result["freed_bytes"]
+        return {"deleted": True, "id": preview["chain"], "deleted_ids": deleted, "freed_bytes": freed}
 
     def delete(self, run_id: str, *, confirmed: bool = False) -> dict[str, Any]:
         """Mark the Run first, so anything short of a finished delete leaves it visible and deletable again."""

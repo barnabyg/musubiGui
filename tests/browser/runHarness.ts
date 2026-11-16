@@ -200,6 +200,7 @@ const runPanelNames = {
   compare: 'Compare with another Run',
   inputs: 'Inputs and output folder',
   samples: 'Samples',
+  segments: 'Segments',
 } as const;
 export type RunTabKey = keyof typeof runTabNames;
 export type RunPanelKey = keyof typeof runPanelNames;

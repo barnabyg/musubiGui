@@ -2,12 +2,17 @@ import { confirmDialog } from './ConfirmDialog';
 import { formatRoute } from './route';
 import { RunControls } from './RunControls';
 import { RunStages } from './RunStages';
-import { sizeLabel } from './runStatus';
+import { runStatus, sizeLabel } from './runStatus';
+import type { RunSummary } from './runHistory';
 import type { DeletePreview, Progress, Run } from './runTypes';
 
-export function confirmDelete(run: Run, preview: DeletePreview) {
+export function confirmDelete(
+  run: { id: string; job: { name: string; revision: number } },
+  preview: DeletePreview,
+) {
+  const segments = preview.segments ?? [];
   const lines = [
-    `This frees ${sizeLabel(preview.bytes ?? 0)} and can't be undone. Its checkpoints, samples, saved states, logs and saved inputs are removed, so download any LoRA you want to keep first.`,
+    `This frees ${sizeLabel(preview.bytes ?? 0)} and can't be undone. ${segments.length ? 'Every segment’s' : 'Its'} checkpoints, samples, saved states, logs and saved inputs are removed, so download any LoRA you want to keep first.`,
   ];
   if (preview.shared_cache)
     lines.push(
@@ -18,9 +23,29 @@ export function confirmDelete(run: Run, preview: DeletePreview) {
       `${preview.dependents.length} later run(s) came from this one. They stay browsable, but can no longer be retried or restored from.`,
     );
   return confirmDialog({
-    title: `Permanently delete run ${run.id.slice(0, 8)} of ${run.job.name} (r${run.job.revision})?`,
-    body: lines.map((line) => <p key={line}>{line}</p>),
-    confirmLabel: 'Delete run',
+    title: segments.length
+      ? `Permanently delete this training of ${run.job.name} (${segments.length} segments)?`
+      : `Permanently delete run ${run.id.slice(0, 8)} of ${run.job.name} (r${run.job.revision})?`,
+    body: (
+      <>
+        {segments.length > 0 && (
+          <ul aria-label="Segments to delete">
+            {segments.map((segment) => (
+              <li key={segment.id}>
+                Segment {segment.position} · Run {segment.id.slice(0, 8)} · r
+                {segment.job.revision} · steps {segment.steps.start}–
+                {segment.steps.end ?? segment.steps.target} ·{' '}
+                {runStatus(segment.status).label}
+              </li>
+            ))}
+          </ul>
+        )}
+        {lines.map((line) => (
+          <p key={line}>{line}</p>
+        ))}
+      </>
+    ),
+    confirmLabel: segments.length ? 'Delete training' : 'Delete run',
     danger: true,
   });
 }
@@ -31,6 +56,7 @@ export function RunActions({
   progress,
   busy,
   pairedStarted,
+  segments,
   action,
   deleteRun,
 }: {
@@ -38,9 +64,13 @@ export function RunActions({
   progress: Progress | null;
   busy: boolean;
   pairedStarted: boolean;
+  // The training's segments when it was resumed, in creation order; otherwise empty.
+  segments: RunSummary[];
   action: (name: string, body?: object) => Promise<void>;
-  deleteRun: () => Promise<void>;
+  deleteRun: (chain: boolean) => Promise<void>;
 }) {
+  const place = segments.find((segment) => segment.id === run.id)?.chain;
+  const chained = segments.length > 1 && run.status !== 'deleting';
   return (
     <section className="panel" aria-label="Actions">
       <h2>Actions</h2>
@@ -189,14 +219,35 @@ export function RunActions({
               Prepare new Run from frozen inputs
             </button>
           )}
-        <button
-          className="danger"
-          disabled={busy}
-          onClick={() => void deleteRun()}
-        >
-          {run.status === 'deleting' ? 'Delete again' : 'Delete run'}
-        </button>
+        {chained && (
+          <button
+            className="danger"
+            disabled={busy}
+            onClick={() => void deleteRun(true)}
+          >
+            Delete training
+          </button>
+        )}
+        {(!chained || place?.later_segments === 0) && (
+          <button
+            className="danger"
+            disabled={busy}
+            onClick={() => void deleteRun(false)}
+          >
+            {run.status === 'deleting'
+              ? 'Delete again'
+              : chained
+                ? 'Delete segment'
+                : 'Delete run'}
+          </button>
+        )}
       </div>
+      {chained && !!place?.later_segments && (
+        <p>
+          Later segments continue from this one, so it is deleted with the whole
+          training, or after its later segments.
+        </p>
+      )}
       <RunStages run={run} />
     </section>
   );

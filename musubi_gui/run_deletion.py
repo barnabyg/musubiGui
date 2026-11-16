@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from musubi_gui.run_chains import source_id
 from musubi_gui.run_store import is_active, references_folder
 from musubi_gui.settings import Settings
 
@@ -48,6 +49,15 @@ def plan_deletion(run: dict[str, Any], others: list[dict[str, Any]], settings: S
     if waiting:
         names = ", ".join(f"{other['id'][:8]} ({other['status']})" for other in waiting)
         raise ValueError(f"Run {names} still needs this Run's frozen inputs or saved state. Cancel or delete it first.")
+    by_id = {item["id"]: item for item in [*others, run]}
+    later = [other for other in others if source_id(other, by_id) == run["id"]]
+    if later:
+        # An earlier segment is the source of a later one, so only the training's latest segment goes alone.
+        names = ", ".join(other["id"][:8] for other in later)
+        raise ValueError(
+            f"Later segments continue from this Run ({names}). "
+            "Delete the whole training, or delete its later segments first."
+        )
     # A restored segment works from its source's cache folder, so the last Run using it removes it.
     shared = any(Path(other.get("cache", "")) == Path(cache) or references_folder(other, cache) for other in others)
     return {

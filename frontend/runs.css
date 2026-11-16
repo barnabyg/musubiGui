@@ -11,10 +11,41 @@
 .run-history > div {
   margin: var(--space-4) 0;
 }
-.run-history button {
+.run-history .run-open {
   width: 100%;
   text-align: left;
   overflow-wrap: anywhere;
+}
+.run-history .actions {
+  flex-wrap: wrap;
+}
+/* A training resumed in segments: one row, expanding to an indented list of its segments. */
+.run-segments {
+  margin: var(--space-4) 0 0;
+  padding: 0 0 0 var(--space-6);
+  list-style: none;
+}
+.run-segments li {
+  margin: var(--space-4) 0;
+}
+.segment-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  gap: var(--space-3);
+  list-style: none;
+  margin: var(--space-4) 0;
+  padding: 0;
+}
+.segment-strip li {
+  border-top: 3px solid var(--color-border-input);
+  padding-top: var(--space-3);
+  overflow-wrap: anywhere;
+}
+.segment-strip li[aria-current='true'] {
+  border-color: var(--color-accent);
+}
+.segment-strip small {
+  display: block;
 }
 .run-history small {
   margin-left: var(--space-2);
