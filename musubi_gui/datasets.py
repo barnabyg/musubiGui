@@ -11,6 +11,7 @@ import sys
 import tempfile
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
@@ -23,6 +24,8 @@ VIDEOS = {".mp4", ".mov", ".mkv", ".avi", ".webm"}
 AUDIO = {".aac", ".flac", ".m4a", ".mp3", ".ogg", ".opus", ".wav"}
 # Windows refuses to replace a file another process has open; scanners and readers let go quickly.
 CAPTION_REPLACE_SECONDS = 2.0
+# Each probe is a short subprocess; a few at once cut scan time without flooding a busy PC.
+PROBE_WORKERS = 4
 
 
 def content_hash(path: Path) -> str:
@@ -236,6 +239,33 @@ class DatasetStore:
             "error": "The application media decoder failed. Repair the locked application environment and re-scan this item.",
         }
 
+    def _inspect(self, dataset_id: str, folder: Path, path: Path) -> tuple[str, str, str, dict[str, Any]] | None:
+        """Probe one media file for a scan, or return None when its stored inspection is current."""
+        relative = path.relative_to(folder).as_posix()
+        item_id = hashlib.sha256((dataset_id + "/" + relative).encode()).hexdigest()[:32]
+        thumbnail = self.root / "thumbnails" / f"{item_id}.jpg"
+        try:
+            resolved = regular_path(path, folder)
+            info = resolved.stat()
+            stamp = f"{info.st_mtime_ns}:{info.st_size}"
+            with self._db() as db:
+                old = db.execute("SELECT stamp,valid FROM items WHERE id=?", (item_id,)).fetchone()
+            if old and old["valid"] and old["stamp"] == stamp and thumbnail.is_file():
+                return None
+            return item_id, relative, stamp, self.probe(resolved, thumbnail)
+        except ValueError as error:
+            return item_id, relative, "", {"valid": False, "error": str(error)}
+        except (OSError, subprocess.SubprocessError):
+            return (
+                item_id,
+                relative,
+                "",
+                {
+                    "valid": False,
+                    "error": "Media is unreadable or escapes the registered folder. Restore access or exclude this item.",
+                },
+            )
+
     def scan(self, dataset_id: str) -> dict[str, Any]:
         folder = self.folder(dataset_id)
         if not folder.is_dir():
@@ -250,49 +280,28 @@ class DatasetStore:
             )
             return self.get(dataset_id)
         paths = sorted(path for path in folder.rglob("*") if path.is_file() and path.suffix.lower() in IMAGES | VIDEOS)
-        seen: set[str] = set()
+        seen = {path.relative_to(folder).as_posix() for path in paths}
         self._progress(dataset_id, {"state": "scanning", "completed": 0, "total": len(paths)})
-        for index, path in enumerate(paths):
-            relative = path.relative_to(folder).as_posix()
-            seen.add(relative)
-            item_id = hashlib.sha256((dataset_id + "/" + relative).encode()).hexdigest()[:32]
-            try:
-                resolved = regular_path(path, folder)
-                info = resolved.stat()
-                stamp = f"{info.st_mtime_ns}:{info.st_size}"
-                with self._db() as db:
-                    old = db.execute("SELECT stamp,valid FROM items WHERE id=?", (item_id,)).fetchone()
-                if (
-                    old
-                    and old["valid"]
-                    and old["stamp"] == stamp
-                    and (self.root / "thumbnails" / f"{item_id}.jpg").is_file()
-                ):
-                    continue
-                inspected = self.probe(resolved, self.root / "thumbnails" / f"{item_id}.jpg")
-            except ValueError as error:
-                stamp = ""
-                inspected = {"valid": False, "error": str(error)}
-            except (OSError, subprocess.SubprocessError):
-                stamp = ""
-                inspected = {
-                    "valid": False,
-                    "error": "Media is unreadable or escapes the registered folder. Restore access or exclude this item.",
-                }
-            with self._db() as db:
-                db.execute(
-                    "INSERT INTO items(id,dataset,relative,stamp,metadata,valid,error) VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET stamp=excluded.stamp,metadata=excluded.metadata,valid=excluded.valid,error=excluded.error",
-                    (
-                        item_id,
-                        dataset_id,
-                        relative,
-                        stamp,
-                        json.dumps(inspected.get("metadata", {})),
-                        int(inspected["valid"]),
-                        inspected.get("error", ""),
-                    ),
-                )
-            self._progress(dataset_id, {"state": "scanning", "completed": index + 1, "total": len(paths)})
+        with ThreadPoolExecutor(PROBE_WORKERS) as pool:
+            inspections = [pool.submit(self._inspect, dataset_id, folder, path) for path in paths]
+            for completed, inspection in enumerate(as_completed(inspections), start=1):
+                result = inspection.result()
+                if result:
+                    item_id, relative, stamp, inspected = result
+                    with self._db() as db:
+                        db.execute(
+                            "INSERT INTO items(id,dataset,relative,stamp,metadata,valid,error) VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET stamp=excluded.stamp,metadata=excluded.metadata,valid=excluded.valid,error=excluded.error",
+                            (
+                                item_id,
+                                dataset_id,
+                                relative,
+                                stamp,
+                                json.dumps(inspected.get("metadata", {})),
+                                int(inspected["valid"]),
+                                inspected.get("error", ""),
+                            ),
+                        )
+                self._progress(dataset_id, {"state": "scanning", "completed": completed, "total": len(paths)})
         with self._db() as db:
             for row in db.execute("SELECT id,relative FROM items WHERE dataset=?", (dataset_id,)).fetchall():
                 if row["relative"] not in seen:
