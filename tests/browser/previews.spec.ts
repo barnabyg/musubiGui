@@ -17,7 +17,8 @@ test('paired Wan previews show matching per-expert steps', async ({ page }) => {
           ...saved.config,
           recipe: 'alternating',
           expert_interval: 5,
-          steps: 24,
+          // Previews inside and across switches; pytest checks each pair's steps in longer schedules.
+          steps: 12,
           preview_every: 4,
         },
       },
@@ -51,7 +52,7 @@ test('paired Wan previews show matching per-expert steps', async ({ page }) => {
     });
     await expect(
       page.getByRole('button', {
-        name: /^Step 12 preview · paired Wan · low 12 \/ high 12 trained steps.*available$/,
+        name: /^Step 8 preview · paired Wan · low 8 \/ high 8 trained steps.*available$/,
       }),
     ).toBeVisible({ timeout: 240_000 });
     await expect(first).toHaveAttribute('aria-pressed', 'true');
@@ -68,7 +69,7 @@ test('paired Wan previews show matching per-expert steps', async ({ page }) => {
       .toBe(true);
     await expect(
       page.getByRole('button', {
-        name: /^Step 24 preview · paired Wan · low 24 \/ high 24 trained steps.*available$/,
+        name: /^Step 12 preview · paired Wan · low 12 \/ high 12 trained steps.*available$/,
       }),
     ).toBeVisible();
     const checkpoints = await openCheckpointPanel(page);
