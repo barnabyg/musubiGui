@@ -17,7 +17,7 @@ import { RunJobLink } from './RunJobLink';
 import { RunList } from './RunList';
 import { RunRecords } from './RunRecords';
 import { RunCaching } from './RunStages';
-import { RunTabs } from './RunTabs';
+import { RunTabs, type RunTab } from './RunTabs';
 import { RunCompletion, RunElapsed, TrainingProgress } from './RunTiming';
 import { refreshRunHistory, useRunHistory } from './runHistory';
 import { notificationsWanted } from './runSignals';
@@ -48,7 +48,7 @@ export function Runs({
   const selected = selectedId ?? '';
   const [view, setView] = useState<{
     runId: string;
-    tab: 'overview' | 'samples';
+    tab: RunTab;
   }>();
   const tab = view?.runId === selected ? view.tab : 'overview';
   const [error, setError] = useState('');
