@@ -54,7 +54,7 @@ To check folder naming, from the repository root run
 Prepare a fixture Job and inspect the Output path on its Run. It should contain
 the Job name and timestamp, without a random suffix. The fixture needs no models
 or GPU; preparation creates synthetic training inputs. Start training, download the final
-LoRA and inspect the Run's `checkpoints` folder. Checkpoint files and state folders should
+LoRA from Checkpoints and inspect the Run's `checkpoints` folder. Checkpoint files and state folders should
 use the frozen Job name and revision, with no random job ID. Rename the Job and confirm
 the original Run still downloads and offers its saved states.
 
@@ -457,12 +457,12 @@ To check this navigation manually, run the following from the repository root in
 ```
 
 Complete WAN acceptance 1, then follow its Last Run link in Jobs using Tab and Enter.
-The Run should offer its final LoRA and identify the frozen job revision. Follow the
+Its Checkpoints panel should list the final LoRA, and the Run should identify the frozen job revision. Follow the
 current draft link, save a changed job name or step count, and use browser Back to return
 to the Run. The frozen revision should stay the same and the current draft link should
 show the new revision. Copy the Run address into another tab and verify the same details.
 Archive the job, reopen the Run, and verify that it explains where to restore the archived
-job while keeping the final LoRA downloadable. Repeat with WAN acceptance 2 to check that
+job while keeping its checkpoints downloadable. Repeat with WAN acceptance 2 to check that
 similarly named jobs lead to their own Runs.
 
 ## Queueing

@@ -441,7 +441,7 @@ counts, and final progress 7/7. This CPU fixture needs no models or GPU.
 
 For the unchanged four-step preset, open **WAN acceptance 1**, review the schedule,
 and choose **Prepare and start**.
-Expect four steps per expert, eight optimizer updates, two LoRA download links,
+Expect four steps per expert, eight optimizer updates, a final LoRA for each expert under Checkpoints,
 and a playable synthetic video. Close/reopen the browser and inspect the saved paired
 states. Restore a matching pair with one additional step; both experts advance by one.
 An interrupted unmatched pair first catches its lagging expert up. To exercise

@@ -55,4 +55,13 @@ Follow [Wan](wan.md) and [H3](h3.md) for recipes, actual evidence, limitations a
 The runner is intentionally limited to these recipes: no I2V/Ref2VA, full fine-tuning,
 caption automation, remote hosting, job queue or resume support is introduced.
 
+## Reference documents
+
+- [Wan](wan.md): Wan 2.2 recipe, alternating high/low workflow, target-PC trials, network access and measured disk use.
+- [H3](h3.md): MiniMax H3 recipe, target-PC trials including images and Triton on Windows, and measured disk use.
+- [Offline Wan weight conversion](wan-conversion.md): converting existing scaled-FP8 Wan files to the native FP16 inputs the recipe needs.
+- [Musubi Tuner caching](caching.md): how the pinned upstream builds and reuses latent and text caches, with a manual test.
+- [Preview GPU memory selection](preview-memory.md): measured preview and final-sample memory profiles and a manual comparison command.
+- [H3 LoRA training timing research](h3-training-timings-research.md): public evidence on typical H3 step times for the measured recipe.
+
 The [README](../../README.md#licences-and-credits) gives the licences and credits.
