@@ -9,7 +9,7 @@ from musubi_gui.sampling import native_preview_frames, sample_geometry
 from musubi_gui.settings import Settings
 
 if TYPE_CHECKING:
-    from musubi_gui.jobs import Job
+    from musubi_gui.job_models import Job
 
 
 def preview_prompt(job: "Job") -> list[dict[str, Any]]:

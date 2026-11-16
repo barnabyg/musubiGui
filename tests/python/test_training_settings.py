@@ -5,7 +5,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from helpers import acceptance_workspace, wait_for
 
-from musubi_gui.jobs import JobStore, as_draft
+from musubi_gui.job_models import as_draft
+from musubi_gui.job_store import JobStore
 from musubi_gui.jobs_api import jobs_router
 from musubi_gui.runs import RunService
 

@@ -5,7 +5,8 @@ from pathlib import Path
 import pytest
 from helpers import acceptance_workspace
 
-from musubi_gui.jobs import Job, JobDraft, build_stages, smoke_config
+from musubi_gui.job_models import Job, JobDraft, smoke_config
+from musubi_gui.job_stages import build_stages
 from musubi_gui.preview_memory import GpuMemory, select_preview_memory
 from musubi_gui.runs import RunService
 from musubi_gui.settings import Settings

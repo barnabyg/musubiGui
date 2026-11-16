@@ -13,7 +13,7 @@ from typing import Any, Literal
 import av
 from PIL import Image
 
-from musubi_gui.jobs import Job, smoke_config
+from musubi_gui.job_models import Job, smoke_config
 from musubi_gui.runs import ExecutionPlan, RunService
 from musubi_gui.settings import Settings, atomic_json, save_settings
 

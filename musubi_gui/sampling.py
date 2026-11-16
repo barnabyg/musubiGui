@@ -3,7 +3,7 @@
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from musubi_gui.jobs import JobConfig
+    from musubi_gui.job_models import JobConfig
 
 
 def sample_geometry(config: "JobConfig") -> tuple[int, int, int]:

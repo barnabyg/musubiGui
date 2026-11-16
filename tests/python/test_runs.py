@@ -130,7 +130,7 @@ def test_execution_clock_excludes_queue_and_separate_preparation_and_survives_re
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, together: bool
 ) -> None:
     now = "2026-11-15T09:00:00+00:00"
-    monkeypatch.setattr("musubi_gui.runs.utc_now", lambda: now)
+    monkeypatch.setattr("musubi_gui.run_execution.utc_now", lambda: now)
     root = tmp_path / "state"
     device = tmp_path / "gpu.sqlite"
     service = RunService(root, device_path=device, autostart=False)

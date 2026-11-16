@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, Literal
 from musubi_gui.video_sampling import source_rate, source_rates, video_sections
 
 if TYPE_CHECKING:
-    from musubi_gui.jobs import Job
+    from musubi_gui.job_models import Job
 
 
 @dataclass

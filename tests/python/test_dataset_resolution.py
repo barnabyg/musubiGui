@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from helpers import acceptance_workspace, wait_for
 
 from musubi_gui.app import create_app
-from musubi_gui.jobs import smoke_config
+from musubi_gui.job_models import smoke_config
 from musubi_gui.runs import RunService
 
 

@@ -4,7 +4,10 @@ from pathlib import Path
 import pytest
 from helpers import acceptance_workspace, instant_steps, wait_for
 
-from musubi_gui.jobs import JobConfig, JobDataset, JobDraft, JobStore, PresetSelection, configuration_errors, review_job
+from musubi_gui.job_models import JobConfig, JobDataset, JobDraft, PresetSelection
+from musubi_gui.job_review import review_job
+from musubi_gui.job_store import JobStore
+from musubi_gui.job_validation import configuration_errors
 from musubi_gui.outputs import OutputBrowser
 from musubi_gui.runs import RunService
 from musubi_gui.settings import load_settings
@@ -156,7 +159,7 @@ def test_stop_at_switch_keeps_gpu_ownership_and_restores_both_states(
             service.stop(run["id"])
         return result
 
-    monkeypatch.setattr("musubi_gui.runs.finish_phase", stop_after_high)
+    monkeypatch.setattr("musubi_gui.run_stage_outputs.finish_phase", stop_after_high)
     try:
         run = service.prepare(job_id, start=True)
         stopped = wait_for(service, run["id"], "stopped", device_released=True)
@@ -218,7 +221,7 @@ def test_failure_does_not_launch_next_phase_or_sample_and_retry_does_not_reset_e
             Path(result["path"], "scheduler.bin").write_text("changed after sealing", encoding="utf-8")
         return result
 
-    monkeypatch.setattr("musubi_gui.runs.finish_phase", corrupt_after_low)
+    monkeypatch.setattr("musubi_gui.run_stage_outputs.finish_phase", corrupt_after_low)
     try:
         run = service.prepare(job_id, start=True)
         deadline = time.monotonic() + 180

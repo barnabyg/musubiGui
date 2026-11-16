@@ -1,54 +1,33 @@
 """Browser-independent preparation from frozen, provenance-bearing plans."""
 
 import builtins
-import copy
-import hashlib
-import json
-import os
-import shutil
-import subprocess  # nosec B404
 import threading
 import time
 import uuid
 from contextlib import nullcontext
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-import psutil
-
-from musubi_gui.checkpoint_dedup import remove_final_duplicates
-from musubi_gui.checkpoint_retention import Save, apply_retention, retained_states, retention_candidates
+from musubi_gui.checkpoint_retention import retained_states
 from musubi_gui.managed_checkout import checkout_gate
-from musubi_gui.media_probe import inspect as inspect_media
-from musubi_gui.processes import identity_status, observed_tree, process_identity, terminate_owned
-from musubi_gui.recipe import Stage, reference_environment
+from musubi_gui.processes import process_identity
+from musubi_gui.recipe import Stage
 from musubi_gui.redaction import redact
+from musubi_gui.run_cache import reuse_cache
 from musubi_gui.run_deletion import failure_message, folder_bytes, output_index_file, plan_deletion, remove_folder
 from musubi_gui.run_estimate import freeze_training_timing
-from musubi_gui.run_paths import create_run_directory
-from musubi_gui.run_performance import RunPerformance, start_performance
+from musubi_gui.run_execution import ExecutionContext, RunExecution
 from musubi_gui.run_progress import estimated_remaining, parse_progress
-from musubi_gui.run_store import DeviceLease, RunStore, blocks_revision, preparation_transaction
+from musubi_gui.run_recovery import RECONCILED_STATUSES, reconcile, terminate_orphan
+from musubi_gui.run_restore import create_segment, restored_segment
+from musubi_gui.run_retention import RetentionScheduler
+from musubi_gui.run_retry import retried_plan
+from musubi_gui.run_store import DeviceLease, RunStore, blocks_revision, preparation_transaction, utc_now
 from musubi_gui.saved_state import discover_states
 from musubi_gui.settings import Settings, atomic_json, load_settings, managed_settings
-from musubi_gui.snapshots import (
-    digest_file,
-    identify_snapshot,
-    materialize_snapshot,
-    verify_inputs,
-)
-from musubi_gui.wan_pair_runtime import (
-    finish_phase,
-    is_paired,
-    paired_saved_states,
-    sampling_pair,
-    stage_log,
-    validate_phase_input,
-)
-from musubi_gui.wan_tokenizer import publish_shared, seed_run, shared_directory
-from musubi_gui.windows_job import ProcessJob, WindowsProcess
+from musubi_gui.snapshots import identify_snapshot, materialize_snapshot, verify_inputs
+from musubi_gui.wan_pair_runtime import is_paired, paired_saved_states, stage_log
 
 
 @dataclass
@@ -63,10 +42,6 @@ class ExecutionPlan:
     stage_keys: dict[str, str] = field(default_factory=dict)
     input_files: dict[str, str] = field(default_factory=dict)
     provenance: dict[str, Any] = field(default_factory=dict)
-
-
-def utc_now() -> str:
-    return datetime.now(UTC).isoformat()
 
 
 class RunService:
@@ -88,29 +63,16 @@ class RunService:
         self.identity = process_identity()
         self.identity["instance"] = uuid.uuid4().hex
         self.stopping = threading.Event()
-        self.retention_stamps: dict[str, tuple[tuple[str, int, int], ...]] = {}
-        self.retention_validation: dict[str, tuple[object, Save]] = {}
-        self.retention_lock = threading.RLock()
-        self.retention_condition = threading.Condition()
-        self.retention_requested: set[str] = set()
-        self.retention_thread = threading.Thread(target=self._retain_requested, name="musubi-retention", daemon=True)
+        self.retention = RetentionScheduler(self.store, self.stopping)
         self.thread = threading.Thread(target=self._schedule, name="musubi-worker", daemon=True)
         if autostart:
             self.start_worker()
 
     def start_worker(self) -> None:
         for run in self.list():
-            if run["status"] in {
-                "preparing",
-                "training",
-                "generating",
-                "stopping",
-                "interrupted",
-                "orphaned",
-                "uncertain",
-            }:
+            if run["status"] in RECONCILED_STATUSES:
                 self.reconcile(run["id"])
-        self.retention_thread.start()
+        self.retention.start()
         self.thread.start()
 
     def list(self) -> list[dict[str, Any]]:
@@ -280,191 +242,23 @@ class RunService:
 
     def close(self) -> None:
         self.stopping.set()
-        with self.retention_condition:
-            self.retention_condition.notify_all()
+        self.retention.wake()
         if self.thread.is_alive():
             self.thread.join(timeout=20)
-        if self.retention_thread.is_alive():
-            # Cancellation interrupts chunked hashes and kills/reaps an active state probe.
-            self.retention_thread.join(timeout=45)
-            if self.retention_thread.is_alive():
-                raise RuntimeError("Background checkpoint inspection did not finish after cancellation.")
+        self.retention.join()
 
     def retry(self, run_id: str) -> dict[str, Any]:
-        previous = self.get(run_id)
-        if is_paired(previous) and (
-            previous.get("pair_sources")
-            or any(stage["status"] != "pending" for stage in previous["stages"] if stage["name"] == "train")
-        ):
-            raise ValueError(
-                "Inspect paired saved states and restore the schedule as a new segment. To restart both experts, prepare a new Run from the Job."
-            )
-        if previous["status"] not in {"failed", "cancelled", "interrupted"} or previous.get("processes"):
-            raise ValueError(
-                "Only failed, cancelled or interrupted Runs without recorded processes can be retried. "
-                "Choose Check for leftover processes first if processes remain."
-            )
-        self._verify_inputs(previous)
-        directory = create_run_directory(Path(previous["directory"]).parent, previous["job"]["name"], "retry")
-        cache = create_run_directory(Path(previous["cache"]).parent, previous["job"]["name"], "retry")
-        # An H3 Run has one metadata file per video section.
-        metadata = sorted(file.name for file in Path(previous["directory"]).glob("dataset*.jsonl"))
-        native_names = ["dataset.toml", *metadata, "samples.txt", "previews.json"]
-        old_native = {str(Path(previous["directory"]) / name) for name in native_names}
-        input_files = {path: value for path, value in previous.get("input_files", {}).items() if path not in old_native}
-        for name in native_names:
-            source = Path(previous["directory"]) / name
-            if source.is_file():
-                text = source.read_text(encoding="utf-8")
-                if name == "dataset.toml":
-                    text = text.replace(previous["cache"].replace("\\", "/"), cache.as_posix())
-                    for file in metadata:
-                        text = text.replace(
-                            json.dumps((Path(previous["directory"]) / file).as_posix(), ensure_ascii=False),
-                            json.dumps((directory / file).as_posix(), ensure_ascii=False),
-                        )
-                target = directory / name
-                target.write_text(text, encoding="utf-8")
-                input_files[str(target)] = digest_file(target)
-        self._verify_inputs(previous)
-        stages = []
-        for stage in previous["stages"]:
-            args = [
-                arg
-                if arg.endswith(".py")
-                else arg.replace(previous["directory"], str(directory)).replace(previous["cache"], str(cache))
-                for arg in stage["args"]
-            ]
-            training = copy.deepcopy(stage.get("training"))
-            if training:
-                training["checkpoint"] = training["checkpoint"].replace(previous["directory"], str(directory))
-            stages.append(
-                Stage(
-                    stage["name"],
-                    args,
-                    training,
-                    stage.get("preview_step"),
-                    preview_memory=copy.deepcopy(stage.get("preview_memory")),
-                )
-            )
-        plan = ExecutionPlan(
-            copy.deepcopy(previous["job"]),
-            Settings.model_validate(previous["settings"]),
-            copy.deepcopy(previous["manifest"]),
-            directory,
-            cache,
-            stages,
-            previous["fingerprint"] + ":retry:" + uuid.uuid4().hex,
-            stage_keys=previous.get("stage_keys", {}),
-            input_files=input_files,
-            provenance=previous.get("provenance", {}),
-        )
+        plan = ExecutionPlan(**retried_plan(self.get(run_id), self._verify_inputs))
         retried = self.submit(plan)
         return self.store.update(retried["id"], lambda r: r.update(retry_of=run_id))
 
     def reconcile(self, run_id: str) -> dict[str, Any]:
-        run = self.get(run_id)
-        if run["status"] not in {
-            "preparing",
-            "training",
-            "generating",
-            "stopping",
-            "interrupted",
-            "orphaned",
-            "uncertain",
-        }:
-            return run
-        controller = run.get("controller")
-        if (
-            run["status"] in {"preparing", "training", "generating", "stopping"}
-            and controller
-            and identity_status(controller) != "dead"
-        ):
-            return run
-        identities = list(run.get("processes", []))
-        uncertain = False
-        for name in run.get("job_objects", []):
-            try:
-                job = ProcessJob(name, create=False)
-                try:
-                    for pid in job.pids():
-                        try:
-                            identities.append(process_identity(pid))
-                        except psutil.NoSuchProcess:
-                            pass
-                finally:
-                    job.close()
-            except (OSError, ValueError, psutil.AccessDenied):
-                uncertain = True
-        live = [identity for identity in identities if identity_status(identity) == "alive"]
-        uncertain = uncertain or any(identity_status(identity) == "uncertain" for identity in identities)
-        owner = self.device.owner()
-        if owner and owner["run_id"] == run_id and owner["state"] == str(self.root.resolve()):
-            # Protocol 3 assigns the named Job Object atomically during process creation.
-            # A known empty job proves that no process survived, even before PID persistence.
-            # Protocol 2 remains readable, but its old unassigned suspended-child window is uncertain.
-            observable_launch = owner.get("launch_protocol") == 3 and bool(run.get("job_objects"))
-            uncertain = uncertain or (bool(owner.get("launch_pending")) and not observable_launch)
-        if live or uncertain:
-            status = "uncertain" if uncertain else "orphaned"
-            self.device.update(run_id, identities)
-            return self.store.update(
-                run_id,
-                lambda r: r.update(
-                    status=status,
-                    processes=identities,
-                    error="Recorded work is still alive or cannot be safely identified. No replacement GPU work will start. Check again or confirm termination of known owned processes.",
-                ),
-            )
-        self.device.release(run_id)
-
-        def finish(record: dict[str, Any]) -> None:
-            # Every recorded process is gone, so a requested stop was observed rather than assumed.
-            # An already interrupted run stays retryable, as it was before stops were reconciled.
-            requested = record.get("stop_requested") if record["status"] != "interrupted" else None
-            for stage in record["stages"]:
-                if stage["status"] == "running":
-                    stage.update(status="stopped" if requested else "interrupted", finished=utc_now())
-            if requested:
-                record.update(
-                    status="stopped",
-                    stop_kind=requested,
-                    processes=[],
-                    error=None,
-                    finished=utc_now(),
-                    execution_end_unknown=True,
-                )
-                return
-            record.update(
-                status="interrupted",
-                processes=[],
-                error="The original processes are gone. Inspect outputs/state, then prepare a new Run from frozen inputs or restore validated optimizer state as a new segment.",
-            )
-
-        return self.store.update(run_id, finish)
+        return reconcile(self.store, self.device, self.root, run_id)
 
     def terminate_orphan(self, run_id: str, *, confirmed: bool = False) -> dict[str, Any]:
         if not confirmed:
             raise ValueError("Explicit confirmation is required to terminate recovered owned processes.")
-        run = self.reconcile(run_id)
-        if run["status"] not in {"orphaned", "uncertain"}:
-            raise ValueError("This run has no recovered orphan process to terminate.")
-        for name in run.get("job_objects", []):
-            job = ProcessJob(name, create=False)
-            try:
-                job.terminate()
-            finally:
-                job.close()
-        terminate_owned(run.get("processes", []), force=True)
-        if run.get("stop_requested"):
-            # A requested stop is completed by this confirmed force termination, whatever kind was asked for.
-            self.store.update(run_id, lambda r: r.update(stop_requested="force"))
-        deadline = time.monotonic() + 5
-        while time.monotonic() < deadline:
-            if all(identity_status(identity) == "dead" for identity in run.get("processes", [])):
-                break
-            time.sleep(0.05)
-        return self.reconcile(run_id)
+        return terminate_orphan(self.store, self.device, self.root, run_id)
 
     def cancel(self, run_id: str) -> dict[str, Any]:
         run = self.get(run_id)
@@ -499,53 +293,11 @@ class RunService:
 
     def retain_checkpoints(self, run_id: str) -> None:
         """Apply the frozen Run's policy; failure preserves training and is visible for repair."""
-        with self.retention_lock:
-            self._retain_checkpoints(run_id)
+        self.retention.retain(run_id)
 
     def request_retention(self, run_id: str) -> None:
         """Coalesce work without delaying process supervision or Stop signalling."""
-        with self.retention_condition:
-            self.retention_requested.add(run_id)
-            self.retention_condition.notify()
-
-    def _retain_requested(self) -> None:
-        while not self.stopping.is_set():
-            with self.retention_condition:
-                self.retention_condition.wait_for(lambda: self.retention_requested or self.stopping.is_set())
-                if self.stopping.is_set():
-                    return
-                run_id = self.retention_requested.pop()
-            try:
-                self.retain_checkpoints(run_id)
-            except (OSError, ValueError):
-                # A terminal Run may have been deleted after its final request was queued.
-                continue
-
-    def _retain_checkpoints(self, run_id: str) -> None:
-        run = self.get(run_id)
-        if run["job"].get("config", {}).get("keep_checkpoints", 0) <= 0:
-            return
-        try:
-            root = Path(run["directory"]) / "checkpoints"
-            stamp = tuple(
-                sorted(
-                    (str(path), path.stat().st_mtime_ns, path.stat().st_size)
-                    for path in root.rglob("*")
-                    if path.is_file() and ".retention" not in path.parts
-                )
-            )
-            if self.retention_stamps.get(run_id) == stamp and not run.get("retention", {}).get("pending"):
-                return
-            candidates, protected = retention_candidates(run, self.retention_validation, self.stopping)
-            if self.stopping.is_set():
-                return
-            self.store.update_with_others(
-                run_id, lambda record, others: apply_retention(record, others, candidates, protected)
-            )
-            self.retention_stamps[run_id] = stamp
-        except (OSError, ValueError) as error:
-            message = redact(str(error))
-            self.store.update(run_id, lambda record: record.setdefault("retention", {}).update(errors=[message]))
+        self.retention.request(run_id)
 
     def restore_state(
         self, run_id: str, state_id: str, additional_steps: int, *, confirmed: bool = False
@@ -567,76 +319,9 @@ class RunService:
             from musubi_gui.wan_pair_restore import restored_pair
 
             record = restored_pair(original, state, additional_steps)
-            record["stages"] = [
-                freeze_training_timing(stage, record["job"]["family"], Path(record["directory"]))
-                for stage in record["stages"]
-            ]
-            self.store.create(record)
-            atomic_json(
-                Path(record["directory"]) / "inputs.json",
-                {
-                    "job": record["job"],
-                    "manifest": record["manifest"],
-                    "resume_of": run_id,
-                    "segment": record["segment"],
-                },
-            )
-            return self.enqueue(record["id"])
-        directory = create_run_directory(Path(original["directory"]).parent, original["job"]["name"], "restore")
-        record = copy.deepcopy(original)
-        record.update(
-            id=uuid.uuid4().hex,
-            directory=str(directory),
-            status="prepared",
-            phase="train",
-            fingerprint=original["fingerprint"] + ":restore:" + uuid.uuid4().hex,
-            created=utc_now(),
-            execution_started=None,
-            processes=[],
-            error=None,
-            resume_of=run_id,
-            saved_states=[],
-            segment={
-                "additional_steps": additional_steps,
-                "optimizer_step_before": state["optimizer_step"],
-                "counter_resets": True,
-                "data_position_restored": False,
-            },
-            state_source={"path": state["path"], "files": state["files"]},
-        )
-        for key in [
-            "stop_requested",
-            "stop_kind",
-            "finished",
-            "execution_end_unknown",
-            "exit_code",
-            "checkpoints",
-            "removed_duplicates",
-            "retention",
-        ]:
-            record.pop(key, None)
-        for stage in record["stages"]:
-            if stage["name"] not in {"train", "generate"}:
-                continue
-            stage.update(status="pending")
-            stage.pop("started", None)
-            stage.pop("finished", None)
-            args = stage["args"]
-            for flag in ["--output_dir"] if stage["name"] == "train" else ["--save_path", "--lora_weight"]:
-                if flag in args:
-                    index = args.index(flag) + 1
-                    args[index] = args[index].replace(original["directory"], str(directory))
-            if stage["name"] == "train":
-                args[args.index("--max_train_steps") + 1] = str(additional_steps)
-                args.extend(["--resume", state["path"]])
-        record["stages"] = [
-            freeze_training_timing(stage, record["job"]["family"], directory) for stage in record["stages"]
-        ]
-        self.store.create(record)
-        atomic_json(
-            directory / "inputs.json",
-            {"job": record["job"], "manifest": record["manifest"], "resume_of": run_id, "segment": record["segment"]},
-        )
+        else:
+            record = restored_segment(original, state, additional_steps)
+        create_segment(self.store, record, run_id)
         return self.enqueue(record["id"])
 
     def deletion_preview(self, run_id: str) -> dict[str, Any]:
@@ -702,458 +387,19 @@ class RunService:
             self.stopping.wait(0.1)
 
     def _execute(self, run: dict[str, Any]) -> None:
-        run_id = run["id"]
-        release = True
-        job_object: ProcessJob | None = None
-        process: WindowsProcess | subprocess.Popen[str] | None = None
-        failure: str | None = None
-        performance: RunPerformance | None = None
-        preparing = run["phase"] == "prepare"
-
-        def claim(record: dict[str, Any]) -> None:
-            if record["status"] in {"pending_preparation", "pending_training"}:
-                record.update(status="preparing" if preparing else "training", controller=self.identity)
-                if (not preparing or record.get("start_after_prepare")) and not record.get("execution_started"):
-                    record["execution_started"] = utc_now()
-                record.pop("finished", None)
-
-        claimed = self.store.update(run_id, claim)
-        if claimed["status"] not in {"preparing", "training"}:
-            self.device.release(run_id)
-            return
-        try:
-            self._verify_inputs(run)
-            if run.get("state_source"):
-                for name, expected in run["state_source"]["files"].items():
-                    if digest_file(Path(run["state_source"]["path"]) / name) != expected:
-                        raise ValueError("Saved state changed while queued. Restore a complete state again.")
-            # Inputs were just verified for the first stage; later stages verify again before launching.
-            verified = True
-            for index, stage in enumerate(run["stages"]):
-                if stage["name"] not in ({"latent_cache", "text_cache"} if preparing else {"train", "generate"}):
-                    continue
-                if not verified:
-                    self._verify_inputs(run)
-                verified = False
-                fresh_run = self.get(run_id)
-                if fresh_run.get("stop_requested"):
-                    self.store.update(
-                        run_id,
-                        lambda r: r.update(
-                            status="stopped", stop_kind=r["stop_requested"], processes=[], finished=utc_now()
-                        ),
-                    )
-                    return
-                if preparing and self._reuse(run, stage["name"], index):
-                    continue
-                pair = None
-                if stage.get("training"):
-                    validate_phase_input(fresh_run, stage)
-                if stage["name"] == "generate":
-                    if is_paired(run):
-                        pair = sampling_pair(fresh_run, stage)
-                        self.store.update(run_id, lambda r: r.update(sample_pair=pair))
-                    self.store.update(run_id, lambda r: r.update(status="generating"))
-                elif not preparing:
-                    self.store.update(run_id, lambda r: r.update(status="training"))
-                self.store.update(run_id, lambda r: r["stages"][index].update(status="running", started=utc_now()))
-                settings = Settings.model_validate(run["settings"])
-                if job_object:
-                    job_object.close()
-                name = (
-                    "Local\\MusubiGui-" + fingerprint(str(self.root.resolve()))[:12] + "-" + run_id + "-" + str(index)
-                )
-                job_object = ProcessJob(name)
-                names = list(self.get(run_id).get("job_objects", []))
-                if name not in names:
-                    names.append(name)
-                self.store.update(run_id, lambda r: r.update(job_objects=names, launch_pending=True, launch_protocol=3))
-                self.device.update(run_id, [], job_objects=names, launch_pending=True, launch_protocol=3)
-                log_file = Path(run["directory"]) / stage_log(stage)
-                with log_file.open("a", encoding="utf-8") as log:
-                    environment = reference_environment(Path(run["cache"]))
-                    environment.pop("MUSUBI_EXPERT_STEP_OFFSET", None)
-                    if (offset := stage.get("training", {}).get("checkpoint_step_offset")) is not None:
-                        environment["MUSUBI_EXPERT_STEP_OFFSET"] = str(offset)
-                    if self._seed_wan_tokenizer(run):
-                        environment["HF_HUB_OFFLINE"] = "1"
-                        log.write("Using the shared Wan tokenizer; Hugging Face Hub access is off for this stage.\n")
-                        log.flush()
-                    if os.name == "nt":
-                        process = job_object.spawn(stage["args"], cwd=settings.checkout, env=environment, log=log)
-                    else:
-                        # B603: trusted recipe adapter builds arrays; no API accepts executable commands.
-                        process = subprocess.Popen(  # nosec B603
-                            stage["args"],
-                            cwd=settings.checkout,
-                            env=environment,
-                            stdout=log,
-                            stderr=subprocess.STDOUT,
-                            text=True,
-                            start_new_session=True,
-                        )
-                    performance = start_performance(run, stage, process.pid, log_file, fixture=self.fixture_mode)
-                    identities = observed_tree(process.pid)
-                    self.store.update(run_id, lambda r: r.update(processes=identities))
-                    self.device.update(run_id, identities)
-                    self.store.update(run_id, lambda r: r.update(processes=identities, launch_pending=False))
-                    self.device.update(run_id, identities, launch_pending=False)
-                    signalled = ""
-                    retention_at = time.monotonic() + 5
-                    while process.poll() is None:
-                        fresh = observed_tree(process.pid)
-                        for pid in job_object.pids():
-                            try:
-                                fresh.append(process_identity(pid))
-                            except psutil.NoSuchProcess:
-                                pass
-                        identities = list(
-                            {(item["pid"], item["created"]): item for item in [*identities, *fresh]}.values()
-                        )
-                        self.device.update(run_id, identities)
-                        self.store.update(run_id, lambda r: r.update(processes=identities))
-                        if self.get(run_id).get("cancel_requested"):
-                            job_object.terminate()
-                            terminate_owned(identities, force=True)
-                        signalled = self._signal_stop(run_id, job_object, identities, signalled)
-                        if stage["name"] == "train" and time.monotonic() >= retention_at:
-                            self.request_retention(run_id)
-                            retention_at = time.monotonic() + 5
-                        if self.stopping.wait(0.1):
-                            release = False
-                            self.store.update(
-                                run_id,
-                                lambda r: r.update(
-                                    status="interrupted",
-                                    error="Service stopped; check for leftover processes before retrying.",
-                                ),
-                            )
-                            if isinstance(process, WindowsProcess):
-                                process.close()
-                            else:
-                                threading.Thread(target=process.wait, name="musubi-child-reaper", daemon=True).start()
-                            return
-                    code = process.wait()
-                    if performance:
-                        performance.close(code)
-                        performance = None
-                    if isinstance(process, WindowsProcess):
-                        process.close()
-                    if not self._await_descendant_exit(run_id, job_object, identities, signalled):
-                        release = False
-                        self.device.update(run_id, identities)
-                        if self.stopping.is_set():
-                            self.store.update(
-                                run_id,
-                                lambda r: r.update(
-                                    status="interrupted",
-                                    processes=identities,
-                                    error="Service stopped; check for leftover processes before retrying.",
-                                ),
-                            )
-                            return
-                        self.store.update(
-                            run_id,
-                            lambda r: r.update(
-                                status="orphaned",
-                                processes=identities,
-                                error="The launcher exited but a descendant remains active. Check for leftover processes before starting another GPU operation.",
-                            ),
-                        )
-                        return
-                requested = self.get(run_id).get("stop_requested")
-                self.store.update(
-                    run_id,
-                    lambda r: r["stages"][index].update(
-                        status="stopped" if requested else "completed" if code == 0 else "failed",
-                        exit_code=code,
-                        finished=utc_now(),
-                    ),
-                )
-                if requested:
-                    self.store.update(
-                        run_id,
-                        lambda r: r.update(
-                            status="stopped", stop_kind=requested, processes=[], exit_code=code, finished=utc_now()
-                        ),
-                    )
-                    return
-                if code:
-                    if self.get(run_id).get("cancel_requested"):
-                        self.store.update(
-                            run_id, lambda r: r.update(status="cancelled", processes=[], finished=utc_now())
-                        )
-                        return
-                    raise ValueError(
-                        f"{stage['name']} exited {code}. Inspect logs, then prepare a new Run from frozen inputs."
-                    )
-                self._share_wan_tokenizer(run)
-                if preparing:
-                    artifacts = self._cache_artifacts(run, stage["name"])
-                    if run.get("stage_keys") and not artifacts:
-                        raise ValueError(f"{stage['name']} returned success but produced no complete cache artifacts.")
-                    self.store.update(run_id, lambda r: r["stages"][index].update(artifacts=artifacts))
-                elif stage["name"] == "train":
-                    from musubi_gui.preview import validate_previews
-
-                    validate_previews(stage["args"], run["job"]["family"])
-                    removed = self._remove_final_duplicates(run, stage)
-                    checkpoints = list((Path(run["directory"]) / "checkpoints").glob("*.safetensors"))
-                    if not any(file.stat().st_size > 0 for file in checkpoints):
-                        raise ValueError("Training exited successfully but no nonempty checkpoint was found.")
-                    self.store.update(
-                        run_id,
-                        lambda r: r.update(
-                            checkpoints=[str(file) for file in checkpoints],
-                            removed_duplicates=[*r.get("removed_duplicates", []), *removed],
-                        ),
-                    )
-                    if stage.get("training"):
-                        state = finish_phase(self.get(run_id), stage)
-
-                        def save_expert(record: dict[str, Any]) -> None:
-                            record.setdefault("pair_seals", {})[state["path"]] = state
-                            record.setdefault("expert_states", {})[stage["training"]["expert"]] = state
-
-                        self.store.update(run_id, save_expert)
-                    self.request_retention(run_id)
-                elif stage["name"] == "generate":
-                    destination = Path(stage["args"][stage["args"].index("--save_path") + 1])
-                    samples = list(destination.rglob("*")) if destination.is_dir() else [destination]
-                    media_files = [
-                        file
-                        for file in samples
-                        if file.is_file() and file.suffix.lower() in {".mp4", ".mov", ".webm", ".wav", ".png", ".jpg"}
-                    ]
-                    if not media_files:
-                        raise ValueError("Sampling exited successfully but no sample was found.")
-                    inspected = []
-                    for file in media_files:
-                        metadata = inspect_media(file, timeline=True)
-                        if run["job"]["family"] == "h3" and (not metadata.get("frames") or not metadata.get("audio")):
-                            raise ValueError("H3 sample is incomplete: decodable video and audio are both required.")
-                        inspected.append(
-                            {
-                                "path": str(file),
-                                "status": "playable",
-                                "metadata": metadata,
-                                "sha256": digest_file(file),
-                                **({"lora_pair": pair} if pair else {}),
-                                **(
-                                    {"preview_step": stage["preview_step"]}
-                                    if stage.get("preview_step") is not None
-                                    else {}
-                                ),
-                            }
-                        )
-                    paths = {sample["path"] for sample in inspected}
-                    self.store.update(
-                        run_id,
-                        lambda r: r.update(
-                            samples=[sample for sample in r.get("samples", []) if sample["path"] not in paths]
-                            + inspected
-                        ),
-                    )
-
-            def finish(record: dict[str, Any]) -> None:
-                record.update(
-                    status="prepared" if preparing else "completed", processes=[], exit_code=0, finished=utc_now()
-                )
-                if (
-                    preparing
-                    and record.get("start_after_prepare")
-                    and not record.get("cancel_requested")
-                    and any(stage["name"] == "train" for stage in record["stages"])
-                ):
-                    # Atomic with the end of preparation: a crash can't leave it prepared but never started.
-                    record.update(status="pending_training", phase="train", order=time.time_ns())
-                    record.pop("finished", None)
-
-            self.store.update(run_id, finish)
-        except Exception as error:
-            failure = redact(str(error))
-        finally:
-            if performance:
-                performance.close()
-            if isinstance(process, WindowsProcess):
-                process.close()
-            if job_object:
-                try:
-                    if job_object.pids():
-                        release = False
-                except (OSError, ValueError):
-                    release = False
-                job_object.close()
-            if failure is not None:
-                # A retryable terminal failure and its cleared ownership records must become visible together.
-                self.store.update(
-                    run_id,
-                    lambda r: r.update(
-                        status="failed" if release else "uncertain",
-                        error=failure,
-                        finished=utc_now(),
-                        processes=[] if release else r["processes"],
-                        launch_pending=False if release else r.get("launch_pending", False),
-                    ),
-                )
-            if release:
-                if failure is None:
-                    self.store.update(run_id, lambda r: r.update(processes=[], launch_pending=False))
-                self.device.release(run_id)
-
-    def _seed_wan_tokenizer(self, run: dict[str, Any]) -> bool:
-        shared = wan_tokenizer_directory(run)
-        if not shared:
-            return False
-        try:
-            return seed_run(shared, Path(run["cache"]))
-        except OSError:
-            # The stage can still download the tokenizer itself.
-            return False
-
-    def _share_wan_tokenizer(self, run: dict[str, Any]) -> None:
-        shared = wan_tokenizer_directory(run)
-        if not shared:
-            return
-        try:
-            publish_shared(Path(run["cache"]), shared)
-        except OSError:
-            # Sharing only saves a later download; it never fails a stage that succeeded.
-            return
-
-    def _remove_final_duplicates(self, run: dict[str, Any], stage: dict[str, Any]) -> builtins.list[str]:
-        """Keep one copy of the final save when the step count is a multiple of the checkpoint interval."""
-        args = stage["args"]
-        if "--output_name" not in args or "--max_train_steps" not in args:
-            return []
-        log_file = Path(run["directory"]) / stage_log(stage)
-        removed, problems = remove_final_duplicates(
-            Path(run["directory"]) / "checkpoints",
-            args[args.index("--output_name") + 1],
-            int(args[args.index("--max_train_steps") + 1]),
+        context = ExecutionContext(
+            root=self.root,
+            store=self.store,
+            device=self.device,
+            identity=self.identity,
+            stopping=self.stopping,
+            fixture_mode=self.fixture_mode,
+            descendant_grace=self.descendant_grace,
+            verify_inputs=self._verify_inputs,
+            reuse=self._reuse,
+            request_retention=self.request_retention,
         )
-        lines = [f"Removed duplicate of the final save: {name}" for name in removed] + problems
-        if lines:
-            with log_file.open("a", encoding="utf-8") as log:
-                log.writelines(f"{line}\n" for line in lines)
-        return removed
-
-    def _signal_stop(
-        self, run_id: str, job_object: ProcessJob, identities: builtins.list[dict[str, Any]], signalled: str
-    ) -> str:
-        """Signal a newly requested stop to the owned tree once; returns the stop kind now signalled."""
-        stop = self.get(run_id).get("stop_requested", "")
-        if not stop or stop == signalled:
-            return signalled
-        try:
-            if stop == "force":
-                job_object.terminate()
-            terminate_owned(identities, force=stop == "force")
-        except OSError:
-            self.store.update(
-                run_id,
-                lambda r: r.update(
-                    error="Graceful console signalling is unavailable. Use confirmed force termination if the process remains active."
-                ),
-            )
-        return str(stop)
-
-    def _await_descendant_exit(
-        self, run_id: str, job_object: ProcessJob, identities: builtins.list[dict[str, Any]], signalled: str
-    ) -> bool:
-        """Allow a bounded grace period for descendants still exiting after their launcher, such as
-        the Python child behind a venv launcher or a short-lived nvidia-smi. Records late arrivals
-        and still honours stop requests; returns whether every owned process has exited."""
-        deadline = time.monotonic() + self.descendant_grace
-        while True:
-            remaining = job_object.pids()
-            known = len(identities)
-            for pid in remaining:
-                try:
-                    identity = process_identity(pid)
-                    if identity not in identities:
-                        identities.append(identity)
-                except psutil.NoSuchProcess:
-                    pass
-            if len(identities) > known:
-                self.device.update(run_id, identities)
-                self.store.update(run_id, lambda r: r.update(processes=identities))
-            if not remaining and all(identity_status(identity) == "dead" for identity in identities):
-                return True
-            signalled = self._signal_stop(run_id, job_object, identities, signalled)
-            if time.monotonic() >= deadline or self.stopping.wait(0.1):
-                return False
-
-    def _cache_artifacts(self, run: dict[str, Any], stage: str) -> builtins.list[dict[str, str]]:
-        cache = Path(run["cache"])
-        # dataset, dataset-images and dataset-rate-N, with dataset-N in place of dataset for several datasets.
-        candidates = list(cache.glob("dataset*/*.safetensors"))
-        files = [file for file in candidates if file.name.endswith("_te.safetensors") == (stage == "text_cache")]
-        if run["job"]["family"] == "h3" and stage == "text_cache":
-            uncond = cache / "uncond.safetensors"
-            if not uncond.is_file():
-                raise ValueError("H3 text caching did not produce the unconditional guidance cache.")
-            files.append(uncond)
-        for item in run["manifest"]["items"]:
-            if "snapshot_path" in item and not any(
-                file.name.startswith(Path(item["snapshot_path"]).stem + "_") for file in files
-            ):
-                raise ValueError(
-                    f"{item['name']}: {stage} did not prepare this included item. Inspect the stage log before retrying."
-                )
-        if any(file.stat().st_size == 0 for file in files):
-            raise ValueError(f"{stage} contains empty/incomplete cache files.")
-        return [{"path": str(file.relative_to(cache)), "sha256": digest_file(file)} for file in files]
+        RunExecution(context, run).execute()
 
     def _reuse(self, run: dict[str, Any], stage_name: str, index: int) -> bool:
-        policy = "latent_cache_policy" if stage_name == "latent_cache" else "text_cache_policy"
-        rebuild = run["job"].get("config", {}).get(policy, "reuse") == "rebuild"
-        reason = "Rebuild requested by this Run." if rebuild else "No verified compatible cache found."
-        self.store.update(run["id"], lambda r: r["stages"][index].update(cache_reason=reason))
-        if rebuild:
-            return False
-        key = run.get("stage_keys", {}).get(stage_name)
-        if not key:
-            return False
-        for previous in self.list():
-            if previous["id"] == run["id"] or previous.get("stage_keys", {}).get(stage_name) != key:
-                continue
-            old: dict[str, Any] = next((stage for stage in previous["stages"] if stage["name"] == stage_name), {})
-            artifacts = old.get("artifacts", [])
-            if not artifacts or old.get("status") not in {"completed", "reused"} or previous["status"] == "deleting":
-                continue
-            try:
-                if not all(
-                    (Path(previous["cache"]) / file["path"]).is_file()
-                    and digest_file(Path(previous["cache"]) / file["path"]) == file["sha256"]
-                    for file in artifacts
-                ):
-                    continue
-                for file in artifacts:
-                    target = Path(run["cache"]) / file["path"]
-                    target.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copyfile(Path(previous["cache"]) / file["path"], target)
-            except (FileNotFoundError, PermissionError):
-                # That Run was deleted meanwhile; its cache simply isn't available to reuse.
-                continue
-            self.store.update(
-                run["id"],
-                lambda r: r["stages"][index].update(
-                    status="reused",
-                    artifacts=artifacts,
-                    reused_from=previous["id"],
-                    cache_reason="Compatible identity and artifact hashes verified.",
-                    exit_code=0,
-                ),
-            )
-            return True
-        return False
-
-
-def wan_tokenizer_directory(run: dict[str, Any]) -> Path | None:
-    cache_root = run["settings"].get("cache_root")
-    return shared_directory(cache_root) if run["job"]["family"] == "wan" and cache_root else None
-
-
-def fingerprint(value: object) -> str:
-    return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+        return reuse_cache(self.store, run, stage_name, index)
