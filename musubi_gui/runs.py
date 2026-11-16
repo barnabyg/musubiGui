@@ -1,7 +1,6 @@
 """Browser-independent preparation from frozen, provenance-bearing plans."""
 
 import builtins
-import copy
 import hashlib
 import json
 import os
@@ -26,11 +25,12 @@ from musubi_gui.redaction import redact
 from musubi_gui.run_cache import cache_artifacts, reuse_cache, seed_wan_tokenizer, share_wan_tokenizer
 from musubi_gui.run_deletion import failure_message, folder_bytes, output_index_file, plan_deletion, remove_folder
 from musubi_gui.run_estimate import freeze_training_timing
-from musubi_gui.run_paths import create_run_directory
 from musubi_gui.run_performance import RunPerformance, start_performance
 from musubi_gui.run_progress import estimated_remaining, parse_progress
 from musubi_gui.run_recovery import RECONCILED_STATUSES, reconcile, terminate_orphan
+from musubi_gui.run_restore import create_segment, restored_segment
 from musubi_gui.run_retention import RetentionScheduler
+from musubi_gui.run_retry import retried_plan
 from musubi_gui.run_store import DeviceLease, RunStore, blocks_revision, preparation_transaction, utc_now
 from musubi_gui.saved_state import discover_states
 from musubi_gui.settings import Settings, atomic_json, load_settings, managed_settings
@@ -269,74 +269,7 @@ class RunService:
         self.retention.join()
 
     def retry(self, run_id: str) -> dict[str, Any]:
-        previous = self.get(run_id)
-        if is_paired(previous) and (
-            previous.get("pair_sources")
-            or any(stage["status"] != "pending" for stage in previous["stages"] if stage["name"] == "train")
-        ):
-            raise ValueError(
-                "Inspect paired saved states and restore the schedule as a new segment. To restart both experts, prepare a new Run from the Job."
-            )
-        if previous["status"] not in {"failed", "cancelled", "interrupted"} or previous.get("processes"):
-            raise ValueError(
-                "Only failed, cancelled or interrupted Runs without recorded processes can be retried. "
-                "Choose Check for leftover processes first if processes remain."
-            )
-        self._verify_inputs(previous)
-        directory = create_run_directory(Path(previous["directory"]).parent, previous["job"]["name"], "retry")
-        cache = create_run_directory(Path(previous["cache"]).parent, previous["job"]["name"], "retry")
-        # An H3 Run has one metadata file per video section.
-        metadata = sorted(file.name for file in Path(previous["directory"]).glob("dataset*.jsonl"))
-        native_names = ["dataset.toml", *metadata, "samples.txt", "previews.json"]
-        old_native = {str(Path(previous["directory"]) / name) for name in native_names}
-        input_files = {path: value for path, value in previous.get("input_files", {}).items() if path not in old_native}
-        for name in native_names:
-            source = Path(previous["directory"]) / name
-            if source.is_file():
-                text = source.read_text(encoding="utf-8")
-                if name == "dataset.toml":
-                    text = text.replace(previous["cache"].replace("\\", "/"), cache.as_posix())
-                    for file in metadata:
-                        text = text.replace(
-                            json.dumps((Path(previous["directory"]) / file).as_posix(), ensure_ascii=False),
-                            json.dumps((directory / file).as_posix(), ensure_ascii=False),
-                        )
-                target = directory / name
-                target.write_text(text, encoding="utf-8")
-                input_files[str(target)] = digest_file(target)
-        self._verify_inputs(previous)
-        stages = []
-        for stage in previous["stages"]:
-            args = [
-                arg
-                if arg.endswith(".py")
-                else arg.replace(previous["directory"], str(directory)).replace(previous["cache"], str(cache))
-                for arg in stage["args"]
-            ]
-            training = copy.deepcopy(stage.get("training"))
-            if training:
-                training["checkpoint"] = training["checkpoint"].replace(previous["directory"], str(directory))
-            stages.append(
-                Stage(
-                    stage["name"],
-                    args,
-                    training,
-                    stage.get("preview_step"),
-                    preview_memory=copy.deepcopy(stage.get("preview_memory")),
-                )
-            )
-        plan = ExecutionPlan(
-            copy.deepcopy(previous["job"]),
-            Settings.model_validate(previous["settings"]),
-            copy.deepcopy(previous["manifest"]),
-            directory,
-            cache,
-            stages,
-            previous["fingerprint"] + ":retry:" + uuid.uuid4().hex,
-            stage_keys=previous.get("stage_keys", {}),
-            input_files=input_files,
-            provenance=previous.get("provenance", {}),
-        )
+        plan = ExecutionPlan(**retried_plan(self.get(run_id), self._verify_inputs))
         retried = self.submit(plan)
         return self.store.update(retried["id"], lambda r: r.update(retry_of=run_id))
 
@@ -407,76 +340,9 @@ class RunService:
             from musubi_gui.wan_pair_restore import restored_pair
 
             record = restored_pair(original, state, additional_steps)
-            record["stages"] = [
-                freeze_training_timing(stage, record["job"]["family"], Path(record["directory"]))
-                for stage in record["stages"]
-            ]
-            self.store.create(record)
-            atomic_json(
-                Path(record["directory"]) / "inputs.json",
-                {
-                    "job": record["job"],
-                    "manifest": record["manifest"],
-                    "resume_of": run_id,
-                    "segment": record["segment"],
-                },
-            )
-            return self.enqueue(record["id"])
-        directory = create_run_directory(Path(original["directory"]).parent, original["job"]["name"], "restore")
-        record = copy.deepcopy(original)
-        record.update(
-            id=uuid.uuid4().hex,
-            directory=str(directory),
-            status="prepared",
-            phase="train",
-            fingerprint=original["fingerprint"] + ":restore:" + uuid.uuid4().hex,
-            created=utc_now(),
-            execution_started=None,
-            processes=[],
-            error=None,
-            resume_of=run_id,
-            saved_states=[],
-            segment={
-                "additional_steps": additional_steps,
-                "optimizer_step_before": state["optimizer_step"],
-                "counter_resets": True,
-                "data_position_restored": False,
-            },
-            state_source={"path": state["path"], "files": state["files"]},
-        )
-        for key in [
-            "stop_requested",
-            "stop_kind",
-            "finished",
-            "execution_end_unknown",
-            "exit_code",
-            "checkpoints",
-            "removed_duplicates",
-            "retention",
-        ]:
-            record.pop(key, None)
-        for stage in record["stages"]:
-            if stage["name"] not in {"train", "generate"}:
-                continue
-            stage.update(status="pending")
-            stage.pop("started", None)
-            stage.pop("finished", None)
-            args = stage["args"]
-            for flag in ["--output_dir"] if stage["name"] == "train" else ["--save_path", "--lora_weight"]:
-                if flag in args:
-                    index = args.index(flag) + 1
-                    args[index] = args[index].replace(original["directory"], str(directory))
-            if stage["name"] == "train":
-                args[args.index("--max_train_steps") + 1] = str(additional_steps)
-                args.extend(["--resume", state["path"]])
-        record["stages"] = [
-            freeze_training_timing(stage, record["job"]["family"], directory) for stage in record["stages"]
-        ]
-        self.store.create(record)
-        atomic_json(
-            directory / "inputs.json",
-            {"job": record["job"], "manifest": record["manifest"], "resume_of": run_id, "segment": record["segment"]},
-        )
+        else:
+            record = restored_segment(original, state, additional_steps)
+        create_segment(self.store, record, run_id)
         return self.enqueue(record["id"])
 
     def deletion_preview(self, run_id: str) -> dict[str, Any]:
