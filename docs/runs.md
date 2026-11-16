@@ -512,7 +512,8 @@ that grace period makes the Run orphaned instead.
 
 ## Saved state
 
-**Resume training from saved state** is near the top of Run Overview. It also
+**Resume training from saved state** is near the top of Run Overview; **How resuming
+works** expands its explanation. It also
 works after restarting the application: open the stopped or interrupted Run,
 choose **Inspect saved states**, enter **Additional segment steps**, then choose
 **Restore as new segment** for a valid state and confirm. This immediately queues

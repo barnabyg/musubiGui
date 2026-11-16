@@ -413,32 +413,37 @@ function SavedStates({
   return (
     <section className="panel" aria-label="Resume training">
       <h2>Resume training from saved state</h2>
-      <p>
-        Restoration starts a new segment with saved optimizer, scheduler and RNG
-        state. Upstream resets its displayed step counter and data position. A
-        LoRA checkpoint alone cannot restore training state. Stopping does not
-        guarantee a checkpoint or state save.
-      </p>
-      <p>
-        After stopping or restarting the app, inspect saved states, choose the
-        additional steps to train and select Restore as new segment. Work since
-        the last saved state must run again. The original Run stays in history.
-      </p>
-      {config?.save_state === false ? (
+      {/* Reference text: closed by default so the controls come first. */}
+      <details>
+        <summary>How resuming works</summary>
         <p>
-          Saved optimizer state was not enabled for this Run. If no valid state
-          is available, start a new Run. For future Runs, enable Save
-          optimizer/training state in the Job before training.
+          Restoration starts a new segment with saved optimizer, scheduler and
+          RNG state. Upstream resets its displayed step counter and data
+          position. A LoRA checkpoint alone cannot restore training state.
+          Stopping does not guarantee a checkpoint or state save.
         </p>
-      ) : (
         <p>
-          For future Runs, enable Save optimizer/training state in the Job and
-          choose a checkpoint interval to control how much work can be lost.
-          {config?.save_state && config.save_every
-            ? ` This Run saves state every ${config.save_every} training steps.`
-            : ''}
+          After stopping or restarting the app, inspect saved states, choose the
+          additional steps to train and select Restore as new segment. Work
+          since the last saved state must run again. The original Run stays in
+          history.
         </p>
-      )}
+        {config?.save_state === false ? (
+          <p>
+            Saved optimizer state was not enabled for this Run. If no valid
+            state is available, start a new Run. For future Runs, enable Save
+            optimizer/training state in the Job before training.
+          </p>
+        ) : (
+          <p>
+            For future Runs, enable Save optimizer/training state in the Job and
+            choose a checkpoint interval to control how much work can be lost.
+            {config?.save_state && config.save_every
+              ? ` This Run saves state every ${config.save_every} training steps.`
+              : ''}
+          </p>
+        )}
+      </details>
       {files.length > 0 && (
         <details>
           <summary>Optimizer state files ({files.length})</summary>

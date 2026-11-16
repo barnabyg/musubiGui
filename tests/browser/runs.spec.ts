@@ -882,9 +882,10 @@ test('a stopped Run resumes saved optimizer state through the UI after a backend
       name: 'Resume training',
       exact: true,
     });
-    await expect(resume).toContainText(
-      'Work since the last saved state must run again',
-    );
+    await resume.getByText('How resuming works', { exact: true }).click();
+    await expect(
+      resume.getByText(/Work since the last saved state must run again/),
+    ).toBeVisible();
     await resume
       .getByRole('button', { name: 'Inspect saved states', exact: true })
       .click();
@@ -959,7 +960,10 @@ test('a stopped Run resumes saved optimizer state through the UI after a backend
     await expect(
       page.getByText('State: Completed', { exact: true }),
     ).toBeVisible({ timeout: 240_000 });
-    await expect(resume).toContainText('Saved optimizer state was not enabled');
+    await resume.getByText('How resuming works', { exact: true }).click();
+    await expect(
+      resume.getByText(/^Saved optimizer state was not enabled/),
+    ).toBeVisible();
     await resume
       .getByRole('button', { name: 'Inspect saved states', exact: true })
       .click();
