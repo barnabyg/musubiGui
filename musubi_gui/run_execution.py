@@ -166,14 +166,8 @@ class RunExecution:
         """Create this stage's named Job Object, recorded before launch so a restart can always find it."""
         if self.job_object:
             self.job_object.close()
-        name = (
-            "Local\\MusubiGui-"
-            + fingerprint(str(self.context.root.resolve()))[:12]
-            + "-"
-            + self.run_id
-            + "-"
-            + str(index)
-        )
+        root = fingerprint(str(self.context.root.resolve()))[:12]
+        name = f"Local\\MusubiGui-{root}-{self.run_id}-{index}"
         self.job_object = ProcessJob(name)
         names = list(self.store.get(self.run_id).get("job_objects", []))
         if name not in names:
