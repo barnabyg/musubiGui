@@ -2,7 +2,9 @@
 
 import copy
 import shutil
+import time
 import uuid
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -15,6 +17,7 @@ from musubi_gui.wan_pair_plan import argument, paired_stages, set_argument
 
 if TYPE_CHECKING:
     from musubi_gui.job_models import Job
+    from musubi_gui.resume_refresh import Refresh
 
 
 def restored_pair(
@@ -24,16 +27,22 @@ def restored_pair(
     *,
     revision: "Job | None" = None,
     changes: list[dict[str, Any]] | None = None,
+    refresh: "Callable[[Path], Refresh] | None" = None,
 ) -> dict[str, Any]:
     """Continue both experts until `target_steps`: per expert for per-expert Runs, schedule updates for legacy Runs.
 
-    With `revision`, phases train and sample as that revision of the Job says, keeping the saved schedule.
+    With `revision`, phases train and sample as that revision of the Job says, keeping the saved schedule. With
+    `refresh`, which snapshots the datasets into the segment's folder, the segment prepares its own caches first.
     """
     steps = segment_steps(original, state, target_steps)
     folder = revision.name if revision else original["job"]["name"]
     directory = create_run_directory(Path(original["directory"]).parent, folder, "resume" if revision else "restore")
+    snapshot = refresh(directory) if refresh and revision else None
     sources = copy.deepcopy(state["sources"])
-    files = revision_inputs(original, revision, directory) if revision else dict(original["input_files"])
+    if snapshot:
+        files = dict(snapshot.input_files)
+    else:
+        files = revision_inputs(original, revision, directory) if revision else dict(original["input_files"])
     for source in sources.values():
         for name, expected in source["files"].items():
             file = str(Path(source["path"]) / name)
@@ -52,7 +61,8 @@ def restored_pair(
         copies.append((checkpoint["path"], target, checkpoint["sha256"]))
         source["checkpoint"] = {**checkpoint, "path": str(target)}
         files[str(target)] = checkpoint["sha256"]
-    templates = revision_stages(original, revision, directory) if revision else []
+    # A refreshed segment's templates start with its cache stages, which the schedule keeps first.
+    templates = revision_stages(original, revision, directory, snapshot) if revision else []
     for stage_name in () if revision else ("train", "generate"):
         old = next((stage for stage in original["stages"] if stage["name"] == stage_name), None)
         if old:
@@ -109,6 +119,9 @@ def restored_pair(
         },
         job=job,
     )
+    if snapshot:
+        record.update({**snapshot.fields(), "input_files": files}, order=time.time_ns())
+        record["segment"].update(dataset_changes=snapshot.dataset)
     for key in [
         "stop_requested",
         "stop_kind",

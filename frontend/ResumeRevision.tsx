@@ -87,6 +87,15 @@ export function ResumeRevision({
                       ’s settings, as a new segment. The data order restarts.
                       This Run stays as it is.
                     </p>
+                    {result.reprepare && (
+                      <p>
+                        It first takes a new snapshot of the datasets
+                        {result.dataset_changes?.changed
+                          ? ` (${result.dataset_changes.summary.join(', ')})`
+                          : ''}{' '}
+                        and caches only the items that changed.
+                      </p>
+                    )}
                     {hasWarnedChanges(result) && (
                       <>
                         <ul aria-label="Changes that change what the LoRA learns">

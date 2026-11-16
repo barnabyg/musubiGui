@@ -4,7 +4,8 @@ import builtins
 import threading
 import time
 import uuid
-from contextlib import nullcontext
+from collections.abc import Callable
+from contextlib import nullcontext, suppress
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -18,7 +19,8 @@ from musubi_gui.processes import process_identity
 from musubi_gui.recipe import Stage
 from musubi_gui.redaction import redact
 from musubi_gui.resume_compat import ResumeIncompatible, compatibility, refusal
-from musubi_gui.run_cache import reuse_cache
+from musubi_gui.resume_refresh import Refresh, inspect_refresh, refreshed_snapshot
+from musubi_gui.run_cache import reuse_cache, seed_refreshed
 from musubi_gui.run_chains import chain_fields, chain_of
 from musubi_gui.run_control import request as request_control
 from musubi_gui.run_control import unsaved_steps
@@ -282,7 +284,9 @@ class RunService:
         retried = self.submit(plan)
         # Retrying a restored segment resumes the same state, so it keeps the segment's step numbering.
         segment = {"segment": previous["segment"]} if "segment" in previous else {}
-        return self.store.update(retried["id"], lambda r: r.update(retry_of=run_id, **segment))
+        # A refreshed segment's retry copies the same unchanged items' caches from the same source Run.
+        refresh = {"refresh": previous["refresh"]} if "refresh" in previous else {}
+        return self.store.update(retried["id"], lambda r: r.update(retry_of=run_id, **segment, **refresh))
 
     def reconcile(self, run_id: str) -> dict[str, Any]:
         return reconcile(self.store, self.device, self.root, run_id)
@@ -381,22 +385,41 @@ class RunService:
     ) -> dict[str, Any]:
         """Queue a new segment that resumes a saved state with `job_revision` of the Run's Job.
 
-        Its training and sampling commands come from that revision; the frozen dataset and caches are reused.
-        A revision that changes what the state was trained with raises ResumeIncompatible naming the fields.
+        Its training and sampling commands come from that revision. The frozen dataset and caches are reused, unless
+        the datasets changed: then the segment snapshots them again and prepares the caches whose inputs changed
+        before it trains. A revision that changes what the state was trained with raises ResumeIncompatible naming
+        the fields.
         """
         original, state, revision, result = self._resume_plan(run_id, job_revision, target_steps, state_id)
         target = result["target_steps"]
         if not result["compatible"]:
             raise ResumeIncompatible(refusal(result))
         changes = result["changes"]
+        refresh = self._refresh(original, revision) if result["reprepare"] else None
         if state.get("paired"):
             from musubi_gui.wan_pair_restore import restored_pair
 
-            record = restored_pair(original, state, target, revision=revision, changes=changes)
+            record = restored_pair(original, state, target, revision=revision, changes=changes, refresh=refresh)
         else:
-            record = restored_segment(original, state, target, revision=revision, changes=changes)
+            record = restored_segment(original, state, target, revision=revision, changes=changes, refresh=refresh)
         create_segment(self.store, record, run_id)
-        return self.enqueue(record["id"])
+        # A refreshed segment is queued to prepare, and trains after it.
+        return self.get(record["id"]) if record.get("refresh") else self.enqueue(record["id"])
+
+    def _refresh(self, original: dict[str, Any], revision: Job) -> Callable[[Path], Refresh]:
+        """Snapshot `revision`'s datasets into a segment folder, as preparing a Run does."""
+
+        def snapshot(directory: Path) -> Refresh:
+            try:
+                with nullcontext() if self.fixture_mode else checkout_gate(), preparation_transaction(self.root):
+                    return refreshed_snapshot(self.root, original, revision, directory, fixture_mode=self.fixture_mode)
+            except BaseException:
+                # A folder left empty by a refused snapshot isn't worth keeping; a partial one says what failed.
+                with suppress(OSError):
+                    directory.rmdir()
+                raise
+
+        return snapshot
 
     def _resume_plan(
         self, run_id: str, job_revision: int | None, target_steps: int | None, state_id: str | None
@@ -435,8 +458,13 @@ class RunService:
                 )
             state = found
         target = target_steps if target_steps is not None else revision.config.steps
+        contents = inspect_refresh(self.root, original, revision, fixture_mode=self.fixture_mode)
         result = compatibility(
-            original["job"], revision.model_dump(), saved_step=resume_step(original, state), target_steps=target
+            original["job"],
+            revision.model_dump(),
+            saved_step=resume_step(original, state),
+            target_steps=target,
+            **contents,
         )
         return original, state, revision, result
 
@@ -597,4 +625,4 @@ class RunService:
         RunExecution(context, run).execute()
 
     def _reuse(self, run: dict[str, Any], stage_name: str, index: int) -> bool:
-        return reuse_cache(self.store, run, stage_name, index)
+        return reuse_cache(self.store, run, stage_name, index) or seed_refreshed(self.store, run, stage_name, index)

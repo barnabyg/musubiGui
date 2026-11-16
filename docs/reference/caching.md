@@ -51,6 +51,16 @@ does not change encoded content, so policy is excluded from cache identity. Retr
 retains the frozen policy with a new private cache directory. Restore continues to
 use frozen inputs; changing a Job does not rewrite a prepared Run.
 
+A segment resumed with a refreshed dataset snapshot reuses caches item by item rather
+than by stage. An item's latent identity is its media hash (and H3 audio), its dataset's
+resolution and the Job's geometry, frame and bucketing settings; its text identity is its
+caption (and for H3 its latent identity, since H3 text caching reads the media). The
+segment copies the source Run's hash-verified files of items with an unchanged identity
+into its own cache directory, renamed for the item's new snapshot name, then runs each
+stage with `--skip_existing`. Wan's existence check then skips exactly those items. H3's
+latent check includes the media's path, so a refreshed H3 snapshot copies latents only
+when no item needs caching; otherwise the latent stage caches every item.
+
 ## Controls and manual verification
 
 Each stage offers **Reuse compatible cache** (the default) or **Rebuild cache**.

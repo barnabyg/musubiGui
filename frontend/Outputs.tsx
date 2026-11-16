@@ -47,6 +47,8 @@ type Comparison = {
   // The picker choices compared, so a changed choice hides a stale result.
   key: string;
   changes: { path: string; before: unknown; after: unknown }[];
+  // Caption and media differences between the two dataset snapshots, counted.
+  dataset: string[];
   note: string;
   samples: [OutputList, OutputList];
 };
@@ -630,6 +632,9 @@ export function RunComparison({
       {comparison && comparison.key === key && (
         <div className="output-comparison" aria-label="Run comparison">
           <p>{comparison.note}</p>
+          {comparison.dataset.length > 0 && (
+            <p>Dataset differences: {comparison.dataset.join(', ')}.</p>
+          )}
           <div className="comparison-media">
             {comparison.samples.map((result, index) => (
               <ComparisonSamples

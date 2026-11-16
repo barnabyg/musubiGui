@@ -9,6 +9,8 @@ from musubi_gui.job_models import Job, JobConfig, JobDataset
 from musubi_gui.resume_compat import (
     ACCUMULATION_WARNING,
     EDITABLE,
+    REPREPARE,
+    REPREPARE_NOTE,
     WARNED,
     WARNING,
     changed_fields,
@@ -68,7 +70,6 @@ NEW_RUN_CHANGES = {
     "block_swap_h2d_only": True,
     "expert_interval": 10,
     "wan_steps_per_expert": False,
-    "repeats": 2,
     "width": 320,
     "height": 320,
     "frames": 33,
@@ -150,20 +151,62 @@ def test_a_warned_change_beside_a_new_run_field_still_needs_a_new_run() -> None:
     assert result["blocking"] == ["LoRA rank"]
 
 
+def test_a_changed_family_needs_a_new_run() -> None:
+    job = frozen()
+    result = compatibility(job, edited(job, family="h3"), saved_step=100, target_steps=600)
+    assert not result["compatible"]
+    assert [change["tier"] for change in result["changes"]] == ["new_run"]
+
+
 @pytest.mark.parametrize(
     "changes",
     [
-        {"family": "h3"},
+        {"repeats": 2},
         {"datasets": [{"dataset_id": "other"}]},
         {"datasets": [{"dataset_id": "data", "repeats": 3}]},
         {"datasets": [{"dataset_id": "data", "resolution": (320, 320)}]},
     ],
 )
-def test_family_and_datasets_need_a_new_run(changes: dict[str, Any]) -> None:
+def test_datasets_and_repeats_resume_with_re_prepare(changes: dict[str, Any]) -> None:
     job = frozen()
     result = compatibility(job, edited(job, **changes), saved_step=100, target_steps=600)
+    assert result["compatible"], result
+    [change] = result["changes"]
+    assert (change["tier"], change["label"]) == ("reprepare", REPREPARE[change["field"]])
+    assert result["reprepare"] and result["blocking"] == []
+    assert REPREPARE_NOTE in result["notes"]
+
+
+def test_caption_and_media_edits_resume_with_re_prepare_without_a_field_change() -> None:
+    job = frozen()
+    contents = {
+        "changed": True,
+        "captions": ["one.png"],
+        "added": ["two.png"],
+        "removed": [],
+        "replaced": [],
+        "summary": ["1 caption changed", "1 media added"],
+    }
+    result = compatibility(job, edited(job), saved_step=100, target_steps=300, dataset=contents)
+    assert result["compatible"] and result["reprepare"]
+    assert result["changes"] == []
+    assert result["dataset_changes"] == contents
+    assert REPREPARE_NOTE in result["notes"]
+
+
+def test_unchanged_contents_and_fields_resume_without_preparing() -> None:
+    job = frozen()
+    contents = {"changed": False, "captions": [], "added": [], "removed": [], "replaced": [], "summary": []}
+    result = compatibility(job, edited(job, steps=600), saved_step=100, target_steps=600, dataset=contents)
+    assert result["compatible"] and not result["reprepare"]
+    assert REPREPARE_NOTE not in result["notes"]
+
+
+def test_a_new_run_field_beside_a_dataset_edit_still_needs_a_new_run() -> None:
+    job = frozen()
+    result = compatibility(job, edited(job, rank=16, repeats=2), saved_step=100, target_steps=600)
     assert not result["compatible"]
-    assert [change["tier"] for change in result["changes"]] == ["new_run"]
+    assert result["blocking"] == ["LoRA rank"]
 
 
 def test_a_renamed_job_still_resumes() -> None:
@@ -267,3 +310,38 @@ def test_job_review_reports_an_unreadable_frozen_revision(tmp_path: Path) -> Non
     section = resume_review([run], edited(frozen()))
     assert section is not None and not section["compatible"]
     assert "prepare a new Run" in section["errors"][0]
+
+
+def test_unreadable_dataset_contents_keep_the_frozen_snapshot_unless_a_dataset_field_changed() -> None:
+    job = frozen()
+    kept = compatibility(job, edited(job), saved_step=100, target_steps=300, dataset_error="Dataset folder is missing.")
+    assert kept["compatible"] and not kept["reprepare"]
+    assert any("keeps the frozen snapshot" in note and "folder is missing" in note for note in kept["notes"])
+    refused = compatibility(
+        job, edited(job, repeats=2), saved_step=100, target_steps=300, dataset_error="Dataset folder is missing."
+    )
+    assert not refused["compatible"]
+    assert refused["errors"] == ["Datasets: Dataset folder is missing."]
+
+
+def test_job_review_reports_dataset_contents_and_preparation_from_the_refresh_check(tmp_path: Path) -> None:
+    run = run_record(tmp_path, "latest", "2026-01-01", saved_states=[{"valid": True, "resume_step": 40}])
+    contents = {
+        "changed": True,
+        "captions": ["one.png"],
+        "added": [],
+        "removed": [],
+        "replaced": [],
+        "summary": ["1 caption changed"],
+    }
+    seen = []
+
+    def refresh(source: dict[str, Any]) -> dict[str, Any]:
+        seen.append(source["id"])
+        return {"dataset": contents, "preparation": {"stages": ["text_cache"]}}
+
+    section = resume_review([run], edited(frozen()), refresh=refresh)
+    assert seen == ["latest"]
+    assert section is not None and section["compatible"] and section["reprepare"]
+    assert section["dataset_changes"] == contents
+    assert section["preparation"] == {"stages": ["text_cache"]}

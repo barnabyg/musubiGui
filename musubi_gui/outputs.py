@@ -15,6 +15,7 @@ from fastapi.responses import FileResponse
 from musubi_gui.media_probe import inspect
 from musubi_gui.preview import preview_step
 from musubi_gui.redaction import redact
+from musubi_gui.resume_dataset import dataset_changes
 from musubi_gui.run_chains import StepRange, chain_of, step_range
 from musubi_gui.run_deletion import output_index_file
 from musubi_gui.runs import RunService
@@ -412,10 +413,18 @@ def _job_view(job: dict[str, Any]) -> dict[str, Any]:
     return view
 
 
+def _item_view(item: dict[str, Any]) -> dict[str, Any]:
+    """An item as compared: its id already includes its dataset, which the job lists, and where a Run or segment
+    keeps its own copy says nothing about the item."""
+    view = {key: value for key, value in item.items() if key not in {"dataset_id", "snapshot_path"}}
+    if isinstance(view.get("audio"), dict):
+        view["audio"] = {key: value for key, value in view["audio"].items() if key != "snapshot_path"}
+    return view
+
+
 def _comparison_view(run: dict[str, Any]) -> dict[str, Any]:
     manifest = {key: value for key, value in run.get("manifest", {}).items() if key != "datasets"}
-    # Each item's id already includes its dataset, and the job lists the datasets.
-    items = [{key: value for key, value in item.items() if key != "dataset_id"} for item in manifest.get("items", [])]
+    items = [_item_view(item) for item in manifest.get("items", [])]
     return dict(
         _scrub(
             {
@@ -446,6 +455,8 @@ def compare_runs(first: dict[str, Any], second: dict[str, Any]) -> dict[str, Any
         "before": first["id"],
         "after": second["id"],
         "changes": changes,
+        # Caption and media differences between the two snapshots, counted, such as a resumed segment's.
+        "dataset": dataset_changes(first.get("manifest", {}), second.get("manifest", {}))["summary"],
         "quality_ranking": None,
         "note": "This compares what each Run recorded as its inputs, not the quality of its results.",
     }

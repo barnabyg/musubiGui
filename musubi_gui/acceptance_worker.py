@@ -40,6 +40,7 @@ def main(stage: str | None = None) -> None:
     parser.add_argument("--task", default="t2v-A14B")
     parser.add_argument("--uncond_output", type=Path)
     parser.add_argument("--one_frame", action="store_true")
+    parser.add_argument("--skip_existing", action="store_true")
     parser.add_argument("--output_dir", type=Path)
     parser.add_argument("--output_name", default="fixture")
     parser.add_argument("--max_train_steps", type=int, default=2)
@@ -73,6 +74,7 @@ def main(stage: str | None = None) -> None:
             parser.error("--dataset_config is required for cache fixtures")
         data: dict[str, Any] = tomllib.loads(args.dataset_config.read_text(encoding="utf-8"))
         architecture = "mmh3" if args.task == "t2va" else "wan"
+        written, skipped = 0, 0
         for dataset in data.get("datasets", []):
             if args.task == "t2va" and "image_directory" in dataset and not args.one_frame:
                 # As upstream's cache plan does, so the fixture catches a job missing the flag.
@@ -98,7 +100,14 @@ def main(stage: str | None = None) -> None:
                 if media.suffix.lower() not in suffixes:
                     continue
                 suffix = f"0256x0256_{architecture}" if stage == "latent_cache" else f"{architecture}_te"
-                tensor(Path(dataset["cache_directory"]) / f"{media.stem}_{suffix}.safetensors")
+                file = Path(dataset["cache_directory"]) / f"{media.stem}_{suffix}.safetensors"
+                # As upstream's --skip_existing does, an item whose cache file exists isn't cached again.
+                if args.skip_existing and file.is_file():
+                    skipped += 1
+                    continue
+                tensor(file)
+                written += 1
+        print(f"SYNTHETIC {stage}: cached {written} items, skipped {skipped} existing", flush=True)
         if args.uncond_output:
             tensor(args.uncond_output)
         if stage == "latent_cache":

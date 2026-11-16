@@ -1,12 +1,14 @@
 """Which edits in a newer Job revision a resumed segment can take, compared field by field with the frozen revision.
 
-A saved optimizer state belongs to one LoRA shape, dataset and training recipe. Fields that only change what the
-segment saves, samples or how it fits in memory can change on resume. The learning rate, timestep distribution and
-gradient accumulation can change too, with a warning, because they change what the LoRA learns from then on. Anything
-else needs a new Run. A field this module doesn't name, including one added to the Job later, needs a new Run until
-someone decides otherwise.
+A saved optimizer state belongs to one LoRA shape and training recipe. Fields that only change what the segment saves,
+samples or how it fits in memory can change on resume. The learning rate, timestep distribution and gradient
+accumulation can change too, with a warning, because they change what the LoRA learns from then on. The datasets and
+their repeats, captions and media can change with a re-prepare: the segment takes a new snapshot of the datasets and
+caches again only the items whose inputs changed. Anything else needs a new Run. A field this module doesn't name,
+including one added to the Job later, needs a new Run until someone decides otherwise.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -15,7 +17,7 @@ from pydantic import ValidationError
 
 from musubi_gui.job_models import Job
 
-Tier = Literal["editable", "warned", "new_run"]
+Tier = Literal["editable", "warned", "reprepare", "new_run"]
 
 # Applied by the resumed segment as the new revision has them.
 EDITABLE: dict[str, str] = {
@@ -44,10 +46,15 @@ WARNED: dict[str, str] = {
     "discrete_flow_shift": "Flow shift",
     "gradient_accumulation": "Gradient accumulation",
 }
+# Applied by a segment that snapshots the datasets again and rebuilds only the caches whose inputs changed. Caption
+# and media edits in the datasets themselves resume this way too, though they change no field of the Job.
+REPREPARE: dict[str, str] = {
+    "datasets": "Datasets",
+    "repeats": "Repeats",
+}
 # Labels for the fields known to need a new Run; any other field needs one too, labelled by its name.
 NEW_RUN: dict[str, str] = {
     "family": "Model family",
-    "datasets": "Datasets",
     "recipe": "Recipe",
     "components": "Model components",
     "rank": "LoRA rank",
@@ -58,7 +65,6 @@ NEW_RUN: dict[str, str] = {
     "save_state": "Save optimizer/training state",
     "expert_interval": "Expert interval",
     "wan_steps_per_expert": "Steps count per expert",
-    "repeats": "Repeats",
     "width": "Default training width",
     "height": "Default training height",
     "frames": "Frames",
@@ -84,6 +90,10 @@ ACCUMULATION_WARNING = (
 DATA_ORDER_NOTE = (
     "Resuming restores the saved optimizer, scheduler and RNG state, but the data order restarts from the "
     "beginning of the dataset."
+)
+REPREPARE_NOTE = (
+    "Resuming takes a new snapshot of the datasets and caches again only the items whose media or caption changed, "
+    "before training continues from the saved step."
 )
 # Identity of a revision rather than its content.
 _IGNORED = frozenset({"id", "version", "revision", "config"})
@@ -113,11 +123,13 @@ def tier(field: str, before: Any, after: Any) -> Tier:
         return "editable"
     if field in WARNED:
         return "warned"
+    if field in REPREPARE:
+        return "reprepare"
     return "new_run"
 
 
 def label(field: str) -> str:
-    return EDITABLE.get(field) or WARNED.get(field) or NEW_RUN.get(field) or field
+    return EDITABLE.get(field) or WARNED.get(field) or REPREPARE.get(field) or NEW_RUN.get(field) or field
 
 
 def flatten(job: dict[str, Any]) -> dict[str, Any]:
@@ -146,11 +158,20 @@ def changed_fields(before: dict[str, Any], after: dict[str, Any]) -> list[Change
 
 
 def compatibility(
-    frozen: dict[str, Any], revision: dict[str, Any], *, saved_step: int | None, target_steps: int
+    frozen: dict[str, Any],
+    revision: dict[str, Any],
+    *,
+    saved_step: int | None,
+    target_steps: int,
+    dataset: dict[str, Any] | None = None,
+    dataset_error: str | None = None,
+    preparation: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Whether a segment resuming a state saved at `saved_step` can train `revision` until `target_steps`.
 
     `frozen` is the revision the saved state was trained with. An unknown `saved_step` skips the total check.
+    `dataset` is how the datasets' current contents differ from the frozen snapshot, or `dataset_error` why they
+    couldn't be read; `preparation` is the work a re-prepare would do, reported as given.
     """
     changes = changed_fields(flatten(frozen), flatten(revision))
     errors = []
@@ -161,6 +182,18 @@ def compatibility(
     warnings = [WARNING] if warned else []
     if "gradient_accumulation" in warned:
         warnings.append(ACCUMULATION_WARNING)
+    fields_reprepare = any(change.tier == "reprepare" for change in changes)
+    notes = [DATA_ORDER_NOTE]
+    if dataset_error is not None:
+        if fields_reprepare:
+            errors.append(f"Datasets: {dataset_error}")
+        else:
+            notes.append(
+                f"The datasets' current contents couldn't be read, so resuming keeps the frozen snapshot: {dataset_error}"
+            )
+    reprepare = dataset_error is None and (fields_reprepare or bool(dataset and dataset["changed"]))
+    if reprepare:
+        notes.append(REPREPARE_NOTE)
     return {
         "compatible": not blocking and not errors,
         "frozen_revision": frozen.get("revision"),
@@ -172,7 +205,11 @@ def compatibility(
         "errors": errors,
         # Shown with the warned fields; resuming asks the user to acknowledge them.
         "warnings": warnings,
-        "notes": [DATA_ORDER_NOTE],
+        "notes": notes,
+        # Whether resuming snapshots the datasets again, what changed in them and the preparation that follows.
+        "reprepare": reprepare,
+        "dataset_changes": dataset,
+        "preparation": preparation if reprepare else None,
     }
 
 
@@ -210,10 +247,16 @@ def _saved_step(run: dict[str, Any]) -> tuple[bool, int | None]:
         return False, None
 
 
-def resume_review(runs: list[dict[str, Any]], job: dict[str, Any]) -> dict[str, Any] | None:
+def resume_review(
+    runs: list[dict[str, Any]],
+    job: dict[str, Any],
+    *,
+    refresh: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+) -> dict[str, Any] | None:
     """Job review's Resume compatibility: `job` against the Job's latest resumable training, or None without one.
 
-    That is the most recently created ended Run or segment of the Job with a saved state.
+    That is the most recently created ended Run or segment of the Job with a saved state. `refresh(run)` compares
+    the datasets' current contents with that Run's snapshot, returning `compatibility`'s dataset arguments.
     """
     candidates = []
     for run in runs:
@@ -227,7 +270,9 @@ def resume_review(runs: list[dict[str, Any]], job: dict[str, Any]) -> dict[str, 
     run, step = max(candidates, key=lambda candidate: candidate[0]["created"])
     source = {"run_id": run["id"], "run_status": run["status"]}
     try:
-        return {**source, **compatibility(run["job"], job, saved_step=step, target_steps=job["config"]["steps"])}
+        contents = refresh(run) if refresh else {}
+        target = job["config"]["steps"]
+        return {**source, **compatibility(run["job"], job, saved_step=step, target_steps=target, **contents)}
     except ValueError as error:
         return {
             **source,
@@ -241,4 +286,7 @@ def resume_review(runs: list[dict[str, Any]], job: dict[str, Any]) -> dict[str, 
             "errors": [str(error)],
             "warnings": [],
             "notes": [],
+            "reprepare": False,
+            "dataset_changes": None,
+            "preparation": None,
         }

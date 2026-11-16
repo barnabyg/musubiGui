@@ -1,7 +1,9 @@
 """Restoring a single saved optimizer state as a new Run segment, with the Run's own or a newer Job revision."""
 
 import copy
+import time
 import uuid
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -14,6 +16,7 @@ from musubi_gui.snapshots import digest_file
 
 if TYPE_CHECKING:
     from musubi_gui.job_models import Job
+    from musubi_gui.resume_refresh import Refresh
 
 # Outcome fields of the original Run that a restored segment starts without.
 _ENDED_FIELDS = [
@@ -62,16 +65,26 @@ def continuous_segment(saved: int, target_steps: int) -> dict[str, Any]:
     }
 
 
-def revision_stages(original: dict[str, Any], revision: "Job", directory: Path) -> list[Stage]:
+def revision_stages(
+    original: dict[str, Any], revision: "Job", directory: Path, refresh: "Refresh | None" = None
+) -> list[Stage]:
     """Training and sampling stages built from `revision` for a segment in `directory`.
 
     They read `original`'s frozen dataset configuration, and through it its media snapshot and caches, so the
-    segment prepares nothing. Alternating Wan stages are templates, before the schedule splits them into phases.
+    segment prepares nothing. With `refresh`, they read the segment's own snapshot and caches instead, after cache
+    stages that skip the items whose cache files preparation copied. Alternating Wan stages are templates, before
+    the schedule splits them into phases.
     """
     from musubi_gui.job_stages import stage_templates
 
-    kinds = {item["kind"] for item in original["manifest"]["items"]}
     settings = Settings.model_validate(original["settings"])
+    if refresh:
+        built = stage_templates(revision, settings, directory, refresh.cache, refresh.kinds)
+        for stage in built:
+            if stage.name in {"latent_cache", "text_cache"}:
+                stage.args.append("--skip_existing")
+        return built
+    kinds = {item["kind"] for item in original["manifest"]["items"]}
     stages = [
         stage
         for stage in stage_templates(revision, settings, directory, Path(original["cache"]), kinds)
@@ -105,16 +118,19 @@ def restored_segment(
     *,
     revision: "Job | None" = None,
     changes: list[dict[str, Any]] | None = None,
+    refresh: "Callable[[Path], Refresh] | None" = None,
 ) -> dict[str, Any]:
     """A prepared Run that resumes `state` in a new folder and trains until global step `target_steps`.
 
     With `revision`, the segment trains and samples as that revision of the Job says, recording it as its own
-    and `changes` from the original's revision; without it, the original's commands are reused.
+    and `changes` from the original's revision; without it, the original's commands are reused. With `refresh`,
+    which snapshots the datasets into the segment's folder, the segment prepares its own caches first.
     """
     saved = resume_step(original, state)
     additional_steps = segment_steps(original, state, target_steps)
     name = revision.name if revision else original["job"]["name"]
     directory = create_run_directory(Path(original["directory"]).parent, name, "resume" if revision else "restore")
+    snapshot = refresh(directory) if refresh and revision else None
     record = copy.deepcopy(original)
     record.update(
         id=uuid.uuid4().hex,
@@ -136,9 +152,18 @@ def restored_segment(
     if revision:
         record["job"] = revision.model_dump()
         record["segment"].update(source_revision=original["job"]["revision"], changes=changes or [])
-        record["input_files"] = revision_inputs(original, revision, directory)
         prepared = [stage for stage in record["stages"] if stage["name"] not in {"train", "generate"}]
-        built = [{**stage.record(), "status": "pending"} for stage in revision_stages(original, revision, directory)]
+        if snapshot:
+            # Its own snapshot carries its inputs, including the preview prompt.
+            record.update(snapshot.fields(), order=time.time_ns())
+            record["segment"].update(dataset_changes=snapshot.dataset)
+            prepared = []
+        else:
+            record["input_files"] = revision_inputs(original, revision, directory)
+        built = [
+            {**stage.record(), "status": "pending"}
+            for stage in revision_stages(original, revision, directory, snapshot)
+        ]
         record["stages"] = prepared + built
         for stage in built:
             if stage["name"] == "train":

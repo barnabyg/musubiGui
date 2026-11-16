@@ -99,11 +99,12 @@ When the revision has warned changes, the confirmation lists them with the warni
 enables **Resume with revision N** only after **I understand these changes change what the
 LoRA learns** is ticked.
 
-| Tier                              | Fields                                                                                                                                                                                                                                                                                                                                                   |
-| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Applies on resume                 | Name, training steps (after the saved step), final sample, sample prompt, sample inference steps, sample size and frames, generation memory policy, preview interval, save interval, kept checkpoints, blocks to swap, gradient checkpointing, inactive-DiT offload, and turning saved state on                                                          |
-| Applies on resume, with a warning | Learning rate, timestep strategy, sigmoid scale, flow shift and gradient accumulation                                                                                                                                                                                                                                                                    |
-| Needs a new Run                   | Model family, recipe, model components, LoRA rank and alpha, optimizer, runtime FP8 scaling, H2D-only block swapping, turning saved state off, expert interval, steps per expert, datasets with their repeats and resolutions, default repeats, training size and frames, frame extraction, bucketing, batch size, cache policies, audio policy and seed |
+| Tier                              | Fields                                                                                                                                                                                                                                                                                          |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Applies on resume                 | Name, training steps (after the saved step), final sample, sample prompt, sample inference steps, sample size and frames, generation memory policy, preview interval, save interval, kept checkpoints, blocks to swap, gradient checkpointing, inactive-DiT offload, and turning saved state on |
+| Applies on resume, with a warning | Learning rate, timestep strategy, sigmoid scale, flow shift and gradient accumulation                                                                                                                                                                                                           |
+| Resume with re-prepare            | Datasets with their repeats and resolutions, default repeats, and caption and media edits in the datasets themselves                                                                                                                                                                            |
+| Needs a new Run                   | Model family, recipe, model components, LoRA rank and alpha, optimizer, runtime FP8 scaling, H2D-only block swapping, turning saved state off, expert interval, steps per expert, training size and frames, frame extraction, bucketing, batch size, cache policies, audio policy and seed      |
 
 A field not listed, including one added in a later version, needs a new Run. A Run frozen
 before a field existed compares it by the default it now reads as, so only real edits count.
@@ -138,7 +139,8 @@ the saved step's numbering offset and `--max_train_steps` set to the total minus
 step. Its folder holds a new `previews.json` from the revision's preview settings, sealed
 with its inputs, so previews from the saved step onwards use the new prompt; Sample now
 follows the revision's preview setting. Training reads the source Run's frozen dataset
-configuration, media snapshot and caches, and nothing is prepared or rebuilt. The segment
+configuration, media snapshot and caches, and nothing is prepared or rebuilt, unless the
+datasets changed (see [Resuming with a refreshed dataset](#resuming-with-a-refreshed-dataset)). The segment
 records the new revision as its own `job`, so Compare, outputs and provenance describe what
 it trained, and `segment.source_revision` and `segment.changes` record the revision it
 continued from and what changed. Its checkpoints are named for its own revision. Like any
@@ -148,14 +150,67 @@ Alternating Wan resumes both expert states of the chosen paired position and kee
 schedule; the expert interval and steps per expert need a new Run. Paired previews and the
 final sample use the new revision's prompt and sampling settings.
 
+### Resuming with a refreshed dataset
+
+A Run freezes copies of its media and captions, so a caption fixed or a clip added after it
+started isn't in its snapshot. Resuming picks such edits up. The check compares the
+datasets' current contents with the snapshot of the Run it resumes, item by item, and lists
+them under **Resume with re-prepare**, such as `Dataset contents: 1 caption changed` or
+`2 media added`, beside any re-prepare field. Edits to captions and media change no field of
+the Job, so the Job's current revision resumes with them. Resolution, frames, frame
+extraction and bucketing still need a new Run for now, though they only change caches.
+
+Such a segment takes a new snapshot of the datasets into its own folder, with its own
+`snapshot.json`, `dataset.toml` and cache folder, and records its own `manifest`,
+`input_files` and `segment.dataset_changes`. It is queued to prepare and trains after it, from
+the saved step with the same step numbering as any resumed segment. Each cache stage first
+copies the source Run's verified cache files of every item whose cache inputs are unchanged,
+renamed for its place in the new snapshot, then runs with `--skip_existing`, so only the other
+items are cached. A stage with nothing left to cache doesn't run and shows as reused from the
+source Run. An item's latent cache follows its media, the dataset's resolution and the Job's
+cache settings; its text cache follows its caption. Changing one caption therefore caches
+that item's text alone, and added media caches only the new items. An item renamed in the
+dataset keeps the cache of identical content. Repeats change only `dataset.toml`, so nothing is
+cached again. A source cache file that changed or went missing since is cached again rather
+than copied. The source Run's files are never written.
+
+Two cases cache more. H3 text caches read the item's media as well as its caption, so a
+replaced H3 clip caches its text again too. Upstream's H3 latent cacher checks each cache
+against the media's file path, which a new snapshot changes, so when any H3 latent must be
+cached it caches them all; when none must, the source's latents are copied and the stage
+doesn't run. Cache policies set to rebuild cache every item.
+
+Review shows the work and disk use before resuming, under **Preparation before resuming** in
+both Job review's Resume compatibility and the Run's resume panel: which cache stages run,
+the items each caches by name and how many reuse a cache, then the new media snapshot, the
+copied caches and an estimate of the new caches, with the free space on each volume as Run
+review checks it. Comparing the segment with its source in Compare lists the changed captions
+and media item by item, with a `Dataset differences` summary.
+
+When a dataset can't be read, for example because its folder moved, a resume without
+re-prepare fields keeps the source's frozen snapshot and says so in the notes; one with them
+is refused naming the problem. A model component, the training checkout or environment that
+changed since the source was prepared refuses the refreshed segment, as preparing would.
+
+Alternating Wan resumes with a refreshed dataset the same way: its cache stages come before
+the restored schedule's phases.
+
 `POST /api/runs/{id}/resume-check {job_revision?, target_steps?, state_id?}` returns the
 comparison, changing nothing but the Run's recorded saved states: `compatible`,
 `frozen_revision`, `revision`, `saved_step`, `target_steps`, `changes` (each with `field`,
-`label`, `tier` of `editable`, `warned` or `new_run`, `before` and `after`), `blocking`
-(labels of fields needing a new Run), `errors`, `warnings` (why the warned changes matter,
-empty without any), `notes`, `state_id` and `state_name`. It
+`label`, `tier` of `editable`, `warned`, `reprepare` or `new_run`, `before` and `after`),
+`blocking` (labels of fields needing a new Run), `errors`, `warnings` (why the warned changes
+matter, empty without any), `notes`, `reprepare` (whether resuming snapshots the datasets
+again), `dataset_changes` (`changed`, item names under `captions`, `added`, `removed` and
+`replaced`, and `summary` lines; null when the datasets couldn't be read), `preparation` (null
+unless `reprepare`: `items`, the cache `stages` that run, `latent_cache` and `text_cache` each
+with `reuse` count and `rebuild` item names, `estimate` bytes of `media_snapshot`,
+`copied_caches` and `new_caches`, and `volumes` as Run review reports them), `state_id` and
+`state_name`. Comparing the current datasets hashes their media, as preparing does. It
 defaults to the Job's latest revision, the latest valid state and the revision's steps.
-`POST /api/runs/{id}/resume {job_revision, target_steps?, state_id?}` queues the segment.
+`POST /api/runs/{id}/resume {job_revision, target_steps?, state_id?}` queues the segment:
+`pending_training` when it reads the source's snapshot, or `pending_preparation` when it
+re-prepares, after which it trains on its own.
 A revision that changes a field needing a new Run, or a total at or before the saved step,
 is refused with 422 and a message naming the fields. Like every action, both refuse requests
 from another site. Restore as new segment (`restore-state`) is unchanged.
@@ -180,6 +235,15 @@ keeps its resume button disabled until the acknowledgement is ticked. Expect a n
 segment at Step 210/210 whose Samples show the step 70, 140 and 210 previews with the new
 prompt and whose training log shows `Resume learning rate: applied 0.0002`, while the
 original Run stays Stopped with its revision.
+
+To check a refreshed dataset, stop WAN acceptance 1 with **Save and stop** as above, then in
+Datasets open **WAN acceptance**, select motion.mp4 and change its caption. Review
+configuration on the Job: Resume compatibility lists `Dataset contents: 1 caption changed`
+under Resume with re-prepare, and Preparation before resuming says text caching runs for
+motion.mp4 alone while latents reuse the Run's caches, with the extra disk use. On the Run,
+check the latest revision and resume. Expect the new segment to prepare, show its latent cache
+as reused and its text cache completed, then train to the total. Compare it with the source
+Run: the caption's old and new text appear, and the source keeps its caption.
 
 ## Alternating Wan saved states
 

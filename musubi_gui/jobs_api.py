@@ -24,6 +24,7 @@ from musubi_gui.job_models import (
 from musubi_gui.job_review import review_job
 from musubi_gui.job_store import JobStore
 from musubi_gui.resume_compat import resume_review
+from musubi_gui.resume_refresh import inspect_refresh
 from musubi_gui.run_store import RunStore
 from musubi_gui.settings import training_settings
 from musubi_gui.training_options import optimizer_options
@@ -166,7 +167,11 @@ def jobs_router(root: Path, *, fixture_mode: bool = False) -> APIRouter:
             result = review_job(
                 root, job, training_settings(root, fixture_mode=fixture_mode), fixture_mode=fixture_mode
             )
-            result["resume_compatibility"] = resume_review(RunStore(root).list(), job.model_dump())
+            result["resume_compatibility"] = resume_review(
+                RunStore(root).list(),
+                job.model_dump(),
+                refresh=lambda run: inspect_refresh(root, run, job, fixture_mode=fixture_mode),
+            )
             return result
 
     return router
