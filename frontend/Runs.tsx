@@ -753,6 +753,18 @@ export function Runs({
       setError((reason as Error).message);
     }
   }
+  const gpuStatus = !owner ? (
+    'GPU available'
+  ) : ownerRun ? (
+    <>
+      GPU in use by{' '}
+      <a href={formatRoute({ screen: 'Runs', id: ownerRun.id })}>
+        {ownerRun.job.name}
+      </a>
+    </>
+  ) : (
+    'GPU in use by other work'
+  );
   return (
     <>
       {selected && (
@@ -760,13 +772,24 @@ export function Runs({
           <ArrowLeft /> Back to runs
         </button>
       )}
-      <section className="title">
-        <h1>{selected ? 'Run details' : 'Runs'}</h1>
-        <p>
-          Each Run keeps the job settings and dataset files it was prepared
-          with. Closing the browser leaves training running.
-        </p>
-      </section>
+      {selected ? (
+        <section className="title run-details-title">
+          <h1>Run details</h1>
+          {/* Joined only visually: the status stays its own live region. */}
+          <p className="run-status-line">
+            <span role="status">{gpuStatus}</span> · Closing the browser leaves
+            training running.
+          </p>
+        </section>
+      ) : (
+        <section className="title">
+          <h1>Runs</h1>
+          <p>
+            Each Run keeps the job settings and dataset files it was prepared
+            with. Closing the browser leaves training running.
+          </p>
+        </section>
+      )}
       {fixture && (
         <p className="error">
           Synthetic fixture mode — these runs do not establish GPU or model
@@ -778,20 +801,7 @@ export function Runs({
           {error || history.error || readError}
         </p>
       )}
-      <p role="status">
-        {!owner ? (
-          'GPU available'
-        ) : ownerRun ? (
-          <>
-            GPU in use by{' '}
-            <a href={formatRoute({ screen: 'Runs', id: ownerRun.id })}>
-              {ownerRun.job.name}
-            </a>
-          </>
-        ) : (
-          'GPU in use by other work'
-        )}
-      </p>
+      {!selected && <p role="status">{gpuStatus}</p>}
       {notice && <p role="status">{notice}</p>}
       <div className="runs-layout">
         {!selected && (

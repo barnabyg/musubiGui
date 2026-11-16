@@ -88,3 +88,14 @@
   border-color: var(--accent);
   font-weight: 700;
 }
+/* Run details header: the heading, then one line for GPU status and the browser note. */
+.run-details-title {
+  margin: var(--space-3) 0 var(--space-6);
+}
+.run-details-title h1 {
+  margin: var(--space-2) 0 var(--space-1);
+}
+.run-status-line {
+  margin: 0;
+  overflow-wrap: anywhere;
+}

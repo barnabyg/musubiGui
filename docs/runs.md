@@ -4,7 +4,8 @@ Use **Runs** in the sidebar to browse Run history and manage the pending queue. 
 
 The Runs collection lists the queue and history. Opening a Run shows only its details. Statuses read as labels such as
 Preparing or Ready to start, and the stored values are unchanged. The GPU line names the job
-using the GPU and links to its Run.
+using the GPU and links to its Run. On Run details it shares one line with the reminder that
+closing the browser leaves training running.
 
 Each Run opens on **Overview**, with progress, controls, diagnostics and LoRA
 downloads. **Samples** holds generated media and periodic previews. Use the tabs
