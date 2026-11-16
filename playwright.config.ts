@@ -10,6 +10,10 @@ export default defineConfig({
   workers: process.env.CI ? 2 : 4,
   // CI stops at the first failure; local runs report every failure.
   maxFailures: process.env.CI ? 1 : 0,
+  // CI also keeps each test's hosted duration for balancing shards; local runs list tests as they finish.
+  reporter: process.env.CI
+    ? [['dot'], ['json', { outputFile: '.cache/durations/browser.json' }]]
+    : 'list',
   // Upper bounds with deliberate margin; see docs/verification.md. A passing test never waits them out.
   timeout: 1_800_000,
   expect: { timeout: 60_000 },

@@ -27,7 +27,10 @@ CI runs the same command in nine parts on separate Windows runners at once:
 packaging, and `npm.cmd run verify -- python --shard 2/4` or `-- browser --shard 2/4` runs one
 quarter of a suite. With no part it runs every check, as before. When a browser part fails, CI keeps Playwright's `test-results`
 (traces, page snapshots, failure screenshots and per-backend logs of synthetic fixtures) as a
-`playwright-results-<n>` artifact for 14 days. Registry access is required by vulnerability and lock checks.
+`playwright-results-<n>` artifact for 14 days. Every test part, passing or not, also keeps a
+`test-durations-<n>` artifact for 14 days: pytest's JUnit XML or Playwright's JSON report, giving
+each test's duration on the hosted runner for balancing shards. `<n>` is the part's matrix position:
+1–4 are the pytest shards and 5–8 the browser shards. Registry access is required by vulnerability and lock checks.
 Successful tests discard their diagnostic output. Traces record browser actions, DOM snapshots,
 console messages and network requests/responses; backend logs survive fixture cleanup and include
 startup, stdout/stderr and exit details, including across backend restarts. Download and extract
