@@ -103,7 +103,7 @@ semantics: training state continues, but exact dataset position does not. The GU
 tracks per-expert/schedule counters separately and exposes this limitation before launch.
 No trainer installation changes or upstream upgrade are required.
 
-See [Jobs](../jobs.md#alternating-wan-highlow-loras) for the single preparation/launch
+See [Jobs](../jobs-training.md#alternating-wan-highlow-loras) for the single preparation/launch
 command, native-model prerequisites and a short stop/restoration scenario. This is
 sequential switching; simultaneous combined-expert residency/offload remains unqualified.
 
@@ -242,7 +242,7 @@ review. A short run proves mechanics only.
 
 ## Measured disk use
 
-Job review's [disk estimate](../jobs.md) uses these sizes from the target PC.
+Job review's [disk estimate](../jobs-checkpoints.md#disk-estimates) uses these sizes from the target PC.
 
 | Item                                   | Bytes       |
 | -------------------------------------- | ----------- |
@@ -269,7 +269,7 @@ and optimizer-state saving, sample generation and Edge playback passed using
 application revision `ae0b598` and its final atomic Windows launcher (protocol 3).
 Restoring optimizer state as a new segment advanced the optimizer from step 2 to
 3 and produced another playable sample. The original inputs and states remain
-preserved. [Saved state](../runs.md#saved-state) gives the limits of restoring.
+preserved. [Saved state](../runs-saved-state.md) gives the limits of restoring.
 
 | Native scenario                | Latent cache (s) | Text cache (s) | Training (s) | Generation (s) |
 | ------------------------------ | ---------------: | -------------: | -----------: | -------------: |

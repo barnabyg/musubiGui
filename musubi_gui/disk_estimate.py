@@ -1,4 +1,4 @@
-"""Expected disk use of a Run from sizes measured on the target PC (docs/jobs.md lists the limits)."""
+"""Expected disk use of a Run from sizes measured on the target PC (docs/jobs-checkpoints.md lists the limits)."""
 
 import os
 import shutil

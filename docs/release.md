@@ -66,7 +66,7 @@ normal application launch; the explicit fixture opt-in is required.
    deliberate `checkout\fail-latent_cache` marker. A `fail-train` marker exercises
    training failure without modifying Python source.
 7. With saved state enabled, restore a complete saved state as a **new segment**.
-   Incomplete state must be rejected. [Saved state](runs.md#saved-state) gives what
+   Incomplete state must be rejected. [Saved state](runs-saved-state.md) gives what
    restoration does and does not continue.
 8. Browse outputs from both model families, play video/audio, compare Run
    revisions and then remove a fixture sample on disk to inspect the missing
@@ -128,7 +128,7 @@ Playback was muted; audible quality and useful learning were not human-reviewed.
 Two steps and four inference steps do not establish production capacity. The later
 [production-size trial](reference/evidence/production-trial.json) qualified Wan at
 832×480 × 33 frames, rank 16 and H3 at 640×352 × 124 frames, rank 8 on the target PC;
-these are the Measured presets described in [Jobs](jobs.md). Useful learning and H3
+these are the Measured presets described in [Training settings](jobs-training.md#duplicates-and-presets). Useful learning and H3
 audio quality still need a human review of a full-length training run.
 
 The [clean-checkout record](reference/evidence/clean-checkout.json) confirms the

@@ -114,11 +114,11 @@ Each library entry shows its worked-out contents, such as `12 images`, `3 videos
 included count, and follow each re-scan. A dataset has no stored image or video type, and
 creating one asks for none, so a mixed folder works like any other. Keeping images and videos
 in separate datasets lets each be reused with models that take only one of them, and a
-[job can list several](jobs.md#training-sections).
+[job can list several](jobs-datasets.md#training-sections).
 
 For image-only, video-only, and separate image-plus-video preparation examples,
 including a single command that launches testable jobs without model downloads,
-see [Preparing images, videos, or both](jobs.md#preparing-images-videos-or-both).
+see [Preparing images, videos, or both](jobs-datasets.md#preparing-images-videos-or-both).
 
 The individual editor fills the available window with thumbnails and editable captions.
 A compact top bar contains back navigation, the dataset name/scan status, **Add media**,
@@ -186,7 +186,7 @@ The CC0 fixture contains two images, one video and one deliberately invalid vide
 training Python or downloads are required. Media decoding and thumbnails use the application's pinned PyAV/Pillow.
 
 The command also prints a separate image folder and video folder, for combining media in one
-[job](jobs.md#datasets-in-a-job). Check the four indexed items, missing-caption coverage, image/video preview and named invalid-media error.
+[job](jobs-datasets.md#datasets-in-a-job). Check the four indexed items, missing-caption coverage, image/video preview and named invalid-media error.
 Re-scan unchanged files, restart with `MUSUBI_GUI_STATE` pointing at the fixture's `state` folder, and confirm
 the library survives. Source files stay in place. Paths outside Settings' dataset roots are rejected after
 symlink/junction resolution. If the source folder disappears, its library entry is retained for recovery.

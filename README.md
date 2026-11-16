@@ -89,7 +89,7 @@ scenario with datasets and Wan/H3 jobs. See [release acceptance](docs/release.md
 
 Stop is observed rather than assumed, and force termination requires confirmation.
 Complete saved optimizer state can be restored as a new segment, within the
-[limits of saved state](docs/runs.md#saved-state).
+[limits of saved state](docs/runs-saved-state.md).
 
 Run the measured Wan/H3 acceptance scenarios with `.venv\Scripts\python.exe -m musubi_gui.reference wan`
 or the same command ending in `h3`. See [reference workflows](docs/reference/README.md)

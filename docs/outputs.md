@@ -39,7 +39,7 @@ escapes, arbitrary paths and identities belonging to another Run are rejected.
 Changing the configured root blocks access to old locations until the original
 root is restored. Moving an output does not silently reassign its provenance.
 
-[Delete run](runs.md#deleting-a-run) removes a Run's outputs and its index entry with it,
+[Delete run](runs-lifecycle.md#deleting-a-run) removes a Run's outputs and its index entry with it,
 so download a LoRA you want to keep first. While a delete is unfinished, the Run offers no
 outputs. Comparison lists neither deleted Runs nor Runs being deleted; comparing with a Run
 deleted from another tab since the list loaded reports that it was not found.
