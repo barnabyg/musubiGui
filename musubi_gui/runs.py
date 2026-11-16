@@ -5,7 +5,6 @@ import copy
 import hashlib
 import json
 import os
-import shutil
 import subprocess  # nosec B404
 import threading
 import time
@@ -25,6 +24,7 @@ from musubi_gui.media_probe import inspect as inspect_media
 from musubi_gui.processes import identity_status, observed_tree, process_identity, terminate_owned
 from musubi_gui.recipe import Stage, reference_environment
 from musubi_gui.redaction import redact
+from musubi_gui.run_cache import cache_artifacts, reuse_cache, seed_wan_tokenizer, share_wan_tokenizer
 from musubi_gui.run_deletion import failure_message, folder_bytes, output_index_file, plan_deletion, remove_folder
 from musubi_gui.run_estimate import freeze_training_timing
 from musubi_gui.run_paths import create_run_directory
@@ -47,7 +47,6 @@ from musubi_gui.wan_pair_runtime import (
     stage_log,
     validate_phase_input,
 )
-from musubi_gui.wan_tokenizer import publish_shared, seed_run, shared_directory
 from musubi_gui.windows_job import ProcessJob, WindowsProcess
 
 
@@ -775,7 +774,7 @@ class RunService:
                     environment.pop("MUSUBI_EXPERT_STEP_OFFSET", None)
                     if (offset := stage.get("training", {}).get("checkpoint_step_offset")) is not None:
                         environment["MUSUBI_EXPERT_STEP_OFFSET"] = str(offset)
-                    if self._seed_wan_tokenizer(run):
+                    if seed_wan_tokenizer(run):
                         environment["HF_HUB_OFFLINE"] = "1"
                         log.write("Using the shared Wan tokenizer; Hugging Face Hub access is off for this stage.\n")
                         log.flush()
@@ -887,9 +886,9 @@ class RunService:
                     raise ValueError(
                         f"{stage['name']} exited {code}. Inspect logs, then prepare a new Run from frozen inputs."
                     )
-                self._share_wan_tokenizer(run)
+                share_wan_tokenizer(run)
                 if preparing:
-                    artifacts = self._cache_artifacts(run, stage["name"])
+                    artifacts = cache_artifacts(run, stage["name"])
                     if run.get("stage_keys") and not artifacts:
                         raise ValueError(f"{stage['name']} returned success but produced no complete cache artifacts.")
                     self.store.update(run_id, lambda r: r["stages"][index].update(artifacts=artifacts))
@@ -1001,26 +1000,6 @@ class RunService:
                     self.store.update(run_id, lambda r: r.update(processes=[], launch_pending=False))
                 self.device.release(run_id)
 
-    def _seed_wan_tokenizer(self, run: dict[str, Any]) -> bool:
-        shared = wan_tokenizer_directory(run)
-        if not shared:
-            return False
-        try:
-            return seed_run(shared, Path(run["cache"]))
-        except OSError:
-            # The stage can still download the tokenizer itself.
-            return False
-
-    def _share_wan_tokenizer(self, run: dict[str, Any]) -> None:
-        shared = wan_tokenizer_directory(run)
-        if not shared:
-            return
-        try:
-            publish_shared(Path(run["cache"]), shared)
-        except OSError:
-            # Sharing only saves a later download; it never fails a stage that succeeded.
-            return
-
     def _remove_final_duplicates(self, run: dict[str, Any], stage: dict[str, Any]) -> builtins.list[str]:
         """Keep one copy of the final save when the step count is a multiple of the checkpoint interval."""
         args = stage["args"]
@@ -1084,75 +1063,8 @@ class RunService:
             if time.monotonic() >= deadline or self.stopping.wait(0.1):
                 return False
 
-    def _cache_artifacts(self, run: dict[str, Any], stage: str) -> builtins.list[dict[str, str]]:
-        cache = Path(run["cache"])
-        # dataset, dataset-images and dataset-rate-N, with dataset-N in place of dataset for several datasets.
-        candidates = list(cache.glob("dataset*/*.safetensors"))
-        files = [file for file in candidates if file.name.endswith("_te.safetensors") == (stage == "text_cache")]
-        if run["job"]["family"] == "h3" and stage == "text_cache":
-            uncond = cache / "uncond.safetensors"
-            if not uncond.is_file():
-                raise ValueError("H3 text caching did not produce the unconditional guidance cache.")
-            files.append(uncond)
-        for item in run["manifest"]["items"]:
-            if "snapshot_path" in item and not any(
-                file.name.startswith(Path(item["snapshot_path"]).stem + "_") for file in files
-            ):
-                raise ValueError(
-                    f"{item['name']}: {stage} did not prepare this included item. Inspect the stage log before retrying."
-                )
-        if any(file.stat().st_size == 0 for file in files):
-            raise ValueError(f"{stage} contains empty/incomplete cache files.")
-        return [{"path": str(file.relative_to(cache)), "sha256": digest_file(file)} for file in files]
-
     def _reuse(self, run: dict[str, Any], stage_name: str, index: int) -> bool:
-        policy = "latent_cache_policy" if stage_name == "latent_cache" else "text_cache_policy"
-        rebuild = run["job"].get("config", {}).get(policy, "reuse") == "rebuild"
-        reason = "Rebuild requested by this Run." if rebuild else "No verified compatible cache found."
-        self.store.update(run["id"], lambda r: r["stages"][index].update(cache_reason=reason))
-        if rebuild:
-            return False
-        key = run.get("stage_keys", {}).get(stage_name)
-        if not key:
-            return False
-        for previous in self.list():
-            if previous["id"] == run["id"] or previous.get("stage_keys", {}).get(stage_name) != key:
-                continue
-            old: dict[str, Any] = next((stage for stage in previous["stages"] if stage["name"] == stage_name), {})
-            artifacts = old.get("artifacts", [])
-            if not artifacts or old.get("status") not in {"completed", "reused"} or previous["status"] == "deleting":
-                continue
-            try:
-                if not all(
-                    (Path(previous["cache"]) / file["path"]).is_file()
-                    and digest_file(Path(previous["cache"]) / file["path"]) == file["sha256"]
-                    for file in artifacts
-                ):
-                    continue
-                for file in artifacts:
-                    target = Path(run["cache"]) / file["path"]
-                    target.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copyfile(Path(previous["cache"]) / file["path"], target)
-            except (FileNotFoundError, PermissionError):
-                # That Run was deleted meanwhile; its cache simply isn't available to reuse.
-                continue
-            self.store.update(
-                run["id"],
-                lambda r: r["stages"][index].update(
-                    status="reused",
-                    artifacts=artifacts,
-                    reused_from=previous["id"],
-                    cache_reason="Compatible identity and artifact hashes verified.",
-                    exit_code=0,
-                ),
-            )
-            return True
-        return False
-
-
-def wan_tokenizer_directory(run: dict[str, Any]) -> Path | None:
-    cache_root = run["settings"].get("cache_root")
-    return shared_directory(cache_root) if run["job"]["family"] == "wan" and cache_root else None
+        return reuse_cache(self.store, run, stage_name, index)
 
 
 def fingerprint(value: object) -> str:

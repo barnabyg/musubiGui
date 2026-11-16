@@ -555,7 +555,7 @@ def test_a_cache_being_deleted_is_not_reused_and_a_vanishing_one_falls_through(
 ) -> None:
     key = {"stage_keys": {"latent_cache": "same"}}
     artifact = {"path": "latents.safetensors", "sha256": ""}
-    from musubi_gui import runs
+    from musubi_gui import run_cache
     from musubi_gui.snapshots import digest_file
 
     def add_with_cache(token: str, status: str) -> dict[str, Any]:
@@ -574,7 +574,7 @@ def test_a_cache_being_deleted_is_not_reused_and_a_vanishing_one_falls_through(
     def vanished(*_: object) -> None:
         raise FileNotFoundError("deleted meanwhile")
 
-    monkeypatch.setattr(runs.shutil, "copyfile", vanished)
+    monkeypatch.setattr(run_cache.shutil, "copyfile", vanished)
     assert service._reuse(target, "latent_cache", 0) is False
 
 
