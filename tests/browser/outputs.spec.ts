@@ -45,7 +45,7 @@ test('Wan and H3 output playback comparison download and missing states retain r
       .getByRole('button', { name: 'h3-revision-1 · H3 · r1', exact: true })
       .click();
     await expect(
-      page.getByRole('heading', { name: 'Run outputs', exact: true }),
+      page.getByRole('heading', { name: 'Checkpoints', exact: true }),
     ).toBeVisible();
     await page.getByRole('tab', { name: 'Samples', exact: true }).click();
     await page
@@ -66,10 +66,10 @@ test('Wan and H3 output playback comparison download and missing states retain r
       )
       .toBeGreaterThan(0);
     await expect(
-      page.getByLabel('Selected output', { exact: true }),
+      page.getByLabel('Selected sample', { exact: true }),
     ).toContainText(h3.id.slice(0, 8));
     await expect(
-      page.getByLabel('Selected output', { exact: true }),
+      page.getByLabel('Selected sample', { exact: true }),
     ).toContainText('"audio"');
     await page
       .getByRole('button', {
@@ -97,8 +97,16 @@ test('Wan and H3 output playback comparison download and missing states retain r
       })
       .click();
     await expect(
-      page.getByLabel('Selected output', { exact: true }),
+      page.getByLabel('Selected checkpoint', { exact: true }),
     ).toContainText('"training_state": false');
+    // Choosing a checkpoint keeps the sample chosen on the Samples tab.
+    await expect(
+      page.getByRole('button', {
+        name: 'tone.wav · available',
+        exact: true,
+        includeHidden: true,
+      }),
+    ).toHaveAttribute('aria-pressed', 'true');
     const download = page.waitForEvent('download');
     await page
       .getByRole('link', { name: 'Download output', exact: true })

@@ -49,7 +49,10 @@ export function RunJobLink({ frozen }: { frozen: JobIdentity }) {
   const job = current?.job;
   return (
     <section aria-label="Originating job">
-      <h3>Originating job</h3>
+      {/* A label, not a heading: Run details keeps headings to one per panel. */}
+      <p>
+        <strong>Originating job</strong>
+      </p>
       <p>
         Frozen for this Run: {frozen.name} · {frozen.family.toUpperCase()} · r
         {frozen.revision}. Its saved inputs and outputs stay with this revision.

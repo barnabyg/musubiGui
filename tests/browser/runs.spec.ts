@@ -4,7 +4,14 @@ import { access, mkdir, writeFile, readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { helper, python } from './backend';
-import { runWorkspace, type RunRecord } from './runHarness';
+import {
+  checkpointDownload,
+  openCheckpointPanel,
+  finalCheckpointButton,
+  preparedRun,
+  runWorkspace,
+  type RunRecord,
+} from './runHarness';
 
 const execute = promisify(execFile);
 const PNG = Buffer.from(
@@ -75,7 +82,7 @@ test('deleting a Run and its Job goes from the UI to the disk and survives a bac
     await expect(
       page.getByText('State: Deleting', { exact: true }),
     ).toBeVisible();
-    await expect(page.getByLabel('Run outputs')).toHaveCount(0);
+    await expect(page.getByLabel('Checkpoints')).toHaveCount(0);
 
     // It is still there, and still deletable, after a restart.
     const closed = new Promise((resolve) => lock.once('exit', resolve));
@@ -187,12 +194,17 @@ test('outputs appear when a Run completes and a playing preview survives a refre
       media.loop = true;
       await media.play();
     });
+    await expect(
+      page.getByRole('button', { name: 'Refresh outputs', exact: true }),
+    ).toBeHidden();
+    await page.getByRole('tab', { name: 'Overview', exact: true }).click();
     await page
       .getByRole('button', { name: 'Refresh outputs', exact: true })
       .click();
     await expect(
       page.getByRole('button', { name: 'Refresh outputs', exact: true }),
     ).toBeEnabled();
+    await page.getByRole('tab', { name: 'Samples', exact: true }).click();
     await expect(sample).toHaveAttribute('aria-pressed', 'true');
     await expect(video).toHaveAttribute('data-kept', 'yes');
     await expect
@@ -882,9 +894,10 @@ test('a stopped Run resumes saved optimizer state through the UI after a backend
       name: 'Resume training',
       exact: true,
     });
-    await expect(resume).toContainText(
-      'Work since the last saved state must run again',
-    );
+    await resume.getByText('How resuming works', { exact: true }).click();
+    await expect(
+      resume.getByText(/Work since the last saved state must run again/),
+    ).toBeVisible();
     await resume
       .getByRole('button', { name: 'Inspect saved states', exact: true })
       .click();
@@ -959,7 +972,10 @@ test('a stopped Run resumes saved optimizer state through the UI after a backend
     await expect(
       page.getByText('State: Completed', { exact: true }),
     ).toBeVisible({ timeout: 240_000 });
-    await expect(resume).toContainText('Saved optimizer state was not enabled');
+    await resume.getByText('How resuming works', { exact: true }).click();
+    await expect(
+      resume.getByText(/^Saved optimizer state was not enabled/),
+    ).toBeVisible();
     await resume
       .getByRole('button', { name: 'Inspect saved states', exact: true })
       .click();
@@ -1266,7 +1282,7 @@ test('Runs read as labels and local times, and the GPU line links to the Run usi
   }
 });
 
-test('a finished Run keeps its final LoRA prominent and samples in a separate tab', async ({
+test('a finished Run lists its final LoRA with its checkpoints and samples in a separate tab', async ({
   page,
 }) => {
   const app = await runWorkspace();
@@ -1284,15 +1300,14 @@ test('a finished Run keeps its final LoRA prominent and samples in a separate ta
       .toBe('completed');
     await page.goto(`${app.url}/#/runs/${run.id}`);
 
-    const result = page.getByRole('region', { name: 'Run result' });
+    await expect(page.getByRole('region', { name: 'Run result' })).toHaveCount(
+      0,
+    );
     await expect(page.getByLabel('Output video', { exact: true })).toHaveCount(
       0,
     );
-    const lora = result.getByRole('link', { name: 'Download final LoRA' });
-    await expect(lora).toBeInViewport({ ratio: 1 });
-    await expect(result).toContainText(/Final LoRA \d+ (KB|MB|GB)/);
 
-    const files = page.getByRole('region', { name: 'Run outputs' });
+    const files = page.getByRole('region', { name: 'Checkpoints' });
     const checkpoints = files.locator('.output-checkpoints');
     await expect(checkpoints.locator('table')).toBeHidden();
     await checkpoints.locator('summary').click();
@@ -1342,15 +1357,6 @@ test('a finished Run keeps its final LoRA prominent and samples in a separate ta
   }
 });
 
-async function preparedRun(app: Awaited<ReturnType<typeof runWorkspace>>) {
-  const job = app.manifest.jobs.find((item) => item.family === 'wan')!;
-  await app.post('/api/runs/prepare', { job_id: job.id });
-  await expect
-    .poll(async () => (await app.records())[0].status, { timeout: 240_000 })
-    .toBe('prepared');
-  return (await app.records())[0];
-}
-
 function outputList(
   run: { id: string },
   status: string,
@@ -1371,12 +1377,12 @@ function outputList(
   };
 }
 
-test('a damaged final LoRA is called out rather than offered as the result', async ({
+test('a damaged final LoRA is called out in the checkpoints', async ({
   page,
 }) => {
   const app = await runWorkspace();
   try {
-    const run = await preparedRun(app);
+    const { run } = await preparedRun(app);
     await page.route('**/api/runs/*/outputs', (route) =>
       route.fulfill({
         json: outputList(run, 'completed', [
@@ -1392,9 +1398,12 @@ test('a damaged final LoRA is called out rather than offered as the result', asy
       }),
     );
     await page.goto(`${app.url}/#/runs/${run.id}`);
-    const result = page.getByRole('region', { name: 'Run result' });
-    await expect(result).toContainText('Output is empty.');
-    await expect(result.getByRole('link')).toHaveCount(0);
+    const final = await finalCheckpointButton(page);
+    await expect(final).toHaveText('wan.safetensors · incomplete');
+    await final.click();
+    await expect(
+      page.getByLabel('Selected checkpoint', { exact: true }),
+    ).toContainText('Output is empty.');
   } finally {
     await app.close();
   }
@@ -1405,7 +1414,7 @@ test('a partial Run shows the outputs it has, with their problems', async ({
 }) => {
   const app = await runWorkspace();
   try {
-    const run = await preparedRun(app);
+    const { run } = await preparedRun(app);
     await page.route('**/api/runs/*/outputs', (route) =>
       route.fulfill({
         json: outputList(run, 'failed', [
@@ -1435,12 +1444,15 @@ test('a partial Run shows the outputs it has, with their problems', async ({
       }),
     );
     await page.goto(`${app.url}/#/runs/${run.id}`);
-    const result = page.getByRole('region', { name: 'Run result' });
-    await expect(result).toContainText('sample.mp4: Sample has no audio.');
-    await expect(result).toContainText('Latest checkpoint step 10');
-    await expect(
-      result.getByRole('link', { name: 'Download latest checkpoint' }),
-    ).toHaveAttribute('href', '/nowhere?download=true');
+    const summary = page.locator('#run-panel-overview > .panel').first();
+    await expect(summary).toContainText('sample.mp4: Sample has no audio.');
+    const checkpoints = await openCheckpointPanel(page);
+    await expect(checkpoints.locator('tbody tr')).toHaveText([
+      /^2.*wan-step00000002\.safetensors · available$/,
+      /^10.*wan-step00000010\.safetensors · available$/,
+    ]);
+    const download = await checkpointDownload(page, /step00000010/);
+    await expect(download).toHaveAttribute('href', '/nowhere?download=true');
   } finally {
     await app.close();
   }

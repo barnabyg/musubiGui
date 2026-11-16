@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import type { Job } from '../../frontend/jobTypes';
-import { runWorkspace } from './runHarness';
+import { checkpointDownload, runWorkspace } from './runHarness';
 
 test('job and Run links preserve identity, frozen revisions and downloads through history and archiving', async ({
   page,
@@ -90,13 +90,11 @@ test('job and Run links preserve identity, frozen revisions and downloads throug
     await expect(
       origin.getByRole('link', { name: /Open current job/ }),
     ).toContainText('WAN acceptance revised · WAN · r2');
-    const download = page.getByRole('link', {
-      name: 'Download final LoRA',
-      exact: true,
-    });
-    await expect(download).toBeVisible();
+    // A reload resets the checkpoint table, so each check opens it and selects the LoRA again.
+    const download = () =>
+      checkpointDownload(page, /-r1\.safetensors · available$/);
     const downloadFile = page.waitForEvent('download');
-    await download.click();
+    await (await download()).click();
     const file = await downloadFile;
     expect(file.suggestedFilename()).toMatch(/\.safetensors$/);
     expect(await file.failure()).toBeNull();
@@ -118,7 +116,7 @@ test('job and Run links preserve identity, frozen revisions and downloads throug
       }),
     ).toBeVisible();
     await page.goBack();
-    await expect(download).toBeVisible();
+    await expect(await download()).toBeVisible();
 
     // Older or externally changed state can leave a Run without an available job.
     // Exercise these HTTP boundary failures without deleting the job's saved history.
@@ -130,7 +128,7 @@ test('job and Run links preserve identity, frozen revisions and downloads throug
     await expect(origin).toContainText('This job is no longer available.');
     await expect(origin).toContainText(`${first.name} · WAN · r1`);
     const unavailableDownload = page.waitForEvent('download');
-    await download.click();
+    await (await download()).click();
     expect(await (await unavailableDownload).failure()).toBeNull();
 
     await page.unroute('**/api/jobs');
@@ -143,7 +141,7 @@ test('job and Run links preserve identity, frozen revisions and downloads throug
     );
     await page.reload();
     await expect(origin).toContainText('Job storage temporarily unavailable.');
-    await expect(download).toBeVisible();
+    await expect(await download()).toBeVisible();
     await page.unroute('**/api/jobs/archived');
     await origin.getByRole('button', { name: 'Retry job lookup' }).click();
     await expect(origin).toContainText('Archived job');

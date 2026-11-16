@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { runWorkspace } from './runHarness';
+import { finalCheckpointButton, runWorkspace } from './runHarness';
 
 test('training elapsed spans expert switches and survives reload independently of phase ETA', async ({
   page,
@@ -234,8 +234,9 @@ test('H3 diagnostics download contains measurements from the completed fixture r
     })) as { id: string };
     await page.goto(`${app.url}/#/runs/${run.id}`);
     await expect(
-      page.getByRole('link', { name: 'Download final LoRA', exact: true }),
+      page.getByText('State: Completed', { exact: true }),
     ).toBeVisible({ timeout: 240_000 });
+    await expect(await finalCheckpointButton(page)).toHaveText(/· available$/);
     const link = page.getByRole('link', {
       name: 'Download performance diagnostics',
     });

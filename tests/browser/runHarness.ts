@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { expect } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 import { helper, localBackend, python } from './backend';
 
 const execute = promisify(execFile);
@@ -162,4 +162,45 @@ export async function runWorkspace(
     leaseGpu,
     close,
   };
+}
+
+// Prepares the first Wan job and returns its Run once it is ready to start.
+export async function preparedRun(
+  app: Awaited<ReturnType<typeof runWorkspace>>,
+) {
+  const job = app.manifest.jobs.find((item) => item.family === 'wan')!;
+  await app.post('/api/runs/prepare', { job_id: job.id });
+  await expect
+    .poll(async () => (await app.records())[0].status, { timeout: 240_000 })
+    .toBe('prepared');
+  return { job, run: (await app.records())[0] };
+}
+
+// Switches Run details to Overview, expands the LoRA checkpoints table and returns its panel.
+export async function openCheckpointPanel(page: Page) {
+  await page.getByRole('tab', { name: 'Overview', exact: true }).click();
+  const panel = page.getByRole('region', { name: 'Checkpoints', exact: true });
+  const table = panel.locator('details.output-checkpoints');
+  await expect(table).toBeVisible({ timeout: 240_000 });
+  if ((await table.getAttribute('open')) === null)
+    await table.locator('summary').click();
+  return panel;
+}
+
+// The file button in the Final row of the checkpoints table.
+export async function finalCheckpointButton(page: Page) {
+  const panel = await openCheckpointPanel(page);
+  return panel
+    .getByRole('row')
+    .filter({ has: page.getByRole('cell', { name: 'Final', exact: true }) })
+    .getByRole('button');
+}
+
+// Selects a checkpoint and returns the download link of its detail.
+export async function checkpointDownload(page: Page, file: RegExp) {
+  const panel = await openCheckpointPanel(page);
+  await panel.getByRole('button', { name: file }).click();
+  return panel
+    .getByLabel('Selected checkpoint', { exact: true })
+    .getByRole('link', { name: 'Download output', exact: true });
 }
