@@ -27,6 +27,8 @@ through its `pretest:browser` script, including when it is given a single spec f
 `playwright test` directly skips that build. The focused pytest command runs serially unless
 given `-n`.
 
+Browser specs are named in kebab-case, `tests/browser/<feature-name>.spec.ts`.
+
 ## What verify runs
 
 The canonical command checks Python/TypeScript formatting, lint, strict types, Bandit static

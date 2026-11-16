@@ -96,7 +96,7 @@ orchestration without model weights or GPU training.
 ```powershell
 .venv\Scripts\python.exe -m pytest tests/python/test_outputs_api.py -q
 npm.cmd run test:browser -- tests/browser/outputs.spec.ts
-npm.cmd run test:browser -- tests/browser/sampleComparison.spec.ts
+npm.cmd run test:browser -- tests/browser/sample-comparison.spec.ts
 ```
 
 The API tests cover persistent/missing inventory, checkpoint bounds, image/audio/video

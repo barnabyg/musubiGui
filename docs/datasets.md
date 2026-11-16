@@ -350,7 +350,7 @@ and measure until the first caption is editable. Expect thumbnails and captions 
 appear together; edit one caption and verify its sidecar. Change another caption
 outside the application, reopen, and expect its new text. Repeat with 8 and 32 files.
 
-The real Edge test `tests/browser/dataset_gallery.spec.ts` repeats these sizes and
+The real Edge test `tests/browser/dataset-gallery.spec.ts` repeats these sizes and
 prints three HTTP item-list timings and one library-click-to-caption timing per size.
 On Windows 11 on 9 November 2026, the measurements below compared base `eb7656c`
 with the request-local location change. Each cell is milliseconds; scans had already
