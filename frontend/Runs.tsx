@@ -910,7 +910,6 @@ export function Runs({
               <section className="panel">
                 <h2>{run.job.name}</h2>
                 <p title={run.id}>Run {run.id.slice(0, 8)}</p>
-                <RunJobLink key={run.id} frozen={run.job} />
                 <p>
                   State: <RunBadge status={run.status} />
                 </p>
@@ -921,6 +920,7 @@ export function Runs({
                   run={run}
                   progress={current?.progress ?? null}
                 />
+                <RunJobLink key={run.id} frozen={run.job} />
               </section>
             )}
             {run && (
