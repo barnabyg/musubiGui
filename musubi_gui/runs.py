@@ -17,7 +17,7 @@ from typing import Any
 import psutil
 
 from musubi_gui.checkpoint_dedup import remove_final_duplicates
-from musubi_gui.checkpoint_retention import Save, apply_retention, retained_states, retention_candidates
+from musubi_gui.checkpoint_retention import retained_states
 from musubi_gui.managed_checkout import checkout_gate
 from musubi_gui.media_probe import inspect as inspect_media
 from musubi_gui.processes import identity_status, observed_tree, process_identity, terminate_owned
@@ -30,6 +30,7 @@ from musubi_gui.run_paths import create_run_directory
 from musubi_gui.run_performance import RunPerformance, start_performance
 from musubi_gui.run_progress import estimated_remaining, parse_progress
 from musubi_gui.run_recovery import RECONCILED_STATUSES, reconcile, terminate_orphan
+from musubi_gui.run_retention import RetentionScheduler
 from musubi_gui.run_store import DeviceLease, RunStore, blocks_revision, preparation_transaction, utc_now
 from musubi_gui.saved_state import discover_states
 from musubi_gui.settings import Settings, atomic_json, load_settings, managed_settings
@@ -83,12 +84,7 @@ class RunService:
         self.identity = process_identity()
         self.identity["instance"] = uuid.uuid4().hex
         self.stopping = threading.Event()
-        self.retention_stamps: dict[str, tuple[tuple[str, int, int], ...]] = {}
-        self.retention_validation: dict[str, tuple[object, Save]] = {}
-        self.retention_lock = threading.RLock()
-        self.retention_condition = threading.Condition()
-        self.retention_requested: set[str] = set()
-        self.retention_thread = threading.Thread(target=self._retain_requested, name="musubi-retention", daemon=True)
+        self.retention = RetentionScheduler(self.store, self.stopping)
         self.thread = threading.Thread(target=self._schedule, name="musubi-worker", daemon=True)
         if autostart:
             self.start_worker()
@@ -97,7 +93,7 @@ class RunService:
         for run in self.list():
             if run["status"] in RECONCILED_STATUSES:
                 self.reconcile(run["id"])
-        self.retention_thread.start()
+        self.retention.start()
         self.thread.start()
 
     def list(self) -> list[dict[str, Any]]:
@@ -267,15 +263,10 @@ class RunService:
 
     def close(self) -> None:
         self.stopping.set()
-        with self.retention_condition:
-            self.retention_condition.notify_all()
+        self.retention.wake()
         if self.thread.is_alive():
             self.thread.join(timeout=20)
-        if self.retention_thread.is_alive():
-            # Cancellation interrupts chunked hashes and kills/reaps an active state probe.
-            self.retention_thread.join(timeout=45)
-            if self.retention_thread.is_alive():
-                raise RuntimeError("Background checkpoint inspection did not finish after cancellation.")
+        self.retention.join()
 
     def retry(self, run_id: str) -> dict[str, Any]:
         previous = self.get(run_id)
@@ -390,53 +381,11 @@ class RunService:
 
     def retain_checkpoints(self, run_id: str) -> None:
         """Apply the frozen Run's policy; failure preserves training and is visible for repair."""
-        with self.retention_lock:
-            self._retain_checkpoints(run_id)
+        self.retention.retain(run_id)
 
     def request_retention(self, run_id: str) -> None:
         """Coalesce work without delaying process supervision or Stop signalling."""
-        with self.retention_condition:
-            self.retention_requested.add(run_id)
-            self.retention_condition.notify()
-
-    def _retain_requested(self) -> None:
-        while not self.stopping.is_set():
-            with self.retention_condition:
-                self.retention_condition.wait_for(lambda: self.retention_requested or self.stopping.is_set())
-                if self.stopping.is_set():
-                    return
-                run_id = self.retention_requested.pop()
-            try:
-                self.retain_checkpoints(run_id)
-            except (OSError, ValueError):
-                # A terminal Run may have been deleted after its final request was queued.
-                continue
-
-    def _retain_checkpoints(self, run_id: str) -> None:
-        run = self.get(run_id)
-        if run["job"].get("config", {}).get("keep_checkpoints", 0) <= 0:
-            return
-        try:
-            root = Path(run["directory"]) / "checkpoints"
-            stamp = tuple(
-                sorted(
-                    (str(path), path.stat().st_mtime_ns, path.stat().st_size)
-                    for path in root.rglob("*")
-                    if path.is_file() and ".retention" not in path.parts
-                )
-            )
-            if self.retention_stamps.get(run_id) == stamp and not run.get("retention", {}).get("pending"):
-                return
-            candidates, protected = retention_candidates(run, self.retention_validation, self.stopping)
-            if self.stopping.is_set():
-                return
-            self.store.update_with_others(
-                run_id, lambda record, others: apply_retention(record, others, candidates, protected)
-            )
-            self.retention_stamps[run_id] = stamp
-        except (OSError, ValueError) as error:
-            message = redact(str(error))
-            self.store.update(run_id, lambda record: record.setdefault("retention", {}).update(errors=[message]))
+        self.retention.request(run_id)
 
     def restore_state(
         self, run_id: str, state_id: str, additional_steps: int, *, confirmed: bool = False
