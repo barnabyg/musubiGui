@@ -314,14 +314,14 @@ def test_per_expert_job_saves_matching_pairs_and_restores(tmp_path: Path) -> Non
         progress = service.progress(run["id"])
         assert progress and (progress["step"], progress["total"]) == (7, 7)
         source = next(state for state in states if state["counts"] == {"low": 3, "high": 3})
-        # One more update per expert reaches the switch interval from inside it.
-        restored = service.restore_state(run["id"], source["id"], 1, confirmed=True)
+        # Two more updates per expert cross the switch interval at 4.
+        restored = service.restore_state(run["id"], source["id"], 2, confirmed=True)
         resumed = wait_for(service, restored["id"], "completed", device_released=True)
         assert {expert: state["optimizer_step"] for expert, state in resumed["expert_states"].items()} == {
-            "low": 4,
-            "high": 4,
+            "low": 5,
+            "high": 5,
         }
-        assert service.progress(restored["id"])["step"] == 1
+        assert service.progress(restored["id"])["step"] == 2
     finally:
         service.close()
 
