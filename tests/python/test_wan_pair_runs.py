@@ -6,7 +6,8 @@ from helpers import acceptance_workspace, instant_steps, wait_for
 
 from musubi_gui.job_models import JobConfig, JobDataset, JobDraft, PresetSelection
 from musubi_gui.job_store import JobStore
-from musubi_gui.jobs import configuration_errors, review_job
+from musubi_gui.job_validation import configuration_errors
+from musubi_gui.jobs import review_job
 from musubi_gui.outputs import OutputBrowser
 from musubi_gui.runs import RunService
 from musubi_gui.settings import load_settings

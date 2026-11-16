@@ -7,7 +7,7 @@ from helpers import acceptance_workspace, wait_for
 from musubi_gui.disk_estimate import estimate_disk
 from musubi_gui.job_models import JobConfig, JobDraft
 from musubi_gui.job_store import JobStore
-from musubi_gui.jobs import configuration_errors
+from musubi_gui.job_validation import configuration_errors
 from musubi_gui.outputs import OutputBrowser
 from musubi_gui.preview import validate_previews
 from musubi_gui.runs import RunService
