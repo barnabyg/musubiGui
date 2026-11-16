@@ -208,7 +208,7 @@ export function JobReview({
         <section aria-label="Resume compatibility">
           <h3>Resume compatibility</h3>
           <p>
-            Compared with the Job’s latest resumable training,{' '}
+            Compared with the Job’s current training,{' '}
             <a
               href={formatRoute({
                 screen: 'Runs',
@@ -226,8 +226,8 @@ export function JobReview({
               : `, saved at step ${review.resume_compatibility.saved_step}`}
             ).{' '}
             {review.resume_compatibility.compatible
-              ? 'Its saved state can resume with this revision.'
-              : 'Its saved state can’t resume with this revision; preparing starts a new Run.'}
+              ? 'Its saved state can resume with this revision. Prepare and start resumes it.'
+              : 'Its saved state can’t resume with this revision; Prepare and start offers a fresh training.'}
           </p>
           <ResumeChanges result={review.resume_compatibility} />
         </section>

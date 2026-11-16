@@ -677,3 +677,54 @@ export function RunComparison({
     </section>
   );
 }
+
+// The Job page's glance at its current training: the newest available sample and LoRA
+// checkpoint, from the training's merged list in step order. Run details lists them all.
+export function LatestOutputs({ outputs }: { outputs: RunOutputs }) {
+  const { result } = outputs;
+  const { samples, checkpoints } = grouped(
+    result?.outputs ?? [],
+    result?.latest,
+  );
+  const sample = samples.filter((item) => item.status === 'available').at(-1);
+  const checkpoint = checkpoints
+    .filter(
+      ({ item }) =>
+        item.status === 'available' &&
+        !/-(low|high)-(phase\d+|source)/.test(item.name),
+    )
+    .at(-1)?.item;
+  const step = (item: Output) =>
+    item.step === undefined ? '' : ` · step ${item.step}`;
+  return (
+    <div role="group" aria-label="Latest outputs" className="latest-outputs">
+      <LoadError outputs={outputs} />
+      {result && !sample && !checkpoint && (
+        <p>No previews or checkpoints yet.</p>
+      )}
+      {sample && (
+        <figure>
+          <MediaPreview output={sample} />
+          <figcaption>
+            Latest preview: {sample.name}
+            {step(sample)}
+          </figcaption>
+        </figure>
+      )}
+      {checkpoint && (
+        <p>
+          Latest checkpoint: {checkpoint.name}
+          {step(checkpoint)} · {byteLabel(checkpoint)}
+          {checkpoint.file_url && (
+            <>
+              {' · '}
+              <a href={`${checkpoint.file_url}?download=true`} download>
+                Download checkpoint
+              </a>
+            </>
+          )}
+        </p>
+      )}
+    </div>
+  );
+}

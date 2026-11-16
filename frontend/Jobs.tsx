@@ -9,6 +9,7 @@ import { JobReview } from './JobReview';
 import { useJobSections } from './jobSections';
 import { JobControls, JobIdentity } from './JobSettings';
 import { JobTable } from './JobTable';
+import { JobTraining } from './JobTraining';
 import { JobTransfer } from './JobTransfer';
 import { runStatus } from './runStatus';
 import { datasetItemRoute } from './route';
@@ -54,6 +55,8 @@ export function Jobs(props: JobsProps) {
     save,
     inspect,
     prepare,
+    start,
+    current,
     duplicate,
     archive,
     restore,
@@ -176,6 +179,7 @@ export function Jobs(props: JobsProps) {
           save={save}
           inspect={inspect}
           prepare={prepare}
+          start={start}
           duplicate={duplicate}
           convert={convert}
           archive={archive}
@@ -183,6 +187,7 @@ export function Jobs(props: JobsProps) {
           setTransferOpen={setTransferOpen}
         />
       )}
+      {job && <JobTraining key={job.id} current={current} />}
       {transferOpen && (
         <JobTransfer
           busy={busy}
@@ -211,6 +216,7 @@ export function Jobs(props: JobsProps) {
           />
           <JobEssentials
             media={media}
+            current={current}
             job={job}
             busy={busy}
             fields={fields}

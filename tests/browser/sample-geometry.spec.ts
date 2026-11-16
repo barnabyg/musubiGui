@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { openRunTab, runWorkspace } from './runHarness';
+import { openRunTab, runWorkspace, openCurrentRun } from './runHarness';
 import type { Job } from '../../frontend/jobTypes';
 
 test('Wan image sample checkbox stays compact at desktop and narrow widths', async ({
@@ -105,6 +105,7 @@ for (const family of ['wan', 'h3'] as const) {
       await page
         .getByRole('button', { name: 'Prepare and start', exact: true })
         .click();
+      await openCurrentRun(page);
       await expect(
         page.getByText('State: Completed', { exact: true }),
       ).toBeVisible({ timeout: 240_000 });
@@ -176,6 +177,7 @@ test('Wan image samples use independent geometry and remain available after swit
     await page
       .getByRole('button', { name: 'Prepare and start', exact: true })
       .click();
+    await openCurrentRun(page);
     await expect(
       page.getByText('State: Completed', { exact: true }),
     ).toBeVisible({ timeout: 240_000 });

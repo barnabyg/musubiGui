@@ -4,8 +4,10 @@
 
 ## Restoring a saved state
 
-**Resume training from saved state** on Run Overview continues training from a saved
-state; **How resuming works** expands its explanation. It also
+**Resume** in the Actions panel, and **Prepare and start** on the Job page, continue the
+latest saved state; see [Resuming with an edited Job revision](#resuming-with-an-edited-job-revision).
+**Resume from an earlier save** on Run Overview restores any saved state with the Run's own
+revision; **How resuming works** expands its explanation. It also
 works after restarting the application: open the stopped or interrupted Run,
 choose **Inspect saved states**, enter **Train until step** (a total, such as 1000),
 then choose **Restore as new segment** for a valid state and confirm. This immediately
@@ -88,13 +90,15 @@ continuation is unsupported. Loading a LoRA checkpoint alone is not optimizer re
 ## Resuming with an edited Job revision
 
 Restoring a state reuses the Run's own commands, so its prompt and every other setting stay
-as they were. To change some of them, edit the Job, then open the stopped or completed Run
-and, under **Resume with the Job's latest revision**, choose **Check latest revision**. It
-inspects the saved states, picks the latest valid one and compares the Job's latest revision
-with the revision the Run trained, field by field. The result lists the changed fields by
-tier and says whether the state can take them. **Resume with revision N** then confirms and
-queues a new segment from the saved step until the revision's **Training steps**, which is
-a total and must be after the saved step. The data order restarts, as for any restoration.
+as they were. To change some of them, edit the Job, then choose **Prepare and start** on the Job page
+([Training from the Job page](jobs-current-training.md)), or open the stopped or completed Run
+and choose **Resume** in its Actions panel. Resume inspects the saved states, picks the latest
+valid one and compares the Job's latest revision with the revision the Run trained, field by
+field. The result, shown under the button, lists the changed fields by tier and says whether
+the state can take them. When it can, a confirmation, **Resume with revision N**, queues a new
+segment from the saved step until the revision's **Training steps**, which is a total and must
+be after the saved step. When it can't, nothing is asked: choose a save in **Resume from an
+earlier save** to continue with the Run's own revision, or start fresh from the Job. The data order restarts, as for any restoration.
 When the revision has warned changes, the confirmation lists them with the warning and
 enables **Resume with revision N** only after **I understand these changes change what the
 LoRA learns** is ticked.
@@ -181,7 +185,7 @@ cached it caches them all; when none must, the source's latents are copied and t
 doesn't run. Cache policies set to rebuild cache every item.
 
 Review shows the work and disk use before resuming, under **Preparation before resuming** in
-both Job review's Resume compatibility and the Run's resume panel: which cache stages run,
+Job review's Resume compatibility, the Run's Resume result and the resume confirmation: which cache stages run,
 the items each caches by name and how many reuse a cache, then the new media snapshot, the
 copied caches and an estimate of the new caches, with the free space on each volume as Run
 review checks it. Comparing the segment with its source in Compare lists the changed captions
@@ -224,13 +228,13 @@ $resumeWorkspace = ".cache/resume-revision-$([guid]::NewGuid().ToString('N'))"
 
 In WAN acceptance 1, set 200 steps, save every 200 steps, enable Save optimizer/training
 state, turn off the final sample, then prepare and start. While it trains, choose **Save and
-stop**. In the Job, set LoRA rank 16 and save. On the stopped Run choose **Check latest
-revision**: expect LoRA rank under Needs a new Run and the resume button disabled. Set the
+stop**. In the Job, set LoRA rank 16 and save. On the stopped Run choose **Resume**: expect
+LoRA rank under Needs a new Run and no confirmation. Set the
 rank back to 8, change the sample prompt, set previews every 70 steps and 210 training steps,
 and save. Review configuration should show Resume compatibility naming that Run, with the
 prompt, steps and preview interval under Applies on resume. Set the learning rate to 0.0002
 and save: review lists Learning rate: 0.0001 → 0.0002 under Applies on resume, but changes
-what the LoRA learns, with the warning. On the Run, check again and resume: the confirmation
+what the LoRA learns, with the warning. On the Run, choose Resume again: the confirmation
 keeps its resume button disabled until the acknowledgement is ticked. Expect a new completed
 segment at Step 210/210 whose Samples show the step 70, 140 and 210 previews with the new
 prompt and whose training log shows `Resume learning rate: applied 0.0002`, while the
@@ -241,7 +245,7 @@ Datasets open **WAN acceptance**, select motion.mp4 and change its caption. Revi
 configuration on the Job: Resume compatibility lists `Dataset contents: 1 caption changed`
 under Resume with re-prepare, and Preparation before resuming says text caching runs for
 motion.mp4 alone while latents reuse the Run's caches, with the extra disk use. On the Run,
-check the latest revision and resume. Expect the new segment to prepare, show its latent cache
+choose Resume and confirm. Expect the new segment to prepare, show its latent cache
 as reused and its text cache completed, then train to the total. Compare it with the source
 Run: the caption's old and new text appear, and the source keeps its caption.
 

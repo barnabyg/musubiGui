@@ -127,7 +127,10 @@ The logs API keeps `progress.eta` in its upstream time format and adds
 ## Prepare and start
 
 Prepare and start on a reviewed Job prepares a Run and then trains it with no further
-click. The request is stored with the Run, so it continues with the browser closed and
+click, and stays on the Job page, whose Current training panel follows it. When the Job's
+current training has ended with a saved state, it resumes that training instead, or offers a
+fresh one when the revision can't resume (see
+[Training from the Job page](jobs-current-training.md)). The request is stored with the Run, so it continues with the browser closed and
 across a backend restart. It joins the same queue as Add to queue, so it waits its turn
 if the GPU is busy. If preparation fails or is cancelled, training doesn't start. Used
 on a revision that already has an unfinished Run, it asks that Run to continue instead
@@ -184,8 +187,8 @@ its next optimizer step:
   Job or the Run is alternating Wan, whose previews run as separate sampling stages.
 - **Save and stop** saves that step's checkpoint and state, even when the Job doesn't
   save state otherwise, then ends the trainer cleanly before the next step. The Run
-  ends as Stopped with a state from that step, which Inspect saved states accepts and
-  Resume training restores.
+  ends as Stopped with a state from that step, which Resume and Prepare and start on
+  the Job page continue, and Inspect saved states accepts.
 
 One request waits at a time: the buttons stay disabled, and the Actions panel says
 which request is waiting, until the step applies it. Then it says the step it ran at.

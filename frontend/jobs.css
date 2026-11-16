@@ -263,3 +263,27 @@
 .job-balance thead th {
   color: var(--color-text-muted);
 }
+/* The Job page's current training: file names and prompts may have few break opportunities. */
+.job-training {
+  overflow-wrap: anywhere;
+}
+.job-training figure {
+  margin: var(--space-6) 0 0;
+}
+.job-training figcaption {
+  margin-top: var(--space-2);
+  font-size: var(--text-small);
+}
+.resume-banner {
+  margin: var(--space-6) 0;
+  padding: var(--space-5) var(--space-6);
+  border-left: 3px solid var(--color-warning);
+}
+.resume-banner p {
+  margin: var(--space-2) 0;
+}
+.resume-hint {
+  display: block;
+  margin-top: var(--space-1);
+  color: var(--color-warning);
+}

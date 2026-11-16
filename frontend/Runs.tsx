@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { apiClient } from './api';
 import {
@@ -21,16 +21,11 @@ import { RunTabs, type RunTab } from './RunTabs';
 import { RunCompletion, RunElapsed, TrainingProgress } from './RunTiming';
 import { trainingOf } from './runChains';
 import { refreshRunHistory, useRunHistory } from './runHistory';
+import { useRunDetail, useRunLogs } from './runLive';
 import { RunSegments } from './RunSegments';
 import { notificationsWanted } from './runSignals';
 import { sizeLabel } from './runStatus';
-import type {
-  CompletionEstimate,
-  DeletePreview,
-  DeleteResult,
-  Progress,
-  Run,
-} from './runTypes';
+import type { DeletePreview, DeleteResult, Run } from './runTypes';
 import { ResumeRevision } from './ResumeRevision';
 import { SavedStates } from './SavedStates';
 import './runs.css';
@@ -48,7 +43,6 @@ export function Runs({
 }) {
   const history = useRunHistory();
   const runs = history.runs ?? [];
-  const [detail, setDetail] = useState<Run>();
   const [detailRefresh, setDetailRefresh] = useState(0);
   const selected = selectedId ?? '';
   const [view, setView] = useState<{
@@ -57,66 +51,25 @@ export function Runs({
   }>();
   const tab = view?.runId === selected ? view.tab : 'overview';
   const [error, setError] = useState('');
-  const [detailFailure, setDetailFailure] = useState<{
-    runId: string;
-    message: string;
-  }>();
-  const [logFailure, setLogFailure] = useState<{
-    runId: string;
-    message: string;
-  }>();
   const [notice, setNotice] = useState('');
   const [deleting, setDeleting] = useState('');
   const [busy, setBusy] = useState(false);
   const [owner, setOwner] = useState<{ run_id: string } | null>(null);
   const [fixture, setFixture] = useState(false);
   const [notify, setNotify] = useState(notificationsWanted);
-  const [live, setLive] = useState<{
-    runId: string;
-    text: string;
-    progress: Progress | null;
-    performance_available?: boolean;
-    run_estimate?: CompletionEstimate;
-  } | null>(null);
-  // Deleted, perhaps from another tab, or never there: a stale link leaves nothing to show.
-  const forgetRun = useEffectEvent(() => onSelect?.(undefined, true));
   const summary = runs.find((record) => record.id === selected);
   const changeKey = summary?.change_key;
   const training = selected ? trainingOf(runs, selected) : undefined;
   const segments =
     training && training.segments.length > 1 ? training.segments : [];
-  useEffect(() => {
-    const controller = new AbortController();
-    if (!selected) return;
-    let timer: number;
-    async function refresh() {
-      try {
-        const record = await request<Run>(
-          `/api/runs/${selected}`,
-          'GET',
-          undefined,
-          controller.signal,
-        );
-        if (controller.signal.aborted) return;
-        setDetail(record);
-        setDetailFailure(undefined);
-      } catch (reason) {
-        if (controller.signal.aborted) return;
-        const message = (reason as Error).message;
-        if (message === 'Run not found.') forgetRun();
-        else {
-          setDetailFailure({ runId: selected, message });
-          timer = window.setTimeout(() => void refresh(), 1000);
-        }
-      }
-    }
-    void refresh();
-    return () => {
-      controller.abort();
-      window.clearTimeout(timer);
-    };
-  }, [selected, changeKey, detailRefresh]);
-  const run = detail?.id === selected ? detail : undefined;
+  // A stale link to a deleted Run leaves nothing to show.
+  const detail = useRunDetail(
+    selected || undefined,
+    changeKey,
+    detailRefresh,
+    () => onSelect?.(undefined, true),
+  );
+  const run = detail.run;
   useEffect(() => {
     const controller = new AbortController();
     let timer: number;
@@ -142,64 +95,21 @@ export function Runs({
       window.clearTimeout(timer);
     };
   }, []);
-  const runId = run?.id;
-  const status = run?.status;
-  useEffect(() => {
-    if (!runId || !status || status === 'deleting') return;
-    const controller = new AbortController();
-    let timer: number;
-    const live = [
-      'preparing',
-      'training',
-      'generating',
-      'stopping',
-      'orphaned',
-      'uncertain',
-    ].includes(status);
-    async function refresh() {
-      let succeeded = false;
-      try {
-        const result = await request<{
-          text: string;
-          progress: Progress | null;
-          performance_available?: boolean;
-          run_estimate?: CompletionEstimate;
-        }>(`/api/runs/${runId}/logs`, 'GET', undefined, controller.signal);
-        if (!controller.signal.aborted) {
-          setLive({ runId: runId!, ...result });
-          setLogFailure(undefined);
-          succeeded = true;
-        }
-      } catch (reason) {
-        if (!controller.signal.aborted)
-          setLogFailure({ runId: runId!, message: (reason as Error).message });
-      } finally {
-        if ((live || !succeeded) && !controller.signal.aborted)
-          timer = window.setTimeout(() => void refresh(), 1000);
-      }
-    }
-    void refresh();
-    return () => {
-      controller.abort();
-      window.clearTimeout(timer);
-    };
-  }, [runId, status]);
+  const logs = useRunLogs(run?.id, run?.status);
   const queue = runs
     .filter((record) =>
       ['pending_preparation', 'pending_training'].includes(record.status),
     )
     .sort((a, b) => a.order - b.order);
   const ownerRun = runs.find((record) => record.id === owner?.run_id);
-  const current = live?.runId === run?.id ? live : null;
+  const current = logs.live;
   const pairedStarted =
     run?.job.config?.recipe === 'alternating' &&
     (run.resume_of ||
       run.stages.some(
         (stage) => stage.name === 'train' && stage.status !== 'pending',
       ));
-  const readError =
-    (detailFailure?.runId === selected ? detailFailure.message : '') ||
-    (logFailure && logFailure.runId === run?.id ? logFailure.message : '');
+  const readError = detail.error || logs.error;
   const showFiles = run && run.status !== 'deleting' && run.id !== deleting;
   // Changes whenever the Run, one of its stages or another segment of its training does, so
   // finished work appears without a click.
@@ -408,6 +318,18 @@ export function Runs({
                   segments={segments}
                   action={action}
                   deleteRun={(chain) => remove(run.id, chain)}
+                  resume={
+                    ENDED.includes(run.status) &&
+                    !segments.find((segment) => segment.id === run.id)?.chain
+                      .later_segments && (
+                      <ResumeRevision
+                        key={run.id}
+                        run={run}
+                        busy={busy}
+                        onResume={(body) => action('resume', body)}
+                      />
+                    )
+                  }
                 />
                 {showFiles && (
                   <SavedStates
@@ -422,15 +344,7 @@ export function Runs({
                         confirmed: true,
                       })
                     }
-                  >
-                    {ENDED.includes(run.status) && (
-                      <ResumeRevision
-                        run={run}
-                        busy={busy}
-                        onResume={(body) => action('resume', body)}
-                      />
-                    )}
-                  </SavedStates>
+                  />
                 )}
                 <RunCaching run={run} chained={segments.length > 1} />
                 {showFiles && <RunCheckpoints outputs={outputs} />}

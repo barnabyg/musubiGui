@@ -16,6 +16,9 @@ export function jobFields(
   review: Review | null,
   config: SetConfig,
   hasVideos = true,
+  // While the Job has a resumable training: the fields a resumed segment takes. Any other field
+  // is marked, but stays editable: changing it makes Start offer a fresh training instead.
+  resumableFields: string[] | null = null,
 ) {
   const liveProblems: Record<string, string> = job
     ? fieldProblems(job.family, job.config, hasVideos)
@@ -71,6 +74,13 @@ export function jobFields(
       </small>
     ) : null;
   }
+  function resumeHint(key: string) {
+    return resumableFields && !resumableFields.includes(key) ? (
+      <small className="resume-hint">
+        Needs a new Run: changing this starts a fresh training.
+      </small>
+    ) : null;
+  }
   function number(label: string, key: keyof JobConfig, help?: string) {
     return (
       <div className="field number-field">
@@ -86,6 +96,7 @@ export function jobFields(
         />
         {problemText(key)}
         {help && <small>{help}</small>}
+        {resumeHint(key)}
       </div>
     );
   }
@@ -104,11 +115,20 @@ export function jobFields(
           {label}
           {help && <small>{help}</small>}
           {problemText(key)}
+          {resumeHint(key)}
         </label>
       </div>
     );
   }
-  return { problems, reviewField, problemProps, problemText, number, toggle };
+  return {
+    problems,
+    reviewField,
+    problemProps,
+    problemText,
+    resumeHint,
+    number,
+    toggle,
+  };
 }
 
 export function focusField(key: string) {

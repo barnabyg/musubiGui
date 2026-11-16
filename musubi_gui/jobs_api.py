@@ -23,7 +23,7 @@ from musubi_gui.job_models import (
 )
 from musubi_gui.job_review import review_job
 from musubi_gui.job_store import JobStore
-from musubi_gui.resume_compat import resume_review
+from musubi_gui.resume_compat import job_training, resume_review
 from musubi_gui.resume_refresh import inspect_refresh
 from musubi_gui.run_store import RunStore
 from musubi_gui.settings import training_settings
@@ -159,6 +159,13 @@ def jobs_router(root: Path, *, fixture_mode: bool = False) -> APIRouter:
     def put_job(job_id: str, update: JobUpdate) -> Job:
         with job_errors():
             return store.save(job_id, JobDraft(**update.model_dump(exclude={"revision"})), update.revision)
+
+    @router.get("/{job_id}/training")
+    def get_training(job_id: str) -> dict[str, Any]:
+        """The Job's current training and what Start would resume, for the Job page."""
+        with job_errors():
+            store.get(job_id)
+            return job_training(RunStore(root).list(), job_id)
 
     @router.post("/{job_id}/review")
     def review(job_id: str) -> dict[str, Any]:

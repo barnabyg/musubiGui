@@ -143,7 +143,7 @@ test('a stopped Run resumes saved optimizer state through the UI after a backend
     const resume = runPanel(page, 'resume');
     await resume.getByText('How resuming works', { exact: true }).click();
     await expect(
-      resume.getByText(/Work since the last saved state must run again/),
+      resume.getByText(/Work since the chosen save must run again/),
     ).toBeVisible();
     await expect(
       resume.getByText(/data order restarts from the beginning/),

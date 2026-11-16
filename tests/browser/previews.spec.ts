@@ -1,5 +1,10 @@
 import { test, expect } from '@playwright/test';
-import { openCheckpointPanel, openRunTab, runWorkspace } from './runHarness';
+import {
+  openCheckpointPanel,
+  openRunTab,
+  runWorkspace,
+  openCurrentRun,
+} from './runHarness';
 
 test('paired Wan previews show matching per-expert steps', async ({ page }) => {
   const app = await runWorkspace({ previewImages: true });
@@ -35,6 +40,7 @@ test('paired Wan previews show matching per-expert steps', async ({ page }) => {
     await page
       .getByRole('button', { name: 'Prepare and start', exact: true })
       .click();
+    await openCurrentRun(page);
     const first = page.getByRole('button', {
       name: /^Step 4 preview · paired Wan · low 4 \/ high 4 trained steps.*available$/,
     });

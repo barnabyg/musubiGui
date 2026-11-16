@@ -16,6 +16,8 @@ from musubi_gui.resume_compat import (
     changed_fields,
     compatibility,
     flatten,
+    job_training,
+    named_save_step,
     resume_review,
 )
 
@@ -273,17 +275,15 @@ def run_record(tmp_path: Path, name: str, created: str, **fields: Any) -> dict[s
     return {"id": name, "created": created, "status": "stopped", "directory": str(directory), "job": frozen(), **fields}
 
 
-def test_job_review_compares_with_the_latest_resumable_training(tmp_path: Path) -> None:
+def test_job_review_compares_with_the_current_training(tmp_path: Path) -> None:
     job = edited(frozen(), sample_prompt="New", rank=16)
     older = run_record(tmp_path, "older", "2026-01-01", saved_states=[{"valid": True, "resume_step": 40}])
     newer = run_record(tmp_path, "newer", "2026-01-02", saved_states=[{"valid": True, "resume_step": 80}])
     runs = [
         older,
         newer,
-        # Not resumable: still training, another Job, or inspected without a valid state.
-        run_record(tmp_path, "active", "2026-01-03", status="training"),
+        # Another Job's training is never this Job's current one.
         run_record(tmp_path, "other", "2026-01-03", job={**frozen(), "id": "other"}),
-        run_record(tmp_path, "invalid", "2026-01-03", saved_states=[{"valid": False, "error": "changed"}]),
     ]
     section = resume_review(runs, job)
     assert section is not None
@@ -293,6 +293,66 @@ def test_job_review_compares_with_the_latest_resumable_training(tmp_path: Path) 
         ("rank", "new_run"),
         ("sample_prompt", "editable"),
     ]
+
+
+@pytest.mark.parametrize(
+    "latest",
+    [
+        {"status": "training"},
+        {"status": "pending_training"},
+        {"status": "stopped", "saved_states": [{"valid": False, "error": "changed"}]},
+        {"status": "stopped", "processes": [{"pid": 1}]},
+    ],
+)
+def test_a_newer_training_that_is_active_or_has_no_state_leaves_nothing_to_resume(
+    tmp_path: Path, latest: dict[str, Any]
+) -> None:
+    # Start on the Job page follows the current training, so an older resumable one is not resumed instead.
+    older = run_record(tmp_path, "older", "2026-01-01", saved_states=[{"valid": True, "resume_step": 40}])
+    runs = [older, run_record(tmp_path, "latest", "2026-01-02", **latest)]
+    assert resume_review(runs, edited(frozen())) is None
+    training = job_training(runs, "job")
+    assert (training["run_id"], training["status"], training["resume"]) == ("latest", latest["status"], None)
+
+
+def test_a_segment_that_failed_before_saving_resumes_from_the_state_it_started_from(tmp_path: Path) -> None:
+    first = run_record(tmp_path, "first", "2026-01-01", saved_states=[{"valid": True, "resume_step": 40}])
+    failed = run_record(tmp_path, "failed", "2026-01-02", status="failed", resume_of="first", saved_states=[])
+    runs = [first, failed]
+    section = resume_review(runs, edited(frozen()))
+    assert section is not None and (section["run_id"], section["saved_step"]) == ("first", 40)
+    training = job_training(runs, "job")
+    assert training["run_id"] == "failed" and training["chain_id"] == "first"
+    assert training["resume"] == {"run_id": "first", "run_status": "stopped", "saved_step": 40}
+
+
+def test_the_job_training_names_the_latest_save_from_uninspected_state_folders(tmp_path: Path) -> None:
+    run = run_record(tmp_path, "stopped", "2026-01-01")
+    checkpoints = Path(run["directory"]) / "checkpoints"
+    assert job_training([], "job") == {
+        "run_id": None,
+        "chain_id": None,
+        "status": None,
+        "resume": None,
+        "resumable_fields": job_training([], "job")["resumable_fields"],
+    }
+    assert job_training([run], "job")["resume"] is None
+    for step in (100, 300):
+        (checkpoints / f"Job-r2-step{step:08d}-state").mkdir()
+    (checkpoints / ".Job-r2-step00000400-state").mkdir()
+    assert job_training([run], "job")["resume"] == {"run_id": "stopped", "run_status": "stopped", "saved_step": 300}
+    # A completed Run's final state is at its target; inspection, once recorded, is what counts.
+    target = {**frozen(), "config": {**frozen()["config"], "steps": 500}}
+    completed = run_record(tmp_path, "completed", "2026-01-02", status="completed", job=target)
+    (Path(completed["directory"]) / "checkpoints" / "Job-r2-state").mkdir()
+    assert named_save_step(completed) == 500
+    assert named_save_step({**run, "saved_states": [{"valid": True, "resume_step": 120}]}) == 120
+    # Paired Wan folders name each expert's local steps.
+    paired = {**run, "job": {**frozen(), "config": {**frozen()["config"], "recipe": "alternating"}}}
+    assert named_save_step(paired) is None
+    fields = job_training([run], "job")["resumable_fields"]
+    assert {"steps", "sample_prompt", "learning_rate", "datasets"} <= set(fields)
+    assert not {"rank", "optimizer", "seed"} & set(fields)
 
 
 def test_job_review_uses_uninspected_state_folders_without_a_saved_step(tmp_path: Path) -> None:

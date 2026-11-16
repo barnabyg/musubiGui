@@ -63,7 +63,7 @@ export type ResumeCompatibility = {
   reprepare: boolean;
   dataset_changes: DatasetChanges | null;
   preparation: ResumePreparation | null;
-  // Job review: the Job's latest resumable training.
+  // Job review: the Run Start resumes in the Job's current training.
   run_id?: string;
   run_status?: string;
   // Run details: the saved state a resume would use.

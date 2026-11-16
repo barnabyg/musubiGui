@@ -8,6 +8,7 @@ caches again only the items whose inputs changed. Anything else needs a new Run.
 including one added to the Job later, needs a new Run until someone decides otherwise.
 """
 
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,6 +17,7 @@ from typing import Any, Literal
 from pydantic import ValidationError
 
 from musubi_gui.job_models import Job
+from musubi_gui.run_chains import Chain, chains, step_range
 
 Tier = Literal["editable", "warned", "reprepare", "new_run"]
 
@@ -240,11 +242,94 @@ def _saved_step(run: dict[str, Any]) -> tuple[bool, int | None]:
         return True, max(int(state["resume_step"]) for state in valid)
     if recorded:
         return False, None
+    return bool(_state_folders(run)), None
+
+
+def _state_folders(run: dict[str, Any]) -> list[Path]:
     try:
         folders = (Path(run["directory"]) / "checkpoints").glob("*-state")
-        return any(folder.is_dir() and not folder.name.startswith(".") for folder in folders), None
+        return [folder for folder in folders if folder.is_dir() and not folder.name.startswith(".")]
     except OSError:
-        return False, None
+        return []
+
+
+# A save at a step, named for the overall step since continuous numbering: `<name>-step00000300-state`.
+_STEP_STATE = re.compile(r"-step(\d+)-state$")
+
+
+def named_save_step(run: dict[str, Any]) -> int | None:
+    """The step of `run`'s latest saved state, as inspection recorded it or, uninspected, as its folders are named.
+
+    A folder name is not proof the state is complete; resuming inspects it. A completed Run's final `<name>-state` is
+    its target step. Paired Wan states and segments restored before continuous numbering name local steps, so they
+    report only what inspection recorded.
+    """
+    resumable, step = _saved_step(run)
+    if step is not None or not resumable:
+        return step
+    config = run.get("job", {}).get("config") or {}
+    steps = step_range(run)
+    if config.get("recipe") == "alternating" or steps.legacy:
+        return None
+    named = []
+    for folder in _state_folders(run):
+        if match := _STEP_STATE.search(folder.name):
+            named.append(int(match.group(1)))
+        elif run["status"] == "completed":
+            named.append(steps.target)
+    return max(named, default=None)
+
+
+def current_training(runs: list[dict[str, Any]], job_id: str) -> Chain | None:
+    """The Job's current training: the chain of its Runs whose latest segment was created most recently.
+
+    Resumed segments keep their Job, so a chain never mixes Jobs.
+    """
+    own = [run for run in runs if run.get("job", {}).get("id") == job_id and run["status"] != "deleting"]
+    found = chains(own)
+    return found[0] if found else None
+
+
+def resume_source(runs: list[dict[str, Any]], job_id: str) -> tuple[dict[str, Any], int | None] | None:
+    """The Run that resuming the Job's current training continues, with its inspected saved step, or None.
+
+    Only an ended training resumes. Its source is the most recently created ended segment on its line with a saved
+    state, so a latest segment that failed before saving resumes from the state it started from.
+    """
+    chain = current_training(runs, job_id)
+    if chain is None or chain.latest["status"] not in ENDED or chain.latest.get("processes"):
+        return None
+    by_id = {run["id"]: run for run in chain.segments}
+    candidates = []
+    for run_id in chain.line:
+        run = by_id[run_id]
+        if run["status"] not in ENDED or run.get("processes"):
+            continue
+        resumable, step = _saved_step(run)
+        if resumable:
+            candidates.append((run, step))
+    return max(candidates, key=lambda candidate: candidate[0]["created"], default=None)
+
+
+def job_training(runs: list[dict[str, Any]], job_id: str) -> dict[str, Any]:
+    """The Job page's view of its current training: the latest segment, and what Start would resume.
+
+    Cheap enough to read on every change of the training: it never hashes or probes saved states.
+    """
+    chain = current_training(runs, job_id)
+    source = resume_source(runs, job_id)
+    resume = None
+    if source is not None:
+        run, _ = source
+        resume = {"run_id": run["id"], "run_status": run["status"], "saved_step": named_save_step(run)}
+    return {
+        "run_id": chain.latest["id"] if chain else None,
+        "chain_id": chain.id if chain else None,
+        "status": chain.latest["status"] if chain else None,
+        "resume": resume,
+        # Fields a resumed segment takes; editing any other field needs a new Run.
+        "resumable_fields": sorted({*EDITABLE, *WARNED, *REPREPARE}),
+    }
 
 
 def resume_review(
@@ -253,21 +338,15 @@ def resume_review(
     *,
     refresh: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
 ) -> dict[str, Any] | None:
-    """Job review's Resume compatibility: `job` against the Job's latest resumable training, or None without one.
+    """Job review's Resume compatibility: `job` against the Job's current training, or None if it can't resume.
 
-    That is the most recently created ended Run or segment of the Job with a saved state. `refresh(run)` compares
-    the datasets' current contents with that Run's snapshot, returning `compatibility`'s dataset arguments.
+    The compared Run is `resume_source`'s, which Start on the Job page resumes. `refresh(run)` compares the
+    datasets' current contents with that Run's snapshot, returning `compatibility`'s dataset arguments.
     """
-    candidates = []
-    for run in runs:
-        if run.get("job", {}).get("id") != job["id"] or run["status"] not in ENDED or run.get("processes"):
-            continue
-        resumable, step = _saved_step(run)
-        if resumable:
-            candidates.append((run, step))
-    if not candidates:
+    found = resume_source(runs, job["id"])
+    if found is None:
         return None
-    run, step = max(candidates, key=lambda candidate: candidate[0]["created"])
+    run, step = found
     source = {"run_id": run["id"], "run_status": run["status"]}
     try:
         contents = refresh(run) if refresh else {}

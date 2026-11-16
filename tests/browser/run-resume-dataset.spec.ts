@@ -108,15 +108,24 @@ test('a caption edited after Save and stop resumes with a refreshed snapshot, af
 
     // Run details shows the same before resuming.
     await page.goto(`${app.url}/#/runs/${original.id}`);
-    const latest = runPanel(page, 'resume').getByRole('region', {
+    const latest = runPanel(page, 'actions').getByRole('group', {
       name: 'Resume with the latest revision',
     });
-    await latest
-      .getByRole('button', { name: 'Check latest revision', exact: true })
-      .click();
+    const resume = latest.getByRole('button', { name: 'Resume', exact: true });
+    const dialog = page.getByRole('dialog');
+    await resume.click();
+    // The confirmation shows the re-prepare work; cancelling leaves the check on the panel.
+    await expect(dialog).toContainText(
+      'It first takes a new snapshot of the datasets (1 caption changed) and caches only the items that changed.',
+      { timeout: 240_000 },
+    );
+    await expect(
+      dialog.getByRole('group', { name: 'Preparation before resuming' }),
+    ).toContainText('Text: caches 1 item (motion.mp4), reuses 0.');
+    await noHorizontalScroll(page);
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
     await expect(latest).toContainText(
       'This revision can resume the saved state.',
-      { timeout: 240_000 },
     );
     await expect(
       latest.getByRole('list', { name: 'Resume with re-prepare', exact: true }),
@@ -125,14 +134,10 @@ test('a caption edited after Save and stop resumes with a refreshed snapshot, af
       latest.getByRole('group', { name: 'Preparation before resuming' }),
     ).toContainText('Text: caches 1 item (motion.mp4), reuses 0.');
     await noHorizontalScroll(page);
-    await latest
-      .getByRole('button', { name: /^Resume with revision \d+$/ })
-      .click();
-    const dialog = page.getByRole('dialog');
-    await expect(dialog).toContainText(
-      'It first takes a new snapshot of the datasets (1 caption changed) and caches only the items that changed.',
-    );
-    await noHorizontalScroll(page);
+    await resume.click();
+    await expect(dialog).toContainText('It first takes a new snapshot', {
+      timeout: 240_000,
+    });
     await dialog.getByRole('button', { name: /^Resume with revision/ }).click();
 
     await expect(

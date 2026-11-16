@@ -50,6 +50,8 @@ test('Wan and H3 prepare and train through the GUI with frozen captions cache re
       await page
         .getByRole('button', { name: 'Prepare run', exact: true })
         .click();
+      // The Job page's Current training shows the first Run until Run details opens.
+      await expect(page).toHaveURL(/#\/runs\//);
       await expect(
         page.getByText('State: Ready to start', { exact: true }),
       ).toBeVisible({ timeout: 240_000 });

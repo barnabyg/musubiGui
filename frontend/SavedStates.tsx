@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useState } from 'react';
 import { apiClient } from './api';
 import { confirmDialog } from './ConfirmDialog';
 import type { Output } from './Outputs';
@@ -7,20 +7,18 @@ import type { Run } from './runTypes';
 
 const request = apiClient('Run request failed.');
 
-// The Resume training panel: inspect a Run's saved optimizer states and restore one as a new segment.
+// Resume from an earlier save: inspect a Run's saved optimizer states and restore one, with this
+// Run's own revision, as a new segment.
 export function SavedStates({
   runId,
   files,
   config,
   onRestore,
-  children,
 }: {
   runId: string;
   files: Output[];
   config: Run['job']['config'];
   onRestore: (stateId: string, steps: number) => Promise<void>;
-  // Resuming with the Job's latest revision, above restoring a chosen state with this Run's.
-  children?: ReactNode;
 }) {
   const [states, setStates] = useState<
     {
@@ -54,8 +52,8 @@ export function SavedStates({
     }
   }
   return (
-    <section className="panel" aria-label="Resume training">
-      <h2>Resume training from saved state</h2>
+    <section className="panel" aria-label="Resume from an earlier save">
+      <h2>Resume from an earlier save</h2>
       {/* Reference text: closed by default so the controls come first. */}
       <details>
         <summary>How resuming works</summary>
@@ -68,9 +66,11 @@ export function SavedStates({
           guarantee a checkpoint or state save.
         </p>
         <p>
-          After stopping or restarting the app, inspect saved states, choose the
-          step to train until and select Restore as new segment. Work since the
-          last saved state must run again. The original Run stays in history.
+          Resume in Actions, or Prepare and start on the Job page, continues the
+          latest save. To go back to an earlier one, inspect saved states,
+          choose the step to train until and select Restore as new segment; it
+          trains with this Run’s revision. Work since the chosen save must run
+          again. The original Run stays in history.
         </p>
         {config?.save_state === false ? (
           <p>
@@ -88,7 +88,6 @@ export function SavedStates({
           </p>
         )}
       </details>
-      {children}
       {files.length > 0 && (
         <details>
           <summary>Optimizer state files ({files.length})</summary>

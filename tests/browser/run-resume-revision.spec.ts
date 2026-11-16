@@ -66,27 +66,21 @@ test('a stopped Run resumes with an edited revision of its Job, after review sho
     };
     await writeFile(path.join(settings.checkout, 'instant-steps'), '');
 
-    // A changed LoRA rank can't resume: the panel names it and offers no resume.
+    // A changed LoRA rank can't resume: Resume names it and asks nothing.
     const rejected = await save({ rank: 16 });
-    const resume = runPanel(page, 'resume');
-    const latest = resume.getByRole('region', {
+    const latest = runPanel(page, 'actions').getByRole('group', {
       name: 'Resume with the latest revision',
     });
-    await latest
-      .getByRole('button', { name: 'Check latest revision', exact: true })
-      .click();
+    const resume = latest.getByRole('button', { name: 'Resume', exact: true });
+    await resume.click();
     await expect(
       latest.getByRole('list', { name: 'Needs a new Run' }),
-    ).toContainText('LoRA rank: 8 → 16');
+    ).toContainText('LoRA rank: 8 → 16', { timeout: 240_000 });
+    await expect(latest).toContainText(`Revision ${rejected} · `);
     await expect(latest).toContainText(
       'This revision can’t resume the saved state.',
     );
-    await expect(
-      latest.getByRole('button', {
-        name: `Resume with revision ${rejected}`,
-        exact: true,
-      }),
-    ).toBeDisabled();
+    await expect(page.getByRole('dialog')).toBeHidden();
 
     // Restore the rank; edit the preview prompt, raise the total and the learning rate.
     const revision = await save({
@@ -133,12 +127,13 @@ test('a stopped Run resumes with an edited revision of its Job, after review sho
     await noHorizontalScroll(page);
 
     await page.goto(`${app.url}/#/runs/${original.id}`);
-    await latest
-      .getByRole('button', { name: 'Check latest revision', exact: true })
-      .click();
+    // Resume checks the latest revision and asks before resuming; cancelling leaves the check shown.
+    const dialog = page.getByRole('dialog');
+    await resume.click();
+    await expect(dialog).toContainText('until step 210', { timeout: 240_000 });
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
     await expect(latest).toContainText(
       'This revision can resume the saved state.',
-      { timeout: 240_000 },
     );
     await expect(latest).toContainText(/until step 210/);
     await expect(
@@ -153,14 +148,10 @@ test('a stopped Run resumes with an edited revision of its Job, after review sho
       'Changing these mid-training changes what the LoRA learns',
     );
     await noHorizontalScroll(page);
-    await latest
-      .getByRole('button', {
-        name: `Resume with revision ${revision}`,
-        exact: true,
-      })
-      .click();
-    const dialog = page.getByRole('dialog');
-    await expect(dialog).toContainText('The data order restarts.');
+    await resume.click();
+    await expect(dialog).toContainText('The data order restarts.', {
+      timeout: 240_000,
+    });
     await expect(dialog).toContainText('until step 210');
     // The warned change must be acknowledged before resuming.
     await expect(

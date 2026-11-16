@@ -1,3 +1,4 @@
+import type { CurrentTraining } from './currentTraining';
 import { JobSection } from './JobSection';
 import { focusField, type JobFields } from './jobFields';
 import type { Job, SetConfig, TrainingOptions } from './jobTypes';
@@ -6,6 +7,7 @@ import { JobTrainingControls } from './JobSettings';
 
 export function JobEssentials({
   job,
+  current,
   busy,
   fields,
   media,
@@ -13,6 +15,7 @@ export function JobEssentials({
   trainingOptions,
 }: {
   job: Job;
+  current: CurrentTraining;
   busy: boolean;
   fields: JobFields;
   media: JobMedia;
@@ -89,7 +92,12 @@ export function JobEssentials({
         </p>
       )}
       {fields.number(
-        'Training steps',
+        // A total, not an increment: Start resumes a stopped training until this step.
+        !current.resume
+          ? 'Training steps'
+          : current.resume.saved_step === null
+            ? 'Training steps (total)'
+            : `Training steps (total; training is at step ${current.resume.saved_step})`,
         'steps',
         job.config.recipe === 'alternating'
           ? job.config.wan_steps_per_expert === false

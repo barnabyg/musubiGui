@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { runWorkspace } from './runHarness';
+import { runWorkspace, openCurrentRun } from './runHarness';
 
 test('generation memory is saved and frozen independently from training', async ({
   page,
@@ -36,6 +36,7 @@ test('generation memory is saved and frozen independently from training', async 
     await page
       .getByRole('button', { name: 'Prepare and start', exact: true })
       .click();
+    await openCurrentRun(page);
     await expect(
       page.getByText('State: Completed', { exact: true }),
     ).toBeVisible({ timeout: 240_000 });

@@ -2,6 +2,7 @@ import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import { confirmDialog } from './ConfirmDialog';
 import { apiClient } from './api';
 import { type CaptionSession, useJobCaptionState } from './captionSession';
+import { type JobTrainingInfo, useCurrentTraining } from './currentTraining';
 import { jobFields } from './jobFields';
 import { jobMedia } from './jobMedia';
 import type {
@@ -16,6 +17,16 @@ import type {
 } from './jobTypes';
 import type { JobSummary } from './JobTable';
 import { plural } from './labels';
+import type { ResumeCompatibility } from './ResumeCompatibility';
+import {
+  ResumeRefusal,
+  checkResume,
+  confirmResume,
+  resumeBody,
+  resumeNeedsConfirmation,
+} from './resumeFlow';
+import { refreshRunHistory } from './runHistory';
+import type { Run } from './runTypes';
 
 export type JobsProps = {
   captions: CaptionSession[];
@@ -90,6 +101,7 @@ export function useJobEditor({
   const [transfer, setTransfer] = useState('');
   const [transferOpen, setTransferOpen] = useState(false);
   const [existingRun, setExistingRun] = useState<PreparedRun | null>(null);
+  const current = useCurrentTraining(job?.id);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -273,7 +285,14 @@ export function useJobEditor({
     if (job) edit({ ...job, config: { ...job.config, [key]: value } });
   }
   const media = jobMedia(job, datasets);
-  const fields = jobFields(job, busy, review, config, !media.imageOnly);
+  const fields = jobFields(
+    job,
+    busy,
+    review,
+    config,
+    !media.imageOnly,
+    current.resume ? (current.info?.resumable_fields ?? null) : null,
+  );
   async function create(family: 'wan' | 'h3') {
     if (dirty && !(await confirmDiscard('create a new draft'))) return;
     await perform(async () => {
@@ -356,33 +375,117 @@ export function useJobEditor({
       await reviewSaved(current);
     });
   }
-  async function prepare(start = false) {
-    if (!job || !review?.valid || dirty) return;
-    await perform(async () => {
-      const saved = await Promise.all(
-        jobCaptions.map((session) => session.flushAll()),
-      );
-      if (saved.includes(false)) return;
-      let run: PreparedRun;
-      try {
-        run = await request<PreparedRun>('/api/runs/prepare', 'POST', {
-          job_id: review.job_id,
-          reviewed_revision: review.revision,
-          start,
-        });
-      } catch (reason) {
-        setReview(null);
-        setStatus('Preparation failed');
-        throw reason;
-      }
-      // Prepare returns the matching unfinished or completed run instead of duplicating it.
-      if (run.existing && !(start && run.status !== 'completed')) {
-        setExistingRun(run);
-        setStatus('Existing run returned');
-        return;
-      }
+  // Saves any caption edits in the Job's datasets first; false if one couldn't be saved.
+  async function flushCaptions() {
+    const saved = await Promise.all(
+      jobCaptions.map((session) => session.flushAll()),
+    );
+    return !saved.includes(false);
+  }
+  async function prepareRun(reviewed: Review, start: boolean) {
+    let run: PreparedRun;
+    try {
+      run = await request<PreparedRun>('/api/runs/prepare', 'POST', {
+        job_id: reviewed.job_id,
+        reviewed_revision: reviewed.revision,
+        start,
+      });
+    } catch (reason) {
+      setReview(null);
+      setStatus('Preparation failed');
+      throw reason;
+    }
+    // Prepare returns the matching unfinished or completed run instead of duplicating it.
+    if (run.existing && !(start && run.status !== 'completed')) {
+      setExistingRun(run);
+      setStatus('Existing run returned');
+      return;
+    }
+    if (!start) {
       setStatus('Preparation submitted');
       onRun?.(run.id);
+      return;
+    }
+    // The Job page follows the training it started; Run details is a link away.
+    await refreshRunHistory();
+    setStatus('Training submitted: preparation runs first');
+  }
+  async function prepare() {
+    if (!job || !review?.valid || dirty) return;
+    await perform(async () => {
+      if (await flushCaptions()) await prepareRun(review, false);
+    });
+  }
+  // Start: resumes the Job's current training from its latest saved state when the reviewed
+  // revision can take it; otherwise, after the user confirms, prepares a fresh training. The
+  // previous training stays in Runs either way.
+  async function start() {
+    if (!job || !review?.valid || dirty) return;
+    await perform(async () => {
+      if (!(await flushCaptions())) return;
+      const training = await request<JobTrainingInfo>(
+        `/api/jobs/${job.id}/training`,
+      );
+      const source = training.resume;
+      if (source) {
+        let check: ResumeCompatibility | undefined;
+        let failure = '';
+        setStatus('Checking saved states…');
+        try {
+          check = await checkResume(source.run_id, review.revision);
+        } catch (reason) {
+          failure = (reason as Error).message;
+        }
+        if (check?.compatible) {
+          if (
+            resumeNeedsConfirmation(check) &&
+            !(await confirmResume(check, {
+              title: `Resume training with revision ${check.revision}?`,
+              confirmLabel: 'Resume training',
+            }))
+          ) {
+            setStatus('Start cancelled');
+            return;
+          }
+          await request<Run>(
+            `/api/runs/${source.run_id}/resume`,
+            'POST',
+            resumeBody(check),
+          );
+          await refreshRunHistory();
+          current.reload();
+          setStatus(
+            `Resuming from step ${check.saved_step} until step ${check.target_steps}`,
+          );
+          return;
+        }
+        const fresh = await confirmDialog({
+          title: 'Start a fresh training?',
+          body: (
+            <>
+              <p>
+                The current training can’t resume from its saved state
+                {check?.saved_step != null
+                  ? ` at step ${check.saved_step}`
+                  : ''}{' '}
+                with revision {review.revision}.
+              </p>
+              <ResumeRefusal result={check} failure={failure} />
+              <p>
+                A fresh training starts again from step 0. The previous training
+                stays in Runs.
+              </p>
+            </>
+          ),
+          confirmLabel: 'Start fresh',
+          cancelLabel: 'Keep editing',
+        });
+        if (!fresh) {
+          setStatus('Start cancelled');
+          return;
+        }
+      }
+      await prepareRun(review, true);
     });
   }
   async function duplicate() {
@@ -596,6 +699,8 @@ export function useJobEditor({
     save,
     inspect,
     prepare,
+    start,
+    current,
     duplicate,
     archive,
     restore,
