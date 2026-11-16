@@ -140,6 +140,8 @@ def test_stop_at_switch_keeps_gpu_ownership_and_restores_both_states(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root, job_id = paired_job(tmp_path, steps=12, expert_interval=3)
+    # The stop is requested between phases, so the fixture trainer needn't pace its steps.
+    (Path(load_settings(root).checkout) / "instant-steps").touch()
     service = RunService(root, fixture_mode=True, device_path=tmp_path / "gpu.sqlite")
     stopped_once = False
 
@@ -191,6 +193,8 @@ def test_stop_inside_first_phase_restores_partial_phase_before_starting_high(tmp
         states = service.saved_states(run["id"])
         source = next(state for state in states if state["schedule_step"] == 1)
         assert source["valid"] and source["counts"] == {"low": 1, "high": 0}
+        # Only the stop needed paced steps; the restored segment runs straight through.
+        (Path(load_settings(root).checkout) / "instant-steps").touch()
         restored = service.restore_state(run["id"], source["id"], 11, confirmed=True)
         completed = wait_for(service, restored["id"], "completed", device_released=True)
         assert completed["stages"][0]["training"]["steps"] == 5
@@ -274,9 +278,18 @@ def test_smoke_presets_select_a_complete_expert_recipe(tmp_path: Path) -> None:
 
 
 def test_per_expert_job_saves_matching_pairs_and_restores(tmp_path: Path) -> None:
+    # Previews are the samples under test; a final sample would add two stage processes.
     root, job_id = paired_job(
-        tmp_path, steps=7, expert_interval=4, save_every=3, preview_every=3, wan_steps_per_expert=True
+        tmp_path,
+        steps=7,
+        expert_interval=4,
+        save_every=3,
+        preview_every=3,
+        wan_steps_per_expert=True,
+        sample_enabled=False,
     )
+    # Nothing acts while a stage runs, so the fixture trainer needn't pace its steps.
+    (Path(load_settings(root).checkout) / "instant-steps").touch()
     review = review_job(root, JobStore(root).get(job_id), load_settings(root), fixture_mode=True)
     assert review["valid"], review["errors"]
     assert review["expert_schedule"]["counts"] == {"low": 7, "high": 7}
@@ -300,13 +313,14 @@ def test_per_expert_job_saves_matching_pairs_and_restores(tmp_path: Path) -> Non
         progress = service.progress(run["id"])
         assert progress and (progress["step"], progress["total"]) == (7, 7)
         source = next(state for state in states if state["counts"] == {"low": 3, "high": 3})
-        restored = service.restore_state(run["id"], source["id"], 2, confirmed=True)
+        # One more update per expert reaches the switch interval from inside it.
+        restored = service.restore_state(run["id"], source["id"], 1, confirmed=True)
         resumed = wait_for(service, restored["id"], "completed", device_released=True)
         assert {expert: state["optimizer_step"] for expert, state in resumed["expert_states"].items()} == {
-            "low": 5,
-            "high": 5,
+            "low": 4,
+            "high": 4,
         }
-        assert service.progress(restored["id"])["step"] == 2
+        assert service.progress(restored["id"])["step"] == 1
     finally:
         service.close()
 

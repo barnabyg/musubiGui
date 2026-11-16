@@ -100,10 +100,11 @@ def test_retention_prunes_old_saves_but_preserves_the_final_restorable_pair(tmp_
                 "dataset_id": draft["dataset_id"],
                 "config": {
                     "recipe": "alternating",
-                    "steps": 8,
+                    "steps": 6,
                     "expert_interval": 2,
                     "save_state": True,
-                    "save_every": 1,
+                    # Saves at each switch leave two old pairs to prune, in as few phases as possible.
+                    "save_every": 2,
                     "keep_checkpoints": 1,
                 },
             }
@@ -119,11 +120,11 @@ def test_retention_prunes_old_saves_but_preserves_the_final_restorable_pair(tmp_
         assert completed["retention"]["errors"] == []
         assert all(Path(state["path"]).is_dir() for state in completed["expert_states"].values())
         assert all(state["valid"] for state in states), states
-        assert states[-1]["valid"] and states[-1]["counts"] == {"low": 8, "high": 8}
+        assert states[-1]["valid"] and states[-1]["counts"] == {"low": 6, "high": 6}
         assert all("missing or moved" not in state["error"] for state in states)
-        restored = service.restore_state(run["id"], states[-1]["id"], 4, confirmed=True)
+        restored = service.restore_state(run["id"], states[-1]["id"], 2, confirmed=True)
         finished = wait_for(service, restored["id"], "completed", device_released=True)
-        assert finished["expert_states"]["high"]["optimizer_step"] == 12
+        assert finished["expert_states"]["high"]["optimizer_step"] == 8
     finally:
         service.close()
 

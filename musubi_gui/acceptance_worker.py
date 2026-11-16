@@ -125,7 +125,8 @@ def main(stage: str | None = None) -> None:
             (state / "scheduler.bin").write_text("synthetic scheduler", encoding="utf-8")
 
         # Longer runs stay slow enough to be observed and stopped; the two-step default needn't wait.
-        step_seconds = 0.5 if args.max_train_steps > 2 else 0
+        # A check that never acts while a stage runs can skip the wait with an `instant-steps` marker.
+        step_seconds = 0.5 if args.max_train_steps > 2 and not (Path.cwd() / "instant-steps").exists() else 0
         timing = (
             TrainingTiming(Path(os.environ["MUSUBI_RUN_TIMING_FILE"]))
             if os.environ.get("MUSUBI_RUN_TIMING_FILE")
