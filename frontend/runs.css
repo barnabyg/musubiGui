@@ -88,7 +88,7 @@
   border-color: var(--accent);
   font-weight: 700;
 }
-/* Run details header: the heading, then one line for GPU status and the browser note. */
+/* Run details: a flat stack of panels with no divider lines inside them. */
 .run-details-title {
   margin: var(--space-3) 0 var(--space-6);
 }
@@ -98,4 +98,13 @@
 .run-status-line {
   margin: 0;
   overflow-wrap: anywhere;
+}
+.run-details details:not(.panel) {
+  border-top: 0;
+  padding-top: 0;
+  margin-bottom: var(--space-5);
+}
+.run-details summary h2 {
+  display: inline;
+  margin: 0;
 }

@@ -76,7 +76,15 @@ test('comparison plays both Runs and keeps provenance and downloads when a sampl
         (run) => run.family === family && run.revision === 2,
       )!;
       await page.goto(`${backend.url}/#/runs/${before.id}`);
+      // Compare lives on Overview, never on the samples-only Samples tab.
+      await page.getByRole('tab', { name: 'Samples', exact: true }).click();
+      await expect(
+        page.getByRole('region', { name: 'Compare with another Run' }),
+      ).toBeHidden();
+      await page.getByRole('tab', { name: 'Overview', exact: true }).click();
       await page
+        .getByRole('tabpanel', { name: 'Overview' })
+        .getByRole('region', { name: 'Compare with another Run' })
         .getByLabel('Compare with run', { exact: true })
         .selectOption(after.id);
       await page

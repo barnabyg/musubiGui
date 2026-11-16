@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { runWorkspace } from './runHarness';
+import { openCheckpointPanel, runWorkspace } from './runHarness';
 
 test('paired Wan previews show matching per-expert steps', async ({ page }) => {
   const app = await runWorkspace({ previewImages: true });
@@ -58,9 +58,10 @@ test('paired Wan previews show matching per-expert steps', async ({ page }) => {
       }),
     ).toBeVisible({ timeout: 240_000 });
     await expect(first).toHaveAttribute('aria-pressed', 'true');
+    // The Run summary is on Overview; staying on Samples keeps the preview playing.
     await expect(
       page.getByText('State: Completed', { exact: true }),
-    ).toBeVisible({ timeout: 240_000 });
+    ).toBeAttached({ timeout: 240_000 });
     const retained = page.locator(`video[src="${firstSource}"]`);
     await expect(retained).toHaveAttribute('data-preview-kept', 'yes');
     await expect
@@ -73,12 +74,15 @@ test('paired Wan previews show matching per-expert steps', async ({ page }) => {
         name: /^Step 24 preview · paired Wan · low 24 \/ high 24 trained steps.*available$/,
       }),
     ).toBeVisible();
-    await expect(
-      page.getByRole('link', { name: 'Download low-noise LoRA', exact: true }),
-    ).toBeVisible();
-    await expect(
-      page.getByRole('link', { name: 'Download high-noise LoRA', exact: true }),
-    ).toBeVisible();
+    const checkpoints = await openCheckpointPanel(page);
+    for (const expert of ['low', 'high'])
+      await expect(
+        checkpoints
+          .getByRole('button', {
+            name: new RegExp(`-${expert}-step\\d+\\.safetensors · available$`),
+          })
+          .first(),
+      ).toBeVisible();
   } finally {
     await app.close();
   }
@@ -139,9 +143,10 @@ for (const family of ['wan', 'h3'] as const) {
           );
         })
         .toBe(true);
+      // The Run summary is on Overview; staying on Samples keeps the preview playing.
       await expect(
         page.getByText('State: Training', { exact: true }),
-      ).toBeVisible();
+      ).toBeAttached();
       await first.click();
       const video = page.getByLabel('Output video', { exact: true });
       await video.evaluate(async (element) => {

@@ -1,9 +1,10 @@
 # Run outputs and revision comparison
 
-Choose a persistent Run. Its sample and a download for the final LoRA come first, with any
-warnings. Run outputs below lists the samples and, collapsed, the LoRA checkpoints with step
-and size; weights inside a saved state's folder are listed under Saved optimizer state, not
-as LoRAs. Select a file to inspect its originating Run, metadata and availability.
+Choose a persistent Run. Output warnings and sample errors appear in its Run summary.
+The Checkpoints panel on Overview lists, collapsed, the LoRA checkpoints with step and
+size, and the Samples tab lists the samples; weights inside a saved state's folder are
+listed under Optimizer state files, not as LoRAs. Select a file to inspect its originating
+Run, metadata and availability. Checkpoint and sample selections are kept separately.
 Image, video and audio samples play in the browser; Open output in browser and
 Download output use only the recorded file identity. Checkpoint downloads remain
 binary attachments, named after the job as `<job name>-r<revision>[-step<N>].safetensors`
@@ -14,13 +15,12 @@ and phase suffixes. Each Run's separate output folder prevents same-name Jobs fr
 overwriting each other. Existing Runs keep their recorded names and paths, including
 job-ID names. Legacy `.pt`/`.pth`/`.ckpt` files are never unpickled.
 
-Alternating Wan Runs show **Paired LoRAs** with separate low/high download links and
-each expert's cumulative optimizer steps. Download names include the expert and phase
-(or `source` for a checkpoint copied into a restored segment), so the two files do not
-share a download name. Earlier phase and interval checkpoints remain in Run outputs.
-While a Run is preparing, ready or active, missing expert checkpoints show as
-pending. An incomplete pair is labelled explicitly once the Run has completed,
-failed, stopped, been cancelled or been interrupted. Saved-state weights remain separate from
+Alternating Wan Runs list each expert's checkpoints under Checkpoints. Download names
+include the expert and phase (or `source` for a checkpoint copied into a restored
+segment), so the two files do not share a download name. Earlier phase and interval
+checkpoints remain listed. An incomplete pair is reported as a warning in the Run
+summary once the Run has completed, failed, stopped, been cancelled or been
+interrupted. Saved-state weights remain separate from
 the downloadable LoRAs. Paired sample metadata records both exact checkpoint paths,
 SHA-256 digests and step counts; sampling refuses missing or changed trained checkpoints.
 

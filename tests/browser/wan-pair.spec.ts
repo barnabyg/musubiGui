@@ -1,5 +1,9 @@
 import { test, expect } from '@playwright/test';
-import { runWorkspace } from './runHarness';
+import {
+  checkpointDownload,
+  openCheckpointPanel,
+  runWorkspace,
+} from './runHarness';
 
 test('Wan offers only alternating training for new jobs and presets', async ({
   page,
@@ -121,40 +125,27 @@ test('alternating Wan settings persist, train both experts and restore the paire
     await expect(
       page.getByRole('button', { name: 'Start training', exact: true }),
     ).toBeEnabled({ timeout: 240_000 });
-    const pendingPair = page.getByLabel('Paired LoRA outputs');
-    await expect(
-      pendingPair.getByText('Checkpoint pending', { exact: true }),
-    ).toHaveCount(2);
     await expect(
       page.getByText(/The paired LoRA outputs are incomplete/),
     ).toHaveCount(0);
     await page
       .getByRole('button', { name: 'Start training', exact: true })
       .click();
-    await expect(page.getByLabel('Paired LoRA outputs')).toContainText(
-      '8 optimizer steps',
-      { timeout: 240_000 },
-    );
-    await expect(
-      page.getByRole('link', { name: 'Download low-noise LoRA', exact: true }),
-    ).toBeVisible();
-    await expect(
-      page.getByRole('link', { name: 'Download high-noise LoRA', exact: true }),
-    ).toBeVisible();
     await expect(page.getByLabel('Training progress')).toContainText(
       'Step 8/8',
+      { timeout: 240_000 },
     );
     await expect(
       page.getByText('State: Completed', { exact: true }),
     ).toBeVisible({ timeout: 240_000 });
     for (const expert of ['low', 'high'] as const) {
       const downloaded = page.waitForEvent('download');
-      await page
-        .getByRole('link', {
-          name: `Download ${expert}-noise LoRA`,
-          exact: true,
-        })
-        .click();
+      await (
+        await checkpointDownload(
+          page,
+          new RegExp(`-${expert}-step0*8\\.safetensors · available$`),
+        )
+      ).click();
       expect((await downloaded).suggestedFilename()).toMatch(
         new RegExp(`-${expert}-step8\\.safetensors$`),
       );
@@ -179,7 +170,9 @@ test('alternating Wan settings persist, train both experts and restore the paire
     await app.start();
     await page.reload();
     await expect(
-      page.getByRole('link', { name: 'Download high-noise LoRA', exact: true }),
+      (await openCheckpointPanel(page)).getByRole('button', {
+        name: /-high-step0*8\.safetensors · available$/,
+      }),
     ).toBeVisible();
     await page
       .getByRole('button', { name: 'Inspect saved states', exact: true })
@@ -211,9 +204,11 @@ test('alternating Wan settings persist, train both experts and restore the paire
     await expect(
       page.getByText('State: Completed', { exact: true }),
     ).toBeVisible({ timeout: 240_000 });
-    await expect(page.getByLabel('Paired LoRA outputs')).toContainText(
-      '7 optimizer steps',
-    );
+    await expect(
+      (await openCheckpointPanel(page)).getByRole('button', {
+        name: /-low-step0*7\.safetensors · available$/,
+      }),
+    ).toBeVisible();
     await page
       .getByRole('tablist', { name: 'Run views' })
       .getByRole('tab', { name: 'Samples', exact: true })

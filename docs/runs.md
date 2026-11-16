@@ -7,11 +7,14 @@ Preparing or Ready to start, and the stored values are unchanged. The GPU line n
 using the GPU and links to its Run. On Run details it shares one line with the reminder that
 closing the browser leaves training running.
 
-Each Run opens on **Overview**, with progress, controls, diagnostics and LoRA
-downloads. **Samples** holds generated media and periodic previews. Use the tabs
+Each Run opens on **Overview**, a flat stack of panels: the Run summary (state, timing,
+progress, warnings and the originating job), Actions with the stage stepper, Resume
+training, Caching, Checkpoints, Compare with another Run, Inputs and output folder, and
+Stage logs. **Samples** holds only generated media and periodic previews. Use the tabs
 or arrow keys to switch views. Switching views keeps the selected sample and its
 player mounted, so returning preserves playback. New previews do not replace a
-selected sample. LoRA downloads remain visible on both tabs.
+selected sample. Take a LoRA from the Checkpoints panel or straight from the Run's
+output folder.
 
 New output and cache folders use the Job name and a UTC timestamp, for example
 `My-Job-2026-11-12_12-30-00Z`. Retry folders include `retry` before the timestamp.
@@ -512,8 +515,8 @@ that grace period makes the Run orphaned instead.
 
 ## Saved state
 
-**Resume training from saved state** is near the top of Run Overview; **How resuming
-works** expands its explanation. It also
+**Resume training from saved state** follows the Run summary and Actions on Run
+Overview. **How resuming works** expands the explanation below. It also
 works after restarting the application: open the stopped or interrupted Run,
 choose **Inspect saved states**, enter **Additional segment steps**, then choose
 **Restore as new segment** for a valid state and confirm. This immediately queues

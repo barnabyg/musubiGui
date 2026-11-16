@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import path from 'node:path';
 import { access, readdir } from 'node:fs/promises';
-import { runWorkspace, type RunRecord } from './runHarness';
+import { checkpointDownload, runWorkspace, type RunRecord } from './runHarness';
 
 test('Run and output folders keep readable frozen Job names without collisions', async ({
   page,
@@ -41,11 +41,13 @@ test('Run and output folders keep readable frozen Job names without collisions',
     await page
       .getByRole('button', { name: 'Start training', exact: true })
       .click();
-    const download = page.getByRole('link', {
-      name: 'Download final LoRA',
-      exact: true,
-    });
-    await expect(download).toBeVisible({ timeout: 240_000 });
+    await expect(
+      page.getByText('State: Completed', { exact: true }),
+    ).toBeVisible({ timeout: 240_000 });
+    const download = await checkpointDownload(
+      page,
+      /^Summer---test-r2\.safetensors · available$/,
+    );
     const href = await download.getAttribute('href');
     expect((await fetch(app.url + href)).ok).toBe(true);
     const files = await readdir(path.join(records[0].directory, 'checkpoints'));

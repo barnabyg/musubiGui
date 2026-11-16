@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { runWorkspace } from './runHarness';
+import { finalCheckpointButton, runWorkspace } from './runHarness';
 
 test.use({ actionTimeout: 240_000 });
 
@@ -211,9 +211,7 @@ test('dataset inclusion and removal name dependent drafts while prepared Runs ke
     await expect(
       page.getByText('State: Completed', { exact: true }),
     ).toBeVisible({ timeout: 240_000 });
-    await expect(
-      page.getByRole('link', { name: 'Download final LoRA', exact: true }),
-    ).toBeVisible();
+    await expect(await finalCheckpointButton(page)).toHaveText(/· available$/);
   } finally {
     await app.close();
   }

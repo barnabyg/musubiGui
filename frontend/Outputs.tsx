@@ -29,10 +29,6 @@ type OutputList = {
   outputs: Output[];
   warnings: string[];
   note: string;
-  lora_pair?: Record<
-    'low' | 'high',
-    { steps: number; output: Output | null }
-  > | null;
 };
 type Comparison = {
   before: string;
@@ -133,7 +129,9 @@ function ComparisonSamples({
     samples.find((item) => item.id === selected) ?? preview ?? samples[0];
   return (
     <section className="comparison-samples" aria-label={label}>
-      <h4>{label}</h4>
+      <p>
+        <strong>{label}</strong>
+      </p>
       <p>
         <strong>{result.job.name}</strong> · {result.job.family.toUpperCase()} ·
         revision {result.job.revision}
@@ -191,10 +189,23 @@ function ComparisonSamples({
   );
 }
 
-// Keeps one list of a Run's files for the result at the top and the inventory below it.
+const settledStates = [
+  'completed',
+  'failed',
+  'stopped',
+  'cancelled',
+  'interrupted',
+];
+
+// Keeps one list of a Run's files for the Overview and Samples tabs. A selection is kept per
+// kind, so choosing a checkpoint on Overview leaves the selected sample on Samples alone.
 export function useRunOutputs(runId: string | undefined, runState: string) {
   const [result, setResult] = useState<OutputList | null>(null);
-  const [selection, setSelection] = useState<{ runId: string; id: string }>();
+  const [selection, setSelection] = useState<{
+    runId: string;
+    sample?: string;
+    checkpoint?: string;
+  }>();
   const history = useRunHistory();
   const [failure, setFailure] = useState<{ runId?: string; message: string }>();
   const [busy, setBusy] = useState(false);
@@ -235,10 +246,13 @@ export function useRunOutputs(runId: string | undefined, runState: string) {
       controller.abort();
     };
   }, [runId, runState, refresh]);
+  const chosen = selection?.runId === runId ? selection : undefined;
   return {
-    selected: selection && selection.runId === runId ? selection.id : '',
-    select(id: string) {
-      if (runId) setSelection({ runId, id });
+    selected: { sample: chosen?.sample, checkpoint: chosen?.checkpoint },
+    select(item: Output) {
+      if (!runId) return;
+      const kind = item.kind === 'checkpoint' ? 'checkpoint' : 'sample';
+      setSelection({ ...chosen, runId, [kind]: item.id });
     },
     result: result?.run_id === runId ? result : null,
     runs: history.runs ?? [],
@@ -257,38 +271,15 @@ export function stateFiles(outputs: RunOutputs) {
 
 export type RunOutputs = ReturnType<typeof useRunOutputs>;
 
-// Keep LoRA downloads and artifact warnings visible outside the Samples tab.
-export function RunResult({ outputs }: { outputs: RunOutputs }) {
+// Artifact warnings, and sample errors once nothing is still writing the files.
+export function RunWarnings({ outputs }: { outputs: RunOutputs }) {
   const { result } = outputs;
   if (!result) return null;
-  const { samples, checkpoints, final: singleFinal } = grouped(result.outputs);
-  const final = result.lora_pair ? undefined : singleFinal;
-  // While a Run is working its files can legitimately be half-written.
-  const settled = [
-    'completed',
-    'failed',
-    'stopped',
-    'cancelled',
-    'interrupted',
-  ].includes(result.status);
-  const problems = settled ? samples.filter((item) => item.error) : [];
-  const latest =
-    settled && !final && !result.lora_pair
-      ? checkpoints
-          .filter(({ item }) => item.status === 'available')
-          .sort((a, b) => (b.step ?? 0) - (a.step ?? 0))[0]
-      : undefined;
-  if (
-    !final &&
-    !latest &&
-    !problems.length &&
-    !result.warnings.length &&
-    !result.lora_pair
-  )
-    return null;
+  const problems = settledStates.includes(result.status)
+    ? grouped(result.outputs).samples.filter((item) => item.error)
+    : [];
   return (
-    <section className="panel run-result" aria-label="Run result">
-      <h2>Result</h2>
+    <>
       {result.warnings.map((warning) => (
         <p className="error" key={warning}>
           {warning}
@@ -299,116 +290,177 @@ export function RunResult({ outputs }: { outputs: RunOutputs }) {
           {item.name}: {item.error}
         </p>
       ))}
-      {result.lora_pair && (
-        <section aria-label="Paired LoRA outputs">
-          <h3>Paired LoRAs</h3>
-          {(['low', 'high'] as const).map((expert) => {
-            const selected = result.lora_pair![expert];
-            const output = selected.output;
-            return (
-              <div className="run-result-lora" key={expert}>
-                <span>
-                  <strong>
-                    {expert === 'low' ? 'Low' : 'High'}-noise LoRA
-                  </strong>{' '}
-                  · {selected.steps} optimizer steps
-                </span>
-                {output?.status === 'available' && output.file_url ? (
-                  <a
-                    className="button-link"
-                    href={`${output.file_url}?download=true`}
-                    download
-                  >
-                    <Download /> Download {expert}-noise LoRA
-                  </a>
-                ) : (
-                  <span className={settled ? 'error-text' : undefined}>
-                    {settled
-                      ? (output?.error ?? 'No complete checkpoint available')
-                      : 'Checkpoint pending'}
-                  </span>
-                )}
-              </div>
-            );
-          })}
-        </section>
-      )}
-      {latest?.item.file_url && (
-        <div className="run-result-lora">
-          <span>
-            <strong>Latest checkpoint</strong> step {latest.step} ·{' '}
-            {byteLabel(latest.item)}
-          </span>
-          <a
-            className="button-link"
-            href={`${latest.item.file_url}?download=true`}
-            download
-          >
-            <Download /> Download latest checkpoint
-          </a>
-        </div>
-      )}
-      {final && (
-        <div className="run-result-lora">
-          <span>
-            <strong>Final LoRA</strong> {byteLabel(final)}
-          </span>
-          {final.file_url && final.status === 'available' ? (
-            <a
-              className="button-link"
-              href={`${final.file_url}?download=true`}
-              download
-            >
-              <Download /> Download final LoRA
+    </>
+  );
+}
+
+function Chooser({ item, outputs }: { item: Output; outputs: RunOutputs }) {
+  const kind = item.kind === 'checkpoint' ? 'checkpoint' : 'sample';
+  return (
+    <button
+      aria-pressed={item.id === outputs.selected[kind]}
+      onClick={() => outputs.select(item)}
+    >
+      {item.name} · {item.status}
+    </button>
+  );
+}
+
+function OutputDetail({ output, label }: { output: Output; label: string }) {
+  return (
+    <div className="output-detail" aria-label={label}>
+      <p>
+        <strong>{output.name}</strong>
+      </p>
+      <p>
+        {output.status} · {byteLabel(output)} · from Run{' '}
+        {output.run_id.slice(0, 8)}
+      </p>
+      {output.error && <p className="error">{output.error}</p>}
+      <MediaPreview output={output} />
+      {output.file_url &&
+        !['missing', 'blocked', 'unreadable'].includes(output.status) && (
+          <p>
+            {output.status === 'available' && output.kind !== 'checkpoint' && (
+              <>
+                <a href={output.file_url} target="_blank" rel="noreferrer">
+                  Open output in browser
+                </a>
+                {' · '}
+              </>
+            )}
+            <a href={`${output.file_url}?download=true`} download>
+              Download output
             </a>
-          ) : (
-            <span className="error-text">{final.error ?? final.status}</span>
+          </p>
+        )}
+      {output.metadata && (
+        <details>
+          <summary>Output metadata</summary>
+          <pre>{JSON.stringify(output.metadata, null, 2)}</pre>
+        </details>
+      )}
+    </div>
+  );
+}
+
+function LoadError({ outputs }: { outputs: RunOutputs }) {
+  return outputs.error ? (
+    <p className="error" role="alert">
+      {outputs.error}
+    </p>
+  ) : null;
+}
+
+// The Overview's view of a Run's files: its LoRA checkpoints, and the way to re-read them all.
+export function RunCheckpoints({ outputs }: { outputs: RunOutputs }) {
+  const { result } = outputs;
+  const { checkpoints } = grouped(result?.outputs ?? []);
+  const output = checkpoints.find(
+    ({ item }) => item.id === outputs.selected.checkpoint,
+  )?.item;
+  return (
+    <section className="panel" aria-label="Checkpoints">
+      <h2>Checkpoints</h2>
+      <p>
+        Checkpoints from this Run. Open the Samples tab for generated media.
+      </p>
+      <button disabled={outputs.busy} onClick={outputs.reload}>
+        Refresh outputs
+      </button>
+      <LoadError outputs={outputs} />
+      {result && (
+        <>
+          <p>
+            {result.job.name} · {result.job.family.toUpperCase()} · revision{' '}
+            {result.job.revision}
+          </p>
+          {result.outputs.length === 0 && (
+            <p>
+              No supported outputs found yet. They appear here when a training
+              or sample stage finishes.
+            </p>
           )}
-        </div>
+          {checkpoints.length > 0 && (
+            <details className="output-checkpoints">
+              <summary>LoRA checkpoints ({checkpoints.length})</summary>
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Step</th>
+                    <th scope="col">Size</th>
+                    <th scope="col">File</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {checkpoints.map(({ item, step }) => (
+                    <tr key={item.id}>
+                      <td>{checkpointLabel(item, step)}</td>
+                      <td>{byteLabel(item)}</td>
+                      <td>
+                        <Chooser item={item} outputs={outputs} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </details>
+          )}
+          {output && (
+            <OutputDetail output={output} label="Selected checkpoint" />
+          )}
+          <p>{result.note}</p>
+        </>
       )}
     </section>
   );
 }
 
-export function Outputs({
+// The Samples tab: generated media and nothing else.
+export function RunSamples({ outputs }: { outputs: RunOutputs }) {
+  const { result } = outputs;
+  const { samples } = grouped(result?.outputs ?? []);
+  const output = samples.find((item) => item.id === outputs.selected.sample);
+  return (
+    <section className="panel" aria-label="Samples">
+      <h2>Samples</h2>
+      <LoadError outputs={outputs} />
+      {result && samples.length === 0 && (
+        <p>
+          No generated samples recorded for this Run. Samples appear here when
+          available.
+        </p>
+      )}
+      {samples.length > 0 && (
+        <div className="job-library" aria-label="Output files">
+          {samples.map((item) => (
+            <span key={item.id}>
+              <Chooser item={item} outputs={outputs} />
+            </span>
+          ))}
+        </div>
+      )}
+      {output && <OutputDetail output={output} label="Selected sample" />}
+    </section>
+  );
+}
+
+export function RunComparison({
   runId,
   outputs,
-  tab,
 }: {
   runId: string;
   outputs: RunOutputs;
-  tab: 'overview' | 'samples';
 }) {
-  const {
-    result: currentResult,
-    runs,
-    error: loadError,
-    reload,
-    selected,
-    select,
-  } = outputs;
   const [other, setOther] = useState('');
   const [comparison, setComparison] = useState<Comparison | null>(null);
-  const [compareError, setCompareError] = useState('');
+  const [error, setError] = useState('');
   const [comparing, setComparing] = useState(false);
   const busy = outputs.busy || comparing;
-  const error = compareError || loadError;
-  const output = currentResult?.outputs.find((item) => item.id === selected);
-  const groups = grouped(currentResult?.outputs ?? []);
-  function chooser(item: Output) {
-    return (
-      <button
-        aria-pressed={item.id === selected}
-        onClick={() => select(item.id)}
-      >
-        {item.name} · {item.status}
-      </button>
-    );
-  }
   async function compare() {
     if (!other) return;
     setComparing(true);
-    setCompareError('');
+    setError('');
     try {
       const [changes, before, after] = await Promise.all([
         read<Omit<Comparison, 'samples'>>(
@@ -419,126 +471,19 @@ export function Outputs({
       ]);
       setComparison({ ...changes, samples: [before, after] });
     } catch (reason) {
-      setCompareError((reason as Error).message);
+      setError((reason as Error).message);
     } finally {
       setComparing(false);
     }
   }
   return (
-    <section className="panel" aria-label="Run outputs">
-      <h2>Run outputs</h2>
-      <p>
-        {tab === 'samples'
-          ? 'Samples and periodic previews from this Run.'
-          : 'Checkpoints from this Run. Open the Samples tab for generated media.'}
-      </p>
-      <button disabled={busy} onClick={reload}>
-        Refresh outputs
-      </button>
+    <section className="panel" aria-label="Compare with another Run">
+      <h2>Compare with another Run</h2>
       {error && (
         <p className="error" role="alert">
           {error}
         </p>
       )}
-      {currentResult && (
-        <>
-          <p>
-            {currentResult.job.name} · {currentResult.job.family.toUpperCase()}{' '}
-            · revision {currentResult.job.revision}
-          </p>
-          {currentResult.outputs.length === 0 && (
-            <p>
-              No supported outputs found yet. They appear here when a training
-              or sample stage finishes.
-            </p>
-          )}
-          {groups.samples.length === 0 && tab === 'samples' && (
-            <p>
-              No generated samples recorded for this Run. Samples appear here
-              when available.
-            </p>
-          )}
-          {groups.samples.length > 0 && (
-            <div hidden={tab !== 'samples'}>
-              <h3>Samples</h3>
-              <div className="job-library" aria-label="Output files">
-                {groups.samples.map((item) => (
-                  <span key={item.id}>{chooser(item)}</span>
-                ))}
-              </div>
-            </div>
-          )}
-          {groups.checkpoints.length > 0 && (
-            <details className="output-checkpoints" hidden={tab === 'samples'}>
-              <summary>LoRA checkpoints ({groups.checkpoints.length})</summary>
-              <table>
-                <thead>
-                  <tr>
-                    <th scope="col">Step</th>
-                    <th scope="col">Size</th>
-                    <th scope="col">File</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {groups.checkpoints.map(({ item, step }) => (
-                    <tr key={item.id}>
-                      <td>{checkpointLabel(item, step)}</td>
-                      <td>{byteLabel(item)}</td>
-                      <td>{chooser(item)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </details>
-          )}
-          {output && (
-            <div
-              className="output-detail"
-              aria-label="Selected output"
-              hidden={(output.kind === 'checkpoint') === (tab === 'samples')}
-            >
-              <h3>{output.name}</h3>
-              <p>
-                {output.status} · {byteLabel(output)} · from Run{' '}
-                {output.run_id.slice(0, 8)}
-              </p>
-              {output.error && <p className="error">{output.error}</p>}
-              <MediaPreview output={output} />
-              {output.file_url &&
-                !['missing', 'blocked', 'unreadable'].includes(
-                  output.status,
-                ) && (
-                  <p>
-                    {output.status === 'available' &&
-                      output.kind !== 'checkpoint' && (
-                        <>
-                          <a
-                            href={output.file_url}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            Open output in browser
-                          </a>
-                          {' · '}
-                        </>
-                      )}
-                    <a href={`${output.file_url}?download=true`} download>
-                      Download output
-                    </a>
-                  </p>
-                )}
-              {output.metadata && (
-                <details>
-                  <summary>Output metadata</summary>
-                  <pre>{JSON.stringify(output.metadata, null, 2)}</pre>
-                </details>
-              )}
-            </div>
-          )}
-          <p>{currentResult.note}</p>
-        </>
-      )}
-      <h3>Compare with another Run</h3>
       <label className="field">
         Compare with run
         <select
@@ -551,7 +496,7 @@ export function Outputs({
           }}
         >
           <option value="">Select another run</option>
-          {runs
+          {outputs.runs
             .filter((run) => run.id !== runId && run.status !== 'deleting')
             .map((run) => (
               <option key={run.id} value={run.id}>
