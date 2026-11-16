@@ -25,7 +25,8 @@ strategies. It draws one base sigma shared by video/audio and applies their own
 model-specific shifts. A saved unsupported H3 choice blocks review and can be
 repaired by selecting Uniform. Switching model family applies the target family's
 strategy defaults. Presets, revisions and exports preserve choices, and restoration
-keeps the original Run's strategy regardless of later Job edits.
+keeps the original Run's strategy regardless of later Job edits. Resuming with a revision
+that changes the strategy needs a new Run.
 
 These controls follow the pinned upstream
 [parser](https://github.com/kohya-ss/musubi-tuner/blob/f8a1b03794a49239a3539015075f5123d6c07d66/src/musubi_tuner/training/parser_common.py#L444-L474),
@@ -60,7 +61,8 @@ default for old and new jobs. A saved or imported unavailable choice stays visib
 but blocks review until the environment is compatible or AdamW is selected.
 Saving presets, revisions and exports preserves the optimizer. Review shows its
 effective value, and restoring a Run keeps that Run's original optimizer even if
-the Job has since changed. A conflicting frozen optimizer/command is rejected.
+the Job has since changed; resuming with a revision that changes it needs a new Run.
+A conflicting frozen optimizer/command is rejected.
 
 The supported subset comes from the pinned upstream
 [optimizer implementation](https://github.com/kohya-ss/musubi-tuner/blob/f8a1b03794a49239a3539015075f5123d6c07d66/src/musubi_tuner/training/trainer_base.py#L225-L307).

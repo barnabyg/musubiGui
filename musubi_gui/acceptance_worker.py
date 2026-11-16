@@ -191,7 +191,8 @@ def main(stage: str | None = None) -> None:
                         width=prompt["width"],
                         height=prompt["height"],
                     )
-                print(f"SYNTHETIC preview complete at step {current}", flush=True)
+                # The prompt shows which revision's previews.json a resumed segment read.
+                print(f"SYNTHETIC preview complete at step {current}: {prompt.get('prompt', '')}", flush=True)
                 if timing:
                     timing.preview_finish(completed=True)
             # Like upstream, interval saves stamp their own metadata and include the last step.

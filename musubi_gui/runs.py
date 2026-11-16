@@ -10,10 +10,14 @@ from pathlib import Path
 from typing import Any
 
 from musubi_gui.checkpoint_retention import retained_states
+from musubi_gui.job_models import Job
+from musubi_gui.job_store import JobStore
+from musubi_gui.job_validation import configuration_errors
 from musubi_gui.managed_checkout import checkout_gate
 from musubi_gui.processes import process_identity
 from musubi_gui.recipe import Stage
 from musubi_gui.redaction import redact
+from musubi_gui.resume_compat import ResumeIncompatible, compatibility, refusal
 from musubi_gui.run_cache import reuse_cache
 from musubi_gui.run_control import request as request_control
 from musubi_gui.run_control import unsaved_steps
@@ -349,6 +353,84 @@ class RunService:
             record = restored_segment(original, state, target_steps)
         create_segment(self.store, record, run_id)
         return self.enqueue(record["id"])
+
+    def resume_check(
+        self,
+        run_id: str,
+        job_revision: int | None = None,
+        target_steps: int | None = None,
+        state_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Whether a revision of the Run's Job (the latest by default) can resume a valid saved state.
+
+        The state is `state_id`, or the latest valid one; the total is `target_steps`, or the revision's steps.
+        """
+        _, state, _, result = self._resume_plan(run_id, job_revision, target_steps, state_id)
+        return {**result, "run_id": run_id, "state_id": state["id"], "state_name": state["name"]}
+
+    def resume(
+        self, run_id: str, job_revision: int, target_steps: int | None = None, state_id: str | None = None
+    ) -> dict[str, Any]:
+        """Queue a new segment that resumes a saved state with `job_revision` of the Run's Job.
+
+        Its training and sampling commands come from that revision; the frozen dataset and caches are reused.
+        A revision that changes what the state was trained with raises ResumeIncompatible naming the fields.
+        """
+        original, state, revision, result = self._resume_plan(run_id, job_revision, target_steps, state_id)
+        target = result["target_steps"]
+        if not result["compatible"]:
+            raise ResumeIncompatible(refusal(result))
+        changes = result["changes"]
+        if state.get("paired"):
+            from musubi_gui.wan_pair_restore import restored_pair
+
+            record = restored_pair(original, state, target, revision=revision, changes=changes)
+        else:
+            record = restored_segment(original, state, target, revision=revision, changes=changes)
+        create_segment(self.store, record, run_id)
+        return self.enqueue(record["id"])
+
+    def _resume_plan(
+        self, run_id: str, job_revision: int | None, target_steps: int | None, state_id: str | None
+    ) -> tuple[dict[str, Any], dict[str, Any], Job, dict[str, Any]]:
+        """The Run, the chosen valid state, the revision and their compatibility."""
+        original = self.get(run_id)
+        jobs = JobStore(self.root)
+        job_id = original["job"]["id"]
+        if jobs.is_archived(job_id):
+            raise ValueError("This job is archived. Restore it from Jobs before resuming with one of its revisions.")
+        try:
+            revision = jobs.get(job_id, job_revision)
+        except FileNotFoundError as error:
+            raise ValueError(
+                f"Revision {job_revision} of this Run's Job doesn't exist."
+                if job_revision
+                else "This Run's Job is gone."
+            ) from error
+        videos = any(item["kind"] == "video" for item in original["manifest"]["items"])
+        if errors := configuration_errors(revision, has_videos=videos):
+            raise ValueError(f"Revision {revision.revision} can't train: " + " ".join(errors))
+        self._verify_inputs(original)
+        states = [state for state in self.saved_states(run_id) if state["valid"]]
+        if not states:
+            raise ValueError(
+                "This Run has no valid saved state to resume. Resume after it stops or completes with a saved state."
+            )
+        if state_id is None:
+            # The furthest-trained state; the last listed of equals is the latest save.
+            state = max(reversed(states), key=lambda item: item["resume_step"])
+        else:
+            found = next((item for item in states if item["id"] == state_id), None)
+            if found is None:
+                raise ValueError(
+                    "Saved state is incomplete, changed or missing. Inspect saved states and choose again."
+                )
+            state = found
+        target = target_steps if target_steps is not None else revision.config.steps
+        result = compatibility(
+            original["job"], revision.model_dump(), saved_step=resume_step(original, state), target_steps=target
+        )
+        return original, state, revision, result
 
     def deletion_preview(self, run_id: str) -> dict[str, Any]:
         run = self.reconcile(run_id)

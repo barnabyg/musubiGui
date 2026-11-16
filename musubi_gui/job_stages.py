@@ -25,6 +25,25 @@ def _set_argument(args: list[str], flag: str, value: str) -> None:
 
 def build_stages(job: Job, settings: Settings, run: Path, cache: Path, kinds: set[str]) -> list[Stage]:
     """Kinds are the included item kinds, because H3 images change its commands."""
+    stages = stage_templates(job, settings, run, cache, kinds)
+    config = job.config
+    if job.family == "wan" and config.recipe == PAIRED_RECIPE:
+        from musubi_gui.wan_pair_plan import paired_stages
+
+        return paired_stages(
+            stages,
+            effective_settings(job, settings).models,
+            config.steps,
+            config.expert_interval,
+            preview_every=config.preview_every,
+            final_sample=config.sample_enabled,
+            per_expert=config.wan_steps_per_expert,
+        )
+    return stages
+
+
+def stage_templates(job: Job, settings: Settings, run: Path, cache: Path, kinds: set[str]) -> list[Stage]:
+    """The Job's stages before alternating Wan splits training into expert phases."""
     from musubi_gui.preview_memory import resolve_preview_memory
     from musubi_gui.training_options import timestep_range_policy
 
@@ -91,23 +110,10 @@ def build_stages(job: Job, settings: Settings, run: Path, cache: Path, kinds: se
                     str(stage.preview_memory["recovery"]["blocks_to_swap"]),
                     "--",
                 ]
-    stages = [
+    return [
         stage
         for stage in stages
         if stage.name != "generate"
         or config.sample_enabled
         or (config.recipe == PAIRED_RECIPE and config.preview_every > 0)
     ]
-    if job.family == "wan" and config.recipe == PAIRED_RECIPE:
-        from musubi_gui.wan_pair_plan import paired_stages
-
-        return paired_stages(
-            stages,
-            settings.models,
-            config.steps,
-            config.expert_interval,
-            preview_every=config.preview_every,
-            final_sample=config.sample_enabled,
-            per_expert=config.wan_steps_per_expert,
-        )
-    return stages

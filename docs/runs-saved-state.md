@@ -85,6 +85,69 @@ versions recorded only `additional_steps`, and remain readable. The pinned upstr
 restores optimizer, scheduler and RNG state but restarts its data position; seamless
 continuation is unsupported. Loading a LoRA checkpoint alone is not optimizer restoration.
 
+## Resuming with an edited Job revision
+
+Restoring a state reuses the Run's own commands, so its prompt and every other setting stay
+as they were. To change some of them, edit the Job, then open the stopped or completed Run
+and, under **Resume with the Job's latest revision**, choose **Check latest revision**. It
+inspects the saved states, picks the latest valid one and compares the Job's latest revision
+with the revision the Run trained, field by field. The result lists the changed fields by
+tier and says whether the state can take them. **Resume with revision N** then confirms and
+queues a new segment from the saved step until the revision's **Training steps**, which is
+a total and must be after the saved step. The data order restarts, as for any restoration.
+
+| Tier                              | Fields                                                                                                                                                                                                                                                                                                                                                                                         |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Applies on resume                 | Name, training steps (after the saved step), final sample, sample prompt, sample inference steps, sample size and frames, generation memory policy, preview interval, save interval, kept checkpoints, blocks to swap, gradient checkpointing, inactive-DiT offload, and turning saved state on                                                                                                |
+| Applies on resume, with a warning | None yet. Learning rate, timestep strategy, sigmoid scale, flow shift and gradient accumulation move here once a resumed trainer is shown to apply them (#202).                                                                                                                                                                                                                                |
+| Needs a new Run                   | Model family, recipe, model components, LoRA rank and alpha, optimizer, the fields awaiting the warning tier, runtime FP8 scaling, H2D-only block swapping, turning saved state off, expert interval, steps per expert, datasets with their repeats and resolutions, default repeats, training size and frames, frame extraction, bucketing, batch size, cache policies, audio policy and seed |
+
+A field not listed, including one added in a later version, needs a new Run. A Run frozen
+before a field existed compares it by the default it now reads as, so only real edits count.
+
+The segment's training and sampling commands are built from the new revision, plus `--resume`,
+the saved step's numbering offset and `--max_train_steps` set to the total minus the saved
+step. Its folder holds a new `previews.json` from the revision's preview settings, sealed
+with its inputs, so previews from the saved step onwards use the new prompt; Sample now
+follows the revision's preview setting. Training reads the source Run's frozen dataset
+configuration, media snapshot and caches, and nothing is prepared or rebuilt. The segment
+records the new revision as its own `job`, so Compare, outputs and provenance describe what
+it trained, and `segment.source_revision` and `segment.changes` record the revision it
+continued from and what changed. Its checkpoints are named for its own revision. Like any
+restoration, `resume_of` links it to the source Run, which is left unchanged.
+
+Alternating Wan resumes both expert states of the chosen paired position and keeps the saved
+schedule; the expert interval and steps per expert need a new Run. Paired previews and the
+final sample use the new revision's prompt and sampling settings.
+
+`POST /api/runs/{id}/resume-check {job_revision?, target_steps?, state_id?}` returns the
+comparison, changing nothing but the Run's recorded saved states: `compatible`,
+`frozen_revision`, `revision`, `saved_step`, `target_steps`, `changes` (each with `field`,
+`label`, `tier` of `editable`, `warned` or `new_run`, `before` and `after`), `blocking`
+(labels of fields needing a new Run), `errors`, `notes`, `state_id` and `state_name`. It
+defaults to the Job's latest revision, the latest valid state and the revision's steps.
+`POST /api/runs/{id}/resume {job_revision, target_steps?, state_id?}` queues the segment.
+A revision that changes a field needing a new Run, or a total at or before the saved step,
+is refused with 422 and a message naming the fields. Like every action, both refuse requests
+from another site. Restore as new segment (`restore-state`) is unchanged.
+
+Manual check from the repository root:
+
+```powershell
+$resumeWorkspace = ".cache/resume-revision-$([guid]::NewGuid().ToString('N'))"
+.\acceptance.cmd --workspace $resumeWorkspace
+```
+
+In WAN acceptance 1, set 200 steps, save every 200 steps, enable Save optimizer/training
+state, turn off the final sample, then prepare and start. While it trains, choose **Save and
+stop**. In the Job, set LoRA rank 16 and save. On the stopped Run choose **Check latest
+revision**: expect LoRA rank under Needs a new Run and the resume button disabled. Set the
+rank back to 8, change the sample prompt, set previews every 70 steps and 210 training steps,
+and save. Review configuration should show Resume compatibility naming that Run, with the
+prompt, steps and preview interval under Applies on resume. On the Run, check again and
+resume. Expect a new completed segment at Step 210/210 whose Samples show the step 70, 140
+and 210 previews with the new prompt, while the original Run stays Stopped with its revision.
+
 ## Alternating Wan saved states
 
 **Inspect saved states** lists paired schedule positions, including interval saves

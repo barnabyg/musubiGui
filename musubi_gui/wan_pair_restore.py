@@ -5,21 +5,35 @@ import shutil
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from musubi_gui.recipe import Stage
 from musubi_gui.run_paths import create_run_directory, job_folder
-from musubi_gui.run_restore import continuous_segment, resume_step, segment_steps
+from musubi_gui.run_restore import continuous_segment, resume_step, revision_inputs, revision_stages, segment_steps
 from musubi_gui.snapshots import digest_file
 from musubi_gui.wan_pair_plan import argument, paired_stages, set_argument
 
+if TYPE_CHECKING:
+    from musubi_gui.job_models import Job
 
-def restored_pair(original: dict[str, Any], state: dict[str, Any], target_steps: int) -> dict[str, Any]:
-    """Continue both experts until `target_steps`: per expert for per-expert Runs, schedule updates for legacy Runs."""
+
+def restored_pair(
+    original: dict[str, Any],
+    state: dict[str, Any],
+    target_steps: int,
+    *,
+    revision: "Job | None" = None,
+    changes: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Continue both experts until `target_steps`: per expert for per-expert Runs, schedule updates for legacy Runs.
+
+    With `revision`, phases train and sample as that revision of the Job says, keeping the saved schedule.
+    """
     steps = segment_steps(original, state, target_steps)
-    directory = create_run_directory(Path(original["directory"]).parent, original["job"]["name"], "restore")
+    folder = revision.name if revision else original["job"]["name"]
+    directory = create_run_directory(Path(original["directory"]).parent, folder, "resume" if revision else "restore")
     sources = copy.deepcopy(state["sources"])
-    files = dict(original["input_files"])
+    files = revision_inputs(original, revision, directory) if revision else dict(original["input_files"])
     for source in sources.values():
         for name, expected in source["files"].items():
             file = str(Path(source["path"]) / name)
@@ -38,20 +52,21 @@ def restored_pair(original: dict[str, Any], state: dict[str, Any], target_steps:
         copies.append((checkpoint["path"], target, checkpoint["sha256"]))
         source["checkpoint"] = {**checkpoint, "path": str(target)}
         files[str(target)] = checkpoint["sha256"]
-    templates = []
-    for name in ("train", "generate"):
-        old = next((stage for stage in original["stages"] if stage["name"] == name), None)
+    templates = revision_stages(original, revision, directory) if revision else []
+    for stage_name in () if revision else ("train", "generate"):
+        old = next((stage for stage in original["stages"] if stage["name"] == stage_name), None)
         if old:
             args = list(old["args"])
-            if name == "train":
+            if stage_name == "train":
                 set_argument(args, "--output_dir", str(directory / "checkpoints"))
                 stem = argument(args, "--output_name").rsplit("-", 2)[0]
                 set_argument(args, "--output_name", stem)
             else:
                 set_argument(args, "--save_path", str(directory / "samples"))
-            templates.append(Stage(name, args, preview_memory=copy.deepcopy(old.get("preview_memory"))))
-    models = {**original["settings"]["models"], **original["job"]["config"].get("components", {})}
-    config = original["job"]["config"]
+            templates.append(Stage(stage_name, args, preview_memory=copy.deepcopy(old.get("preview_memory"))))
+    job = revision.model_dump() if revision else original["job"]
+    models = {**original["settings"]["models"], **job["config"].get("components", {})}
+    config = job["config"]
     stages = paired_stages(
         templates,
         models,
@@ -90,7 +105,9 @@ def restored_pair(original: dict[str, Any], state: dict[str, Any], target_steps:
             **continuous_segment(resume_step(original, state), target_steps),
             "schedule_start": state["schedule_step"],
             "optimizer_step_before": state["schedule_step"],
+            **({"source_revision": original["job"]["revision"], "changes": changes or []} if revision else {}),
         },
+        job=job,
     )
     for key in [
         "stop_requested",

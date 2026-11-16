@@ -1,14 +1,19 @@
-"""Restoring a single saved optimizer state as a new Run segment."""
+"""Restoring a single saved optimizer state as a new Run segment, with the Run's own or a newer Job revision."""
 
 import copy
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+from musubi_gui.recipe import Stage
 from musubi_gui.run_estimate import freeze_training_timing
 from musubi_gui.run_paths import create_run_directory
 from musubi_gui.run_store import RunStore, utc_now
-from musubi_gui.settings import atomic_json
+from musubi_gui.settings import Settings, atomic_json
+from musubi_gui.snapshots import digest_file
+
+if TYPE_CHECKING:
+    from musubi_gui.job_models import Job
 
 # Outcome fields of the original Run that a restored segment starts without.
 _ENDED_FIELDS = [
@@ -57,11 +62,59 @@ def continuous_segment(saved: int, target_steps: int) -> dict[str, Any]:
     }
 
 
-def restored_segment(original: dict[str, Any], state: dict[str, Any], target_steps: int) -> dict[str, Any]:
-    """A prepared Run that resumes `state` in a new folder and trains until global step `target_steps`."""
+def revision_stages(original: dict[str, Any], revision: "Job", directory: Path) -> list[Stage]:
+    """Training and sampling stages built from `revision` for a segment in `directory`.
+
+    They read `original`'s frozen dataset configuration, and through it its media snapshot and caches, so the
+    segment prepares nothing. Alternating Wan stages are templates, before the schedule splits them into phases.
+    """
+    from musubi_gui.job_stages import stage_templates
+
+    kinds = {item["kind"] for item in original["manifest"]["items"]}
+    settings = Settings.model_validate(original["settings"])
+    stages = [
+        stage
+        for stage in stage_templates(revision, settings, directory, Path(original["cache"]), kinds)
+        if stage.name in {"train", "generate"}
+    ]
+    frozen = next(stage["args"] for stage in original["stages"] if stage["name"] == "train")
+    dataset = frozen[frozen.index("--dataset_config") + 1]
+    for stage in stages:
+        if "--dataset_config" in stage.args:
+            stage.args[stage.args.index("--dataset_config") + 1] = dataset
+    return stages
+
+
+def revision_inputs(original: dict[str, Any], revision: "Job", directory: Path) -> dict[str, str]:
+    """The sealed inputs of a segment training `revision`: `original`'s, with this revision's preview prompt."""
+    from musubi_gui.preview import preview_prompt
+
+    previews = Path(original["directory"]) / "previews.json"
+    files = {path: value for path, value in original["input_files"].items() if Path(path) != previews}
+    if revision.config.preview_every:
+        prompts = directory / "previews.json"
+        atomic_json(prompts, preview_prompt(revision))
+        files[str(prompts)] = digest_file(prompts)
+    return files
+
+
+def restored_segment(
+    original: dict[str, Any],
+    state: dict[str, Any],
+    target_steps: int,
+    *,
+    revision: "Job | None" = None,
+    changes: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """A prepared Run that resumes `state` in a new folder and trains until global step `target_steps`.
+
+    With `revision`, the segment trains and samples as that revision of the Job says, recording it as its own
+    and `changes` from the original's revision; without it, the original's commands are reused.
+    """
     saved = resume_step(original, state)
     additional_steps = segment_steps(original, state, target_steps)
-    directory = create_run_directory(Path(original["directory"]).parent, original["job"]["name"], "restore")
+    name = revision.name if revision else original["job"]["name"]
+    directory = create_run_directory(Path(original["directory"]).parent, name, "resume" if revision else "restore")
     record = copy.deepcopy(original)
     record.update(
         id=uuid.uuid4().hex,
@@ -80,6 +133,18 @@ def restored_segment(original: dict[str, Any], state: dict[str, Any], target_ste
     )
     for key in _ENDED_FIELDS:
         record.pop(key, None)
+    if revision:
+        record["job"] = revision.model_dump()
+        record["segment"].update(source_revision=original["job"]["revision"], changes=changes or [])
+        record["input_files"] = revision_inputs(original, revision, directory)
+        prepared = [stage for stage in record["stages"] if stage["name"] not in {"train", "generate"}]
+        built = [{**stage.record(), "status": "pending"} for stage in revision_stages(original, revision, directory)]
+        record["stages"] = prepared + built
+        for stage in built:
+            if stage["name"] == "train":
+                stage["args"][stage["args"].index("--max_train_steps") + 1] = str(additional_steps)
+                stage["args"].extend(["--resume", state["path"]])
+        return record
     for stage in record["stages"]:
         if stage["name"] not in {"train", "generate"}:
             continue

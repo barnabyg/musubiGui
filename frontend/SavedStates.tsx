@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { apiClient } from './api';
 import { confirmDialog } from './ConfirmDialog';
 import type { Output } from './Outputs';
@@ -13,11 +13,14 @@ export function SavedStates({
   files,
   config,
   onRestore,
+  children,
 }: {
   runId: string;
   files: Output[];
   config: Run['job']['config'];
   onRestore: (stateId: string, steps: number) => Promise<void>;
+  // Resuming with the Job's latest revision, above restoring a chosen state with this Run's.
+  children?: ReactNode;
 }) {
   const [states, setStates] = useState<
     {
@@ -85,6 +88,7 @@ export function SavedStates({
           </p>
         )}
       </details>
+      {children}
       {files.length > 0 && (
         <details>
           <summary>Optimizer state files ({files.length})</summary>

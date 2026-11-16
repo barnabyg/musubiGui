@@ -135,6 +135,9 @@ export type Review = {
     args: string[];
     preview_memory?: import('./PreviewMemory').PreviewMemoryChoice;
   }[];
+  // Against the Job's latest resumable training; null without one.
+  resume_compatibility?:
+    import('./ResumeCompatibility').ResumeCompatibility | null;
   expert_schedule?: {
     interval: number;
     counts: { low: number; high: number };

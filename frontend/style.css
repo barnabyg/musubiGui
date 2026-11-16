@@ -547,6 +547,14 @@ summary:focus-visible,
 .hint {
   font-size: var(--text-small);
 }
+/* Resume compatibility quotes prompts and paths, which may have few break opportunities. */
+.resume-changes {
+  overflow-wrap: anywhere;
+}
+.resume-changes h4 {
+  margin: var(--space-6) 0 var(--space-2);
+  font-size: var(--text-base);
+}
 .check {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

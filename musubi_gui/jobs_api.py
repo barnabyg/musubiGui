@@ -23,6 +23,8 @@ from musubi_gui.job_models import (
 )
 from musubi_gui.job_review import review_job
 from musubi_gui.job_store import JobStore
+from musubi_gui.resume_compat import resume_review
+from musubi_gui.run_store import RunStore
 from musubi_gui.settings import training_settings
 from musubi_gui.training_options import optimizer_options
 
@@ -160,8 +162,11 @@ def jobs_router(root: Path, *, fixture_mode: bool = False) -> APIRouter:
     @router.post("/{job_id}/review")
     def review(job_id: str) -> dict[str, Any]:
         with job_errors():
-            return review_job(
-                root, store.get(job_id), training_settings(root, fixture_mode=fixture_mode), fixture_mode=fixture_mode
+            job = store.get(job_id)
+            result = review_job(
+                root, job, training_settings(root, fixture_mode=fixture_mode), fixture_mode=fixture_mode
             )
+            result["resume_compatibility"] = resume_review(RunStore(root).list(), job.model_dump())
+            return result
 
     return router

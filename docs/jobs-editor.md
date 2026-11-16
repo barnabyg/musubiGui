@@ -68,6 +68,21 @@ experts sequentially. Simultaneous combined
 training remains unqualified. Runtime FP8 scaling requires native FP16 sources,
 not saved scaled-FP8 weights. Inactive-DiT offload is not supported by this recipe.
 
+### Resume compatibility
+
+When the Job has resumable training, Configuration review adds **Resume compatibility**.
+It compares the reviewed revision with the Job's latest resumable training: the most
+recently created stopped, completed, failed, cancelled or interrupted Run or segment of the
+Job with a saved state. It links that Run, gives its revision and saved step, and says
+whether its saved state can resume with this revision. Changed fields are listed by tier
+(Applies on resume, Applies on resume with a warning, Needs a new Run), each with its old
+and new value, followed by the note that the data order restarts. Training steps at or
+before the saved step are reported too. The saved step comes from the Run's last **Inspect
+saved states**; before that, review reports state folders without a step and skips that
+check. Review never hashes states, so it stays quick. Preparing still starts a new Run; to
+resume, use [Resume with the Job's latest revision](runs-saved-state.md#resuming-with-an-edited-job-revision)
+in Run details, which also lists the tiers.
+
 ## Drafts and revisions
 
 Launch with `launch.cmd`, register a dataset, and open Jobs. Jobs are listed in a table

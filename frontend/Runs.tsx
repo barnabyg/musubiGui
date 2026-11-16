@@ -29,10 +29,13 @@ import type {
   Progress,
   Run,
 } from './runTypes';
+import { ResumeRevision } from './ResumeRevision';
 import { SavedStates } from './SavedStates';
 import './runs.css';
 
 const request = apiClient('Run request failed.');
+// Ended Runs, whose saved states can be inspected and resumed.
+const ENDED = ['completed', 'stopped', 'failed', 'cancelled', 'interrupted'];
 
 export function Runs({
   selectedId,
@@ -387,7 +390,15 @@ export function Runs({
                         confirmed: true,
                       })
                     }
-                  />
+                  >
+                    {ENDED.includes(run.status) && (
+                      <ResumeRevision
+                        run={run}
+                        busy={busy}
+                        onResume={(body) => action('resume', body)}
+                      />
+                    )}
+                  </SavedStates>
                 )}
                 <RunCaching run={run} />
                 {showFiles && <RunCheckpoints outputs={outputs} />}

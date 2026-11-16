@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict
 
+from musubi_gui.resume_compat import ResumeIncompatible
 from musubi_gui.run_estimate import completion_estimate
 from musubi_gui.run_store import utc_now
 from musubi_gui.runs import RunService
@@ -49,10 +50,26 @@ class RestoreRequest(BaseModel):
     confirmed: bool = False
 
 
+class ResumeCheck(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    # The Job's latest revision when omitted.
+    job_revision: int | None = None
+    # A total; the revision's training steps when omitted.
+    target_steps: int | None = None
+    # The latest valid saved state when omitted.
+    state_id: str | None = None
+
+
+class ResumeRequest(ResumeCheck):
+    job_revision: int
+
+
 @contextmanager
 def run_errors() -> Iterator[None]:
     try:
         yield
+    except ResumeIncompatible as error:
+        raise HTTPException(422, str(error)) from error
     except (ValueError, KeyError) as error:
         raise HTTPException(409, str(error)) from error
     except OSError as error:
@@ -167,6 +184,16 @@ def runs_router(service: RunService) -> APIRouter:
     def restore(run_id: str, request: RestoreRequest) -> dict[str, Any]:
         with run_errors():
             return service.restore_state(run_id, request.state_id, request.target_steps, confirmed=request.confirmed)
+
+    @router.post("/{run_id}/resume-check")
+    def resume_check(run_id: str, request: ResumeCheck) -> dict[str, Any]:
+        with run_errors():
+            return service.resume_check(run_id, request.job_revision, request.target_steps, request.state_id)
+
+    @router.post("/{run_id}/resume")
+    def resume(run_id: str, request: ResumeRequest) -> dict[str, Any]:
+        with run_errors():
+            return service.resume(run_id, request.job_revision, request.target_steps, request.state_id)
 
     @router.post("/{run_id}/reconcile")
     def reconcile(run_id: str) -> dict[str, Any]:
