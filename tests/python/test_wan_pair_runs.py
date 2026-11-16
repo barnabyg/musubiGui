@@ -2,7 +2,7 @@ import time
 from pathlib import Path
 
 import pytest
-from helpers import acceptance_workspace, wait_for
+from helpers import acceptance_workspace, instant_steps, wait_for
 
 from musubi_gui.jobs import JobConfig, JobDataset, JobDraft, JobStore, PresetSelection, configuration_errors, review_job
 from musubi_gui.outputs import OutputBrowser
@@ -12,7 +12,8 @@ from musubi_gui.wan_pair_plan import argument
 from musubi_gui.wan_pair_runtime import finish_phase
 
 
-def paired_job(tmp_path: Path, **config: object) -> tuple[Path, str]:
+def paired_job(tmp_path: Path, *, instant: bool = False, **config: object) -> tuple[Path, str]:
+    """A paired Wan job; `instant` is for checks that never act while a stage runs."""
     workspace = acceptance_workspace(tmp_path)
     root = Path(workspace["state"])
     dataset = next(job["dataset_id"] for job in workspace["jobs"] if job["family"] == "wan")
@@ -32,6 +33,8 @@ def paired_job(tmp_path: Path, **config: object) -> tuple[Path, str]:
             ),
         )
     )
+    if instant:
+        instant_steps(root)
     return root, job.id
 
 
@@ -139,7 +142,8 @@ def test_changed_expert_state_or_checkpoint_is_not_restorable(tmp_path: Path) ->
 def test_stop_at_switch_keeps_gpu_ownership_and_restores_both_states(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    root, job_id = paired_job(tmp_path, steps=12, expert_interval=3)
+    # The stop is requested between phases, so the fixture trainer needn't pace its steps.
+    root, job_id = paired_job(tmp_path, steps=12, expert_interval=3, instant=True)
     service = RunService(root, fixture_mode=True, device_path=tmp_path / "gpu.sqlite")
     stopped_once = False
 
@@ -191,6 +195,8 @@ def test_stop_inside_first_phase_restores_partial_phase_before_starting_high(tmp
         states = service.saved_states(run["id"])
         source = next(state for state in states if state["schedule_step"] == 1)
         assert source["valid"] and source["counts"] == {"low": 1, "high": 0}
+        # Only the stop needed paced steps; the restored segment runs straight through.
+        instant_steps(root)
         restored = service.restore_state(run["id"], source["id"], 11, confirmed=True)
         completed = wait_for(service, restored["id"], "completed", device_released=True)
         assert completed["stages"][0]["training"]["steps"] == 5
@@ -274,8 +280,16 @@ def test_smoke_presets_select_a_complete_expert_recipe(tmp_path: Path) -> None:
 
 
 def test_per_expert_job_saves_matching_pairs_and_restores(tmp_path: Path) -> None:
+    # Previews are the samples under test; a final sample would add two stage processes.
     root, job_id = paired_job(
-        tmp_path, steps=7, expert_interval=4, save_every=3, preview_every=3, wan_steps_per_expert=True
+        tmp_path,
+        steps=7,
+        expert_interval=4,
+        save_every=3,
+        preview_every=3,
+        wan_steps_per_expert=True,
+        sample_enabled=False,
+        instant=True,
     )
     review = review_job(root, JobStore(root).get(job_id), load_settings(root), fixture_mode=True)
     assert review["valid"], review["errors"]
@@ -300,6 +314,7 @@ def test_per_expert_job_saves_matching_pairs_and_restores(tmp_path: Path) -> Non
         progress = service.progress(run["id"])
         assert progress and (progress["step"], progress["total"]) == (7, 7)
         source = next(state for state in states if state["counts"] == {"low": 3, "high": 3})
+        # Two more updates per expert cross the switch interval at 4.
         restored = service.restore_state(run["id"], source["id"], 2, confirmed=True)
         resumed = wait_for(service, restored["id"], "completed", device_released=True)
         assert {expert: state["optimizer_step"] for expert, state in resumed["expert_states"].items()} == {

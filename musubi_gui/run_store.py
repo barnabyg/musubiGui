@@ -91,8 +91,11 @@ def database(path: Path) -> Iterator[sqlite3.Connection]:
         version = connection.execute("PRAGMA user_version").fetchone()[0]
         if version not in {0, 1}:
             raise ValueError("Unsupported run database version. Preserve it and use a compatible application.")
-        connection.execute("CREATE TABLE IF NOT EXISTS records (id TEXT PRIMARY KEY, data TEXT NOT NULL)")
-        connection.execute("PRAGMA user_version=1")
+        if version == 0:
+            # Only a new or pre-versioning file needs the schema. Writing it on every transaction made
+            # each read a synced write: about 10 ms, while supervision reads Runs several times a second.
+            connection.execute("CREATE TABLE IF NOT EXISTS records (id TEXT PRIMARY KEY, data TEXT NOT NULL)")
+            connection.execute("PRAGMA user_version=1")
         yield connection
         connection.commit()
     except BaseException:

@@ -11,9 +11,11 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from musubi_gui.acceptance import prepare, synthetic_video
+from musubi_gui.acceptance_worker import INSTANT_STEPS
 from musubi_gui.app import create_app
 from musubi_gui.datasets_api import dataset_router
 from musubi_gui.runs import RunService
+from musubi_gui.settings import load_settings
 
 PNG = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=")
 
@@ -21,6 +23,11 @@ PNG = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4
 def acceptance_workspace(tmp_path: Path) -> dict[str, Any]:
     """A fixture workspace without the mixed-media library scan, which no pytest test reads."""
     return prepare(tmp_path / "acceptance", "fixture", None, scan_library=False)
+
+
+def instant_steps(root: Path) -> None:
+    """Stop the fixture trainer pacing its steps, for checks that never act while a stage runs."""
+    (Path(load_settings(root).checkout) / INSTANT_STEPS).touch()
 
 
 def wait_for(service: RunService, run_id: str, status: str, *, device_released: bool = False) -> dict[str, Any]:

@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import {
   checkpointDownload,
   openCheckpointPanel,
+  openRunTab,
   runWorkspace,
 } from './runHarness';
 
@@ -209,10 +210,7 @@ test('alternating Wan settings persist, train both experts and restore the paire
         name: /-low-step0*7\.safetensors · available$/,
       }),
     ).toBeVisible();
-    await page
-      .getByRole('tablist', { name: 'Run views' })
-      .getByRole('tab', { name: 'Samples', exact: true })
-      .click();
+    await openRunTab(page, 'samples');
     await page.getByRole('button', { name: /sample.mp4.*available/ }).click();
     await expect(page.getByLabel('Output video')).toBeVisible();
     const video = page.getByLabel('Output video');

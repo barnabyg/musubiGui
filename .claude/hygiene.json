@@ -1,4 +1,4 @@
 {
-  "testCommand": "uv sync --locked && npm ci && npm run build && uv run --locked python -m pytest --durations=0 --durations-min=0 -q && npm run test:browser -- --reporter=list",
+  "testCommand": "uv sync --locked && npm ci && uv run --locked python -m pytest -n 4 --durations=0 --durations-min=0 -q && npm run test:browser -- --reporter=list",
   "slowTestMs": 10000
 }

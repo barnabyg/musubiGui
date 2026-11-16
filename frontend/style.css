@@ -567,6 +567,10 @@ pre {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+/* Paths and revisions have few break opportunities; wrap them anywhere. */
+code {
+  overflow-wrap: anywhere;
+}
 pre[aria-label='Run logs'] {
   max-height: 30rem;
   overflow: auto;

@@ -727,10 +727,14 @@ class RunService:
                 for name, expected in run["state_source"]["files"].items():
                     if digest_file(Path(run["state_source"]["path"]) / name) != expected:
                         raise ValueError("Saved state changed while queued. Restore a complete state again.")
+            # Inputs were just verified for the first stage; later stages verify again before launching.
+            verified = True
             for index, stage in enumerate(run["stages"]):
                 if stage["name"] not in ({"latent_cache", "text_cache"} if preparing else {"train", "generate"}):
                     continue
-                self._verify_inputs(run)
+                if not verified:
+                    self._verify_inputs(run)
+                verified = False
                 fresh_run = self.get(run_id)
                 if fresh_run.get("stop_requested"):
                     self.store.update(

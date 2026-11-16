@@ -39,7 +39,7 @@ escapes, arbitrary paths and identities belonging to another Run are rejected.
 Changing the configured root blocks access to old locations until the original
 root is restored. Moving an output does not silently reassign its provenance.
 
-[Delete run](runs.md#deleting-a-run) removes a Run's outputs and its index entry with it,
+[Delete run](runs-lifecycle.md#deleting-a-run) removes a Run's outputs and its index entry with it,
 so download a LoRA you want to keep first. While a delete is unfinished, the Run offers no
 outputs. Comparison lists neither deleted Runs nor Runs being deleted; comparing with a Run
 deleted from another tab since the list loaded reports that it was not found.
@@ -96,7 +96,7 @@ orchestration without model weights or GPU training.
 ```powershell
 .venv\Scripts\python.exe -m pytest tests/python/test_outputs_api.py -q
 npm.cmd run test:browser -- tests/browser/outputs.spec.ts
-npm.cmd run test:browser -- tests/browser/sampleComparison.spec.ts
+npm.cmd run test:browser -- tests/browser/sample-comparison.spec.ts
 ```
 
 The API tests cover persistent/missing inventory, checkpoint bounds, image/audio/video

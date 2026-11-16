@@ -1,7 +1,6 @@
 import { useEffect, useEffectEvent, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { apiClient } from './api';
-import { confirmDialog } from './ConfirmDialog';
 import {
   RunCheckpoints,
   RunComparison,
@@ -9,519 +8,31 @@ import {
   RunWarnings,
   stateFiles,
   useRunOutputs,
-  type Output,
 } from './Outputs';
 import { formatRoute } from './route';
-import { PreviewMemory, type PreviewMemoryChoice } from './PreviewMemory';
+import { PreviewMemory } from './PreviewMemory';
+import { confirmDelete, RunActions } from './RunActions';
+import { RunBadge } from './RunBadge';
 import { RunJobLink } from './RunJobLink';
+import { RunList } from './RunList';
+import { RunRecords } from './RunRecords';
+import { RunCaching } from './RunStages';
+import { RunTabs, type RunTab } from './RunTabs';
+import { RunCompletion, RunElapsed, TrainingProgress } from './RunTiming';
 import { refreshRunHistory, useRunHistory } from './runHistory';
-import { notificationsWanted, setNotificationsWanted } from './runSignals';
-import { readableTime, runStatus, sizeLabel } from './runStatus';
-import { StatusBadge } from './StatusBadge';
+import { notificationsWanted } from './runSignals';
+import { sizeLabel } from './runStatus';
+import type {
+  CompletionEstimate,
+  DeletePreview,
+  DeleteResult,
+  Progress,
+  Run,
+} from './runTypes';
+import { SavedStates } from './SavedStates';
 import './runs.css';
 
-type Run = {
-  id: string;
-  created: string;
-  finished?: string;
-  execution_started?: string | null;
-  execution_end_unknown?: boolean;
-  status: string;
-  error: string | null;
-  retention?: {
-    removed?: string[];
-    pending?: string[];
-    errors?: string[];
-    protected?: string[];
-  };
-  fixture: boolean;
-  job: {
-    id: string;
-    name: string;
-    family: string;
-    revision: number;
-    config?: { recipe?: string; save_state?: boolean; save_every?: number };
-  };
-  manifest: {
-    items: { name?: string; path: string; caption: { text: string } }[];
-  };
-  stages: {
-    name: string;
-    status: string;
-    exit_code?: number;
-    reused_from?: string;
-    cache_reason?: string;
-    started?: string;
-    finished?: string;
-    preview_memory?: PreviewMemoryChoice;
-  }[];
-  directory: string;
-  order: number;
-  start_after_prepare?: boolean;
-  resume_of?: string;
-  deletion?: {
-    error: string | null;
-    remaining: { path: string; bytes?: number }[];
-  };
-};
-type DeletePreview = {
-  refusal: string | null;
-  bytes?: number;
-  shared_cache?: string | null;
-  dependents?: { id: string; status: string }[];
-};
-type DeleteResult = { deleted: boolean; freed_bytes?: number };
-type Progress = {
-  step: number;
-  total: number;
-  elapsed: string | null;
-  eta: string | null;
-  eta_scope?: 'phase';
-  estimated_remaining_seconds?: number | null;
-  seconds_per_step?: number | null;
-  loss: string | null;
-  expert?: string;
-  phase_step?: number;
-  phase_total?: number;
-  expert_steps?: { low: number; high: number };
-};
-type CompletionEstimate = {
-  remaining_seconds: number | null;
-  finish_at: string | null;
-  accounted_remaining_seconds?: number | null;
-  accounted_finish_at?: string | null;
-  outstanding_previews: number;
-  completed_previews: number;
-  outstanding_final_samples: number;
-  preview_remaining_seconds: number | null;
-  unknown_components: string[];
-};
-
-function remainingDuration(seconds: number | null | undefined) {
-  return seconds == null
-    ? 'unknown'
-    : `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m ${seconds % 60}s`;
-}
-
-function RunCompletion({
-  run,
-  estimate,
-}: {
-  run: Run;
-  estimate?: CompletionEstimate;
-}) {
-  if (!['training', 'generating'].includes(run.status)) return null;
-  const seconds = estimate?.remaining_seconds;
-  return (
-    <div className="run-progress" aria-label="Run completion estimate">
-      <p>Estimated Run remaining: {remainingDuration(seconds)}</p>
-      <p>
-        Estimated finish:{' '}
-        {estimate?.finish_at
-          ? new Date(estimate.finish_at).toLocaleString()
-          : 'unknown'}
-      </p>
-      {seconds == null && estimate?.accounted_remaining_seconds != null && (
-        <>
-          <p>
-            Partial remaining estimate:{' '}
-            {remainingDuration(estimate.accounted_remaining_seconds)} (measured
-            components only)
-          </p>
-          <p>
-            Conditional finish for estimated components:{' '}
-            {estimate.accounted_finish_at
-              ? new Date(estimate.accounted_finish_at).toLocaleString()
-              : 'unknown'}
-          </p>
-        </>
-      )}
-      {estimate?.preview_remaining_seconds != null && (
-        <p>
-          Outstanding preview budget:{' '}
-          {remainingDuration(estimate.preview_remaining_seconds)}
-        </p>
-      )}
-      {estimate && (
-        <p>
-          Previews: {estimate.completed_previews} completed ·{' '}
-          {estimate.outstanding_previews} outstanding · Final samples
-          outstanding: {estimate.outstanding_final_samples}
-        </p>
-      )}
-      <small>
-        Based on measured step and sampling wall time.{' '}
-        {estimate?.unknown_components.length
-          ? `Unestimated or assumed: ${estimate.unknown_components.join('; ')}.`
-          : 'Timings vary between executions.'}
-      </small>
-    </div>
-  );
-}
-type StepState = 'pending' | 'current' | 'completed' | 'failed' | 'stopped';
-const stepLabels: Record<StepState, string> = {
-  pending: 'Not started',
-  current: 'In progress',
-  completed: 'Done',
-  failed: 'Failed',
-  stopped: 'Stopped',
-};
-
-// Groups the stages into what the user is waiting for. A Run can fail outside any stage, such as
-// when frozen inputs changed, so that failure lands on the first step that did not finish.
-function runSteps(run: Run) {
-  const groups = [
-    { label: 'Caching', names: ['latent_cache', 'text_cache'] },
-    { label: 'Training', names: ['train'] },
-    { label: 'Sample', names: ['generate'] },
-  ];
-  const steps = groups.flatMap(({ label, names }) => {
-    const stages = run.stages.filter((stage) => names.includes(stage.name));
-    if (stages.length === 0) return [];
-    const has = (...values: string[]) =>
-      stages.some((stage) => values.includes(stage.status));
-    const state: StepState = has('failed')
-      ? 'failed'
-      : has('stopped', 'interrupted')
-        ? 'stopped'
-        : has('running')
-          ? 'current'
-          : stages.every((stage) =>
-                ['completed', 'reused'].includes(stage.status),
-              )
-            ? 'completed'
-            : 'pending';
-    const failed =
-      state === 'failed' && stages.find((stage) => stage.exit_code);
-    const detail = failed
-      ? `Exit code ${failed.exit_code}`
-      : stages.some((stage) => stage.reused_from)
-        ? 'verified cache reused'
-        : stepLabels[state];
-    return [{ label, state, detail }];
-  });
-  if (
-    run.status === 'failed' &&
-    !steps.some((step) => step.state === 'failed')
-  ) {
-    const step =
-      steps.find((item) => item.state !== 'completed') ?? steps.at(-1);
-    if (step) Object.assign(step, { state: 'failed', detail: 'Failed' });
-  }
-  const done: StepState = run.status === 'completed' ? 'completed' : 'pending';
-  return [...steps, { label: 'Done', state: done, detail: stepLabels[done] }];
-}
-
-function duration(from: string, to?: string) {
-  if (
-    !Number.isFinite(Date.parse(from)) ||
-    (to && !Number.isFinite(Date.parse(to)))
-  )
-    return 'unknown';
-  const seconds = Math.max(
-    0,
-    Math.round(((to ? Date.parse(to) : Date.now()) - Date.parse(from)) / 1000),
-  );
-  const minutes = Math.floor(seconds / 60);
-  const pad = (value: number) => String(value).padStart(2, '0');
-  return minutes >= 60
-    ? `${Math.floor(minutes / 60)}:${pad(minutes % 60)}:${pad(seconds % 60)}`
-    : `${pad(minutes)}:${pad(seconds % 60)}`;
-}
-
-function RunElapsed({ run }: { run: Run }) {
-  const terminal = [
-    'completed',
-    'failed',
-    'stopped',
-    'cancelled',
-    'interrupted',
-  ].includes(run.status);
-  const uncertain =
-    run.execution_end_unknown ||
-    ['interrupted', 'orphaned', 'uncertain'].includes(run.status);
-  // Old records did not distinguish automatic preparation from a separate Prepare.
-  const started =
-    run.execution_started === undefined
-      ? run.stages.find((stage) => stage.name === 'train' && stage.started)
-          ?.started
-      : run.execution_started;
-  const active = Boolean(started && !terminal && !uncertain);
-  const [, tick] = useState(0);
-  useEffect(() => {
-    if (!active) return;
-    const timer = setInterval(() => tick((value) => value + 1), 1000);
-    return () => clearInterval(timer);
-  }, [active]);
-  const elapsed = !started
-    ? 'not started'
-    : uncertain || (terminal && !run.finished)
-      ? 'unknown (execution end unconfirmed)'
-      : duration(started, terminal ? run.finished : undefined);
-  return (
-    <p aria-label="Run elapsed">
-      Run elapsed {elapsed}
-      {run.execution_started === undefined && started
-        ? ' (legacy: from first training start)'
-        : ''}
-    </p>
-  );
-}
-
-function TrainingProgress({
-  run,
-  progress,
-}: {
-  run: Run;
-  progress: Progress | null;
-}) {
-  const training = run.stages.filter(
-    (stage) => stage.name === 'train' && stage.started,
-  );
-  const train = training.at(-1);
-  const ended =
-    train?.finished ??
-    (['completed', 'failed', 'stopped', 'cancelled', 'interrupted'].includes(
-      run.status,
-    )
-      ? run.finished
-      : undefined);
-  const trainingActive = Boolean(train && !ended);
-  const [, tick] = useState(0);
-  useEffect(() => {
-    if (!trainingActive) return;
-    const timer = setInterval(() => tick((value) => value + 1), 1000);
-    return () => clearInterval(timer);
-  }, [trainingActive]);
-  if (!train) return null;
-  const elapsed = training[0].started
-    ? duration(training[0].started, ended)
-    : 'unknown';
-  if (!progress)
-    return (
-      <div className="run-progress" aria-label="Training progress">
-        <p>Training elapsed {elapsed}</p>
-        <p>Step progress unknown: training has not reported a step yet.</p>
-      </div>
-    );
-  return (
-    <div className="run-progress" aria-label="Training progress">
-      <p>
-        <strong>
-          Step {progress.step}/{progress.total}
-        </strong>
-      </p>
-      {progress.expert_steps && (
-        <p>
-          Active expert: {progress.expert}-noise · Phase {progress.phase_step}/
-          {progress.phase_total} · Low-noise {progress.expert_steps.low} steps ·
-          High-noise {progress.expert_steps.high} steps
-        </p>
-      )}
-      <progress
-        aria-label="Training steps"
-        max={progress.total}
-        value={progress.step}
-      />
-      <p>
-        Training elapsed {elapsed} ·{' '}
-        {progress.eta_scope === 'phase' ? 'Phase ETA' : 'Training ETA'}{' '}
-        {progress.eta ?? 'unknown'} · Loss {progress.loss ?? 'unknown'}
-      </p>
-      <p>
-        Seconds per step:{' '}
-        {progress.seconds_per_step == null
-          ? 'unknown'
-          : `${progress.seconds_per_step.toFixed(2)} s/step (trainer reported)`}
-      </p>
-      <p>
-        Estimated training remaining to max steps:{' '}
-        {remainingDuration(progress.estimated_remaining_seconds)}
-      </p>
-      <small>
-        Assumes the current observed step speed for all remaining steps.
-        Excludes future model loading, previews and final sampling.
-      </small>
-    </div>
-  );
-}
-
-function confirmDelete(run: Run, preview: DeletePreview) {
-  const lines = [
-    `This frees ${sizeLabel(preview.bytes ?? 0)} and can't be undone. Its checkpoints, samples, saved states, logs and saved inputs are removed, so download any LoRA you want to keep first.`,
-  ];
-  if (preview.shared_cache)
-    lines.push(
-      'Its cache stays until the other run using it is deleted, and is not counted above.',
-    );
-  if (preview.dependents?.length)
-    lines.push(
-      `${preview.dependents.length} later run(s) came from this one. They stay browsable, but can no longer be retried or restored from.`,
-    );
-  return confirmDialog({
-    title: `Permanently delete run ${run.id.slice(0, 8)} of ${run.job.name} (r${run.job.revision})?`,
-    body: lines.map((line) => <p key={line}>{line}</p>),
-    confirmLabel: 'Delete run',
-    danger: true,
-  });
-}
-
 const request = apiClient('Run request failed.');
-
-function RunBadge({ status }: { status: string }) {
-  const { label, tone } = runStatus(status);
-  return <StatusBadge tone={tone}>{label}</StatusBadge>;
-}
-
-function SavedStates({
-  runId,
-  files,
-  config,
-  onRestore,
-}: {
-  runId: string;
-  files: Output[];
-  config: Run['job']['config'];
-  onRestore: (stateId: string, steps: number) => Promise<void>;
-}) {
-  const [states, setStates] = useState<
-    {
-      id: string;
-      name: string;
-      valid: boolean;
-      error: string;
-      optimizer_step?: number;
-      paired?: boolean;
-      counts?: { low: number; high: number };
-    }[]
-  >([]);
-  const [steps, setSteps] = useState(1);
-  const [error, setError] = useState('');
-  const [inspecting, setInspecting] = useState(false);
-  const [inspected, setInspected] = useState(false);
-  async function inspect() {
-    // Inspection hashes every state file, which takes seconds for large folders.
-    setInspecting(true);
-    try {
-      setStates(await request(`/api/runs/${runId}/states`));
-      setInspected(true);
-      setError('');
-    } catch (reason) {
-      setError((reason as Error).message);
-    } finally {
-      setInspecting(false);
-    }
-  }
-  return (
-    <section className="panel" aria-label="Resume training">
-      <h2>Resume training from saved state</h2>
-      {/* Reference text: closed by default so the controls come first. */}
-      <details>
-        <summary>How resuming works</summary>
-        <p>
-          Restoration starts a new segment with saved optimizer, scheduler and
-          RNG state. Upstream resets its displayed step counter and data
-          position. A LoRA checkpoint alone cannot restore training state.
-          Stopping does not guarantee a checkpoint or state save.
-        </p>
-        <p>
-          After stopping or restarting the app, inspect saved states, choose the
-          additional steps to train and select Restore as new segment. Work
-          since the last saved state must run again. The original Run stays in
-          history.
-        </p>
-        {config?.save_state === false ? (
-          <p>
-            Saved optimizer state was not enabled for this Run. If no valid
-            state is available, start a new Run. For future Runs, enable Save
-            optimizer/training state in the Job before training.
-          </p>
-        ) : (
-          <p>
-            For future Runs, enable Save optimizer/training state in the Job and
-            choose a checkpoint interval to control how much work can be lost.
-            {config?.save_state && config.save_every
-              ? ` This Run saves state every ${config.save_every} training steps.`
-              : ''}
-          </p>
-        )}
-      </details>
-      {files.length > 0 && (
-        <details>
-          <summary>Optimizer state files ({files.length})</summary>
-          <ul className="state-files">
-            {files.map((file) => (
-              <li key={file.id}>
-                {file.path}
-                {file.bytes !== undefined && ` · ${sizeLabel(file.bytes)}`}
-                {file.file_url && (
-                  <>
-                    {' · '}
-                    <a href={`${file.file_url}?download=true`} download>
-                      Download
-                    </a>
-                  </>
-                )}
-              </li>
-            ))}
-          </ul>
-        </details>
-      )}
-      <button disabled={inspecting} onClick={() => void inspect()}>
-        Inspect saved states
-      </button>
-      {inspecting && <p role="status">Checking saved states…</p>}
-      {error && <p role="alert">{error}</p>}
-      {inspected && states.length === 0 && !error && (
-        <p>
-          No saved optimizer states found. A LoRA alone cannot resume optimizer
-          state. Start a new Run and enable Save optimizer/training state for
-          future Runs.
-        </p>
-      )}
-      <label className="field number-field">
-        Additional segment steps
-        <input
-          type="number"
-          min={1}
-          value={steps}
-          onChange={(event) => setSteps(Number(event.target.value))}
-        />
-      </label>
-      {states.map((state) => (
-        <p key={state.id}>
-          {state.name} ·{' '}
-          {state.valid
-            ? state.counts
-              ? `low-noise ${state.counts.low} steps · high-noise ${state.counts.high} steps`
-              : `optimizer step ${state.optimizer_step}`
-            : state.error}
-          <button
-            disabled={!state.valid || !Number.isInteger(steps) || steps < 1}
-            onClick={() =>
-              void confirmDialog({
-                title: 'Restore this optimizer state as a new segment?',
-                body: (
-                  <p>
-                    {state.paired &&
-                      'Both expert states and the alternating schedule continue from this saved position. New paired runs extend each expert by the requested steps after catching up an interrupted pair; legacy runs count total updates. '}
-                    The displayed step counter and data position restart.
-                    Original run inputs are preserved.
-                  </p>
-                ),
-                confirmLabel: 'Restore as new segment',
-              }).then((confirmed) => {
-                if (confirmed) void onRestore(state.id, steps);
-              })
-            }
-          >
-            Restore as new segment
-          </button>
-        </p>
-      ))}
-    </section>
-  );
-}
 
 export function Runs({
   selectedId,
@@ -537,7 +48,7 @@ export function Runs({
   const selected = selectedId ?? '';
   const [view, setView] = useState<{
     runId: string;
-    tab: 'overview' | 'samples';
+    tab: RunTab;
   }>();
   const tab = view?.runId === selected ? view.tab : 'overview';
   const [error, setError] = useState('');
@@ -812,105 +323,24 @@ export function Runs({
       {notice && <p role="status">{notice}</p>}
       <div className="runs-layout">
         {!selected && (
-          <div>
-            {queue.length > 0 && (
-              <section className="panel">
-                <h2>Pending queue</h2>
-                {queue.map((record, index) => (
-                  <p key={record.id}>
-                    {index + 1}. {record.job.name}{' '}
-                    <RunBadge status={record.status} />{' '}
-                    <button
-                      className="quiet"
-                      disabled={index === 0}
-                      onClick={() => void moveEarlier(record.id)}
-                    >
-                      Move earlier
-                    </button>
-                  </p>
-                ))}
-              </section>
-            )}
-            <section className="panel run-history">
-              <h2>Run history</h2>
-              <p>
-                <a href={formatRoute({ screen: 'Jobs' })}>
-                  Open jobs to prepare a Run
-                </a>
-              </p>
-              {runs.length === 0 && (
-                <p>Save and review a job, then choose Prepare.</p>
-              )}
-              {runs.map((record) => (
-                <div key={record.id}>
-                  <button
-                    aria-pressed={selected === record.id}
-                    onClick={() => onSelect?.(record.id)}
-                  >
-                    {record.job.name} · {record.job.family.toUpperCase()} · r
-                    {record.job.revision}
-                  </button>
-                  <p>
-                    <RunBadge status={record.status} />{' '}
-                    <small>{readableTime(record.created)}</small>
-                  </p>
-                </div>
-              ))}
-            </section>
-            <label className="job-toggle">
-              <input
-                type="checkbox"
-                checked={notify}
-                onChange={(event) =>
-                  void setNotificationsWanted(event.target.checked).then(
-                    setNotify,
-                  )
-                }
-              />
-              <span>
-                Send a browser notification when a Run is ready or finished
-              </span>
-            </label>
-          </div>
+          <RunList
+            runs={runs}
+            queue={queue}
+            selected={selected}
+            onSelect={onSelect}
+            moveEarlier={moveEarlier}
+            notify={notify}
+            setNotify={setNotify}
+          />
         )}
         {selected && (
           <div className="run-details">
             {!run && !readError && <p>Loading Run...</p>}
             {run && (
-              <div role="tablist" aria-label="Run views" className="run-tabs">
-                {(['overview', 'samples'] as const).map((value) => (
-                  <button
-                    key={value}
-                    role="tab"
-                    id={`run-tab-${value}`}
-                    aria-controls={`run-panel-${value}`}
-                    aria-selected={tab === value}
-                    tabIndex={tab === value ? 0 : -1}
-                    onClick={() => setView({ runId: selected, tab: value })}
-                    onKeyDown={(event) => {
-                      if (
-                        !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(
-                          event.key,
-                        )
-                      )
-                        return;
-                      event.preventDefault();
-                      const next =
-                        event.key === 'Home'
-                          ? 'overview'
-                          : event.key === 'End'
-                            ? 'samples'
-                            : value === 'overview'
-                              ? 'samples'
-                              : 'overview';
-                      setView({ runId: selected, tab: next });
-                      document.getElementById(`run-tab-${next}`)?.focus();
-                    }}
-                  >
-                    {value === 'overview' ? 'Overview' : 'Samples'}
-                  </button>
-                ))}
-              </div>
+              <RunTabs
+                tab={tab}
+                onChange={(value) => setView({ runId: selected, tab: value })}
+              />
             )}
             {run && (
               <div
@@ -936,240 +366,13 @@ export function Runs({
                   />
                   <RunJobLink key={run.id} frozen={run.job} />
                 </section>
-                <section className="panel" aria-label="Actions">
-                  <h2>Actions</h2>
-                  {run.start_after_prepare &&
-                    ['pending_preparation', 'preparing'].includes(
-                      run.status,
-                    ) && (
-                      <p>
-                        Training starts by itself when preparation succeeds.
-                      </p>
-                    )}
-                  {run.status === 'pending_training' && (
-                    <p>
-                      Remove this Run from the training queue. Training will not
-                      start; prepared files remain available.
-                    </p>
-                  )}
-                  {pairedStarted &&
-                    ['failed', 'stopped', 'interrupted'].includes(
-                      run.status,
-                    ) && (
-                      <p>
-                        Inspect paired saved states in Resume training to
-                        continue both experts and the schedule as a new segment.
-                        Updates after the selected save are lost. Prepare from
-                        Jobs to restart both experts.
-                        {run.resume_of && (
-                          <>
-                            {' '}
-                            You can also restore again from the{' '}
-                            <a
-                              href={formatRoute({
-                                screen: 'Runs',
-                                id: run.resume_of,
-                              })}
-                            >
-                              source Run
-                            </a>
-                            , including when this segment failed before saving
-                            state.
-                          </>
-                        )}
-                      </p>
-                    )}
-                  {!pairedStarted &&
-                    ['failed', 'cancelled', 'interrupted'].includes(
-                      run.status,
-                    ) && (
-                      <div aria-label="Retry frozen inputs">
-                        <p>
-                          Retry creates a new Run using this Run’s frozen job
-                          revision and dataset inputs. Only verified matching
-                          latent and text caches are eligible for reuse.
-                          Training will not start automatically. Training and
-                          sampling run again after you start training (sampling
-                          only if enabled in the frozen job). It does not resume
-                          optimizer state.
-                        </p>
-                        <p>
-                          To change the build, edit the job, save and review it,
-                          then prepare from Jobs. For saved optimizer state, use
-                          Inspect saved states in Resume training.
-                        </p>
-                      </div>
-                    )}
-                  {run.status === 'deleting' && (
-                    <div aria-label="Unfinished delete">
-                      <p className="error">
-                        {run.deletion?.error ??
-                          'This run is being deleted, or its delete was interrupted. If this stays, choose Delete again.'}
-                      </p>
-                      {!!run.deletion?.remaining.length && (
-                        <>
-                          <p>Still on disk:</p>
-                          <ul>
-                            {run.deletion.remaining.map((item) => (
-                              <li key={item.path}>
-                                {item.path}
-                                {item.bytes !== undefined &&
-                                  ` · ${sizeLabel(item.bytes)}`}
-                              </li>
-                            ))}
-                          </ul>
-                        </>
-                      )}
-                    </div>
-                  )}
-                  <div className="actions">
-                    {['orphaned', 'uncertain', 'interrupted'].includes(
-                      run.status,
-                    ) && (
-                      <>
-                        <button
-                          disabled={busy}
-                          onClick={() => void action('reconcile')}
-                        >
-                          Check for leftover processes
-                        </button>
-                        {run.status !== 'interrupted' && (
-                          <button
-                            className="danger"
-                            disabled={busy}
-                            onClick={() =>
-                              void confirmDialog({
-                                title: 'Terminate recovered work?',
-                                body: (
-                                  <p>
-                                    This ends the recovered processes belonging
-                                    to this run. Unsaved work may be lost.
-                                  </p>
-                                ),
-                                confirmLabel: 'Terminate recovered work',
-                                danger: true,
-                              }).then((confirmed) => {
-                                if (confirmed)
-                                  void action('terminate-orphan', {
-                                    confirmed: true,
-                                  });
-                              })
-                            }
-                          >
-                            Terminate recovered work
-                          </button>
-                        )}
-                      </>
-                    )}
-                    {['training', 'generating', 'stopping'].includes(
-                      run.status,
-                    ) && (
-                      <>
-                        <button
-                          disabled={busy || run.status === 'stopping'}
-                          onClick={() => void action('stop', { force: false })}
-                        >
-                          Request graceful stop
-                        </button>
-                        <button
-                          className="danger"
-                          disabled={busy}
-                          onClick={() =>
-                            void confirmDialog({
-                              title: 'Force terminate this Run?',
-                              body: (
-                                <p>
-                                  This ends the Run's whole process tree.
-                                  Unsaved checkpoints and optimizer state may be
-                                  lost.
-                                </p>
-                              ),
-                              confirmLabel: 'Force terminate',
-                              danger: true,
-                            }).then((confirmed) => {
-                              if (confirmed)
-                                void action('stop', {
-                                  force: true,
-                                  confirmed: true,
-                                });
-                            })
-                          }
-                        >
-                          Force terminate
-                        </button>
-                      </>
-                    )}
-                    {run.status === 'prepared' && (
-                      <button
-                        disabled={busy}
-                        className="primary"
-                        onClick={() => void action('start')}
-                      >
-                        Start training
-                      </button>
-                    )}
-                    {run.status === 'prepared' && (
-                      <button
-                        disabled={busy}
-                        onClick={() => void action('queue')}
-                      >
-                        Add to queue
-                      </button>
-                    )}
-                    {[
-                      'pending_preparation',
-                      'pending_training',
-                      'preparing',
-                    ].includes(run.status) && (
-                      <button
-                        disabled={busy}
-                        onClick={() => void action('cancel')}
-                      >
-                        {run.status === 'pending_training'
-                          ? 'Cancel queued training'
-                          : run.status === 'pending_preparation'
-                            ? 'Cancel queued preparation'
-                            : 'Cancel preparation'}
-                      </button>
-                    )}
-                    {!pairedStarted &&
-                      ['failed', 'cancelled', 'interrupted'].includes(
-                        run.status,
-                      ) && (
-                        <button
-                          disabled={busy}
-                          onClick={() => void action('retry')}
-                        >
-                          Prepare new Run from frozen inputs
-                        </button>
-                      )}
-                    <button
-                      className="danger"
-                      disabled={busy}
-                      onClick={() => void deleteRun()}
-                    >
-                      {run.status === 'deleting'
-                        ? 'Delete again'
-                        : 'Delete run'}
-                    </button>
-                  </div>
-                  {run.stages.length > 0 && (
-                    <ol className="run-stepper" aria-label="Run stages">
-                      {runSteps(run).map((step) => (
-                        <li
-                          key={step.label}
-                          className={step.state}
-                          aria-current={
-                            step.state === 'current' ? 'step' : undefined
-                          }
-                        >
-                          <strong>{step.label}</strong>
-                          <small>{step.detail}</small>
-                        </li>
-                      ))}
-                    </ol>
-                  )}
-                </section>
+                <RunActions
+                  run={run}
+                  busy={busy}
+                  pairedStarted={Boolean(pairedStarted)}
+                  action={action}
+                  deleteRun={deleteRun}
+                />
                 {showFiles && (
                   <SavedStates
                     key={`states-${run.id}`}
@@ -1185,55 +388,7 @@ export function Runs({
                     }
                   />
                 )}
-                <section
-                  className="panel"
-                  aria-label="Cache preparation results"
-                >
-                  <h2>Caching</h2>
-                  <ul>
-                    {run.stages
-                      .filter((stage) =>
-                        ['latent_cache', 'text_cache'].includes(stage.name),
-                      )
-                      .map((stage) => (
-                        <li key={stage.name}>
-                          {stage.name === 'latent_cache'
-                            ? 'Latents'
-                            : 'Text embeddings'}
-                          :{' '}
-                          {stage.status === 'reused'
-                            ? 'Verified compatible cache reused'
-                            : stage.status === 'completed'
-                              ? 'Cache rebuilt'
-                              : stage.status}
-                          {stage.cache_reason && (
-                            <small> · {stage.cache_reason}</small>
-                          )}
-                        </li>
-                      ))}
-                  </ul>
-                  {run.retention && (
-                    <section aria-label="Checkpoint retention">
-                      <p>
-                        Checkpoint retention:{' '}
-                        {run.retention.removed?.length ?? 0} artifacts pruned;{' '}
-                        {run.retention.protected?.length ?? 0} protected
-                        artifacts retained beyond the limit.
-                      </p>
-                      {run.retention.errors?.map((error) => (
-                        <p className="error" key={error}>
-                          {error}
-                        </p>
-                      ))}
-                      {!!run.retention.pending?.length && (
-                        <p>
-                          Pruning will retry for {run.retention.pending.length}{' '}
-                          artifacts at the next checkpoint check.
-                        </p>
-                      )}
-                    </section>
-                  )}
-                </section>
+                <RunCaching run={run} />
                 {showFiles && <RunCheckpoints outputs={outputs} />}
                 {showFiles && (
                   <RunComparison
@@ -1242,41 +397,11 @@ export function Runs({
                     outputs={outputs}
                   />
                 )}
-                <section
-                  className="panel"
-                  aria-label="Inputs and output folder"
-                >
-                  <h2>Inputs and output folder</h2>
-                  <details>
-                    <summary>
-                      Inputs saved with this Run ({run.manifest.items.length}{' '}
-                      included items)
-                    </summary>
-                    <pre>{JSON.stringify(run.manifest, null, 2)}</pre>
-                  </details>
-                  <p>Output: {run.directory}</p>
-                  {run.job.family === 'h3' &&
-                    current?.performance_available && (
-                      <p>
-                        <a href={`/api/runs/${run.id}/performance`} download>
-                          Download performance diagnostics
-                        </a>{' '}
-                        — timestamped GPU, memory and step measurements.
-                      </p>
-                    )}
-                  <details>
-                    <summary>Full Run ID</summary>
-                    <code>{run.id}</code>
-                  </details>
-                </section>
-                <details className="panel" open={run.status === 'failed'}>
-                  <summary>
-                    <h2>Stage logs</h2>
-                  </summary>
-                  <pre aria-label="Run logs">
-                    {current?.text || 'Waiting for stage output…'}
-                  </pre>
-                </details>
+                <RunRecords
+                  run={run}
+                  logText={current?.text}
+                  performanceAvailable={current?.performance_available}
+                />
               </div>
             )}
             {showFiles && (

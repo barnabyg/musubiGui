@@ -66,13 +66,26 @@ function readabilityFindings(page: Page) {
   });
 }
 
+// The innermost elements that reach past the window's right edge, so a failure names the culprit.
 function overflowing(page: Page) {
-  return page.evaluate(
-    () =>
-      document.documentElement.scrollWidth >
-      document.documentElement.clientWidth,
-  );
+  return page.evaluate(() => {
+    const width = document.documentElement.clientWidth;
+    if (document.documentElement.scrollWidth <= width) return [];
+    const past = (element: Element) =>
+      element.getBoundingClientRect().right > width + 0.5;
+    return [...document.body.querySelectorAll('*')]
+      .filter((element) => past(element) && ![...element.children].some(past))
+      .map(
+        (element) =>
+          `<${element.tagName.toLowerCase()}${element.className ? ` class="${String(element.className)}"` : ''}> right edge ${Math.round(element.getBoundingClientRect().right)}px: ${element.textContent?.trim().slice(0, 120) ?? ''}`,
+      );
+  });
 }
+
+// A path with no hyphens or spaces has no line-break opportunity; it is
+// longer than a 760px Settings panel can fit unless it wraps anywhere.
+const unbreakablePath =
+  'C:\\Users\\SomeoneWithALongName\\AppData\\Local\\Temp\\hygiene.GWeRCT\\repo\\.venv\\Scripts\\python.exe';
 
 test('main screens keep text readable and fit the window at every supported width', async ({
   page,
@@ -81,6 +94,16 @@ test('main screens keep text readable and fit the window at every supported widt
   try {
     const job = app.manifest.jobs.find((item) => item.family === 'wan')!;
     await app.post('/api/runs/prepare', { job_id: job.id });
+    // The checkout paths come from where the repository lives; force a long
+    // one so the result does not depend on the test's own checkout path.
+    await page.route('**/api/checkout', async (route) => {
+      const response = await route.fetch();
+      const checkout = (await response.json()) as Record<string, unknown>;
+      await route.fulfill({
+        response,
+        json: { ...checkout, python: unbreakablePath },
+      });
+    });
     await page.goto(app.url);
     const screens: [string, () => Promise<void>][] = [
       [
@@ -142,7 +165,7 @@ test('main screens keep text readable and fit the window at every supported widt
           .toEqual([]);
         expect
           .soft(await overflowing(page), `${name} overflows at ${width}px`)
-          .toBe(false);
+          .toEqual([]);
       }
     }
   } finally {

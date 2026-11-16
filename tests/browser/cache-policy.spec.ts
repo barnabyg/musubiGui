@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { runWorkspace } from './runHarness';
+import { runPanel, runWorkspace } from './runHarness';
 import type { Job } from '../../frontend/jobTypes';
 
 test('cache policies persist from the job form and review explains preparation', async ({
@@ -58,9 +58,7 @@ test('cache policies persist from the job form and review explains preparation',
       )
       .toBe('prepared');
     await page.goto(`${app.url}/#/runs/${prepared.id}`);
-    const result = page.getByRole('region', {
-      name: 'Cache preparation results',
-    });
+    const result = runPanel(page, 'caching');
     await expect(result).toContainText('Text embeddings: Cache rebuilt');
     await expect(result).toContainText('Rebuild requested by this Run.');
   } finally {

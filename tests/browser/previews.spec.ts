@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { openCheckpointPanel, runWorkspace } from './runHarness';
+import { openCheckpointPanel, openRunTab, runWorkspace } from './runHarness';
 
 test('paired Wan previews show matching per-expert steps', async ({ page }) => {
   const app = await runWorkspace({ previewImages: true });
@@ -17,7 +17,8 @@ test('paired Wan previews show matching per-expert steps', async ({ page }) => {
           ...saved.config,
           recipe: 'alternating',
           expert_interval: 5,
-          steps: 24,
+          // Previews inside and across switches; pytest checks the exact pair at each preview step.
+          steps: 12,
           preview_every: 4,
         },
       },
@@ -37,10 +38,7 @@ test('paired Wan previews show matching per-expert steps', async ({ page }) => {
     const first = page.getByRole('button', {
       name: /^Step 4 preview · paired Wan · low 4 \/ high 4 trained steps.*available$/,
     });
-    await page
-      .getByRole('tablist', { name: 'Run views' })
-      .getByRole('tab', { name: 'Samples', exact: true })
-      .click();
+    await openRunTab(page, 'samples');
     await expect(first).toBeVisible({ timeout: 240_000 });
     await first.click();
     const playing = page.getByLabel('Output video', { exact: true });
@@ -54,7 +52,7 @@ test('paired Wan previews show matching per-expert steps', async ({ page }) => {
     });
     await expect(
       page.getByRole('button', {
-        name: /^Step 12 preview · paired Wan · low 12 \/ high 12 trained steps.*available$/,
+        name: /^Step 8 preview · paired Wan · low 8 \/ high 8 trained steps.*available$/,
       }),
     ).toBeVisible({ timeout: 240_000 });
     await expect(first).toHaveAttribute('aria-pressed', 'true');
@@ -71,7 +69,7 @@ test('paired Wan previews show matching per-expert steps', async ({ page }) => {
       .toBe(true);
     await expect(
       page.getByRole('button', {
-        name: /^Step 24 preview · paired Wan · low 24 \/ high 24 trained steps.*available$/,
+        name: /^Step 12 preview · paired Wan · low 12 \/ high 12 trained steps.*available$/,
       }),
     ).toBeVisible();
     const checkpoints = await openCheckpointPanel(page);
@@ -124,7 +122,7 @@ for (const family of ['wan', 'h3'] as const) {
         start: true,
       })) as { id: string };
       await page.goto(`${app.url}/#/runs/${run.id}`);
-      await page.getByRole('tab', { name: 'Samples', exact: true }).click();
+      await openRunTab(page, 'samples');
       const first = page.getByRole('button', {
         name: /^Step 5 preview.*available$/,
       });

@@ -26,31 +26,36 @@ def test_preview_boundaries_preserve_total_expert_allocation() -> None:
 def test_paired_previews_use_the_pair_at_each_total_step_and_restore_the_schedule(
     tmp_path: Path, final_sample: bool
 ) -> None:
-    root, job_id = paired_job(tmp_path, steps=8, expert_interval=3, preview_every=2, sample_enabled=final_sample)
+    root, job_id = paired_job(tmp_path, steps=5, expert_interval=3, preview_every=2, sample_enabled=final_sample)
     service = RunService(root, fixture_mode=True, device_path=tmp_path / "gpu.sqlite")
     try:
         run = service.prepare(job_id, start=True)
         completed = wait_for(service, run["id"], "completed", device_released=True)
         generations = [stage for stage in completed["stages"] if stage["name"] == "generate"]
-        assert [stage.get("preview_step") for stage in generations] == [2, 4, 6, 8] + ([None] if final_sample else [])
+        assert [stage.get("preview_step") for stage in generations] == [2, 4] + ([None] if final_sample else [])
         assert all("--sample_every_n_steps" not in stage["args"] for stage in completed["stages"])
         samples = [sample for sample in completed["samples"] if "preview_step" in sample]
-        assert len(completed["samples"]) == 4 + int(final_sample)
+        assert len(completed["samples"]) == 2 + int(final_sample)
         assert [
             (sample["preview_step"], sample["lora_pair"]["low"]["steps"], sample["lora_pair"]["high"]["steps"])
             for sample in samples
-        ] == [(2, 2, 0), (4, 3, 1), (6, 3, 3), (8, 5, 3)]
+        ] == [(2, 2, 0), (4, 3, 1)]
         assert samples[0]["lora_pair"]["high"]["base"] is True
-        assert len({sample["path"] for sample in samples}) == 4
+        assert len({sample["path"] for sample in samples}) == 2
         outputs = OutputBrowser(service).scan(run["id"])
         previews = [output for output in outputs["outputs"] if "preview" in output.get("metadata", {})]
-        assert len(previews) == 4
+        assert len(previews) == 2
         assert all(output["status"] == "available" for output in previews)
         assert previews[0]["metadata"]["lora_pair"] == samples[0]["lora_pair"]
-        state = next(state for state in service.saved_states(run["id"]) if state["schedule_step"] == 3)
-        restored = service.restore_state(run["id"], state["id"], 5, confirmed=True)
+        # The last save is inside the high phase; the restored schedule continues through it and back to low.
+        state = next(state for state in service.saved_states(run["id"]) if state["schedule_step"] == 5)
+        restored = service.restore_state(run["id"], state["id"], 3, confirmed=True)
         resumed = wait_for(service, restored["id"], "completed", device_released=True)
-        assert [sample["preview_step"] for sample in resumed["samples"] if "preview_step" in sample] == [4, 6, 8]
+        assert [
+            (sample["preview_step"], sample["lora_pair"]["low"]["steps"], sample["lora_pair"]["high"]["steps"])
+            for sample in resumed["samples"]
+            if "preview_step" in sample
+        ] == [(6, 3, 3), (8, 5, 3)]
         assert resumed["expert_states"]["low"]["optimizer_step"] == 5
         assert resumed["expert_states"]["high"]["optimizer_step"] == 3
     finally:
@@ -74,7 +79,9 @@ def test_failed_paired_preview_stops_before_the_next_training_phase(tmp_path: Pa
 
 
 def test_retention_preserves_paired_previews_and_latest_restoration(tmp_path: Path) -> None:
-    root, job_id = paired_job(tmp_path, steps=12, expert_interval=3, preview_every=2, keep_checkpoints=1)
+    # Previews inside and at the end of phases, with older saves to prune, in few stage processes.
+    # Nothing acts while a stage runs, so the fixture trainer needn't pace its steps.
+    root, job_id = paired_job(tmp_path, steps=8, expert_interval=3, preview_every=4, keep_checkpoints=1, instant=True)
     service = RunService(root, fixture_mode=True, device_path=tmp_path / "gpu.sqlite")
     try:
         run = service.prepare(job_id, start=True)
@@ -84,13 +91,13 @@ def test_retention_preserves_paired_previews_and_latest_restoration(tmp_path: Pa
         assert service.get(run["id"])["retention"]["removed"]
         outputs = OutputBrowser(service).scan(run["id"])
         previews = [output for output in outputs["outputs"] if "preview" in output.get("metadata", {})]
-        assert [output["metadata"]["preview"]["step"] for output in previews] == [2, 4, 6, 8, 10, 12]
+        assert [output["metadata"]["preview"]["step"] for output in previews] == [4, 8]
         assert all(output["status"] == "available" for output in previews)
         assert all(outputs["lora_pair"][expert]["output"]["status"] == "available" for expert in ("low", "high"))
-        restored = service.restore_state(run["id"], states[-1]["id"], 6, confirmed=True)
+        restored = service.restore_state(run["id"], states[-1]["id"], 2, confirmed=True)
         completed = wait_for(service, restored["id"], "completed", device_released=True)
-        assert completed["expert_states"]["low"]["optimizer_step"] == 9
-        assert completed["expert_states"]["high"]["optimizer_step"] == 9
+        assert completed["expert_states"]["low"]["optimizer_step"] == 6
+        assert completed["expert_states"]["high"]["optimizer_step"] == 4
     finally:
         service.close()
 
