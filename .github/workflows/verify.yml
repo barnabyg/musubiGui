@@ -50,3 +50,11 @@ jobs:
           path: test-results
           if-no-files-found: ignore
           retention-days: 14
+      # Each test's hosted duration, for balancing shards. Kept whether or not the part passed.
+      - if: always() && matrix.part != 'static'
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: test-durations-${{ strategy.job-index }}
+          path: .cache/durations
+          if-no-files-found: ignore
+          retention-days: 14

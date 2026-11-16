@@ -70,9 +70,13 @@ Each test owns its temporary state, backend port and GPU lease file.
 CI runs the canonical command in nine parts on separate Windows runners at once.
 `npm.cmd run verify -- static` runs everything except the two test suites, then builds the UI
 for packaging, and `npm.cmd run verify -- python --shard 2/4` or `-- browser --shard 2/4` runs
-one quarter of a suite. With no part it runs every check. A shard deals the collected tests
-out in turn, so each file's tests spread across all four. `--shard` needs the `tests/python`
-path on the pytest command line, which loads the option before arguments are parsed.
+one quarter of a suite. With no part it runs every check. A shard of either suite deals the
+tests out in turn, so each file's tests spread across all four. The slow Run and preview specs
+sit together in test order, so a contiguous split ran one browser shard twice as long as
+another. Pytest gets this from `--shard` in `tests/python/conftest.py`, which needs the
+`tests/python` path on the pytest command line to load the option before arguments are parsed.
+Browser shards pass Playwright a `--test-list` that `verify.py` writes under `.cache`;
+Playwright's own `--shard` takes a contiguous run.
 
 Verify runs for pull requests and pushes to `main`. A branch without a pull request can run
 it by hand with `gh workflow run Verify --ref <branch>`.
@@ -91,6 +95,11 @@ restarts. Download and extract the artifact, then run
 `npx.cmd playwright show-trace <path-to-trace.zip>` from the repository root to inspect the
 action and network history around a failure.
 
+Every test part, passing or not, also keeps a `test-durations-<n>` artifact for 14 days:
+pytest's JUnit XML or Playwright's JSON report, giving each test's duration on the hosted
+runner for balancing shards. `<n>` is the part's matrix position: 1–4 are the pytest shards and
+5–8 the browser shards.
+
 ## Timeouts
 
 Test deadlines are upper bounds, not targets, so they carry a lot of margin. A passing test
@@ -99,8 +108,8 @@ crawls. Hosted runs have taken over 45 seconds to scan four media files, and ove
 for an H3 inspection scenario that takes 10 seconds locally. Deadlines are never set just
 above an observed time.
 
-- Each Verify part in CI has a 120-minute limit, far above the slowest passing hosted run of
-  about 27 minutes, from before the suites were split.
+- Each Verify part in CI has a 120-minute limit, far above the slowest passing hosted part of
+  about 6 minutes and the 27-minute single job the parts replaced.
 - Each browser test has a single 30-minute budget, which exceeds the sum of its waits.
 - Browser actions and navigation each have a 240-second limit, so a missing option or control
   cannot consume the entire test budget. This leaves headroom for slow hosted uploads and
