@@ -159,7 +159,7 @@ def test_stop_at_switch_keeps_gpu_ownership_and_restores_both_states(
             service.stop(run["id"])
         return result
 
-    monkeypatch.setattr("musubi_gui.runs.finish_phase", stop_after_high)
+    monkeypatch.setattr("musubi_gui.run_stage_outputs.finish_phase", stop_after_high)
     try:
         run = service.prepare(job_id, start=True)
         stopped = wait_for(service, run["id"], "stopped", device_released=True)
@@ -221,7 +221,7 @@ def test_failure_does_not_launch_next_phase_or_sample_and_retry_does_not_reset_e
             Path(result["path"], "scheduler.bin").write_text("changed after sealing", encoding="utf-8")
         return result
 
-    monkeypatch.setattr("musubi_gui.runs.finish_phase", corrupt_after_low)
+    monkeypatch.setattr("musubi_gui.run_stage_outputs.finish_phase", corrupt_after_low)
     try:
         run = service.prepare(job_id, start=True)
         deadline = time.monotonic() + 180
