@@ -107,10 +107,7 @@ test('a finished Run lists its final LoRA with its checkpoints and samples in a 
     // Optimizer state weights are not offered as LoRA outputs.
     await expect(checkpoints).not.toContainText('model.safetensors');
     await expect(files).not.toContainText('-state/');
-    const states = page.getByRole('region', {
-      name: 'Resume training',
-      exact: true,
-    });
+    const states = runPanel(page, 'resume');
     await expect(states).toHaveCount(1);
     await states.getByText(/^Optimizer state files/).click();
     await expect(states.locator('.state-files')).toContainText(

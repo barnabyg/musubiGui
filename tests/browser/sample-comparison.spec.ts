@@ -1,12 +1,16 @@
 import { test, expect } from '@playwright/test';
-import { execFile } from 'node:child_process';
 import { mkdtemp, readFile, rm, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { promisify } from 'node:util';
 import { localBackend, python } from './backend';
 import { stopBackendTree } from './processes';
-import { openRunTab, runTabPanel } from './runHarness';
+import {
+  execute,
+  openRunTab,
+  runPanel,
+  runPanelLabelled,
+  runTabPanel,
+} from './runHarness';
 
 test('comparison plays both Runs and keeps provenance and downloads when a sample is missing', async ({
   page,
@@ -19,7 +23,7 @@ test('comparison plays both Runs and keeps provenance and downloads when a sampl
     args: ['--acceptance-fixture'],
   });
   try {
-    const generation = promisify(execFile)(python, [
+    const generation = execute(python, [
       '-m',
       'musubi_gui.output_fixture',
       fixture,
@@ -79,12 +83,9 @@ test('comparison plays both Runs and keeps provenance and downloads when a sampl
       await page.goto(`${backend.url}/#/runs/${before.id}`);
       // Compare lives on Overview, never on the samples-only Samples tab.
       await openRunTab(page, 'samples');
-      await expect(
-        page.getByRole('region', { name: 'Compare with another Run' }),
-      ).toBeHidden();
+      await expect(runPanelLabelled(page, 'compare')).toBeHidden();
       await openRunTab(page, 'overview');
-      await runTabPanel(page, 'overview')
-        .getByRole('region', { name: 'Compare with another Run' })
+      await runPanel(runTabPanel(page, 'overview'), 'compare')
         .getByLabel('Compare with run', { exact: true })
         .selectOption(after.id);
       await page

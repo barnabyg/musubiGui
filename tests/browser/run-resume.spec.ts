@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { readdir } from 'node:fs/promises';
 import path from 'node:path';
-import { exists, runWorkspace, type RunRecord } from './runHarness';
+import { exists, runPanel, runWorkspace, type RunRecord } from './runHarness';
 
 test('backend interruption retains GPU ownership and offers explicit recovery without duplicate training', async ({
   page,
@@ -134,10 +134,7 @@ test('a stopped Run resumes saved optimizer state through the UI after a backend
     await app.crash();
     await app.start();
     await page.reload();
-    const resume = page.getByRole('region', {
-      name: 'Resume training',
-      exact: true,
-    });
+    const resume = runPanel(page, 'resume');
     await resume.getByText('How resuming works', { exact: true }).click();
     await expect(
       resume.getByText(/Work since the last saved state must run again/),

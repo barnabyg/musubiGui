@@ -1,11 +1,9 @@
 import { test, expect } from '@playwright/test';
-import { execFile } from 'node:child_process';
 import { mkdtemp, readFile, rm, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { promisify } from 'node:util';
 import { localBackend, python } from './backend';
-import { openRunTab, runPanel } from './runHarness';
+import { execute, openRunTab, runPanel } from './runHarness';
 
 type FixtureRun = {
   id: string;
@@ -25,11 +23,7 @@ test('Wan and H3 output playback comparison download and missing states retain r
     args: ['--acceptance-fixture'],
   });
   try {
-    await promisify(execFile)(python, [
-      '-m',
-      'musubi_gui.output_fixture',
-      fixture,
-    ]);
+    await execute(python, ['-m', 'musubi_gui.output_fixture', fixture]);
     const records = JSON.parse(
       await readFile(path.join(fixture, 'output-fixture.json'), 'utf8'),
     ) as { runs: FixtureRun[] };

@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { helper, python } from './backend';
-import { exists, runPanel, runWorkspace } from './runHarness';
+import { exists, runPanelLabelled, runWorkspace } from './runHarness';
 
 test('deleting a Run and its Job goes from the UI to the disk and survives a backend restart', async ({
   page,
@@ -62,7 +62,7 @@ test('deleting a Run and its Job goes from the UI to the disk and survives a bac
     await expect(
       page.getByText('State: Deleting', { exact: true }),
     ).toBeVisible();
-    await expect(runPanel(page, 'checkpoints')).toHaveCount(0);
+    await expect(runPanelLabelled(page, 'checkpoints')).toHaveCount(0);
 
     // It is still there, and still deletable, after a restart.
     const closed = new Promise((resolve) => lock.once('exit', resolve));

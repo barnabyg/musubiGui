@@ -3,7 +3,7 @@ import { access, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { expect, type Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
 import { helper, localBackend, python } from './backend';
 
 export const execute = promisify(execFile);
@@ -218,8 +218,15 @@ export function runTabPanel(page: Page, tab: RunTabKey) {
   return page.getByRole('tabpanel', { name: runTabNames[tab], exact: true });
 }
 
-export function runPanel(page: Page, panel: RunPanelKey) {
-  return page.getByRole('region', { name: runPanelNames[panel], exact: true });
+// The panel on the page, or within a scope such as one tab's panel.
+export function runPanel(scope: Page | Locator, panel: RunPanelKey) {
+  return scope.getByRole('region', { name: runPanelNames[panel], exact: true });
+}
+
+// For absence checks: anything labelled with the panel name, of any role, matched as a
+// case-insensitive substring, so a renamed or re-roled copy of the panel still counts.
+export function runPanelLabelled(page: Page, panel: RunPanelKey) {
+  return page.getByLabel(runPanelNames[panel]);
 }
 
 // The first Overview panel: the Run's name, state, warnings, timing and originating job.
