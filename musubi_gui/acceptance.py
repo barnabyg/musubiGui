@@ -11,6 +11,7 @@ import sys
 import threading
 import wave
 import webbrowser
+from concurrent.futures import ThreadPoolExecutor
 from fractions import Fraction
 from pathlib import Path
 from typing import Any, Literal
@@ -226,11 +227,26 @@ def prepare(
         validate_paths(settings)
         save_settings(workspace / "state", settings)
         store, jobs = DatasetStore(workspace / "state"), JobStore(workspace / "state")
+        registered: dict[str, tuple[dict[str, Any], dict[str, Any] | None]] = {}
         for family in families:
             dataset = store.register(
                 f"{family.upper()} acceptance", str(datasets / (f"{family}-images" if preview_images else family))
             )
-            store.scan(dataset["id"])
+            images = (
+                store.register(f"{family.upper()} images", str(datasets / f"{family}-images"))
+                if dataset_media
+                else None
+            )
+            registered[family] = dataset, images
+        library = store.register("Mixed media and invalid item", str(workspace / "library" / "media 资料"))
+        scans = {item["id"] for pair in registered.values() for item in pair if item}
+        if scan_library:
+            scans.add(library["id"])
+        # A scan probes each item in its own subprocess, so scanning the datasets at once roughly halves preparation.
+        with ThreadPoolExecutor(len(scans)) as pool:
+            list(pool.map(store.scan, sorted(scans)))
+        for family in families:
+            dataset, images = registered[family]
             for number in [1, 2]:
                 config = smoke_config(family).model_copy(update={"save_state": True})
                 if preview_images:
@@ -252,9 +268,7 @@ def prepare(
                     )
                 )
                 manifest["jobs"].append({"id": job.id, "name": job.name, "family": family, "dataset_id": dataset["id"]})
-            if dataset_media:
-                images = store.register(f"{family.upper()} images", str(datasets / f"{family}-images"))
-                store.scan(images["id"])
+            if images:
                 for combined in [False, True]:
                     rows = [JobDataset(dataset_id=images["id"], repeats=2)]
                     if combined:
@@ -270,9 +284,6 @@ def prepare(
                     manifest["jobs"].append(
                         {"id": job.id, "name": job.name, "family": family, "dataset_id": images["id"]}
                     )
-        library = store.register("Mixed media and invalid item", str(workspace / "library" / "media 资料"))
-        if scan_library:
-            store.scan(library["id"])
         manifest["library_dataset"] = library["id"]
         manifest["status"] = "ready"
     except Exception:
