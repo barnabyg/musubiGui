@@ -12,8 +12,9 @@ from typing import Any
 
 from musubi_gui.diagnostics import training_environment, upstream_revision
 from musubi_gui.job_models import Job
+from musubi_gui.job_stages import build_stages, effective_settings
 from musubi_gui.job_store import JobStore, load_job
-from musubi_gui.jobs import build_stages, effective_settings, review_job
+from musubi_gui.jobs import review_job
 from musubi_gui.run_paths import create_run_directory
 from musubi_gui.safetensors_file import safetensors_header
 from musubi_gui.settings import Settings, atomic_json, training_settings, within_root
