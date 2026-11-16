@@ -2,7 +2,7 @@ import time
 from pathlib import Path
 
 import pytest
-from helpers import acceptance_workspace, wait_for
+from helpers import acceptance_workspace, instant_steps, wait_for
 
 from musubi_gui.jobs import JobConfig, JobDataset, JobDraft, JobStore, PresetSelection, configuration_errors, review_job
 from musubi_gui.outputs import OutputBrowser
@@ -12,7 +12,8 @@ from musubi_gui.wan_pair_plan import argument
 from musubi_gui.wan_pair_runtime import finish_phase
 
 
-def paired_job(tmp_path: Path, **config: object) -> tuple[Path, str]:
+def paired_job(tmp_path: Path, *, instant: bool = False, **config: object) -> tuple[Path, str]:
+    """A paired Wan job; `instant` is for checks that never act while a stage runs."""
     workspace = acceptance_workspace(tmp_path)
     root = Path(workspace["state"])
     dataset = next(job["dataset_id"] for job in workspace["jobs"] if job["family"] == "wan")
@@ -32,6 +33,8 @@ def paired_job(tmp_path: Path, **config: object) -> tuple[Path, str]:
             ),
         )
     )
+    if instant:
+        instant_steps(root)
     return root, job.id
 
 
@@ -139,9 +142,8 @@ def test_changed_expert_state_or_checkpoint_is_not_restorable(tmp_path: Path) ->
 def test_stop_at_switch_keeps_gpu_ownership_and_restores_both_states(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    root, job_id = paired_job(tmp_path, steps=12, expert_interval=3)
     # The stop is requested between phases, so the fixture trainer needn't pace its steps.
-    (Path(load_settings(root).checkout) / "instant-steps").touch()
+    root, job_id = paired_job(tmp_path, steps=12, expert_interval=3, instant=True)
     service = RunService(root, fixture_mode=True, device_path=tmp_path / "gpu.sqlite")
     stopped_once = False
 
@@ -194,7 +196,7 @@ def test_stop_inside_first_phase_restores_partial_phase_before_starting_high(tmp
         source = next(state for state in states if state["schedule_step"] == 1)
         assert source["valid"] and source["counts"] == {"low": 1, "high": 0}
         # Only the stop needed paced steps; the restored segment runs straight through.
-        (Path(load_settings(root).checkout) / "instant-steps").touch()
+        instant_steps(root)
         restored = service.restore_state(run["id"], source["id"], 11, confirmed=True)
         completed = wait_for(service, restored["id"], "completed", device_released=True)
         assert completed["stages"][0]["training"]["steps"] == 5
@@ -287,9 +289,8 @@ def test_per_expert_job_saves_matching_pairs_and_restores(tmp_path: Path) -> Non
         preview_every=3,
         wan_steps_per_expert=True,
         sample_enabled=False,
+        instant=True,
     )
-    # Nothing acts while a stage runs, so the fixture trainer needn't pace its steps.
-    (Path(load_settings(root).checkout) / "instant-steps").touch()
     review = review_job(root, JobStore(root).get(job_id), load_settings(root), fixture_mode=True)
     assert review["valid"], review["errors"]
     assert review["expert_schedule"]["counts"] == {"low": 7, "high": 7}

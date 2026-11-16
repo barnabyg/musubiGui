@@ -79,9 +79,8 @@ def test_failed_paired_preview_stops_before_the_next_training_phase(tmp_path: Pa
 
 def test_retention_preserves_paired_previews_and_latest_restoration(tmp_path: Path) -> None:
     # Previews inside and at the end of phases, with older saves to prune, in few stage processes.
-    root, job_id = paired_job(tmp_path, steps=8, expert_interval=3, preview_every=4, keep_checkpoints=1)
     # Nothing acts while a stage runs, so the fixture trainer needn't pace its steps.
-    (Path(load_settings(root).checkout) / "instant-steps").touch()
+    root, job_id = paired_job(tmp_path, steps=8, expert_interval=3, preview_every=4, keep_checkpoints=1, instant=True)
     service = RunService(root, fixture_mode=True, device_path=tmp_path / "gpu.sqlite")
     try:
         run = service.prepare(job_id, start=True)

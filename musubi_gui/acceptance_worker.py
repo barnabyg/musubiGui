@@ -11,6 +11,9 @@ from typing import Any
 from musubi_gui.checkpoint_names import expert_step_name
 from musubi_gui.training_timing import TrainingTiming
 
+# In the synthetic checkout, lets checks that never act while a stage runs skip the paced steps.
+INSTANT_STEPS = "instant-steps"
+
 
 def tensor(file: Path, **metadata: str) -> None:
     """Write a tiny, labelled tensor container; it is never a usable model."""
@@ -125,8 +128,7 @@ def main(stage: str | None = None) -> None:
             (state / "scheduler.bin").write_text("synthetic scheduler", encoding="utf-8")
 
         # Longer runs stay slow enough to be observed and stopped; the two-step default needn't wait.
-        # A check that never acts while a stage runs can skip the wait with an `instant-steps` marker.
-        step_seconds = 0.5 if args.max_train_steps > 2 and not (Path.cwd() / "instant-steps").exists() else 0
+        step_seconds = 0.5 if args.max_train_steps > 2 and not (Path.cwd() / INSTANT_STEPS).exists() else 0
         timing = (
             TrainingTiming(Path(os.environ["MUSUBI_RUN_TIMING_FILE"]))
             if os.environ.get("MUSUBI_RUN_TIMING_FILE")
