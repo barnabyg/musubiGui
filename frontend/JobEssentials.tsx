@@ -1,18 +1,23 @@
 import { JobSection } from './JobSection';
 import { focusField, type JobFields } from './jobFields';
-import type { Job } from './jobTypes';
+import type { Job, SetConfig, TrainingOptions } from './jobTypes';
 import type { JobMedia } from './jobMedia';
+import { JobTrainingControls } from './JobSettings';
 
 export function JobEssentials({
   job,
   busy,
   fields,
   media,
+  config,
+  trainingOptions,
 }: {
   job: Job;
   busy: boolean;
   fields: JobFields;
   media: JobMedia;
+  config: SetConfig;
+  trainingOptions: TrainingOptions;
 }) {
   const choices: { field: string; message: string }[] = [];
   if (!job.name.trim())
@@ -92,6 +97,13 @@ export function JobEssentials({
             : 'Steps for each expert: 1,000 trains low and high to 1,000 each (2,000 optimizer updates).'
           : undefined,
       )}
+      <JobTrainingControls
+        job={job}
+        busy={busy}
+        fields={fields}
+        config={config}
+        trainingOptions={trainingOptions}
+      />
     </JobSection>
   );
 }

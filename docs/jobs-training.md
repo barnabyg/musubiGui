@@ -5,7 +5,7 @@ the other job topics.
 
 ## Timestep strategy
 
-The LoRA & training tab offers **Shift**, **Sigmoid** and **Uniform**
+The Training tab offers **Shift**, **Sigmoid** and **Uniform**
 for Wan. Shift favours noisier timesteps using a shifted sigmoid distribution;
 Sigmoid concentrates draws around the middle; Uniform assigns equal probability
 across the active expert's range. Sigmoid scale controls spread for Shift and
@@ -43,7 +43,7 @@ From `C:/docs/git/musubiGui` in PowerShell 7:
 .\acceptance.cmd --workspace ".cache/timesteps-$([guid]::NewGuid().ToString('N'))" --wan-paired
 ```
 
-Open WAN acceptance 1, open LoRA & training, select Sigmoid and set its scale
+Open WAN acceptance 1, open Training, select Sigmoid and set its scale
 to 1.5. Save and reload: the choice should remain. Review should pass and show
 Sigmoid with scale 1.5 and bounded mapping; Advanced command arrays should keep
 the appropriate low/high ranges. Prepare and start the four-step fixture, then
@@ -53,7 +53,7 @@ CPU orchestration test; no models or GPU are required.
 
 ## Optimizer selection
 
-The LoRA & training tab offers AdamW and, when the selected training
+The Training tab offers AdamW and, when the selected training
 Python can load a CUDA-enabled bitsandbytes optimizer, AdamW8bit. Both Wan and H3
 use the pinned trainer's shared optimizer implementation. AdamW remains the
 default for old and new jobs. A saved or imported unavailable choice stays visible
@@ -80,7 +80,7 @@ From `C:/docs/git/musubiGui` in PowerShell 7:
 .\acceptance.cmd --workspace ".cache/optimizer-$([guid]::NewGuid().ToString('N'))"
 ```
 
-Open WAN acceptance 1, open LoRA & training, select AdamW8bit, save and reload.
+Open WAN acceptance 1, open Training, select AdamW8bit, save and reload.
 The selection should remain; Review configuration should show Optimizer: AdamW8bit.
 Repeat with H3 acceptance 1. The fixture explicitly labels optimizer execution as
 simulated. No model weights or GPU are required; real optimizer execution needs

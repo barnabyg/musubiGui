@@ -29,9 +29,7 @@ test('jobs remain usable while optional optimizer detection is pending or fails'
       name: 'Optimizer',
       exact: true,
     });
-    await page
-      .getByRole('tab', { name: 'LoRA & training', exact: true })
-      .click();
+    await page.getByRole('tab', { name: 'Training', exact: true }).click();
     await expect(optimizer).toHaveValue('AdamW');
     release();
     await expect(

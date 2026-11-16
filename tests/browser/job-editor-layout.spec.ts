@@ -71,7 +71,6 @@ for (const family of ['wan', 'h3'] as const) {
         'Training',
         'Samples',
         'Dataset preparation',
-        'LoRA & training',
         'Memory',
         'Checkpoints',
         'Presets',
@@ -116,7 +115,7 @@ for (const family of ['wan', 'h3'] as const) {
       await go('Memory');
       const blocks = page.getByRole('spinbutton', { name: /^Blocks to swap/ });
       await blocks.fill('12');
-      await go('LoRA & training');
+      await go('Training');
       await go('Memory');
       await expect(blocks).toHaveValue('12');
       await expect(page.getByRole('status')).toHaveText('Unsaved draft');

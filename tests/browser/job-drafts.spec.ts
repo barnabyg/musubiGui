@@ -52,9 +52,7 @@ test('Wan draft controls, validation and reviewed native configuration survive s
     await page.getByRole('tab', { name: 'Job & dataset', exact: true }).click();
     await page.getByLabel('Job name', { exact: true }).fill('Browser Wan');
 
-    await page
-      .getByRole('tab', { name: 'LoRA & training', exact: true })
-      .click();
+    await page.getByRole('tab', { name: 'Training', exact: true }).click();
     await page.getByLabel('LoRA rank', { exact: true }).fill('16');
     await page
       .getByRole('tab', { name: 'Dataset preparation', exact: true })
@@ -125,9 +123,7 @@ test('Wan draft controls, validation and reviewed native configuration survive s
     await expect(
       page.getByRole('spinbutton', { name: /^Frames\b/ }),
     ).toHaveValue('33');
-    await page
-      .getByRole('tab', { name: 'LoRA & training', exact: true })
-      .click();
+    await page.getByRole('tab', { name: 'Training', exact: true }).click();
     await expect(page.getByLabel('LoRA rank', { exact: true })).toHaveValue(
       '16',
     );

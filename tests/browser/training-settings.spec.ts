@@ -13,9 +13,7 @@ test('optimizer choice persists and appears in configuration review', async ({
       name: 'Optimizer',
       exact: true,
     });
-    await page
-      .getByRole('tab', { name: 'LoRA & training', exact: true })
-      .click();
+    await page.getByRole('tab', { name: 'Training', exact: true }).click();
     await expect(optimizer).toHaveValue('AdamW');
     await optimizer.selectOption('AdamW8bit');
     await expect(
@@ -25,9 +23,7 @@ test('optimizer choice persists and appears in configuration review', async ({
     await expect(page.getByRole('status')).toContainText('revision 2');
     await page.reload();
 
-    await page
-      .getByRole('tab', { name: 'LoRA & training', exact: true })
-      .click();
+    await page.getByRole('tab', { name: 'Training', exact: true }).click();
     await expect(optimizer).toHaveValue('AdamW8bit');
     await page
       .getByRole('button', { name: 'Review configuration', exact: true })
@@ -52,9 +48,7 @@ test('Wan timestep choices persist while H3 explains its fixed Uniform strategy'
       name: 'Timestep strategy',
       exact: true,
     });
-    await page
-      .getByRole('tab', { name: 'LoRA & training', exact: true })
-      .click();
+    await page.getByRole('tab', { name: 'Training', exact: true }).click();
     await expect(strategy).toHaveValue('shift');
     await strategy.selectOption('sigmoid');
     await page.getByLabel('Sigmoid scale', { exact: true }).fill('1.5');
@@ -63,9 +57,7 @@ test('Wan timestep choices persist while H3 explains its fixed Uniform strategy'
     await expect(page.getByRole('status')).toContainText('revision 2');
     await page.reload();
 
-    await page
-      .getByRole('tab', { name: 'LoRA & training', exact: true })
-      .click();
+    await page.getByRole('tab', { name: 'Training', exact: true }).click();
     await expect(strategy).toHaveValue('sigmoid');
     await expect(page.getByLabel('Sigmoid scale', { exact: true })).toHaveValue(
       '1.5',
@@ -79,9 +71,7 @@ test('Wan timestep choices persist while H3 explains its fixed Uniform strategy'
     await expect(review).toContainText('Sigmoid scale: 1.5');
     const h3 = app.manifest.jobs.find((job) => job.family === 'h3')!;
     await page.goto(`${app.url}/#/jobs/${h3.id}`);
-    await page
-      .getByRole('tab', { name: 'LoRA & training', exact: true })
-      .click();
+    await page.getByRole('tab', { name: 'Training', exact: true }).click();
     await expect(strategy).toHaveValue('uniform');
     await expect(strategy).toBeDisabled();
     await expect(
