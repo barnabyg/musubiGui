@@ -39,15 +39,19 @@ All diagnostics and warnings must be resolved; pytest warnings and ESLint warnin
 When `CI` is set, pytest and Playwright each stop at their first failure, so a failing run
 ends soon after its first useful signal, and the first failing part cancels the other parts.
 Local runs still report every failure. Each Verify part has a 120-minute limit, far above the
-slowest passing hosted run of about 27 minutes, from before the suites were split.
+slowest passing hosted part of about 6 minutes and the 27-minute single job the parts replaced.
 It runs for pull requests and pushes to `main`. A branch without a pull request can run it
 by hand with `gh workflow run Verify --ref <branch>`.
 
 Pytest and Playwright each run in parallel: four workers locally and two when `CI` is set.
 Each test owns its temporary state, backend port and GPU lease file. The focused pytest
-command below runs serially unless given `-n`. A shard deals the collected tests out in turn,
-so each file's tests spread across all four. `--shard` needs the `tests/python` path on the
-pytest command line, which loads the option before arguments are parsed.
+command below runs serially unless given `-n`. A shard of either suite deals the tests out
+in turn, so each file's tests spread across all four. The slow Run and preview specs sit
+together in test order, so a contiguous split ran one browser shard twice as long as another.
+Pytest gets this from `--shard` in `tests/python/conftest.py`, which needs the `tests/python`
+path on the pytest command line to load the option before arguments are parsed. Browser shards
+pass Playwright a `--test-list` that `verify.py` writes under `.cache`; Playwright's own
+`--shard` takes a contiguous run.
 
 Test deadlines are upper bounds, not targets, so they carry a lot of margin. A passing test
 never waits them out, while a tight deadline fails correct code when a hosted Windows runner
