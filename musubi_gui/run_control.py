@@ -63,11 +63,15 @@ def collect(store: RunStore, run: dict[str, Any]) -> dict[str, Any] | None:
     handled = read_json(file) if file.is_file() else None
     if handled is None:
         return None
-    # Removed before the request clears, so the outcome of a newer request can't be deleted unread.
-    file.unlink(missing_ok=True)
     entry: dict[str, Any] = {}
 
     def change(record: dict[str, Any]) -> None:
+        if recorded := next(
+            (item for item in record.get("controls", []) if "handled" in item and item["id"] == handled.get("id")), None
+        ):
+            # Already recorded by a check whose removal of the handled file failed.
+            entry.update(recorded)
+            return
         pending = record.get("control_request") or {}
         entry.update(
             id=handled.get("id"),
@@ -84,7 +88,11 @@ def collect(store: RunStore, run: dict[str, Any]) -> dict[str, Any] | None:
             # Saving now; the process exits at its next step.
             record["status"] = "stopping"
 
+    # Recorded before the handled file is removed, so a failed update leaves the outcome for the next check.
     store.update(run["id"], change)
+    # Unless a newer request's outcome has already replaced it.
+    if (read_json(file) or {}).get("id") == handled.get("id"):
+        file.unlink(missing_ok=True)
     return entry
 
 

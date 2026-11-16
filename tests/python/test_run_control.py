@@ -16,8 +16,9 @@ from musubi_gui.job_store import JobStore
 from musubi_gui.outputs import OutputBrowser
 from musubi_gui.run_control import TRAINING_FINISHED, unavailable
 from musubi_gui.run_stage_outputs import record_checkpoints
+from musubi_gui.run_store import RunStore
 from musubi_gui.runs import RunService
-from musubi_gui.trainer_control import HANDLED_FILE, REQUEST_FILE
+from musubi_gui.trainer_control import HANDLED_FILE, REQUEST_FILE, write_json
 
 
 def job_with(tmp_path: Path, family: str = "wan", **config: Any) -> tuple[Path, str]:
@@ -255,3 +256,41 @@ def test_sample_now_needs_previews() -> None:
     assert unavailable(run, "save") is None
     run["stages"][0]["args"] += ["--sample_prompts", "previews.json"]
     assert unavailable(run, "sample") is None
+
+
+def test_an_outcome_the_record_could_not_take_is_collected_later(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = RunStore(tmp_path)
+    run = store.create({"id": "run", "status": "training", "directory": str(tmp_path), "stages": []})
+    run = run_control.request(store, run["id"], "save")
+    pending = run["control_request"]
+    write_json(tmp_path / HANDLED_FILE, {"id": pending["id"], "action": "save", "step": 3})
+    original = store.update
+
+    def unavailable_record(run_id: str, change: Any) -> dict[str, Any]:
+        raise OSError("database is locked")
+
+    monkeypatch.setattr(store, "update", unavailable_record)
+    with pytest.raises(OSError):
+        run_control.collect(store, run)
+    monkeypatch.setattr(store, "update", original)
+    # The outcome is kept for the next check, which records it and frees the controls.
+    assert (tmp_path / HANDLED_FILE).is_file()
+    assert run_control.collect(store, run) == {**store.get("run")["controls"][0]}
+    collected = store.get("run")
+    assert "control_request" not in collected
+    assert [(entry["id"], entry["step"]) for entry in collected["controls"]] == [(pending["id"], 3)]
+    assert not (tmp_path / HANDLED_FILE).exists()
+
+
+def test_collecting_an_outcome_again_records_it_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store = RunStore(tmp_path)
+    run = store.create({"id": "run", "status": "training", "directory": str(tmp_path), "stages": []})
+    pending = run_control.request(store, run["id"], "save")["control_request"]
+    write_json(tmp_path / HANDLED_FILE, {"id": pending["id"], "action": "save", "step": 3})
+    # The handled file survives the first collection, as when removing it failed.
+    monkeypatch.setattr(Path, "unlink", lambda self, missing_ok=False: None)
+    first = run_control.collect(store, run)
+    assert run_control.collect(store, run) == first
+    assert len(store.get("run")["controls"]) == 1
