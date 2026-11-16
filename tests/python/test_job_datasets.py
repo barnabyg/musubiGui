@@ -10,7 +10,7 @@ from helpers import acceptance_workspace, wait_for
 
 from musubi_gui.app import create_app
 from musubi_gui.job_models import Job, JobConfig, as_draft, smoke_config
-from musubi_gui.jobs import JobStore
+from musubi_gui.job_store import JobStore
 from musubi_gui.outputs import compare_runs
 from musubi_gui.runs import RunService
 from musubi_gui.snapshots import cache_stage_keys

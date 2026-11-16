@@ -10,7 +10,7 @@ import pytest
 from helpers import acceptance_workspace, wait_for
 
 from musubi_gui.job_models import JobConfig, JobDraft
-from musubi_gui.jobs import JobStore
+from musubi_gui.job_store import JobStore
 from musubi_gui.recipe import Stage
 from musubi_gui.runs import ExecutionPlan, RunService
 from musubi_gui.settings import Settings

@@ -21,7 +21,8 @@ from musubi_gui.job_models import (
     default_config,
     export_draft,
 )
-from musubi_gui.jobs import JobStore, review_job
+from musubi_gui.job_store import JobStore
+from musubi_gui.jobs import review_job
 from musubi_gui.settings import training_settings
 from musubi_gui.training_options import optimizer_options
 
