@@ -1,7 +1,5 @@
 """Running a claimed Run's stages: launch, supervision, stop and cancel handling, and each stage's outcome."""
 
-import hashlib
-import json
 import os
 import subprocess  # nosec B404
 import threading
@@ -21,7 +19,7 @@ from musubi_gui.run_performance import RunPerformance, start_performance
 from musubi_gui.run_stage_outputs import record_checkpoints, record_samples
 from musubi_gui.run_store import DeviceLease, RunStore, utc_now
 from musubi_gui.settings import Settings
-from musubi_gui.snapshots import digest_file
+from musubi_gui.snapshots import digest, digest_file
 from musubi_gui.wan_pair_runtime import is_paired, sampling_pair, stage_log, validate_phase_input
 from musubi_gui.windows_job import ProcessJob, WindowsProcess
 
@@ -166,7 +164,7 @@ class RunExecution:
         """Create this stage's named Job Object, recorded before launch so a restart can always find it."""
         if self.job_object:
             self.job_object.close()
-        root = fingerprint(str(self.context.root.resolve()))[:12]
+        root = digest(str(self.context.root.resolve()))[:12]
         name = f"Local\\MusubiGui-{root}-{self.run_id}-{index}"
         self.job_object = ProcessJob(name)
         names = list(self.store.get(self.run_id).get("job_objects", []))
@@ -395,7 +393,3 @@ def signal_stop(
             ),
         )
     return str(stop)
-
-
-def fingerprint(value: object) -> str:
-    return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
