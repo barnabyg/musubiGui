@@ -17,7 +17,7 @@ test('paired Wan previews show matching per-expert steps', async ({ page }) => {
           ...saved.config,
           recipe: 'alternating',
           expert_interval: 5,
-          // Previews inside and across switches; pytest checks each pair's steps in longer schedules.
+          // Previews inside and across switches; pytest checks the exact pair at each preview step.
           steps: 12,
           preview_every: 4,
         },
