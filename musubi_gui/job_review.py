@@ -1,4 +1,4 @@
-"""Versioned job drafts and deterministic plans for the pinned LoRA recipe."""
+"""Review: what preparing a Job would do, and the errors and warnings that block or qualify it."""
 
 import json
 import math

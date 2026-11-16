@@ -1,4 +1,4 @@
-"""Same-origin job operations; storage and validation live in musubi_gui.jobs."""
+"""Same-origin job operations; models, storage, validation and Review live in the musubi_gui.job_* modules."""
 
 import sqlite3
 from contextlib import contextmanager
@@ -21,8 +21,8 @@ from musubi_gui.job_models import (
     default_config,
     export_draft,
 )
+from musubi_gui.job_review import review_job
 from musubi_gui.job_store import JobStore
-from musubi_gui.jobs import review_job
 from musubi_gui.settings import training_settings
 from musubi_gui.training_options import optimizer_options
 
