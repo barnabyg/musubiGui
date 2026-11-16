@@ -176,13 +176,18 @@ Prepare and start in A. Expect the revision-change message and an empty Run hist
 In A, choose Review configuration, confirm the new name, then choose Prepare run.
 The Run in history shows the new name and the revision that passed review.
 
-Browser checks: `npm.cmd run test:browser -- tests/browser/jobs.spec.ts`. The scenarios
-cover restart persistence and generated configuration for both models, frame
-extraction with cached-window counts for a resampled 30 fps clip, invalid draft
-feedback, duplication, presets, cancelled/accepted conversion and configuration
-round-trip. These UI scenarios intentionally do not launch GPU work; the separate
-release-acceptance fixtures exercise execution and real hardware evidence remains
-separate.
+Browser checks: `npm.cmd run test:browser -- tests/browser/job-` runs every
+`tests/browser/job-*.spec.ts`. The Job editor specs below share
+`tests/browser/jobHarness.ts`. `job-drafts.spec.ts` covers restart persistence and
+generated configuration for both models, and frame extraction with cached-window
+counts for a resampled 30 fps clip. `job-review-errors.spec.ts` covers invalid draft
+feedback and Review errors that lead to their field. `job-transfer.spec.ts` covers
+duplication, presets, cancelled/accepted conversion and configuration round-trip.
+`job-actions.spec.ts` covers the action bar, the job collection and confirmation
+dialogs, `job-editor-layout.spec.ts` the form layout and tabs, and
+`job-library-load.spec.ts` library and preset load failures. These UI scenarios
+intentionally do not launch GPU work; the separate release-acceptance fixtures
+exercise execution and real hardware evidence remains separate.
 
 To check collection navigation manually, run `./launch.cmd` from the repository root
 (`C:/docs/git/musubiGui`). This prepares and launches the application. In Jobs,
