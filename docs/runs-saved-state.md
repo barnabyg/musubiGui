@@ -46,7 +46,7 @@ $resumeWorkspace = ".cache/resume-check-$([guid]::NewGuid().ToString('N'))"
 
 This isolated CPU fixture needs no models or GPU. In a fixture Job set 50 steps,
 save every step and enable Save optimizer/training state. Prepare and start,
-wait for an interval state in the outputs, then request graceful stop. Close and
+wait for an interval state in the outputs, then choose Stop now. Close and
 relaunch the saved workspace with the command below, open the stopped Run and
 inspect saved states. Set **Train until step** to the saved step of a valid state
 (for example 3 for the state at optimizer step 3) and expect its Restore button to be
@@ -99,8 +99,10 @@ high starts fresh when its phase arrives. Restored checkpoints include a local c
 of the inactive expert's source LoRA, so both downloads are available even if only one
 expert trains in the new segment.
 
-Stopping does not force a new save. Choose a complete saved schedule position and
-expect any unsaved updates after that position to be lost. Restoration validates the
+Stop now does not force a new save. Save and stop saves the active expert's
+checkpoint and state at the step it stops, with the usual per-expert name, and
+Inspect saved states pairs it with the other expert's latest state. Choose a complete saved
+schedule position and expect any unsaved updates after that position to be lost. Restoration validates the
 state files and their counters; missing or changed state blocks it. Retry after paired
 training has started directs you to inspect/restore paired state rather than silently
 restarting either expert. Preparing the Job again explicitly starts both experts over.

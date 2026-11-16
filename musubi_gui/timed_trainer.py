@@ -13,22 +13,30 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from musubi_gui.checkpoint_names import expert_step_name  # noqa: E402
 from musubi_gui.step_offset import ENVIRONMENT, OffsetStepName, StepSchedule  # noqa: E402
+from musubi_gui.trainer_control import ENVIRONMENT as CONTROL_ENVIRONMENT  # noqa: E402
+from musubi_gui.trainer_control import TrainerControl  # noqa: E402
 from musubi_gui.training_timing import TrainingTiming  # noqa: E402
 
 
 def observe_trainer(
-    trainer: Any, timing: TrainingTiming, *, expert_step_offset: int | None = None, step_offset: int = 0
+    trainer: Any,
+    timing: TrainingTiming,
+    *,
+    expert_step_offset: int | None = None,
+    step_offset: int = 0,
+    control: TrainerControl | None = None,
 ) -> None:
     before = trainer.on_before_sample_images
     sample = trainer.sample_images
     after = trainer.on_after_sample_images
     optimizer_step = trainer.on_post_optimizer_step
-    schedule = StepSchedule(step_offset) if step_offset else None
+    # Sets each step's intervals; offset zero fires them as upstream does. A control request overrides one step.
+    schedule = StepSchedule(step_offset)
     succeeded = False
 
     def global_step(step: int) -> int:
         # Step zero is upstream's optional sample before training, not an update of this segment.
-        return schedule.global_step(step) if schedule and step else step
+        return schedule.global_step(step) if step else step
 
     def on_before(self: Any, *args: Any, **kwargs: Any) -> Any:
         nonlocal succeeded
@@ -75,21 +83,37 @@ def observe_trainer(
         if args[4]:
             step = int(args[5]) + 1
             timing.step(global_step(step))
-            if schedule:
-                schedule.before_step(args[0], step)
+            namespace = args[0]
+            schedule.before_step(namespace, step)
             if expert_step_offset is not None:
-                namespace = args[0]
                 namespace.output_name = expert_step_name(namespace.output_name, expert_step_offset, step)
                 if step == namespace.max_train_steps:
                     # The mandatory train-end save writes this same checkpoint/state.
                     # Avoid publishing it twice with different epoch/RNG metadata.
                     namespace.save_every_n_steps = None
+            if control:
+                # Saves are named by the expert's cumulative step in alternating Wan phases.
+                named = expert_step_offset + step if expert_step_offset is not None else global_step(step)
+                control.at_step(namespace, step, named)
         return result
+
+    def stop_after_save(original: Any) -> Any:
+        # The next hook after a Save and stop step: its save has been written.
+        def hook(self: Any, *args: Any, **kwargs: Any) -> Any:
+            if control:
+                control.after_save()
+            return original(self, *args, **kwargs)
+
+        return hook
 
     trainer.on_before_sample_images = on_before
     trainer.sample_images = on_sample
     trainer.on_after_sample_images = on_after
     trainer.on_post_optimizer_step = on_optimizer_step
+    # The next step starts with its batch; an epoch that ends first calls its end hook.
+    for name in ("process_batch", "on_epoch_end"):
+        if hasattr(trainer, name):
+            setattr(trainer, name, stop_after_save(getattr(trainer, name)))
 
 
 def main() -> None:
@@ -122,6 +146,7 @@ def main() -> None:
             TrainingTiming(options.timing_file),
             expert_step_offset=int(offset) if offset is not None else None,
             step_offset=step_offset,
+            control=TrainerControl(Path(request)) if (request := os.environ.get(CONTROL_ENVIRONMENT)) else None,
         )
     sys.argv = [options.upstream, *remaining]
     runpy.run_path(options.upstream, run_name="__main__")

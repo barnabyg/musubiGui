@@ -1,8 +1,9 @@
 import { confirmDialog } from './ConfirmDialog';
 import { formatRoute } from './route';
+import { RunControls } from './RunControls';
 import { RunStages } from './RunStages';
 import { sizeLabel } from './runStatus';
-import type { DeletePreview, Run } from './runTypes';
+import type { DeletePreview, Progress, Run } from './runTypes';
 
 export function confirmDelete(run: Run, preview: DeletePreview) {
   const lines = [
@@ -27,12 +28,14 @@ export function confirmDelete(run: Run, preview: DeletePreview) {
 // The Actions panel: what the user can do with the Run in its current state.
 export function RunActions({
   run,
+  progress,
   busy,
   pairedStarted,
   action,
   deleteRun,
 }: {
   run: Run;
+  progress: Progress | null;
   busy: boolean;
   pairedStarted: boolean;
   action: (name: string, body?: object) => Promise<void>;
@@ -113,6 +116,14 @@ export function RunActions({
           )}
         </div>
       )}
+      {['training', 'generating', 'stopping'].includes(run.status) && (
+        <RunControls
+          run={run}
+          progress={progress}
+          busy={busy}
+          action={action}
+        />
+      )}
       <div className="actions">
         {['orphaned', 'uncertain', 'interrupted'].includes(run.status) && (
           <>
@@ -145,41 +156,6 @@ export function RunActions({
                 Terminate recovered work
               </button>
             )}
-          </>
-        )}
-        {['training', 'generating', 'stopping'].includes(run.status) && (
-          <>
-            <button
-              disabled={busy || run.status === 'stopping'}
-              onClick={() => void action('stop', { force: false })}
-            >
-              Request graceful stop
-            </button>
-            <button
-              className="danger"
-              disabled={busy}
-              onClick={() =>
-                void confirmDialog({
-                  title: 'Force terminate this Run?',
-                  body: (
-                    <p>
-                      This ends the Run's whole process tree. Unsaved
-                      checkpoints and optimizer state may be lost.
-                    </p>
-                  ),
-                  confirmLabel: 'Force terminate',
-                  danger: true,
-                }).then((confirmed) => {
-                  if (confirmed)
-                    void action('stop', {
-                      force: true,
-                      confirmed: true,
-                    });
-                })
-              }
-            >
-              Force terminate
-            </button>
           </>
         )}
         {run.status === 'prepared' && (

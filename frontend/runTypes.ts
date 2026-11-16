@@ -25,6 +25,7 @@ export type Run = {
       save_state?: boolean;
       save_every?: number;
       steps?: number;
+      preview_every?: number;
     };
   };
   manifest: {
@@ -44,11 +45,22 @@ export type Run = {
   order: number;
   start_after_prepare?: boolean;
   resume_of?: string;
+  // Save now, Sample now or Save and stop, waiting for the next training step.
+  control_request?: { id: string; action: ControlAction; requested: string };
+  controls?: {
+    id: string;
+    action: ControlAction;
+    step?: number;
+    handled?: string;
+    dropped?: string;
+    error?: string;
+  }[];
   deletion?: {
     error: string | null;
     remaining: { path: string; bytes?: number }[];
   };
 };
+export type ControlAction = 'save' | 'sample' | 'save_and_stop';
 export type DeletePreview = {
   refusal: string | null;
   bytes?: number;
@@ -69,6 +81,8 @@ export type Progress = {
   phase_step?: number;
   phase_total?: number;
   expert_steps?: { low: number; high: number };
+  // Updates of the training stage since its latest save, which Stop now loses.
+  unsaved_steps?: number | null;
 };
 export type CompletionEstimate = {
   remaining_seconds: number | null;

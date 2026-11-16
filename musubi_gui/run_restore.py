@@ -20,6 +20,8 @@ _ENDED_FIELDS = [
     "checkpoints",
     "removed_duplicates",
     "retention",
+    "control_request",
+    "controls",
 ]
 
 

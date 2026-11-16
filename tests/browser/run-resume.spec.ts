@@ -125,8 +125,14 @@ test('a stopped Run resumes saved optimizer state through the UI after a backend
         { timeout: 240_000 },
       )
       .toBeTruthy();
+    await page.getByRole('button', { name: 'Stop now', exact: true }).click();
+    // Stop now says what it loses; Save and stop would keep it.
+    await expect(page.getByRole('dialog')).toContainText(
+      'trained since the last save',
+    );
     await page
-      .getByRole('button', { name: 'Request graceful stop', exact: true })
+      .getByRole('dialog')
+      .getByRole('button', { name: 'Stop now' })
       .click();
     await expect(page.getByText('State: Stopped', { exact: true })).toBeVisible(
       { timeout: 240_000 },
@@ -298,8 +304,10 @@ test('a gracefully stopped revision can be prepared and started again', async ({
     await expect(page.getByLabel('Run logs')).toContainText(
       'SYNTHETIC ACCEPTANCE FIXTURE: train',
     );
+    await page.getByRole('button', { name: 'Stop now', exact: true }).click();
     await page
-      .getByRole('button', { name: 'Request graceful stop', exact: true })
+      .getByRole('dialog')
+      .getByRole('button', { name: 'Stop now' })
       .click();
     await expect(page.getByText('State: Stopped', { exact: true })).toBeVisible(
       { timeout: 240_000 },

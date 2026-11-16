@@ -172,12 +172,55 @@ explanation. Retry should again prepare a new Run and wait for Start training. R
 the marker before trying a successful training run. The CPU fixture checks control
 flow, not GPU training quality.
 
+## Save now, Sample now and Save and stop
+
+While a Run is training, its Actions offer three requests that the trainer honours at
+its next optimizer step:
+
+- **Save now** saves that step's checkpoint and, when the Job saves training state,
+  its state. Training continues.
+- **Sample now** generates a preview at that step with the Run's frozen preview
+  settings. It is unavailable, with the reason shown, when previews are off for the
+  Job or the Run is alternating Wan, whose previews run as separate sampling stages.
+- **Save and stop** saves that step's checkpoint and state, even when the Job doesn't
+  save state otherwise, then ends the trainer cleanly before the next step. The Run
+  ends as Stopped with a state from that step, which Inspect saved states accepts and
+  Resume training restores.
+
+One request waits at a time: the buttons stay disabled, and the Actions panel says
+which request is waiting, until the step applies it. Then it says the step it ran at.
+Extra saves and previews are named by their step like interval ones, so restored
+segments name them by global step and alternating Wan by the expert's cumulative
+step, and they appear with the Run's outputs. Checkpoint retention counts an extra
+save like an interval save. At the final step the train-end save already saves, so
+nothing extra is written.
+
+The request is a file, `control-request.json`, in the Run folder, holding the action
+and a request ID. Only training stages read it, at their post-optimizer hook; the
+trainer reports the step in `control-handled.json` and removes the request. A
+request still waiting when training reaches a sampling stage, or when the Run ends,
+is removed and listed as not applied, so it never fires in a later stage or segment.
+A Save and stop waiting at a sampling stage stops the Run there instead: training's
+own end save has already been written. `POST /api/runs/{id}/control` with
+`{"action": "save" | "sample" | "save_and_stop"}` makes a request; it returns 409 with
+the reason when the Run isn't training, a request is already waiting or Sample now is
+unavailable. The Run records the waiting request as `control_request`, each outcome
+in `controls` with its step, and `stop_kind: "save"` after Save and stop.
+
+To check them, open the acceptance workspace from [Queueing](#queueing), set a Wan
+Job to 200 steps with a preview interval, then prepare, start and use Save now,
+Sample now and Save and stop in turn. Each reports
+the step it ran at; the checkpoint and preview appear in the outputs, and the stopped
+Run's Inspect saved states lists a valid state at the stop step.
+
 ## Stopping
 
-Request graceful stop first. Windows console signalling can be unavailable for
-some launch environments; inspect the reported result and use the separately
-confirmed Force terminate action when necessary. Neither action promises a save
-on stop. Only the observed process tree belonging to that Run is signalled.
+**Stop now** asks for confirmation that says how many steps trained since the last
+save it will lose; Save and stop keeps them. It requests a graceful stop. Windows
+console signalling can be unavailable for some launch environments; inspect the
+reported result and use the separately confirmed Force terminate action when
+necessary. Neither action saves on stop. Only the observed process tree belonging to
+that Run is signalled.
 A graceful stop sends one console break to the stage launcher's process group,
 which its descendants share; if the launcher has already exited, nothing is left
 to signal gracefully and remaining descendants need Force terminate.

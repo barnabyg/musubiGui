@@ -2,7 +2,7 @@
 
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Iterator, Literal
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
@@ -29,6 +29,11 @@ class StopRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     force: bool = False
     confirmed: bool = False
+
+
+class ControlRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    action: Literal["save", "sample", "save_and_stop"]
 
 
 class DeleteRequest(BaseModel):
@@ -147,6 +152,11 @@ def runs_router(service: RunService) -> APIRouter:
     def stop(run_id: str, request: StopRequest) -> dict[str, Any]:
         with run_errors():
             return service.stop(run_id, force=request.force, confirmed=request.confirmed)
+
+    @router.post("/{run_id}/control")
+    def control(run_id: str, request: ControlRequest) -> dict[str, Any]:
+        with run_errors():
+            return service.control(run_id, request.action)
 
     @router.get("/{run_id}/states")
     def states(run_id: str) -> list[dict[str, Any]]:

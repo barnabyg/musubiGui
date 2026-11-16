@@ -368,6 +368,7 @@ export function Runs({
                 </section>
                 <RunActions
                   run={run}
+                  progress={current?.progress ?? null}
                   busy={busy}
                   pairedStarted={Boolean(pairedStarted)}
                   action={action}

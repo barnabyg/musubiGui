@@ -107,6 +107,8 @@ def restored_pair(original: dict[str, Any], state: dict[str, Any], target_steps:
         "controller",
         "job_objects",
         "launch_pending",
+        "control_request",
+        "controls",
     ]:
         record.pop(key, None)
     return record

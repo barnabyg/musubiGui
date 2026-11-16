@@ -9,7 +9,9 @@ from pathlib import Path
 from typing import Any
 
 from musubi_gui.checkpoint_names import expert_step_name
-from musubi_gui.step_offset import ENVIRONMENT
+from musubi_gui.step_offset import ENVIRONMENT, StepSchedule
+from musubi_gui.trainer_control import ENVIRONMENT as CONTROL_ENVIRONMENT
+from musubi_gui.trainer_control import TrainerControl
 from musubi_gui.training_timing import TrainingTiming
 
 # In the synthetic checkout, lets checks that never act while a stage runs skip the paced steps.
@@ -43,6 +45,7 @@ def main(stage: str | None = None) -> None:
     parser.add_argument("--sample_every_n_steps", type=int)
     parser.add_argument("--sample_prompts", type=Path)
     parser.add_argument("--save_state", action="store_true")
+    parser.add_argument("--save_state_on_train_end", action="store_true")
     parser.add_argument("--resume", type=Path)
     parser.add_argument("--save_path", type=Path)
     parser.add_argument("--video_size", nargs=2, type=int, default=[256, 256])
@@ -139,7 +142,13 @@ def main(stage: str | None = None) -> None:
         # As the app's trainer entry point does: a restored segment names saves and previews by global step,
         # at interval multiples after the offset, while its progress bar counts this segment's updates.
         step_offset = int(os.environ.get(ENVIRONMENT) or 0) if expert_offset is None else 0
+        schedule = StepSchedule(step_offset)
+        request = os.environ.get(CONTROL_ENVIRONMENT)
+        control = TrainerControl(Path(request)) if request else None
         for step in range(1, args.max_train_steps + 1):
+            if control:
+                # The next batch after a Save and stop step ends the process cleanly.
+                control.after_save()
             time.sleep(step_seconds)
             current = step_offset + step
             if timing:
@@ -148,7 +157,15 @@ def main(stage: str | None = None) -> None:
                 f"steps: {step}/{args.max_train_steps} loss=0.0 (synthetic optimizer_step={previous + step})",
                 flush=True,
             )
-            if args.sample_every_n_steps and current % args.sample_every_n_steps == 0:
+            # As the app's trainer hook does: the schedule sets this step's intervals, then a control request
+            # can make this step save or preview.
+            schedule.before_step(args, step)
+            if expert_offset is not None and step == args.max_train_steps:
+                # The train-end save writes this same checkpoint and state.
+                args.save_every_n_steps = None
+            if control:
+                control.at_step(args, step, int(expert_offset) + step if expert_offset is not None else current)
+            if args.sample_every_n_steps and step % args.sample_every_n_steps == 0:
                 if timing:
                     timing.preview_start(current)
                 if args.sample_prompts is None:
@@ -178,11 +195,7 @@ def main(stage: str | None = None) -> None:
                 if timing:
                     timing.preview_finish(completed=True)
             # Like upstream, interval saves stamp their own metadata and include the last step.
-            if (
-                args.save_every_n_steps
-                and current % args.save_every_n_steps == 0
-                and not (expert_offset is not None and step == args.max_train_steps)
-            ):
+            if args.save_every_n_steps and step % args.save_every_n_steps == 0:
                 name = (
                     expert_step_name(args.output_name, int(expert_offset), step)
                     if expert_offset is not None
@@ -192,7 +205,7 @@ def main(stage: str | None = None) -> None:
                 if args.save_state:
                     save_state(args.output_dir / f"{name}-state", step)
         tensor(args.output_dir / f"{args.output_name}.safetensors", saved="train end")
-        if args.save_state:
+        if args.save_state or args.save_state_on_train_end:
             save_state(args.output_dir / f"{args.output_name}-state", args.max_train_steps)
     elif stage == "generate":
         if args.save_path is None:

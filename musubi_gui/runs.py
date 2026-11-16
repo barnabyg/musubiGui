@@ -15,6 +15,8 @@ from musubi_gui.processes import process_identity
 from musubi_gui.recipe import Stage
 from musubi_gui.redaction import redact
 from musubi_gui.run_cache import reuse_cache
+from musubi_gui.run_control import request as request_control
+from musubi_gui.run_control import unsaved_steps
 from musubi_gui.run_deletion import failure_message, folder_bytes, output_index_file, plan_deletion, remove_folder
 from musubi_gui.run_estimate import freeze_training_timing
 from musubi_gui.run_execution import ExecutionContext, RunExecution
@@ -212,6 +214,8 @@ class RunService:
         with file.open("rb") as stream:
             stream.seek(max(0, file.stat().st_size - 64_000))
             progress = parse_progress(stream.read().decode("utf-8", errors="replace"))
+        if progress:
+            progress["unsaved_steps"] = unsaved_steps(run, stage, progress["step"])
         segment = run.get("segment", {})
         # Segments restored before continuous numbering report their own steps and requested additional steps.
         continuous = "target_steps" in segment
@@ -293,6 +297,10 @@ class RunService:
         return self.store.update(
             run_id, lambda r: r.update(status="stopping", stop_requested="force" if force else "graceful")
         )
+
+    def control(self, run_id: str, action: str) -> dict[str, Any]:
+        """Save now, Sample now or Save and stop at the training process's next step."""
+        return request_control(self.store, run_id, action)
 
     def saved_states(self, run_id: str) -> builtins.list[dict[str, Any]]:
         run = self.get(run_id)

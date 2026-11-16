@@ -145,7 +145,7 @@ test('a delayed history refresh cannot replace live training with the start resp
     await secondRequest;
     releaseSecond();
     await expect(
-      page.getByRole('button', { name: 'Request graceful stop', exact: true }),
+      page.getByRole('button', { name: 'Stop now', exact: true }),
     ).toBeEnabled();
     await expect(
       page.getByText('State: Training', { exact: true }),
