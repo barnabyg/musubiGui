@@ -8,6 +8,7 @@ import sqlite3
 import tempfile
 from collections.abc import Callable, Iterator
 from contextlib import closing, contextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +25,10 @@ ACTIVE_STATUSES = frozenset(
         "uncertain",
     }
 )
+
+
+def utc_now() -> str:
+    return datetime.now(UTC).isoformat()
 
 
 def is_active(run: dict[str, Any]) -> bool:

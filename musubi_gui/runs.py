@@ -11,7 +11,6 @@ import time
 import uuid
 from contextlib import nullcontext
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -30,7 +29,8 @@ from musubi_gui.run_estimate import freeze_training_timing
 from musubi_gui.run_paths import create_run_directory
 from musubi_gui.run_performance import RunPerformance, start_performance
 from musubi_gui.run_progress import estimated_remaining, parse_progress
-from musubi_gui.run_store import DeviceLease, RunStore, blocks_revision, preparation_transaction
+from musubi_gui.run_recovery import RECONCILED_STATUSES, reconcile, terminate_orphan
+from musubi_gui.run_store import DeviceLease, RunStore, blocks_revision, preparation_transaction, utc_now
 from musubi_gui.saved_state import discover_states
 from musubi_gui.settings import Settings, atomic_json, load_settings, managed_settings
 from musubi_gui.snapshots import (
@@ -64,10 +64,6 @@ class ExecutionPlan:
     provenance: dict[str, Any] = field(default_factory=dict)
 
 
-def utc_now() -> str:
-    return datetime.now(UTC).isoformat()
-
-
 class RunService:
     def __init__(
         self,
@@ -99,15 +95,7 @@ class RunService:
 
     def start_worker(self) -> None:
         for run in self.list():
-            if run["status"] in {
-                "preparing",
-                "training",
-                "generating",
-                "stopping",
-                "interrupted",
-                "orphaned",
-                "uncertain",
-            }:
+            if run["status"] in RECONCILED_STATUSES:
                 self.reconcile(run["id"])
         self.retention_thread.start()
         self.thread.start()
@@ -362,108 +350,12 @@ class RunService:
         return self.store.update(retried["id"], lambda r: r.update(retry_of=run_id))
 
     def reconcile(self, run_id: str) -> dict[str, Any]:
-        run = self.get(run_id)
-        if run["status"] not in {
-            "preparing",
-            "training",
-            "generating",
-            "stopping",
-            "interrupted",
-            "orphaned",
-            "uncertain",
-        }:
-            return run
-        controller = run.get("controller")
-        if (
-            run["status"] in {"preparing", "training", "generating", "stopping"}
-            and controller
-            and identity_status(controller) != "dead"
-        ):
-            return run
-        identities = list(run.get("processes", []))
-        uncertain = False
-        for name in run.get("job_objects", []):
-            try:
-                job = ProcessJob(name, create=False)
-                try:
-                    for pid in job.pids():
-                        try:
-                            identities.append(process_identity(pid))
-                        except psutil.NoSuchProcess:
-                            pass
-                finally:
-                    job.close()
-            except (OSError, ValueError, psutil.AccessDenied):
-                uncertain = True
-        live = [identity for identity in identities if identity_status(identity) == "alive"]
-        uncertain = uncertain or any(identity_status(identity) == "uncertain" for identity in identities)
-        owner = self.device.owner()
-        if owner and owner["run_id"] == run_id and owner["state"] == str(self.root.resolve()):
-            # Protocol 3 assigns the named Job Object atomically during process creation.
-            # A known empty job proves that no process survived, even before PID persistence.
-            # Protocol 2 remains readable, but its old unassigned suspended-child window is uncertain.
-            observable_launch = owner.get("launch_protocol") == 3 and bool(run.get("job_objects"))
-            uncertain = uncertain or (bool(owner.get("launch_pending")) and not observable_launch)
-        if live or uncertain:
-            status = "uncertain" if uncertain else "orphaned"
-            self.device.update(run_id, identities)
-            return self.store.update(
-                run_id,
-                lambda r: r.update(
-                    status=status,
-                    processes=identities,
-                    error="Recorded work is still alive or cannot be safely identified. No replacement GPU work will start. Check again or confirm termination of known owned processes.",
-                ),
-            )
-        self.device.release(run_id)
-
-        def finish(record: dict[str, Any]) -> None:
-            # Every recorded process is gone, so a requested stop was observed rather than assumed.
-            # An already interrupted run stays retryable, as it was before stops were reconciled.
-            requested = record.get("stop_requested") if record["status"] != "interrupted" else None
-            for stage in record["stages"]:
-                if stage["status"] == "running":
-                    stage.update(status="stopped" if requested else "interrupted", finished=utc_now())
-            if requested:
-                record.update(
-                    status="stopped",
-                    stop_kind=requested,
-                    processes=[],
-                    error=None,
-                    finished=utc_now(),
-                    execution_end_unknown=True,
-                )
-                return
-            record.update(
-                status="interrupted",
-                processes=[],
-                error="The original processes are gone. Inspect outputs/state, then prepare a new Run from frozen inputs or restore validated optimizer state as a new segment.",
-            )
-
-        return self.store.update(run_id, finish)
+        return reconcile(self.store, self.device, self.root, run_id)
 
     def terminate_orphan(self, run_id: str, *, confirmed: bool = False) -> dict[str, Any]:
         if not confirmed:
             raise ValueError("Explicit confirmation is required to terminate recovered owned processes.")
-        run = self.reconcile(run_id)
-        if run["status"] not in {"orphaned", "uncertain"}:
-            raise ValueError("This run has no recovered orphan process to terminate.")
-        for name in run.get("job_objects", []):
-            job = ProcessJob(name, create=False)
-            try:
-                job.terminate()
-            finally:
-                job.close()
-        terminate_owned(run.get("processes", []), force=True)
-        if run.get("stop_requested"):
-            # A requested stop is completed by this confirmed force termination, whatever kind was asked for.
-            self.store.update(run_id, lambda r: r.update(stop_requested="force"))
-        deadline = time.monotonic() + 5
-        while time.monotonic() < deadline:
-            if all(identity_status(identity) == "dead" for identity in run.get("processes", [])):
-                break
-            time.sleep(0.05)
-        return self.reconcile(run_id)
+        return terminate_orphan(self.store, self.device, self.root, run_id)
 
     def cancel(self, run_id: str) -> dict[str, Any]:
         run = self.get(run_id)

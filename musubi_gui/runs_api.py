@@ -9,7 +9,8 @@ from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict
 
 from musubi_gui.run_estimate import completion_estimate
-from musubi_gui.runs import RunService, utc_now
+from musubi_gui.run_store import utc_now
+from musubi_gui.runs import RunService
 
 
 class PrepareRequest(BaseModel):
