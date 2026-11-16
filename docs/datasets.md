@@ -144,6 +144,8 @@ windows, each with its own close control. A registered folder is populated by ad
 files on disk and choosing **Re-scan** in **Dataset settings**. When repairing job
 inputs, the editor requests `POST /api/datasets/{id}/scan?wait=true` so returning
 to the job uses the refreshed index. Omitting `wait` starts a background scan.
+A scan probes up to four new or changed files at once and skips files whose size and
+modification time are unchanged.
 
 **Pause uploads** pauses remaining files. A file already submitted for validation
 finishes publication and scanning before the job can review the dataset again.
