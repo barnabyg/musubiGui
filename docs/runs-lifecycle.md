@@ -103,8 +103,9 @@ step count, elapsed time, ETA and loss from upstream's progress bar. Unreported
 values show as unknown. Training elapsed is explicitly scoped to the span of training
 stages; Run elapsed above it covers the full execution. A separately labelled estimate extrapolates the observed speed to
 maximum steps, as [remaining-time estimates](runs-timing.md#remaining-time-estimates)
-describes. A restored segment counts its own steps, because
-upstream resets the displayed counter. Stage logs are collapsed below that, and open by
+describes. A restored segment continues the original Run's step count up to its
+**Train until step** total, although upstream restarts its own counter; segments
+restored by earlier versions count their own steps. Stage logs are collapsed below that, and open by
 themselves when a Run has failed.
 
 ## Alternating Wan runs

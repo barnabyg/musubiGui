@@ -20,13 +20,14 @@ from musubi_gui.run_estimate import freeze_training_timing
 from musubi_gui.run_execution import ExecutionContext, RunExecution
 from musubi_gui.run_progress import estimated_remaining, parse_progress
 from musubi_gui.run_recovery import RECONCILED_STATUSES, reconcile, terminate_orphan
-from musubi_gui.run_restore import create_segment, restored_segment
+from musubi_gui.run_restore import create_segment, restored_segment, resume_step
 from musubi_gui.run_retention import RetentionScheduler
 from musubi_gui.run_retry import retried_plan
 from musubi_gui.run_store import DeviceLease, RunStore, blocks_revision, preparation_transaction, utc_now
 from musubi_gui.saved_state import discover_states
 from musubi_gui.settings import Settings, atomic_json, load_settings, managed_settings
 from musubi_gui.snapshots import identify_snapshot, materialize_snapshot, verify_inputs
+from musubi_gui.step_offset import segment_step_offset
 from musubi_gui.wan_pair_runtime import is_paired, paired_saved_states, stage_log
 
 
@@ -211,6 +212,9 @@ class RunService:
         with file.open("rb") as stream:
             stream.seek(max(0, file.stat().st_size - 64_000))
             progress = parse_progress(stream.read().decode("utf-8", errors="replace"))
+        segment = run.get("segment", {})
+        # Segments restored before continuous numbering report their own steps and requested additional steps.
+        continuous = "target_steps" in segment
         if progress and stage.get("training"):
             phase = stage["training"]
             from musubi_gui.wan_pair import phase_counts
@@ -220,19 +224,28 @@ class RunService:
                 expert=phase["expert"],
                 phase_step=progress["step"],
                 phase_total=progress["total"],
-                step=absolute - run.get("segment", {}).get("schedule_start", 0),
+                step=absolute - (0 if continuous else segment.get("schedule_start", 0)),
                 total=(
-                    sum(item["training"]["steps"] for item in run["stages"] if item.get("training"))
+                    (segment.get("schedule_start", 0) if continuous else 0)
+                    + sum(item["training"]["steps"] for item in run["stages"] if item.get("training"))
                     if phase.get("per_expert")
-                    else run.get("segment", {}).get("additional_steps", run["job"]["config"]["steps"])
+                    else segment.get("target_steps", segment.get("additional_steps", run["job"]["config"]["steps"]))
                 ),
                 expert_steps=phase_counts(phase, progress["step"]),
                 eta_scope="phase",
             )
+        elif progress and (offset := segment_step_offset(run, stage)):
+            # The trainer counts this segment from zero; show the global step and target total.
+            progress.update(
+                phase_step=progress["step"],
+                phase_total=progress["total"],
+                step=offset + progress["step"],
+                total=offset + progress["total"],
+            )
         if progress:
             progress["estimated_remaining_seconds"] = estimated_remaining(progress)
             if stage.get("training", {}).get("per_expert"):
-                initial = run.get("pair_sources", {})
+                initial = {} if continuous else run.get("pair_sources", {})
                 initial_steps = min(initial.get(expert, {}).get("optimizer_step", 0) for expert in ("low", "high"))
                 last = next(item["training"] for item in reversed(run["stages"]) if item.get("training"))
                 target = min(phase_counts(last, last["steps"]).values())
@@ -248,9 +261,12 @@ class RunService:
         self.retention.join()
 
     def retry(self, run_id: str) -> dict[str, Any]:
-        plan = ExecutionPlan(**retried_plan(self.get(run_id), self._verify_inputs))
+        previous = self.get(run_id)
+        plan = ExecutionPlan(**retried_plan(previous, self._verify_inputs))
         retried = self.submit(plan)
-        return self.store.update(retried["id"], lambda r: r.update(retry_of=run_id))
+        # Retrying a restored segment resumes the same state, so it keeps the segment's step numbering.
+        segment = {"segment": previous["segment"]} if "segment" in previous else {}
+        return self.store.update(retried["id"], lambda r: r.update(retry_of=run_id, **segment))
 
     def reconcile(self, run_id: str) -> dict[str, Any]:
         return reconcile(self.store, self.device, self.root, run_id)
@@ -288,6 +304,9 @@ class RunService:
         run = self.get(run_id)
         states = paired_saved_states(run) if is_paired(run) else discover_states(run)
         states = retained_states(run, states)
+        for state in states:
+            if state["valid"]:
+                state["resume_step"] = resume_step(run, state)
         self.store.update(run_id, lambda r: r.update(saved_states=states))
         return states
 
@@ -300,14 +319,13 @@ class RunService:
         self.retention.request(run_id)
 
     def restore_state(
-        self, run_id: str, state_id: str, additional_steps: int, *, confirmed: bool = False
+        self, run_id: str, state_id: str, target_steps: int, *, confirmed: bool = False
     ) -> dict[str, Any]:
+        """Queue a new segment that trains `state` until global step `target_steps`."""
         if not confirmed:
             raise ValueError(
-                "Please confirm restoration as a new segment: upstream restores optimizer state but resets the displayed counter and data position."
+                "Please confirm restoration as a new segment: upstream restores optimizer state but restarts the data position."
             )
-        if not 1 <= additional_steps <= 1_000_000:
-            raise ValueError("Choose between 1 and 1000000 additional training steps.")
         original = self.get(run_id)
         self._verify_inputs(original)
         state = next((state for state in self.saved_states(run_id) if state["id"] == state_id), None)
@@ -318,9 +336,9 @@ class RunService:
         if state.get("paired"):
             from musubi_gui.wan_pair_restore import restored_pair
 
-            record = restored_pair(original, state, additional_steps)
+            record = restored_pair(original, state, target_steps)
         else:
-            record = restored_segment(original, state, additional_steps)
+            record = restored_segment(original, state, target_steps)
         create_segment(self.store, record, run_id)
         return self.enqueue(record["id"])
 

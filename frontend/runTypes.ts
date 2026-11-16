@@ -20,7 +20,12 @@ export type Run = {
     name: string;
     family: string;
     revision: number;
-    config?: { recipe?: string; save_state?: boolean; save_every?: number };
+    config?: {
+      recipe?: string;
+      save_state?: boolean;
+      save_every?: number;
+      steps?: number;
+    };
   };
   manifest: {
     items: { name?: string; path: string; caption: { text: string } }[];

@@ -156,3 +156,38 @@ def test_estimated_remaining_extrapolates_observed_phase_speed(
         )
         == expected
     )
+
+
+@pytest.mark.parametrize(
+    ("segment", "expected"),
+    [
+        # Resumed at 5 to train until 7: the trainer's bar counts 1 of 2, progress shows the global step and total.
+        ({"target_steps": 7, "step_offset": 5, "additional_steps": 2}, (6, 7)),
+        # Segments restored before continuous numbering stay readable with their own step counts.
+        ({"additional_steps": 2, "optimizer_step_before": 5, "counter_resets": True}, (1, 2)),
+    ],
+)
+def test_restored_segment_progress_reports_global_steps(
+    tmp_path: Path, segment: dict[str, int | bool], expected: tuple[int, int]
+) -> None:
+    service = RunService(tmp_path / "state", device_path=tmp_path / "device.sqlite3", autostart=False)
+    run = service.submit(
+        ExecutionPlan(
+            job={"id": "job", "name": "Job", "family": "wan", "revision": 1, "config": {"steps": 5}},
+            settings=Settings(),
+            manifest={"items": []},
+            directory=tmp_path / "run",
+            cache=tmp_path / "cache",
+            stages=[],
+            fingerprint="fingerprint",
+        )
+    )
+    service.store.update(
+        run["id"], lambda r: r.update(segment=segment, stages=[{"name": "train", "status": "running", "args": []}])
+    )
+    (tmp_path / "run" / "train.log").write_text("steps: 50%| | 1/2 [00:10<00:10, 10s/it]\n", encoding="utf-8")
+    progress = service.progress(run["id"])
+    assert progress is not None
+    assert (progress["step"], progress["total"]) == expected
+    # The remaining estimate covers the one update left either way.
+    assert progress["estimated_remaining_seconds"] == 10

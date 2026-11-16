@@ -9,11 +9,14 @@ from typing import Any
 
 from musubi_gui.recipe import Stage
 from musubi_gui.run_paths import create_run_directory, job_folder
+from musubi_gui.run_restore import continuous_segment, resume_step, segment_steps
 from musubi_gui.snapshots import digest_file
 from musubi_gui.wan_pair_plan import argument, paired_stages, set_argument
 
 
-def restored_pair(original: dict[str, Any], state: dict[str, Any], steps: int) -> dict[str, Any]:
+def restored_pair(original: dict[str, Any], state: dict[str, Any], target_steps: int) -> dict[str, Any]:
+    """Continue both experts until `target_steps`: per expert for per-expert Runs, schedule updates for legacy Runs."""
+    steps = segment_steps(original, state, target_steps)
     directory = create_run_directory(Path(original["directory"]).parent, original["job"]["name"], "restore")
     sources = copy.deepcopy(state["sources"])
     files = dict(original["input_files"])
@@ -84,11 +87,9 @@ def restored_pair(original: dict[str, Any], state: dict[str, Any], steps: int) -
         expert_states={},
         stages=[{**stage.record(), "status": "pending"} for stage in stages],
         segment={
-            "additional_steps": steps,
+            **continuous_segment(resume_step(original, state), target_steps),
             "schedule_start": state["schedule_step"],
             "optimizer_step_before": state["schedule_step"],
-            "counter_resets": True,
-            "data_position_restored": False,
         },
     )
     for key in [

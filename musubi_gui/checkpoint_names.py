@@ -9,8 +9,11 @@ def expert_step_name(final_name: str, offset: int, step: int) -> str:
     return f"{final_name.rsplit('-step', 1)[0]}-step{offset + step:08d}"
 
 
-def training_saves(stage: dict[str, Any], output: Path, suffix: str) -> list[tuple[int, Path]]:
-    """Return local step positions without inferring progress from a legacy phase identifier."""
+def training_saves(stage: dict[str, Any], output: Path, suffix: str, step_offset: int = 0) -> list[tuple[int, Path]]:
+    """Return local step positions without inferring progress from a legacy phase identifier.
+
+    A restored segment's interval saves are named by global step, `step_offset` more than the local step.
+    """
     args = stage["args"]
     name = args[args.index("--output_name") + 1]
     total = int(args[args.index("--max_train_steps") + 1])
@@ -21,7 +24,7 @@ def training_saves(stage: dict[str, Any], output: Path, suffix: str) -> list[tup
     for path in output.glob(f"{stem}*{suffix}"):
         match = pattern.fullmatch(path.name)
         if match:
-            step = int(match[1]) - (offset or 0)
+            step = int(match[1]) - (offset if offset is not None else step_offset)
         elif offset is None and path.name == name + suffix:
             step = total
         else:

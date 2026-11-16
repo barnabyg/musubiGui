@@ -382,7 +382,7 @@ export function Runs({
                     onRestore={(stateId, steps) =>
                       action('restore-state', {
                         state_id: stateId,
-                        additional_steps: steps,
+                        target_steps: steps,
                         confirmed: true,
                       })
                     }

@@ -185,9 +185,8 @@ test('alternating Wan settings persist, train both experts and restore the paire
       'low-noise 2 steps · high-noise 1 steps',
       { timeout: 240_000 },
     );
-    await page
-      .getByLabel('Additional segment steps', { exact: true })
-      .fill('5');
+    // Both experts train until step 7: low continues from 2 and high catches up from 1.
+    await page.getByLabel('Train until step', { exact: true }).fill('7');
     await partial
       .getByRole('button', { name: 'Restore as new segment', exact: true })
       .click();
@@ -199,7 +198,7 @@ test('alternating Wan settings persist, train both experts and restore the paire
       .getByRole('button', { name: 'Restore as new segment', exact: true })
       .click();
     await expect(page.getByLabel('Training progress')).toContainText(
-      'Step 6/6',
+      'Step 7/7',
       { timeout: 240_000 },
     );
     await expect(

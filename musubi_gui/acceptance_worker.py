@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from musubi_gui.checkpoint_names import expert_step_name
+from musubi_gui.step_offset import ENVIRONMENT
 from musubi_gui.training_timing import TrainingTiming
 
 # In the synthetic checkout, lets checks that never act while a stage runs skip the paced steps.
@@ -134,21 +135,26 @@ def main(stage: str | None = None) -> None:
             if os.environ.get("MUSUBI_RUN_TIMING_FILE")
             else None
         )
+        expert_offset = os.environ.get("MUSUBI_EXPERT_STEP_OFFSET")
+        # As the app's trainer entry point does: a restored segment names saves and previews by global step,
+        # at interval multiples after the offset, while its progress bar counts this segment's updates.
+        step_offset = int(os.environ.get(ENVIRONMENT) or 0) if expert_offset is None else 0
         for step in range(1, args.max_train_steps + 1):
             time.sleep(step_seconds)
+            current = step_offset + step
             if timing:
-                timing.step(step)
+                timing.step(current)
             print(
                 f"steps: {step}/{args.max_train_steps} loss=0.0 (synthetic optimizer_step={previous + step})",
                 flush=True,
             )
-            if args.sample_every_n_steps and step % args.sample_every_n_steps == 0:
+            if args.sample_every_n_steps and current % args.sample_every_n_steps == 0:
                 if timing:
-                    timing.preview_start(step)
+                    timing.preview_start(current)
                 if args.sample_prompts is None:
                     parser.error("--sample_prompts is required for previews")
                 prompt = json.loads(args.sample_prompts.read_text(encoding="utf-8"))[0]
-                stem = f"{args.output_name}_{step:06d}_00_20261110000000_{prompt['seed']}"
+                stem = f"{args.output_name}_{current:06d}_00_20261110000000_{prompt['seed']}"
                 destination = (
                     args.output_dir / "sample" / (f"{stem}_000.png" if prompt["frame_count"] == 1 else f"{stem}.mp4")
                 )
@@ -168,22 +174,21 @@ def main(stage: str | None = None) -> None:
                         width=prompt["width"],
                         height=prompt["height"],
                     )
-                print(f"SYNTHETIC preview complete at step {step}", flush=True)
+                print(f"SYNTHETIC preview complete at step {current}", flush=True)
                 if timing:
                     timing.preview_finish(completed=True)
             # Like upstream, interval saves stamp their own metadata and include the last step.
-            offset = os.environ.get("MUSUBI_EXPERT_STEP_OFFSET")
             if (
                 args.save_every_n_steps
-                and step % args.save_every_n_steps == 0
-                and not (offset is not None and step == args.max_train_steps)
+                and current % args.save_every_n_steps == 0
+                and not (expert_offset is not None and step == args.max_train_steps)
             ):
                 name = (
-                    expert_step_name(args.output_name, int(offset), step)
-                    if offset is not None
-                    else f"{args.output_name}-step{step:08d}"
+                    expert_step_name(args.output_name, int(expert_offset), step)
+                    if expert_offset is not None
+                    else f"{args.output_name}-step{current:08d}"
                 )
-                tensor(args.output_dir / f"{name}.safetensors", saved=f"step {step}")
+                tensor(args.output_dir / f"{name}.safetensors", saved=f"step {current}")
                 if args.save_state:
                     save_state(args.output_dir / f"{name}-state", step)
         tensor(args.output_dir / f"{args.output_name}.safetensors", saved="train end")

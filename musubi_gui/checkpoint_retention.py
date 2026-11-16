@@ -14,6 +14,7 @@ from musubi_gui.safetensors_file import complete_safetensors
 from musubi_gui.saved_state import inspect_state
 from musubi_gui.settings import atomic_json, within_root
 from musubi_gui.snapshots import digest_file
+from musubi_gui.step_offset import segment_step_offset
 from musubi_gui.wan_pair import phase_counts
 from musubi_gui.wan_pair_runtime import is_paired
 
@@ -37,7 +38,8 @@ def _saves(run: dict[str, Any], validated: dict[str, tuple[object, Save]], cance
             continue
         phase = stage.get("training", {})
         expert = phase.get("expert", "model")
-        for step, checkpoint in training_saves(stage, root, ".safetensors"):
+        offset = segment_step_offset(run, stage)
+        for step, checkpoint in training_saves(stage, root, ".safetensors", offset):
             if cancelled is not None and cancelled.is_set():
                 return []
             try:
@@ -73,7 +75,8 @@ def _saves(run: dict[str, Any], validated: dict[str, tuple[object, Save]], cance
                         continue
                     state = state_path
                     optimizer_step = inspected["optimizer_step"]
-                save = Save(checkpoint, state, expert, phase.get("start", 0) + step, optimizer_step)
+                # Global steps: paired phases start at their schedule position, restored segments after their offset.
+                save = Save(checkpoint, state, expert, phase.get("start", offset) + step, optimizer_step)
                 validated[str(checkpoint)] = (stamp, save)
                 saves.append(save)
             except (OSError, ValueError):

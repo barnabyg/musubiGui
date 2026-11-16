@@ -12,26 +12,44 @@ from typing import Any
 # Accelerate executes this file in the separate managed environment.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from musubi_gui.checkpoint_names import expert_step_name  # noqa: E402
+from musubi_gui.step_offset import ENVIRONMENT, OffsetStepName, StepSchedule  # noqa: E402
 from musubi_gui.training_timing import TrainingTiming  # noqa: E402
 
 
-def observe_trainer(trainer: Any, timing: TrainingTiming, *, expert_step_offset: int | None = None) -> None:
+def observe_trainer(
+    trainer: Any, timing: TrainingTiming, *, expert_step_offset: int | None = None, step_offset: int = 0
+) -> None:
     before = trainer.on_before_sample_images
     sample = trainer.sample_images
     after = trainer.on_after_sample_images
     optimizer_step = trainer.on_post_optimizer_step
+    schedule = StepSchedule(step_offset) if step_offset else None
     succeeded = False
+
+    def global_step(step: int) -> int:
+        # Step zero is upstream's optional sample before training, not an update of this segment.
+        return schedule.global_step(step) if schedule and step else step
 
     def on_before(self: Any, *args: Any, **kwargs: Any) -> Any:
         nonlocal succeeded
         succeeded = False
-        timing.preview_start(int(args[3]))
+        timing.preview_start(global_step(int(args[3])))
         return before(self, *args, **kwargs)
 
     def on_sample(self: Any, *args: Any, **kwargs: Any) -> Any:
         nonlocal succeeded
-        result = sample(self, *args, **kwargs)
-        namespace, step = args[1], int(args[3])
+        namespace, step = args[1], global_step(int(args[3]))
+        if step != int(args[3]):
+            # Preview filenames use the steps argument. Upstream rechecks it against the interval, so the
+            # interval briefly equals the global step being sampled.
+            interval = namespace.sample_every_n_steps
+            namespace.sample_every_n_steps = step
+            try:
+                result = sample(self, *args[:3], step, *args[4:], **kwargs)
+            finally:
+                namespace.sample_every_n_steps = interval
+        else:
+            result = sample(self, *args, **kwargs)
         # Upstream can return successfully when no prompt/output exists.
         try:
             succeeded = any(
@@ -56,7 +74,9 @@ def observe_trainer(trainer: Any, timing: TrainingTiming, *, expert_step_offset:
         result = optimizer_step(self, *args, **kwargs)
         if args[4]:
             step = int(args[5]) + 1
-            timing.step(step)
+            timing.step(global_step(step))
+            if schedule:
+                schedule.before_step(args[0], step)
             if expert_step_offset is not None:
                 namespace = args[0]
                 namespace.output_name = expert_step_name(namespace.output_name, expert_step_offset, step)
@@ -84,14 +104,24 @@ def main() -> None:
         module = importlib.import_module("musubi_tuner." + name)
         trainer = module.WanNetworkTrainer if options.family == "wan" else module.MiniMaxH3NetworkTrainer
         offset = os.environ.get("MUSUBI_EXPERT_STEP_OFFSET") if options.family == "wan" else None
-        if offset is not None:
+        # Alternating Wan phases already name saves by cumulative expert step.
+        step_offset = int(os.environ.get(ENVIRONMENT) or 0) if offset is None else 0
+        if offset is not None or step_offset:
             train_utils: Any = importlib.import_module("musubi_tuner.utils.train_utils")
+        if offset is not None:
             # Pinned trainer formats these at the save boundary. output_name already
             # includes the cumulative expert step; str.format ignores the local step.
             train_utils.STEP_FILE_NAME = "{}"
             train_utils.STEP_STATE_NAME = "{}-state"
+        elif step_offset:
+            # Formatted with the local step at each save; the final `<name>` and `<name>-state` stay unnumbered.
+            train_utils.STEP_FILE_NAME = OffsetStepName(train_utils.STEP_FILE_NAME, step_offset)
+            train_utils.STEP_STATE_NAME = OffsetStepName(train_utils.STEP_STATE_NAME, step_offset)
         observe_trainer(
-            trainer, TrainingTiming(options.timing_file), expert_step_offset=int(offset) if offset is not None else None
+            trainer,
+            TrainingTiming(options.timing_file),
+            expert_step_offset=int(offset) if offset is not None else None,
+            step_offset=step_offset,
         )
     sys.argv = [options.upstream, *remaining]
     runpy.run_path(options.upstream, run_name="__main__")

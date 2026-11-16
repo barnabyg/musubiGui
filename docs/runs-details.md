@@ -43,8 +43,8 @@ Open **WAN acceptance 1**, set Training steps to 4, steps per expert before swit
 to 2, and Save every N steps to 1. Save, review, then **Prepare and start**. In the
 Run's output folder, expect each expert's checkpoints and state folders at steps 1,
 2, 3 and 4; the paired downloads should end in `-low-step4.safetensors` and
-`-high-step4.safetensors`. Inspect saved states and restore the pair at step 2 for two
-additional steps: the new segment's final files should both end in `-step00000004`.
+`-high-step4.safetensors`. Inspect saved states and restore the pair at step 2 with
+**Train until step** 4: the new segment's final files should both end in `-step00000004`.
 GPU training quality is outside this naming check.
 
 To check folder naming, from the repository root run

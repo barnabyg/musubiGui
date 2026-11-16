@@ -5,18 +5,23 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from musubi_gui.checkpoint_names import training_saves
 
 
-@pytest.mark.parametrize("expert,offset", [("low", 0), ("high", 0), ("low", 100), ("high", 137)])
-def test_native_entry_point_names_interval_and_final_saves_after_completed_expert_steps(
-    tmp_path: Path, expert: str, offset: int
-) -> None:
-    # Synthetic external trainer uses the pinned get_step_ckpt_name and state-name
-    # contracts. The subprocess runs the real entry point, not the CPU worker.
+def synthetic_trainer(tmp_path: Path, family: str) -> Path:
+    """A stand-in for the pinned trainer using its get_step_ckpt_name and state-name contracts.
+
+    Like the pinned loop, each interval check follows the post-optimizer hook and reads the current interval.
+    """
+    module, trainer = (
+        ("wan_train_network", "WanNetworkTrainer")
+        if family == "wan"
+        else ("minimax_h3_train_network", "MiniMaxH3NetworkTrainer")
+    )
     package = tmp_path / "musubi_tuner"
     utils = package / "utils"
     utils.mkdir(parents=True)
@@ -28,9 +33,9 @@ def test_native_entry_point_names_interval_and_final_saves_after_completed_exper
         'def get_last_ckpt_name(name): return name + ".safetensors"\n',
         encoding="utf-8",
     )
-    (package / "wan_train_network.py").write_text(
+    (package / f"{module}.py").write_text(
         "import argparse, json\nfrom pathlib import Path\nfrom musubi_tuner.utils import train_utils\n"
-        "class WanNetworkTrainer:\n"
+        f"class {trainer}:\n"
         " def on_before_sample_images(self,*args): pass\n"
         " def on_after_sample_images(self,*args): pass\n"
         " def sample_images(self,*args): pass\n"
@@ -40,7 +45,7 @@ def test_native_entry_point_names_interval_and_final_saves_after_completed_exper
         " parser.add_argument('--output_name')\n"
         " parser.add_argument('--max_train_steps',type=int)\n"
         " parser.add_argument('--save_every_n_steps',type=int)\n"
-        " args=parser.parse_args()\n trainer=WanNetworkTrainer()\n saves=[]\n"
+        f" args=parser.parse_args()\n trainer={trainer}()\n saves=[]\n"
         " def save(name,state,step):\n"
         "  Path(name).write_text(str(step))\n  Path(state).mkdir()\n  saves.append((name,state,step))\n"
         " for step in range(args.max_train_steps):\n"
@@ -53,9 +58,16 @@ def test_native_entry_point_names_interval_and_final_saves_after_completed_exper
         " Path('saves.json').write_text(json.dumps(saves))\n",
         encoding="utf-8",
     )
-    upstream = tmp_path / "wan_train_network.py"
-    upstream.write_text("from musubi_tuner.wan_train_network import main\nmain()\n", encoding="utf-8")
-    final = f"Job-step-test-r1-{expert}-step{offset + 4:08d}"
+    upstream = tmp_path / f"{module}.py"
+    upstream.write_text(f"from musubi_tuner.{module} import main\nmain()\n", encoding="utf-8")
+    return upstream
+
+
+def run_entry_point(
+    tmp_path: Path, family: str, output_name: str, steps: int, save_every: int, environment: dict[str, str]
+) -> list[list[Any]]:
+    """Run the real entry point, not the CPU worker, around the stand-in trainer; returns its saves."""
+    upstream = synthetic_trainer(tmp_path, family)
     result = subprocess.run(
         [
             sys.executable,
@@ -63,25 +75,63 @@ def test_native_entry_point_names_interval_and_final_saves_after_completed_exper
             "--timing-file",
             str(tmp_path / "timing.json"),
             "--family",
-            "wan",
+            family,
             "--upstream",
             str(upstream),
             "--output_name",
-            final,
+            output_name,
             "--max_train_steps",
-            "4",
+            str(steps),
             "--save_every_n_steps",
-            "2",
+            str(save_every),
         ],
         cwd=tmp_path,
-        env={**os.environ, "PYTHONPATH": str(tmp_path), "MUSUBI_EXPERT_STEP_OFFSET": str(offset)},
+        env={**os.environ, "PYTHONPATH": str(tmp_path), **environment},
         capture_output=True,
         text=True,
         check=False,
         timeout=300,
     )
     assert result.returncode == 0, result.stderr
-    saves = json.loads((tmp_path / "saves.json").read_text())
+    saves: list[list[Any]] = json.loads((tmp_path / "saves.json").read_text())
+    return saves
+
+
+@pytest.mark.parametrize("family", ["wan", "h3"])
+def test_native_entry_point_names_restored_segment_saves_by_global_step(tmp_path: Path, family: str) -> None:
+    # Resumed at 250 with saves every 100: local steps 50, 150 and 250 are global 300, 400 and 500.
+    saves = run_entry_point(tmp_path, family, "Job-r1", 250, 100, {"MUSUBI_STEP_OFFSET": "250"})
+    assert saves == [
+        *[
+            [f"Job-r1-step{step:08d}.safetensors", f"Job-r1-step{step:08d}-state", step - 250]
+            for step in (300, 400, 500)
+        ],
+        ["Job-r1.safetensors", "Job-r1-state", 250],
+    ]
+    assert json.loads((tmp_path / "timing.json").read_text())["training"]["step"] == 500
+
+
+def test_expert_naming_takes_precedence_over_a_general_offset(tmp_path: Path) -> None:
+    saves = run_entry_point(
+        tmp_path,
+        "wan",
+        "Job-r1-low-step00000104",
+        4,
+        2,
+        {"MUSUBI_EXPERT_STEP_OFFSET": "100", "MUSUBI_STEP_OFFSET": "250"},
+    )
+    assert [name for name, _, _ in saves] == [
+        "Job-r1-low-step00000102.safetensors",
+        "Job-r1-low-step00000104.safetensors",
+    ]
+
+
+@pytest.mark.parametrize("expert,offset", [("low", 0), ("high", 0), ("low", 100), ("high", 137)])
+def test_native_entry_point_names_interval_and_final_saves_after_completed_expert_steps(
+    tmp_path: Path, expert: str, offset: int
+) -> None:
+    final = f"Job-step-test-r1-{expert}-step{offset + 4:08d}"
+    saves = run_entry_point(tmp_path, "wan", final, 4, 2, {"MUSUBI_EXPERT_STEP_OFFSET": str(offset)})
     assert saves == [
         [
             f"Job-step-test-r1-{expert}-step{offset + step:08d}.safetensors",
@@ -118,4 +168,16 @@ def test_discovery_preserves_legacy_local_steps_and_excludes_other_expert_phases
         (tmp_path / (stem + suffix)).touch()
     assert [(step, path.name) for step, path in training_saves(stage, tmp_path, suffix)] == [
         (step, stem + suffix) for step, stem in expected
+    ]
+
+
+@pytest.mark.parametrize("suffix", [".safetensors", "-state"])
+def test_discovery_reads_restored_segment_saves_named_by_global_step(tmp_path: Path, suffix: str) -> None:
+    stage = {"args": ["--output_name", "Job-r1", "--max_train_steps", "200"]}
+    for stem in ["Job-r1-step00000400", "Job-r1", "Job-r1-step00000300", "Job-r1-step00000600"]:
+        (tmp_path / (stem + suffix)).touch()
+    # Resumed at 300: the save at global 400 is local step 100, the final save local 200.
+    assert [(step, path.name) for step, path in training_saves(stage, tmp_path, suffix, 300)] == [
+        (100, "Job-r1-step00000400" + suffix),
+        (200, "Job-r1" + suffix),
     ]

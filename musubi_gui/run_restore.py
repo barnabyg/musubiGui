@@ -23,8 +23,42 @@ _ENDED_FIELDS = [
 ]
 
 
-def restored_segment(original: dict[str, Any], state: dict[str, Any], additional_steps: int) -> dict[str, Any]:
-    """A prepared Run that resumes `state` for `additional_steps` in a new folder."""
+def resume_step(run: dict[str, Any], state: dict[str, Any]) -> int:
+    """The global step a valid saved state continues from; a restored segment trains until a later step."""
+    if state.get("paired"):
+        if any(stage.get("training", {}).get("per_expert") for stage in run["stages"]):
+            # Both experts train to the same target, so it must pass the further-trained expert.
+            return max(int(count) for count in state["counts"].values())
+        return int(state["schedule_step"])
+    return int(state["optimizer_step"])
+
+
+def segment_steps(run: dict[str, Any], state: dict[str, Any], target_steps: int) -> int:
+    """Updates a segment trains to reach `target_steps`, after validating the requested total."""
+    saved = resume_step(run, state)
+    if target_steps <= saved:
+        raise ValueError(f"Train until step: choose a step after the saved step {saved}.")
+    if target_steps - saved > 1_000_000:
+        raise ValueError(f"Train until step: choose at most 1000000 steps after the saved step {saved}.")
+    return target_steps - saved
+
+
+def continuous_segment(saved: int, target_steps: int) -> dict[str, Any]:
+    """Segment fields that continue the original Run's step numbering up to `target_steps`."""
+    return {
+        "target_steps": target_steps,
+        "step_offset": saved,
+        "additional_steps": target_steps - saved,
+        # Upstream still counts from zero; names, previews and progress add the offset.
+        "counter_resets": False,
+        "data_position_restored": False,
+    }
+
+
+def restored_segment(original: dict[str, Any], state: dict[str, Any], target_steps: int) -> dict[str, Any]:
+    """A prepared Run that resumes `state` in a new folder and trains until global step `target_steps`."""
+    saved = resume_step(original, state)
+    additional_steps = segment_steps(original, state, target_steps)
     directory = create_run_directory(Path(original["directory"]).parent, original["job"]["name"], "restore")
     record = copy.deepcopy(original)
     record.update(
@@ -39,12 +73,7 @@ def restored_segment(original: dict[str, Any], state: dict[str, Any], additional
         error=None,
         resume_of=original["id"],
         saved_states=[],
-        segment={
-            "additional_steps": additional_steps,
-            "optimizer_step_before": state["optimizer_step"],
-            "counter_resets": True,
-            "data_position_restored": False,
-        },
+        segment={**continuous_segment(saved, target_steps), "optimizer_step_before": state["optimizer_step"]},
         state_source={"path": state["path"], "files": state["files"]},
     )
     for key in _ENDED_FIELDS:

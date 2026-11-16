@@ -516,7 +516,7 @@ def test_a_real_restored_segment_blocks_its_source_until_finished_then_outlives_
 
         # Another owner of the GPU keeps the restored segment waiting.
         assert running.device.acquire("other-work", {})
-        segment = running.restore_state(source["id"], state["id"], 1, confirmed=True)
+        segment = running.restore_state(source["id"], state["id"], state["resume_step"] + 1, confirmed=True)
         assert segment["status"] == "pending_training"
         assert segment["cache"] == source["cache"]
         refused = client.post(f"/api/runs/{source['id']}/delete", json={"confirmed": True})
@@ -539,7 +539,7 @@ def test_a_real_restored_segment_blocks_its_source_until_finished_then_outlives_
         kept = running.saved_states(segment["id"])[0]
         refused = client.post(
             f"/api/runs/{segment['id']}/restore-state",
-            json={"state_id": kept["id"], "additional_steps": 1, "confirmed": True},
+            json={"state_id": kept["id"], "target_steps": kept["resume_step"] + 1, "confirmed": True},
         )
         assert refused.status_code == 409
         assert "Frozen dataset inputs" in refused.json()["detail"]

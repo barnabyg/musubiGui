@@ -20,6 +20,7 @@ from musubi_gui.run_stage_outputs import record_checkpoints, record_samples
 from musubi_gui.run_store import DeviceLease, RunStore, utc_now
 from musubi_gui.settings import Settings
 from musubi_gui.snapshots import digest, digest_file
+from musubi_gui.step_offset import ENVIRONMENT, segment_step_offset
 from musubi_gui.wan_pair_runtime import is_paired, sampling_pair, stage_log, validate_phase_input
 from musubi_gui.windows_job import ProcessJob, WindowsProcess
 
@@ -179,8 +180,12 @@ class RunExecution:
     ) -> WindowsProcess | subprocess.Popen[str]:
         environment = reference_environment(Path(self.run["cache"]))
         environment.pop("MUSUBI_EXPERT_STEP_OFFSET", None)
+        environment.pop(ENVIRONMENT, None)
         if (offset := stage.get("training", {}).get("checkpoint_step_offset")) is not None:
             environment["MUSUBI_EXPERT_STEP_OFFSET"] = str(offset)
+        if step_offset := segment_step_offset(self.run, stage):
+            # A restored segment continues the original Run's step numbering.
+            environment[ENVIRONMENT] = str(step_offset)
         if seed_wan_tokenizer(self.run):
             environment["HF_HUB_OFFLINE"] = "1"
             log.write("Using the shared Wan tokenizer; Hugging Face Hub access is off for this stage.\n")

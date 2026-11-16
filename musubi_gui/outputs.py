@@ -216,7 +216,11 @@ class OutputBrowser:
                                     "scope": "low-noise expert only" if run["job"]["family"] == "wan" else "H3",
                                     "prompt": run["job"]["config"].get("sample_prompt", ""),
                                     "seed": run["job"]["config"].get("seed"),
-                                    "counter": "segment optimizer updates",
+                                    "counter": (
+                                        "total optimizer updates"
+                                        if "target_steps" in run.get("segment", {})
+                                        else "segment optimizer updates"
+                                    ),
                                 }
                                 entry["name"] = f"Step {step} preview · {metadata['preview']['scope']}"
                         entry.update(metadata=_scrub(metadata), stamp=stamp)

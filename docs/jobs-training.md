@@ -188,8 +188,8 @@ and states. Disk estimates include every phase's final saves and interval saves.
 The existing AdamW/constant-scheduler recipe is retained.
 
 **Musubi starts a fresh shuffled dataset pass at every switch.** Its resume implementation
-does not restore the batch position or epoch, and resets its displayed step counter.
-The GUI maintains total and per-expert counters separately. A short phase can repeat
+does not restore the batch position or epoch, and restarts its own step counter.
+The GUI maintains total and per-expert counters separately and names saves by them. A short phase can repeat
 some examples before others are seen; this is not equivalent to an uninterrupted
 dataset traversal.
 

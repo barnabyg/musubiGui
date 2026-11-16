@@ -123,7 +123,7 @@ def test_retention_prunes_old_saves_but_preserves_the_final_restorable_pair(tmp_
         assert all(state["valid"] for state in states), states
         assert states[-1]["valid"] and states[-1]["counts"] == {"low": 3, "high": 3}
         assert all("missing or moved" not in state["error"] for state in states)
-        restored = service.restore_state(run["id"], states[-1]["id"], 2, confirmed=True)
+        restored = service.restore_state(run["id"], states[-1]["id"], states[-1]["resume_step"] + 2, confirmed=True)
         finished = wait_for(service, restored["id"], "completed", device_released=True)
         assert finished["expert_states"]["high"]["optimizer_step"] == 5
     finally:

@@ -41,7 +41,8 @@ to 2 in Job & dataset. In Checkpoints, set Save every N steps to 1 and Maximum c
 saves to keep to 1. Review, then Prepare
 and start. Expect older saves to be pruned while both final expert LoRAs and their latest
 restorable pair remain available. Inspect Run details for retention status, restore the latest
-pair for four additional steps, and confirm the new segment completes. Zero should retain
+pair with **Train until step** four steps after its saved step, and confirm the new segment
+completes. Zero should retain
 history as before. This command uses synthetic CPU workers and does not qualify GPU training.
 
 ## Disk estimates

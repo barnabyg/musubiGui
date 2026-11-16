@@ -39,7 +39,8 @@ class DeleteRequest(BaseModel):
 class RestoreRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     state_id: str
-    additional_steps: int
+    # Train until this global step; the saved state's step is subtracted for the trainer.
+    target_steps: int
     confirmed: bool = False
 
 
@@ -155,9 +156,7 @@ def runs_router(service: RunService) -> APIRouter:
     @router.post("/{run_id}/restore-state")
     def restore(run_id: str, request: RestoreRequest) -> dict[str, Any]:
         with run_errors():
-            return service.restore_state(
-                run_id, request.state_id, request.additional_steps, confirmed=request.confirmed
-            )
+            return service.restore_state(run_id, request.state_id, request.target_steps, confirmed=request.confirmed)
 
     @router.post("/{run_id}/reconcile")
     def reconcile(run_id: str) -> dict[str, Any]:
