@@ -178,7 +178,8 @@ def prepare(
     try:
         from musubi_gui.dataset_fixture import prepare as prepare_library
         from musubi_gui.datasets import DatasetStore
-        from musubi_gui.jobs import JobDataset, JobDraft, JobStore, smoke_config
+        from musubi_gui.job_models import JobDataset, JobDraft, smoke_config
+        from musubi_gui.jobs import JobStore
 
         prepare_library(workspace / "library")
         datasets = workspace / "datasets"

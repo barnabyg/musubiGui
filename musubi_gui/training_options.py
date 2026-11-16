@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, Literal
 from musubi_gui.settings import Settings
 
 if TYPE_CHECKING:
-    from musubi_gui.jobs import Job
+    from musubi_gui.job_models import Job
 
 
 def timestep_range_policy(job: "Job") -> Literal["original", "bounded", "shared-av"]:

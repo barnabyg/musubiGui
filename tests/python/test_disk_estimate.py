@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from musubi_gui.disk_estimate import check_volumes, estimate_disk
-from musubi_gui.jobs import JobConfig, smoke_config
+from musubi_gui.job_models import JobConfig, smoke_config
 from musubi_gui.settings import Settings
 
 GB = 1000**3

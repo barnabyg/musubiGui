@@ -8,21 +8,20 @@ from typing import Any, Iterator, Literal
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict
 
-from musubi_gui.jobs import (
+from musubi_gui.job_models import (
     Conversion,
     Job,
     JobConfig,
     JobDraft,
     JobExport,
-    JobStore,
     NamedPreset,
     Preset,
     PresetSelection,
     as_draft,
     default_config,
     export_draft,
-    review_job,
 )
+from musubi_gui.jobs import JobStore, review_job
 from musubi_gui.settings import training_settings
 from musubi_gui.training_options import optimizer_options
 

@@ -15,7 +15,8 @@ from PIL import Image
 
 from musubi_gui.acceptance import synthetic_audio, synthetic_video
 from musubi_gui.app import create_app
-from musubi_gui.jobs import Job, JobDataset, build_stages, smoke_config
+from musubi_gui.job_models import Job, JobDataset, smoke_config
+from musubi_gui.jobs import build_stages
 from musubi_gui.runs import RunService
 from musubi_gui.settings import Settings
 

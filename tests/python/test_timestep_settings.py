@@ -5,7 +5,7 @@ import pytest
 from helpers import acceptance_workspace
 from test_training_settings import client_for
 
-from musubi_gui.jobs import smoke_config
+from musubi_gui.job_models import smoke_config
 
 
 def test_legacy_h3_preset_keeps_uniform_sampling_when_applied(tmp_path: Path) -> None:

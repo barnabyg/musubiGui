@@ -4,7 +4,8 @@ from pathlib import Path
 import pytest
 from helpers import acceptance_workspace, instant_steps, wait_for
 
-from musubi_gui.jobs import JobConfig, JobDataset, JobDraft, JobStore, PresetSelection, configuration_errors, review_job
+from musubi_gui.job_models import JobConfig, JobDataset, JobDraft, PresetSelection
+from musubi_gui.jobs import JobStore, configuration_errors, review_job
 from musubi_gui.outputs import OutputBrowser
 from musubi_gui.runs import RunService
 from musubi_gui.settings import load_settings

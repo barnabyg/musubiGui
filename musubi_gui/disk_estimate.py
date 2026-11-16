@@ -10,7 +10,7 @@ from musubi_gui.settings import Settings
 from musubi_gui.wan_pair import PAIRED_RECIPE, alternating_phases, paired_phases
 
 if TYPE_CHECKING:
-    from musubi_gui.jobs import JobConfig
+    from musubi_gui.job_models import JobConfig
 
 GB = 1000**3
 MINIMUM_MARGIN = GB

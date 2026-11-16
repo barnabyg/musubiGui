@@ -3,7 +3,8 @@ from pathlib import Path
 import pytest
 
 from musubi_gui.disk_estimate import estimate_disk
-from musubi_gui.jobs import Job, JobConfig, build_stages, configuration_errors, smoke_config
+from musubi_gui.job_models import Job, JobConfig, smoke_config
+from musubi_gui.jobs import build_stages, configuration_errors
 from musubi_gui.preview import preview_prompt
 from musubi_gui.sampling import sample_geometry
 from musubi_gui.settings import Settings

@@ -5,7 +5,8 @@ import pytest
 from helpers import acceptance_workspace, wait_for
 
 from musubi_gui.disk_estimate import estimate_disk
-from musubi_gui.jobs import JobConfig, JobDraft, JobStore, configuration_errors
+from musubi_gui.job_models import JobConfig, JobDraft
+from musubi_gui.jobs import JobStore, configuration_errors
 from musubi_gui.outputs import OutputBrowser
 from musubi_gui.preview import validate_previews
 from musubi_gui.runs import RunService
