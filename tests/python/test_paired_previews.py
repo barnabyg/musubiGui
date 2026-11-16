@@ -26,35 +26,36 @@ def test_preview_boundaries_preserve_total_expert_allocation() -> None:
 def test_paired_previews_use_the_pair_at_each_total_step_and_restore_the_schedule(
     tmp_path: Path, final_sample: bool
 ) -> None:
-    root, job_id = paired_job(tmp_path, steps=6, expert_interval=3, preview_every=2, sample_enabled=final_sample)
+    root, job_id = paired_job(tmp_path, steps=5, expert_interval=3, preview_every=2, sample_enabled=final_sample)
     service = RunService(root, fixture_mode=True, device_path=tmp_path / "gpu.sqlite")
     try:
         run = service.prepare(job_id, start=True)
         completed = wait_for(service, run["id"], "completed", device_released=True)
         generations = [stage for stage in completed["stages"] if stage["name"] == "generate"]
-        assert [stage.get("preview_step") for stage in generations] == [2, 4, 6] + ([None] if final_sample else [])
+        assert [stage.get("preview_step") for stage in generations] == [2, 4] + ([None] if final_sample else [])
         assert all("--sample_every_n_steps" not in stage["args"] for stage in completed["stages"])
         samples = [sample for sample in completed["samples"] if "preview_step" in sample]
-        assert len(completed["samples"]) == 3 + int(final_sample)
+        assert len(completed["samples"]) == 2 + int(final_sample)
         assert [
             (sample["preview_step"], sample["lora_pair"]["low"]["steps"], sample["lora_pair"]["high"]["steps"])
             for sample in samples
-        ] == [(2, 2, 0), (4, 3, 1), (6, 3, 3)]
+        ] == [(2, 2, 0), (4, 3, 1)]
         assert samples[0]["lora_pair"]["high"]["base"] is True
-        assert len({sample["path"] for sample in samples}) == 3
+        assert len({sample["path"] for sample in samples}) == 2
         outputs = OutputBrowser(service).scan(run["id"])
         previews = [output for output in outputs["outputs"] if "preview" in output.get("metadata", {})]
-        assert len(previews) == 3
+        assert len(previews) == 2
         assert all(output["status"] == "available" for output in previews)
         assert previews[0]["metadata"]["lora_pair"] == samples[0]["lora_pair"]
-        if final_sample:
-            # The restored schedule doesn't depend on the final sample, so one case checks it in fewer stages.
-            return
-        # Restore inside the high phase; the schedule continues past the original end and back to low.
+        # The last save is inside the high phase; the restored schedule continues through it and back to low.
         state = next(state for state in service.saved_states(run["id"]) if state["schedule_step"] == 5)
         restored = service.restore_state(run["id"], state["id"], 3, confirmed=True)
         resumed = wait_for(service, restored["id"], "completed", device_released=True)
-        assert [sample["preview_step"] for sample in resumed["samples"] if "preview_step" in sample] == [6, 8]
+        assert [
+            (sample["preview_step"], sample["lora_pair"]["low"]["steps"], sample["lora_pair"]["high"]["steps"])
+            for sample in resumed["samples"]
+            if "preview_step" in sample
+        ] == [(6, 3, 3), (8, 5, 3)]
         assert resumed["expert_states"]["low"]["optimizer_step"] == 5
         assert resumed["expert_states"]["high"]["optimizer_step"] == 3
     finally:
