@@ -36,7 +36,8 @@ for (const family of ['wan', 'h3'] as const) {
         page.getByRole('tablist', { name: 'Job sections' }),
       ).toBeVisible();
       await page.getByRole('tab', { name: 'Training', exact: true }).click();
-      await expect(page.getByLabel('LoRA rank', { exact: true })).toBeHidden();
+      // Training holds the step count, optimizer and LoRA settings together.
+      await expect(page.getByLabel('LoRA rank', { exact: true })).toBeVisible();
       const required = page.getByRole('region', { name: 'Required choices' });
       await expect(required).toContainText('Select at least one dataset');
       await expect(required).toContainText(
@@ -119,9 +120,7 @@ test('compact saved and imported jobs retain every advanced value and reveal hid
 
     await expect(page.getByLabel('LoRA rank', { exact: true })).toBeHidden();
 
-    await page
-      .getByRole('tab', { name: 'LoRA & training', exact: true })
-      .click();
+    await page.getByRole('tab', { name: 'Training', exact: true }).click();
     await page.getByLabel('LoRA rank', { exact: true }).fill('16');
     await page.getByRole('tab', { name: 'Samples', exact: true }).click();
     await page.getByLabel('Seed', { exact: true }).fill('123');
@@ -140,9 +139,7 @@ test('compact saved and imported jobs retain every advanced value and reveal hid
     await page.reload();
     await expect(page.getByLabel('LoRA rank', { exact: true })).toBeHidden();
 
-    await page
-      .getByRole('tab', { name: 'LoRA & training', exact: true })
-      .click();
+    await page.getByRole('tab', { name: 'Training', exact: true }).click();
     await expect(page.getByLabel('LoRA rank', { exact: true })).toHaveValue(
       '16',
     );
@@ -201,9 +198,7 @@ test('compact saved and imported jobs retain every advanced value and reveal hid
     await expect(
       page.getByLabel('Default training width', { exact: true }),
     ).toBeFocused();
-    await page
-      .getByRole('tab', { name: 'LoRA & training', exact: true })
-      .click();
+    await page.getByRole('tab', { name: 'Training', exact: true }).click();
     await expect(page.getByLabel('LoRA rank', { exact: true })).toHaveValue(
       '16',
     );

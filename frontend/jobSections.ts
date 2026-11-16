@@ -7,7 +7,6 @@ export const sections = [
   { id: 'job-section-essentials', label: 'Training' },
   { id: 'job-section-samples', label: 'Samples' },
   { id: 'job-section-dataset', label: 'Dataset preparation' },
-  { id: 'job-section-training', label: 'LoRA & training' },
   { id: 'job-section-memory', label: 'Memory' },
   { id: 'job-section-checkpoints', label: 'Checkpoints' },
   { id: 'job-section-presets', label: 'Presets' },

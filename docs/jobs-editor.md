@@ -5,7 +5,8 @@ How to edit, save, review and manage a job. [Jobs](jobs.md) lists the other job 
 ## Compact job setup
 
 Jobs opens on **Job & dataset**. Separate tabs contain Training, Samples, Dataset preparation,
-LoRA & training, Memory, Checkpoints, Presets and Review. Use Left/Right arrows to switch tabs,
+Memory, Checkpoints, Presets and Review. Training holds the required choices, step count,
+optimizer, timestep strategy and LoRA settings. Use Left/Right arrows to switch tabs,
 or Home/End to select the first/last tab. This follows the separate-panel behaviour of Runs tabs.
 Samples holds final-sample enablement, preview cadence, prompt, inference steps,
 resolution, duration and the shared training/sample seed.
@@ -40,9 +41,9 @@ Create a Wan job, choose a dataset, and enter a sample prompt or turn off the fi
 For the fixture's short WAN acceptance clip, open Presets and apply its Smoke
 test preset before review; normal 33-frame-or-longer clips use the new-job recipe directly.
 Repeat with H3 acceptance, which supports the default 124 frames. Review should pass without
-changing memory or optimizer settings. In LoRA & training, change LoRA rank, switch to Memory
+changing memory or optimizer settings. In Training, change LoRA rank, switch to Memory
 and back: the edit should remain, with only the selected tab’s fields visible. Save, reload,
-and return to LoRA & training: the saved rank should remain. Set an invalid width in Dataset
+and return to Training: the saved rank should remain. Set an invalid width in Dataset
 preparation, review, and follow the Geometry error: Dataset preparation should open with the
 width focused. Check arrow-key navigation and a window about 700 pixels wide; the form should
 stay within the window.

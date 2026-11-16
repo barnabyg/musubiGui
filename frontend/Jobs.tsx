@@ -209,7 +209,14 @@ export function Jobs(props: JobsProps) {
             models={models}
             modelRoots={modelRoots}
           />
-          <JobEssentials media={media} job={job} busy={busy} fields={fields} />
+          <JobEssentials
+            media={media}
+            job={job}
+            busy={busy}
+            fields={fields}
+            config={config}
+            trainingOptions={trainingOptions}
+          />
           <JobSamples job={job} busy={busy} fields={fields} config={config} />
           <JobPresets
             job={job}
@@ -226,7 +233,6 @@ export function Jobs(props: JobsProps) {
           <JobControls
             edit={edit}
             datasets={datasets}
-            trainingOptions={trainingOptions}
             media={media}
             job={job}
             busy={busy}

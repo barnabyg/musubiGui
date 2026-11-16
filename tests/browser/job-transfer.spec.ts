@@ -13,9 +13,7 @@ test('duplication presets cancelled conversion and versioned export import keep 
     await page.getByRole('tab', { name: 'Job & dataset', exact: true }).click();
     await page.getByLabel('Job name', { exact: true }).fill('Reusable');
 
-    await page
-      .getByRole('tab', { name: 'LoRA & training', exact: true })
-      .click();
+    await page.getByRole('tab', { name: 'Training', exact: true }).click();
     await page.getByLabel('LoRA rank', { exact: true }).fill('16');
     await page.getByRole('button', { name: 'Save draft', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('Draft saved');
@@ -30,9 +28,7 @@ test('duplication presets cancelled conversion and versioned export import keep 
     await expect(page.getByLabel('Job name', { exact: true })).toHaveValue(
       'Reusable copy',
     );
-    await page
-      .getByRole('tab', { name: 'LoRA & training', exact: true })
-      .click();
+    await page.getByRole('tab', { name: 'Training', exact: true }).click();
     await page.getByLabel('LoRA rank', { exact: true }).fill('32');
     await page.getByRole('button', { name: 'Save draft', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('Draft saved');
@@ -43,13 +39,10 @@ test('duplication presets cancelled conversion and versioned export import keep 
     await page
       .getByRole('button', { name: 'Apply preset', exact: true })
       .click();
-    await page
-      .getByRole('tab', { name: 'LoRA & training', exact: true })
-      .click();
+    await page.getByRole('tab', { name: 'Training', exact: true }).click();
     await expect(page.getByLabel('LoRA rank', { exact: true })).toHaveValue(
       '16',
     );
-    await page.getByRole('tab', { name: 'Training', exact: true }).click();
     await page.getByLabel('Training steps', { exact: true }).fill('800');
     await page.getByRole('button', { name: 'Save draft', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('Draft saved');
@@ -116,9 +109,7 @@ test('duplication presets cancelled conversion and versioned export import keep 
       .getByRole('button', { name: 'Back to jobs', exact: true })
       .click();
     await page.getByRole('button', { name: /Reusable · WAN/ }).click();
-    await page
-      .getByRole('tab', { name: 'LoRA & training', exact: true })
-      .click();
+    await page.getByRole('tab', { name: 'Training', exact: true }).click();
     await expect(page.getByLabel('LoRA rank', { exact: true })).toHaveValue(
       '16',
     );

@@ -193,7 +193,6 @@ export function JobControls({
   edit,
   datasets,
   media,
-  trainingOptions,
 }: {
   job: Job;
   busy: boolean;
@@ -202,7 +201,6 @@ export function JobControls({
   edit: (next: Job) => void;
   datasets: DatasetOption[];
   media: JobMedia;
-  trainingOptions: TrainingOptions;
 }) {
   const { problemProps, problemText, number, toggle } = fields;
   return (
@@ -356,105 +354,6 @@ export function JobControls({
           </label>
         )}
       </JobSection>
-      <JobSection className="panel" id="job-section-training">
-        <h2>LoRA & training</h2>
-        <label className="field">
-          Optimizer
-          <select
-            id={fieldId('optimizer')}
-            aria-label="Optimizer"
-            value={job.config.optimizer}
-            disabled={busy}
-            {...problemProps('optimizer')}
-            onChange={(event) =>
-              config('optimizer', event.target.value as JobConfig['optimizer'])
-            }
-          >
-            {trainingOptions.optimizers.map((optimizer) => (
-              <option key={optimizer} value={optimizer}>
-                {optimizer}
-              </option>
-            ))}
-            {!trainingOptions.optimizers.includes(job.config.optimizer) && (
-              <option value={job.config.optimizer} disabled>
-                {job.config.optimizer} (unavailable)
-              </option>
-            )}
-          </select>
-          {problemText('optimizer')}
-          <small>{trainingOptions.reason}</small>
-        </label>
-        <label className="field">
-          Timestep strategy
-          <select
-            id={fieldId('timestep_sampling')}
-            aria-label="Timestep strategy"
-            value={job.config.timestep_sampling}
-            disabled={
-              busy ||
-              (job.family === 'h3' &&
-                job.config.timestep_sampling === 'uniform')
-            }
-            {...problemProps('timestep_sampling')}
-            onChange={(event) =>
-              config(
-                'timestep_sampling',
-                event.target.value as JobConfig['timestep_sampling'],
-              )
-            }
-          >
-            {job.family === 'wan' && <option value="shift">Shift</option>}
-            {job.family === 'wan' && <option value="sigmoid">Sigmoid</option>}
-            <option value="uniform">Uniform</option>
-            {job.family === 'h3' &&
-              job.config.timestep_sampling !== 'uniform' && (
-                <option value={job.config.timestep_sampling} disabled>
-                  Unsupported: {job.config.timestep_sampling}
-                </option>
-              )}
-          </select>
-          {problemText('timestep_sampling')}
-          <small>
-            {job.family === 'h3'
-              ? 'The pinned H3 trainer supports Uniform only, sharing one base draw between video and audio.'
-              : job.config.timestep_sampling === 'uniform'
-                ? 'Equal probability across the active expert’s timestep range.'
-                : job.config.timestep_sampling === 'sigmoid'
-                  ? 'Concentrates draws around the middle of the active expert’s range. Scale controls the spread.'
-                  : 'Shifts a sigmoid distribution toward noisier timesteps. The default shift 3 and scale 1 preserve the original recipe.'}
-          </small>
-        </label>
-        {job.family === 'wan' && job.config.timestep_sampling !== 'uniform' && (
-          <div className="number-row">
-            {number(
-              'Sigmoid scale',
-              'sigmoid_scale',
-              '0.001–1000. Larger values spread draws toward the range edges.',
-            )}
-            {job.config.timestep_sampling === 'shift' &&
-              number(
-                'Flow shift',
-                'discrete_flow_shift',
-                '0.001–1000. Values above one favour noisier timesteps.',
-              )}
-          </div>
-        )}
-        {job.family === 'wan' && (
-          <p className="hint">
-            {job.config.timestep_sampling === 'shift' &&
-            job.config.discrete_flow_shift === 3 &&
-            job.config.sigmoid_scale === 1
-              ? 'Original recipe: preserve the distribution within each expert’s range.'
-              : 'The selected distribution is scaled into each expert’s range, keeping every draw inside it.'}
-          </p>
-        )}
-        <div className="number-row">
-          {number('LoRA rank', 'rank')}
-          {number('LoRA alpha', 'alpha')}
-          {number('Learning rate', 'learning_rate')}
-          {number('Gradient accumulation', 'gradient_accumulation')}
-        </div>
-      </JobSection>
       <JobSection className="panel" id="job-section-memory">
         <h2>Memory</h2>
         {number(
@@ -516,6 +415,122 @@ export function JobControls({
           'A LoRA checkpoint alone is not resumable optimizer state.',
         )}
       </JobSection>
+    </>
+  );
+}
+
+export function JobTrainingControls({
+  job,
+  busy,
+  fields,
+  config,
+  trainingOptions,
+}: {
+  job: Job;
+  busy: boolean;
+  fields: JobFields;
+  config: SetConfig;
+  trainingOptions: TrainingOptions;
+}) {
+  const { problemProps, problemText, number } = fields;
+  return (
+    <>
+      <h3>LoRA & optimizer</h3>
+      <label className="field">
+        Optimizer
+        <select
+          id={fieldId('optimizer')}
+          aria-label="Optimizer"
+          value={job.config.optimizer}
+          disabled={busy}
+          {...problemProps('optimizer')}
+          onChange={(event) =>
+            config('optimizer', event.target.value as JobConfig['optimizer'])
+          }
+        >
+          {trainingOptions.optimizers.map((optimizer) => (
+            <option key={optimizer} value={optimizer}>
+              {optimizer}
+            </option>
+          ))}
+          {!trainingOptions.optimizers.includes(job.config.optimizer) && (
+            <option value={job.config.optimizer} disabled>
+              {job.config.optimizer} (unavailable)
+            </option>
+          )}
+        </select>
+        {problemText('optimizer')}
+        <small>{trainingOptions.reason}</small>
+      </label>
+      <label className="field">
+        Timestep strategy
+        <select
+          id={fieldId('timestep_sampling')}
+          aria-label="Timestep strategy"
+          value={job.config.timestep_sampling}
+          disabled={
+            busy ||
+            (job.family === 'h3' && job.config.timestep_sampling === 'uniform')
+          }
+          {...problemProps('timestep_sampling')}
+          onChange={(event) =>
+            config(
+              'timestep_sampling',
+              event.target.value as JobConfig['timestep_sampling'],
+            )
+          }
+        >
+          {job.family === 'wan' && <option value="shift">Shift</option>}
+          {job.family === 'wan' && <option value="sigmoid">Sigmoid</option>}
+          <option value="uniform">Uniform</option>
+          {job.family === 'h3' &&
+            job.config.timestep_sampling !== 'uniform' && (
+              <option value={job.config.timestep_sampling} disabled>
+                Unsupported: {job.config.timestep_sampling}
+              </option>
+            )}
+        </select>
+        {problemText('timestep_sampling')}
+        <small>
+          {job.family === 'h3'
+            ? 'The pinned H3 trainer supports Uniform only, sharing one base draw between video and audio.'
+            : job.config.timestep_sampling === 'uniform'
+              ? 'Equal probability across the active expert’s timestep range.'
+              : job.config.timestep_sampling === 'sigmoid'
+                ? 'Concentrates draws around the middle of the active expert’s range. Scale controls the spread.'
+                : 'Shifts a sigmoid distribution toward noisier timesteps. The default shift 3 and scale 1 preserve the original recipe.'}
+        </small>
+      </label>
+      {job.family === 'wan' && job.config.timestep_sampling !== 'uniform' && (
+        <div className="number-row">
+          {number(
+            'Sigmoid scale',
+            'sigmoid_scale',
+            '0.001–1000. Larger values spread draws toward the range edges.',
+          )}
+          {job.config.timestep_sampling === 'shift' &&
+            number(
+              'Flow shift',
+              'discrete_flow_shift',
+              '0.001–1000. Values above one favour noisier timesteps.',
+            )}
+        </div>
+      )}
+      {job.family === 'wan' && (
+        <p className="hint">
+          {job.config.timestep_sampling === 'shift' &&
+          job.config.discrete_flow_shift === 3 &&
+          job.config.sigmoid_scale === 1
+            ? 'Original recipe: preserve the distribution within each expert’s range.'
+            : 'The selected distribution is scaled into each expert’s range, keeping every draw inside it.'}
+        </p>
+      )}
+      <div className="number-row">
+        {number('LoRA rank', 'rank')}
+        {number('LoRA alpha', 'alpha')}
+        {number('Learning rate', 'learning_rate')}
+        {number('Gradient accumulation', 'gradient_accumulation')}
+      </div>
     </>
   );
 }

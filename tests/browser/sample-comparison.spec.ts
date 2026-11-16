@@ -21,11 +21,23 @@ async function expectCompareControls(page: Page, panel: Locator) {
     name: 'Compare inputs',
     exact: true,
   });
-  const box = async (locator: Locator) => (await locator.boundingBox())!;
+  await expect(button).toBeVisible();
+  // Measures the section, picker and button in one layout pass. Content above the panel
+  // can still be loading, and shifts it between separate boundingBox calls.
+  const boxes = () =>
+    panel.evaluate((root) => {
+      const rect = (element: Element) => {
+        const { x, y, width, height } = element.getBoundingClientRect();
+        return { x, y, width, height };
+      };
+      return {
+        section: rect(root),
+        picker: rect(root.querySelector('.run-compare-picker select')!),
+        action: rect(root.querySelector('.run-compare-picker button')!),
+      };
+    });
   await page.setViewportSize({ width: 1366, height: 768 });
-  const section = await box(panel);
-  let picker = await box(select);
-  let action = await box(button);
+  let { section, picker, action } = await boxes();
   expect(picker.width).toBeLessThan(section.width / 2);
   expect(action.x).toBeGreaterThanOrEqual(picker.x + picker.width);
   expect(action.y).toBeLessThan(picker.y + picker.height);
@@ -37,7 +49,8 @@ async function expectCompareControls(page: Page, panel: Locator) {
     option.textContent = 'a-very-long-job-name-'.repeat(10);
     element.append(option);
   });
-  expect((await box(select)).width).toBeLessThan(section.width / 2);
+  ({ section, picker } = await boxes());
+  expect(picker.width).toBeLessThan(section.width / 2);
   await select.evaluate((element) =>
     element.querySelector('.long-run-name')!.remove(),
   );
@@ -47,8 +60,7 @@ async function expectCompareControls(page: Page, panel: Locator) {
       () => document.documentElement.scrollWidth <= window.innerWidth,
     ),
   ).toBe(true);
-  picker = await box(select);
-  action = await box(button);
+  ({ picker, action } = await boxes());
   expect(picker.x).toBeGreaterThanOrEqual(0);
   expect(picker.x + picker.width).toBeLessThanOrEqual(375);
   expect(picker.width).toBeGreaterThan(150);
