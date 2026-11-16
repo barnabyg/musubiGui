@@ -22,9 +22,12 @@ it is given a single spec file. Running `playwright test` directly skips that bu
 `tests/browser/api.spec.ts` is the exception to real browser testing: it runs the shared
 request helper in Node with a stubbed `fetch`, to reach error responses the backend doesn't produce.
 Python that browser tests run lives in `tests/browser/helper.py`, under the same format, lint and type checks.
-CI uses the same command. When it fails, CI keeps Playwright's `test-results`
-(traces, page snapshots, failure screenshots and per-backend logs of synthetic fixtures) as the
-`playwright-results` artifact for 14 days. Registry access is required by vulnerability and lock checks.
+CI runs the same command in nine parts on separate Windows runners at once:
+`npm.cmd run verify -- static` runs everything except the two test suites, then builds the UI for
+packaging, and `npm.cmd run verify -- python --shard 2/4` or `-- browser --shard 2/4` runs one
+quarter of a suite. With no part it runs every check, as before. When a browser part fails, CI keeps Playwright's `test-results`
+(traces, page snapshots, failure screenshots and per-backend logs of synthetic fixtures) as a
+`playwright-results-<n>` artifact for 14 days. Registry access is required by vulnerability and lock checks.
 Successful tests discard their diagnostic output. Traces record browser actions, DOM snapshots,
 console messages and network requests/responses; backend logs survive fixture cleanup and include
 startup, stdout/stderr and exit details, including across backend restarts. Download and extract
@@ -34,14 +37,17 @@ trace belongs to the original failure.
 All diagnostics and warnings must be resolved; pytest warnings and ESLint warnings fail.
 
 When `CI` is set, pytest and Playwright each stop at their first failure, so a failing run
-ends soon after its first useful signal. Local runs still report every failure. The Verify
-job has a 120-minute limit, well above the slowest passing hosted run of about 18 minutes.
+ends soon after its first useful signal, and the first failing part cancels the other parts.
+Local runs still report every failure. Each Verify part has a 120-minute limit, far above the
+slowest passing hosted run of about 27 minutes, from before the suites were split.
 It runs for pull requests and pushes to `main`. A branch without a pull request can run it
 by hand with `gh workflow run Verify --ref <branch>`.
 
 Pytest and Playwright each run in parallel: four workers locally and two when `CI` is set.
 Each test owns its temporary state, backend port and GPU lease file. The focused pytest
-command below runs serially unless given `-n`.
+command below runs serially unless given `-n`. A shard deals the collected tests out in turn,
+so each file's tests spread across all four. `--shard` needs the `tests/python` path on the
+pytest command line, which loads the option before arguments are parsed.
 
 Test deadlines are upper bounds, not targets, so they carry a lot of margin. A passing test
 never waits them out, while a tight deadline fails correct code when a hosted Windows runner

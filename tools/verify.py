@@ -1,5 +1,11 @@
-"""Canonical non-mutating source checks. Builds write ignored outputs only."""
+"""Canonical non-mutating source checks. Builds write ignored outputs only.
 
+With no arguments every check runs. CI runs the parts on separate runners at once:
+`static` for everything except the test suites, and `python` or `browser` for one suite,
+optionally split with `--shard INDEX/TOTAL`.
+"""
+
+import argparse
 import json
 import os
 import shutil
@@ -19,11 +25,42 @@ def run(*args: str) -> None:
     subprocess.run(args, check=True, env=env)  # nosec B603
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("part", nargs="?", choices=["static", "python", "browser"], help="run only this part")
+    parser.add_argument("--shard", metavar="INDEX/TOTAL", help="run one share of the python or browser suite")
+    args = parser.parse_args()
+    if args.shard and args.part not in ("python", "browser"):
+        parser.error("--shard needs the python or browser part")
+    return args
+
+
 def main() -> None:
+    args = parse_args()
     python = sys.executable
     npm = shutil.which("npm.cmd" if os.name == "nt" else "npm")
     if not npm:
         raise SystemExit("Node.js/npm is required.")
+    shard = [f"--shard={args.shard}"] if args.shard else []
+    if args.part in (None, "static"):
+        code_checks(python, npm)
+    if args.part in (None, "python"):
+        # CI stops at the first failure; local runs report every failure. Hosted runners get fewer workers.
+        workers = ["--maxfail=1", "-n", "2"] if os.environ.get("CI") else ["-n", "4"]
+        # The explicit path loads tests/python/conftest.py before options parse, so --shard exists.
+        run(python, "-m", "pytest", "tests/python", "-q", *workers, *shard)
+    if args.part in (None, "browser"):
+        # Builds the UI first through pretest:browser; packaging below ships that same bundle.
+        run(npm, "run", "test:browser", *(["--", *shard] if shard else []))
+    if args.part == "static":
+        # Without the browser suite, nothing else builds the UI that packaging ships.
+        run(npm, "run", "build")
+    if args.part in (None, "static"):
+        dependency_and_package_checks(python, npm)
+    print("\nVerification passed.")
+
+
+def code_checks(python: str, npm: str) -> None:
     run(python, "-m", "ruff", "format", "--check", "musubi_gui", "tools", "tests/python", "tests/browser")
     run(npm, "run", "format:check")
     run(python, "-m", "ruff", "check", "musubi_gui", "tools", "tests/python", "tests/browser")
@@ -31,10 +68,9 @@ def main() -> None:
     run(python, "-m", "mypy")
     run(npm, "run", "typecheck")
     run(python, "-m", "bandit", "-r", "musubi_gui", "tools", "-c", "pyproject.toml", "-q")
-    # CI stops at the first failure; local runs report every failure. Hosted runners get fewer workers.
-    run(python, "-m", "pytest", "-q", *(["--maxfail=1", "-n", "2"] if os.environ.get("CI") else ["-n", "4"]))
-    # Builds the UI first through pretest:browser; packaging below ships that same bundle.
-    run(npm, "run", "test:browser")
+
+
+def dependency_and_package_checks(python: str, npm: str) -> None:
     run("uv", "lock", "--check")
     run(npm, "ls", "--all")
     audit_requirements = str(Path(".cache/audit-requirements.txt").resolve())
@@ -97,7 +133,6 @@ def main() -> None:
             for suffix in [".js", ".css"]
         ):
             raise SystemExit("Wheel is missing the built browser application.")
-    print("\nVerification passed.")
 
 
 if __name__ == "__main__":

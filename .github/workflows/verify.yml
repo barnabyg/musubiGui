@@ -7,9 +7,25 @@ on:
   workflow_dispatch:
 jobs:
   windows:
+    name: ${{ matrix.part }}
     runs-on: windows-latest
     # Upper bound with deliberate margin; see docs/verification.md.
     timeout-minutes: 120
+    strategy:
+      # The first failing part cancels the others, as the first failure stops a single run.
+      fail-fast: true
+      # Each part is a share of `npm.cmd run verify`; together they run every check once.
+      matrix:
+        part:
+          - static
+          - python --shard 1/4
+          - python --shard 2/4
+          - python --shard 3/4
+          - python --shard 4/4
+          - browser --shard 1/4
+          - browser --shard 2/4
+          - browser --shard 3/4
+          - browser --shard 4/4
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-python@v7.1.0
@@ -25,12 +41,12 @@ jobs:
           enable-cache: true
       - run: uv sync --locked
       - run: npm.cmd ci
-      - run: npm.cmd run verify
+      - run: npm.cmd run verify -- ${{ matrix.part }}
       # Includes failure traces, page snapshots, screenshots and backend logs.
-      - if: failure()
+      - if: failure() && startsWith(matrix.part, 'browser')
         uses: actions/upload-artifact@v7.0.2
         with:
-          name: playwright-results
+          name: playwright-results-${{ strategy.job-index }}
           path: test-results
           if-no-files-found: ignore
           retention-days: 14
