@@ -16,7 +16,7 @@ from musubi_gui.processes import identity_status, observed_tree, process_identit
 from musubi_gui.recipe import reference_environment
 from musubi_gui.redaction import redact
 from musubi_gui.run_cache import cache_artifacts, seed_wan_tokenizer, share_wan_tokenizer
-from musubi_gui.run_control import collect, drop, request_file, stopped_by_save
+from musubi_gui.run_control import TRAINING_FINISHED, collect, drop, request_file, stopped_by_save
 from musubi_gui.run_performance import RunPerformance, start_performance
 from musubi_gui.run_stage_outputs import record_checkpoints, record_samples, remove_final_duplicate_saves
 from musubi_gui.run_store import DeviceLease, RunStore, utc_now
@@ -102,6 +102,9 @@ class RunExecution:
             verified = False
             if not self._run_stage(index, stage):
                 return
+        if not self.preparing:
+            # Recorded as when sampling follows, so the outcome doesn't depend on the Job sampling.
+            drop(self.store, self.run, TRAINING_FINISHED)
         self.store.update(self.run_id, self._finish)
 
     def _run_stage(self, index: int, stage: dict[str, Any]) -> bool:
@@ -116,9 +119,12 @@ class RunExecution:
         if self.preparing and self.context.reuse(self.run, stage["name"], index):
             return True
         if stage["name"] != "train" and not self.preparing:
-            # Only training steps read a request. Training has saved at its end, so Save and stop stops here.
-            dropped = drop(self.store, self.run)
-            if dropped and dropped["action"] == "save_and_stop":
+            # Only training steps read a request.
+            if not any(later["name"] == "train" for later in self.run["stages"][index + 1 :]):
+                # Training finished; a request no step reached leaves the Run to sample and complete.
+                drop(self.store, self.run, TRAINING_FINISHED)
+            elif (dropped := drop(self.store, self.run)) and dropped["action"] == "save_and_stop":
+                # A paired phase ends by saving its state, so Save and stop stops at this preview.
                 self.store.update(
                     self.run_id,
                     lambda r: r.update(status="stopped", stop_kind="save", processes=[], finished=utc_now()),

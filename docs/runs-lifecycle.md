@@ -203,8 +203,11 @@ and a request ID. Only training stages read it, at their post-optimizer hook; th
 trainer reports the step in `control-handled.json` and removes the request. A
 request still waiting when training reaches a sampling stage, or when the Run ends,
 is removed and listed as not applied, so it never fires in a later stage or segment.
-A Save and stop waiting at a sampling stage stops the Run there instead: training's
-own end save has already been written. `POST /api/runs/{id}/control` with
+A request made after training's final step, while the Run still shows Training, is
+listed as not applied because training finished before the next step and its final
+save is the latest. The Run then samples and completes as usual, whether or not the
+Job samples. Only between alternating Wan phases does a waiting Save and stop stop
+the Run at the preview stage, since the finished phase saved its state. `POST /api/runs/{id}/control` with
 `{"action": "save" | "sample" | "save_and_stop"}` makes a request; it returns 409 with
 the reason when the Run isn't training, a request is already waiting or Sample now is
 unavailable. The Run records the waiting request as `control_request`, each outcome

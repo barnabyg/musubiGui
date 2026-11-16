@@ -3,8 +3,8 @@
 One request waits at a time, recorded as the Run's `control_request` and written to its request file. The trainer
 reports how it handled it in the handled file; the backend moves the outcome to the Run's `controls` history.
 A request still waiting when training reaches a sampling stage or the Run ends is dropped, so it can never fire in a
-later stage or segment. A waiting Save and stop instead stops the Run at that sampling stage, after training's own
-end save.
+later stage or segment. One made after training's final step leaves the Run to sample and complete; between
+alternating Wan phases a waiting Save and stop stops the Run at the preview, after the phase's own end save.
 """
 
 import uuid
@@ -19,6 +19,7 @@ from musubi_gui.wan_pair_runtime import is_paired
 
 LABELS = {"save": "Save now", "sample": "Sample now", "save_and_stop": "Save and stop"}
 NOT_REACHED = "training ended before its next step."
+TRAINING_FINISHED = "training finished before the next step; its final save is the latest."
 
 
 def request_file(run: dict[str, Any]) -> Path:

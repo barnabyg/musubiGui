@@ -14,7 +14,7 @@ from musubi_gui.app import create_app
 from musubi_gui.job_models import JobDraft
 from musubi_gui.job_store import JobStore
 from musubi_gui.outputs import OutputBrowser
-from musubi_gui.run_control import NOT_REACHED, unavailable
+from musubi_gui.run_control import TRAINING_FINISHED, unavailable
 from musubi_gui.run_stage_outputs import record_checkpoints
 from musubi_gui.runs import RunService
 from musubi_gui.trainer_control import HANDLED_FILE, REQUEST_FILE
@@ -158,11 +158,12 @@ def test_retention_counts_an_extra_save_like_an_interval_save(tmp_path: Path) ->
         service.close()
 
 
+@pytest.mark.parametrize("sampling", [True, False])
 @pytest.mark.parametrize("action", ["save", "save_and_stop"])
-def test_request_waiting_when_training_ends_is_not_applied_by_sampling(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, action: str
+def test_request_made_after_the_final_step_is_not_applied_and_the_run_completes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, action: str, sampling: bool
 ) -> None:
-    root, job_id = job_with(tmp_path, steps=2, save_every=2, save_state=True, sample_enabled=True)
+    root, job_id = job_with(tmp_path, steps=2, save_every=2, save_state=False, sample_enabled=sampling)
     instant_steps(root)
     service = RunService(root, fixture_mode=True, device_path=tmp_path / "device.sqlite")
 
@@ -175,16 +176,14 @@ def test_request_waiting_when_training_ends_is_not_applied_by_sampling(
     monkeypatch.setattr("musubi_gui.run_execution.record_checkpoints", request_after_training)
     try:
         run = service.prepare(job_id, start=True)
-        ended = wait_for(service, run["id"], "completed" if action == "save" else "stopped", device_released=True)
+        # The same outcome whether or not the Job samples after training.
+        ended = wait_for(service, run["id"], "completed", device_released=True)
         assert no_request_files(ended)
-        assert ended["controls"][0]["error"] == NOT_REACHED
-        generate = next(stage for stage in ended["stages"] if stage["name"] == "generate")
-        if action == "save":
-            assert generate["status"] == "completed"
-        else:
-            # Training already saved its end, so the Run stops before sampling.
-            assert (generate["status"], ended["stop_kind"]) == ("pending", "save")
-            assert any(state["valid"] and state["optimizer_step"] == 2 for state in service.saved_states(run["id"]))
+        assert "stop_kind" not in ended
+        assert ended["controls"][0]["error"] == TRAINING_FINISHED
+        assert [stage["status"] for stage in ended["stages"] if stage["name"] == "generate"] == (
+            ["completed"] if sampling else []
+        )
     finally:
         service.close()
 
