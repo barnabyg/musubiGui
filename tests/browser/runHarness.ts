@@ -1,12 +1,24 @@
 import { execFile } from 'node:child_process';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { access, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { expect, type Page } from '@playwright/test';
 import { helper, localBackend, python } from './backend';
 
-const execute = promisify(execFile);
+export const execute = promisify(execFile);
+
+// A one-pixel PNG for specs that need a real image file.
+export const PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=',
+  'base64',
+);
+
+export const exists = (file: string) =>
+  access(file).then(
+    () => true,
+    () => false,
+  );
 
 export type RunRecord = {
   id: string;
