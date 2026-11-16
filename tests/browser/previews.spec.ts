@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { openCheckpointPanel, runWorkspace } from './runHarness';
+import { openCheckpointPanel, openRunTab, runWorkspace } from './runHarness';
 
 test('paired Wan previews show matching per-expert steps', async ({ page }) => {
   const app = await runWorkspace({ previewImages: true });
@@ -37,10 +37,7 @@ test('paired Wan previews show matching per-expert steps', async ({ page }) => {
     const first = page.getByRole('button', {
       name: /^Step 4 preview · paired Wan · low 4 \/ high 4 trained steps.*available$/,
     });
-    await page
-      .getByRole('tablist', { name: 'Run views' })
-      .getByRole('tab', { name: 'Samples', exact: true })
-      .click();
+    await openRunTab(page, 'samples');
     await expect(first).toBeVisible({ timeout: 240_000 });
     await first.click();
     const playing = page.getByLabel('Output video', { exact: true });
@@ -124,7 +121,7 @@ for (const family of ['wan', 'h3'] as const) {
         start: true,
       })) as { id: string };
       await page.goto(`${app.url}/#/runs/${run.id}`);
-      await page.getByRole('tab', { name: 'Samples', exact: true }).click();
+      await openRunTab(page, 'samples');
       const first = page.getByRole('button', {
         name: /^Step 5 preview.*available$/,
       });

@@ -8,7 +8,11 @@ import {
   checkpointDownload,
   openCheckpointPanel,
   finalCheckpointButton,
+  openRunTab,
   preparedRun,
+  runPanel,
+  runSummary,
+  runTab,
   runWorkspace,
   type RunRecord,
 } from './runHarness';
@@ -82,7 +86,7 @@ test('deleting a Run and its Job goes from the UI to the disk and survives a bac
     await expect(
       page.getByText('State: Deleting', { exact: true }),
     ).toBeVisible();
-    await expect(page.getByLabel('Checkpoints')).toHaveCount(0);
+    await expect(runPanel(page, 'checkpoints')).toHaveCount(0);
 
     // It is still there, and still deletable, after a restart.
     const closed = new Promise((resolve) => lock.once('exit', resolve));
@@ -180,7 +184,7 @@ test('outputs appear when a Run completes and a playing preview survives a refre
       name: 'sample.mp4 · available',
       exact: true,
     });
-    await page.getByRole('tab', { name: 'Samples', exact: true }).click();
+    await openRunTab(page, 'samples');
     await expect(sample).toBeVisible({ timeout: 240_000 });
     await expect(page.getByText(/^No supported outputs found yet/)).toHaveCount(
       0,
@@ -197,14 +201,14 @@ test('outputs appear when a Run completes and a playing preview survives a refre
     await expect(
       page.getByRole('button', { name: 'Refresh outputs', exact: true }),
     ).toBeHidden();
-    await page.getByRole('tab', { name: 'Overview', exact: true }).click();
+    await openRunTab(page, 'overview');
     await page
       .getByRole('button', { name: 'Refresh outputs', exact: true })
       .click();
     await expect(
       page.getByRole('button', { name: 'Refresh outputs', exact: true }),
     ).toBeEnabled();
-    await page.getByRole('tab', { name: 'Samples', exact: true }).click();
+    await openRunTab(page, 'samples');
     await expect(sample).toHaveAttribute('aria-pressed', 'true');
     await expect(video).toHaveAttribute('data-kept', 'yes');
     await expect
@@ -694,7 +698,7 @@ test('Wan and H3 prepare and train through the GUI with frozen captions cache re
       await expect(
         page.getByText('State: Completed', { exact: true }),
       ).toBeVisible({ timeout: 240_000 });
-      await page.getByRole('tab', { name: 'Samples', exact: true }).click();
+      await openRunTab(page, 'samples');
       await page
         .getByRole('button', {
           name: 'sample.mp4 · available',
@@ -714,7 +718,7 @@ test('Wan and H3 prepare and train through the GUI with frozen captions cache re
           ),
         )
         .toBeGreaterThan(0);
-      await page.getByRole('tab', { name: 'Overview', exact: true }).click();
+      await openRunTab(page, 'overview');
       const inspect = page.getByRole('button', {
         name: 'Inspect saved states',
         exact: true,
@@ -1307,7 +1311,7 @@ test('a finished Run lists its final LoRA with its checkpoints and samples in a 
       0,
     );
 
-    const files = page.getByRole('region', { name: 'Checkpoints' });
+    const files = runPanel(page, 'checkpoints');
     const checkpoints = files.locator('.output-checkpoints');
     await expect(checkpoints.locator('table')).toBeHidden();
     await checkpoints.locator('summary').click();
@@ -1325,7 +1329,7 @@ test('a finished Run lists its final LoRA with its checkpoints and samples in a 
     await expect(states.locator('.state-files')).toContainText(
       'model.safetensors',
     );
-    await page.getByRole('tab', { name: 'Samples', exact: true }).click();
+    await openRunTab(page, 'samples');
     await page
       .getByRole('button', { name: 'sample.mp4 · available', exact: true })
       .click();
@@ -1334,17 +1338,11 @@ test('a finished Run lists its final LoRA with its checkpoints and samples in a 
     await video.evaluate((element) =>
       element.setAttribute('data-tab-kept', 'yes'),
     );
-    await page.getByRole('tab', { name: 'Overview', exact: true }).click();
+    await openRunTab(page, 'overview');
     await expect(video).toBeHidden();
-    await page
-      .getByRole('tab', { name: 'Overview', exact: true })
-      .press('ArrowRight');
-    await page
-      .getByRole('tab', { name: 'Overview', exact: true })
-      .press('ArrowRight');
-    await expect(
-      page.getByRole('tab', { name: 'Samples', exact: true }),
-    ).toBeFocused();
+    await runTab(page, 'overview').press('ArrowRight');
+    await runTab(page, 'overview').press('ArrowRight');
+    await expect(runTab(page, 'samples')).toBeFocused();
     await expect(video).toHaveAttribute('data-tab-kept', 'yes');
     await page.setViewportSize({ width: 700, height: 900 });
     expect(
@@ -1444,7 +1442,7 @@ test('a partial Run shows the outputs it has, with their problems', async ({
       }),
     );
     await page.goto(`${app.url}/#/runs/${run.id}`);
-    const summary = page.locator('#run-panel-overview > .panel').first();
+    const summary = runSummary(page);
     await expect(summary).toContainText('sample.mp4: Sample has no audio.');
     const checkpoints = await openCheckpointPanel(page);
     await expect(checkpoints.locator('tbody tr')).toHaveText([

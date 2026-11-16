@@ -6,6 +6,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { localBackend, python } from './backend';
 import { stopBackendTree } from './processes';
+import { openRunTab, runTabPanel } from './runHarness';
 
 test('comparison plays both Runs and keeps provenance and downloads when a sample is missing', async ({
   page,
@@ -77,13 +78,12 @@ test('comparison plays both Runs and keeps provenance and downloads when a sampl
       )!;
       await page.goto(`${backend.url}/#/runs/${before.id}`);
       // Compare lives on Overview, never on the samples-only Samples tab.
-      await page.getByRole('tab', { name: 'Samples', exact: true }).click();
+      await openRunTab(page, 'samples');
       await expect(
         page.getByRole('region', { name: 'Compare with another Run' }),
       ).toBeHidden();
-      await page.getByRole('tab', { name: 'Overview', exact: true }).click();
-      await page
-        .getByRole('tabpanel', { name: 'Overview' })
+      await openRunTab(page, 'overview');
+      await runTabPanel(page, 'overview')
         .getByRole('region', { name: 'Compare with another Run' })
         .getByLabel('Compare with run', { exact: true })
         .selectOption(after.id);

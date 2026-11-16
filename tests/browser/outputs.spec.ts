@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { localBackend, python } from './backend';
+import { openRunTab, runPanel } from './runHarness';
 
 type FixtureRun = {
   id: string;
@@ -45,9 +46,9 @@ test('Wan and H3 output playback comparison download and missing states retain r
       .getByRole('button', { name: 'h3-revision-1 · H3 · r1', exact: true })
       .click();
     await expect(
-      page.getByRole('heading', { name: 'Checkpoints', exact: true }),
+      runPanel(page, 'checkpoints').getByRole('heading', { level: 2 }),
     ).toBeVisible();
-    await page.getByRole('tab', { name: 'Samples', exact: true }).click();
+    await openRunTab(page, 'samples');
     await page
       .getByRole('button', {
         name: 'sample.mp4 · available',
@@ -88,7 +89,7 @@ test('Wan and H3 output playback comparison download and missing states retain r
         audio.evaluate((element) => (element as HTMLAudioElement).currentTime),
       )
       .toBeGreaterThan(0);
-    await page.getByRole('tab', { name: 'Overview', exact: true }).click();
+    await openRunTab(page, 'overview');
     await page.getByText(/^LoRA checkpoints/).click();
     await page
       .getByRole('button', {
@@ -149,7 +150,7 @@ test('Wan and H3 output playback comparison download and missing states retain r
     await page
       .getByRole('button', { name: 'wan-revision-1 · WAN · r1', exact: true })
       .click();
-    await page.getByRole('tab', { name: 'Samples', exact: true }).click();
+    await openRunTab(page, 'samples');
     await page
       .getByRole('button', {
         name: 'still.png · available',

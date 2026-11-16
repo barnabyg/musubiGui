@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { runWorkspace } from './runHarness';
+import { openRunTab, runWorkspace } from './runHarness';
 import type { Job } from '../../frontend/jobTypes';
 
 test('Wan image sample checkbox stays compact at desktop and narrow widths', async ({
@@ -140,7 +140,7 @@ for (const family of ['wan', 'h3'] as const) {
         expect(output.metadata.fps).toBe(fps);
         expect(output.metadata.duration).toBeCloseTo(effectiveFrames / fps, 2);
       }
-      await page.getByRole('tab', { name: 'Samples', exact: true }).click();
+      await openRunTab(page, 'samples');
       await expect(
         page.getByRole('button', { name: /Step 1 preview.*available/ }),
       ).toBeVisible();
@@ -179,15 +179,15 @@ test('Wan image samples use independent geometry and remain available after swit
     await expect(
       page.getByText('State: Completed', { exact: true }),
     ).toBeVisible({ timeout: 240_000 });
-    await page.getByRole('tab', { name: 'Samples', exact: true }).click();
+    await openRunTab(page, 'samples');
     await page
       .getByRole('button', { name: 'sample.png · available', exact: true })
       .click();
     await expect(
       page.getByAltText('Sample sample.png', { exact: true }),
     ).toBeVisible();
-    await page.getByRole('tab', { name: 'Overview', exact: true }).click();
-    await page.getByRole('tab', { name: 'Samples', exact: true }).click();
+    await openRunTab(page, 'overview');
+    await openRunTab(page, 'samples');
     await expect(
       page.getByAltText('Sample sample.png', { exact: true }),
     ).toBeVisible();

@@ -176,10 +176,49 @@ export async function preparedRun(
   return { job, run: (await app.records())[0] };
 }
 
+// Run details structure. Specs name a tab or panel by key and reach it through these helpers,
+// so renaming a tab or panel heading changes only the names below (and
+// run-details-layout.spec.ts, which checks the layout itself).
+const runTabNames = { overview: 'Overview', samples: 'Samples' } as const;
+const runPanelNames = {
+  actions: 'Actions',
+  resume: 'Resume training',
+  caching: 'Cache preparation results',
+  checkpoints: 'Checkpoints',
+  compare: 'Compare with another Run',
+  inputs: 'Inputs and output folder',
+  samples: 'Samples',
+} as const;
+export type RunTabKey = keyof typeof runTabNames;
+export type RunPanelKey = keyof typeof runPanelNames;
+
+export function runTab(page: Page, tab: RunTabKey) {
+  return page
+    .getByRole('tablist', { name: 'Run views' })
+    .getByRole('tab', { name: runTabNames[tab], exact: true });
+}
+
+export async function openRunTab(page: Page, tab: RunTabKey) {
+  await runTab(page, tab).click();
+}
+
+export function runTabPanel(page: Page, tab: RunTabKey) {
+  return page.getByRole('tabpanel', { name: runTabNames[tab], exact: true });
+}
+
+export function runPanel(page: Page, panel: RunPanelKey) {
+  return page.getByRole('region', { name: runPanelNames[panel], exact: true });
+}
+
+// The first Overview panel: the Run's name, state, warnings, timing and originating job.
+export function runSummary(page: Page) {
+  return page.locator('#run-panel-overview > .panel').first();
+}
+
 // Switches Run details to Overview, expands the LoRA checkpoints table and returns its panel.
 export async function openCheckpointPanel(page: Page) {
-  await page.getByRole('tab', { name: 'Overview', exact: true }).click();
-  const panel = page.getByRole('region', { name: 'Checkpoints', exact: true });
+  await openRunTab(page, 'overview');
+  const panel = runPanel(page, 'checkpoints');
   const table = panel.locator('details.output-checkpoints');
   await expect(table).toBeVisible({ timeout: 240_000 });
   if ((await table.getAttribute('open')) === null)
