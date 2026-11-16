@@ -95,15 +95,43 @@ with the revision the Run trained, field by field. The result lists the changed 
 tier and says whether the state can take them. **Resume with revision N** then confirms and
 queues a new segment from the saved step until the revision's **Training steps**, which is
 a total and must be after the saved step. The data order restarts, as for any restoration.
+When the revision has warned changes, the confirmation lists them with the warning and
+enables **Resume with revision N** only after **I understand these changes change what the
+LoRA learns** is ticked.
 
-| Tier                              | Fields                                                                                                                                                                                                                                                                                                                                                                                         |
-| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Applies on resume                 | Name, training steps (after the saved step), final sample, sample prompt, sample inference steps, sample size and frames, generation memory policy, preview interval, save interval, kept checkpoints, blocks to swap, gradient checkpointing, inactive-DiT offload, and turning saved state on                                                                                                |
-| Applies on resume, with a warning | None yet. Learning rate, timestep strategy, sigmoid scale, flow shift and gradient accumulation move here once a resumed trainer is shown to apply them (#202).                                                                                                                                                                                                                                |
-| Needs a new Run                   | Model family, recipe, model components, LoRA rank and alpha, optimizer, the fields awaiting the warning tier, runtime FP8 scaling, H2D-only block swapping, turning saved state off, expert interval, steps per expert, datasets with their repeats and resolutions, default repeats, training size and frames, frame extraction, bucketing, batch size, cache policies, audio policy and seed |
+| Tier                              | Fields                                                                                                                                                                                                                                                                                                                                                   |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Applies on resume                 | Name, training steps (after the saved step), final sample, sample prompt, sample inference steps, sample size and frames, generation memory policy, preview interval, save interval, kept checkpoints, blocks to swap, gradient checkpointing, inactive-DiT offload, and turning saved state on                                                          |
+| Applies on resume, with a warning | Learning rate, timestep strategy, sigmoid scale, flow shift and gradient accumulation                                                                                                                                                                                                                                                                    |
+| Needs a new Run                   | Model family, recipe, model components, LoRA rank and alpha, optimizer, runtime FP8 scaling, H2D-only block swapping, turning saved state off, expert interval, steps per expert, datasets with their repeats and resolutions, default repeats, training size and frames, frame extraction, bucketing, batch size, cache policies, audio policy and seed |
 
 A field not listed, including one added in a later version, needs a new Run. A Run frozen
 before a field existed compares it by the default it now reads as, so only real edits count.
+
+### Warned changes
+
+The warned fields apply on resume, but changing them mid-training changes what the LoRA
+learns: the saved state was trained with the earlier values, so the result can differ from
+a Run trained with either value throughout. Changing gradient accumulation also changes what
+a step means, since each later step averages a different number of batches. Steps still
+count optimizer updates, so step numbering, **Train until step**, save and preview intervals
+and Save now work as before. The first update after the change can average fewer batches,
+because the restored accumulation counter continues from the saved state. Time per step
+changes too, so estimates from the source Run's timing are off until the segment reports
+its own.
+
+The segment's train arguments carry the new values. Loading the saved state restores the
+optimizer's learning rate, so the app's trainer entry point writes the configured one back.
+It records each optimizer parameter group's configured base learning rate when upstream builds
+the scheduler, before the state loads, and at upstream's `on_train_start` hook, after the
+state loads and before the first optimizer step, writes it into each group's `lr` and
+`initial_lr` and the scheduler's `base_lrs`. Groups keep their ratios to the configured rate,
+such as LoRA+'s scaled group, and the scheduler's warmup or decay factor at the saved step is
+kept. The training log then shows
+`Resume learning rate: applied 0.0002; the saved state had 0.0001.`, or
+`Resume learning rate: 0.0001, unchanged from the saved state.` when nothing changes. A
+Run that isn't resuming is untouched. This override awaits confirmation on a real GPU run
+for H3 and Wan; the CPU fixture logs the same line through the same code.
 
 The segment's training and sampling commands are built from the new revision, plus `--resume`,
 the saved step's numbering offset and `--max_train_steps` set to the total minus the saved
@@ -124,7 +152,8 @@ final sample use the new revision's prompt and sampling settings.
 comparison, changing nothing but the Run's recorded saved states: `compatible`,
 `frozen_revision`, `revision`, `saved_step`, `target_steps`, `changes` (each with `field`,
 `label`, `tier` of `editable`, `warned` or `new_run`, `before` and `after`), `blocking`
-(labels of fields needing a new Run), `errors`, `notes`, `state_id` and `state_name`. It
+(labels of fields needing a new Run), `errors`, `warnings` (why the warned changes matter,
+empty without any), `notes`, `state_id` and `state_name`. It
 defaults to the Job's latest revision, the latest valid state and the revision's steps.
 `POST /api/runs/{id}/resume {job_revision, target_steps?, state_id?}` queues the segment.
 A revision that changes a field needing a new Run, or a total at or before the saved step,
@@ -144,9 +173,13 @@ stop**. In the Job, set LoRA rank 16 and save. On the stopped Run choose **Check
 revision**: expect LoRA rank under Needs a new Run and the resume button disabled. Set the
 rank back to 8, change the sample prompt, set previews every 70 steps and 210 training steps,
 and save. Review configuration should show Resume compatibility naming that Run, with the
-prompt, steps and preview interval under Applies on resume. On the Run, check again and
-resume. Expect a new completed segment at Step 210/210 whose Samples show the step 70, 140
-and 210 previews with the new prompt, while the original Run stays Stopped with its revision.
+prompt, steps and preview interval under Applies on resume. Set the learning rate to 0.0002
+and save: review lists Learning rate: 0.0001 → 0.0002 under Applies on resume, but changes
+what the LoRA learns, with the warning. On the Run, check again and resume: the confirmation
+keeps its resume button disabled until the acknowledgement is ticked. Expect a new completed
+segment at Step 210/210 whose Samples show the step 70, 140 and 210 previews with the new
+prompt and whose training log shows `Resume learning rate: applied 0.0002`, while the
+original Run stays Stopped with its revision.
 
 ## Alternating Wan saved states
 

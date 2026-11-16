@@ -76,7 +76,11 @@ recently created stopped, completed, failed, cancelled or interrupted Run or seg
 Job with a saved state. It links that Run, gives its revision and saved step, and says
 whether its saved state can resume with this revision. Changed fields are listed by tier
 (Applies on resume, Applies on resume with a warning, Needs a new Run), each with its old
-and new value, followed by the note that the data order restarts. Training steps at or
+and new value, followed by the note that the data order restarts. Learning rate, timestep
+strategy, sigmoid scale, flow shift and gradient accumulation apply with a warning that
+changing them mid-training changes what the LoRA learns, and for gradient accumulation what
+a step means; resuming asks to acknowledge it (see
+[Warned changes](runs-saved-state.md#warned-changes)). Training steps at or
 before the saved step are reported too. The saved step comes from the Run's last **Inspect
 saved states**; before that, review reports state folders without a step and skips that
 check. Review never hashes states, so it stays quick. Preparing still starts a new Run; to

@@ -264,3 +264,60 @@ def test_alternating_wan_resumes_its_paired_states_with_an_edited_revision(tmp_p
         assert progress and (progress["step"], progress["total"]) == (30, 30)
     finally:
         service.close()
+
+
+def test_a_changed_learning_rate_resumes_with_a_warning_and_reaches_the_trainer(tmp_path: Path) -> None:
+    root, job_id = job_with(tmp_path, steps=3, save_every=1, save_state=True, preview_every=0, sample_enabled=False)
+    instant_steps(root)
+    assets = tmp_path / "assets"
+    assets.mkdir()
+    with TestClient(create_app(root, assets, fixture_mode=True, device_path=tmp_path / "device.sqlite")) as client:
+        run = client.post("/api/runs/prepare", json={"job_id": job_id, "start": True}).json()
+        deadline = time.monotonic() + 180
+        while client.get(f"/api/runs/{run['id']}").json()["status"] != "completed":
+            assert time.monotonic() < deadline
+            time.sleep(0.05)
+        revision = edit(
+            root,
+            job_id,
+            learning_rate=0.0002,
+            timestep_sampling="sigmoid",
+            sigmoid_scale=2.0,
+            gradient_accumulation=2,
+            steps=5,
+        )
+
+        check = client.post(f"/api/runs/{run['id']}/resume-check", json={}).json()
+        assert check["compatible"], check
+        assert [(change["field"], change["tier"]) for change in check["changes"]] == [
+            ("gradient_accumulation", "warned"),
+            ("learning_rate", "warned"),
+            ("sigmoid_scale", "warned"),
+            ("steps", "editable"),
+            ("timestep_sampling", "warned"),
+        ]
+        assert len(check["warnings"]) == 2 and "what a step means" in check["warnings"][1]
+        review = client.post(f"/api/jobs/{job_id}/review", json={}).json()["resume_compatibility"]
+        assert review["compatible"] and review["warnings"] == check["warnings"]
+
+        resumed = client.post(f"/api/runs/{run['id']}/resume", json={"job_revision": revision})
+        assert resumed.status_code == 200, resumed.text
+        segment_id = resumed.json()["id"]
+        deadline = time.monotonic() + 180
+        while (segment := client.get(f"/api/runs/{segment_id}").json())["status"] != "completed":
+            assert segment["status"] not in {"failed", "stopped"}, segment
+            assert time.monotonic() < deadline
+            time.sleep(0.05)
+
+    # The segment's own arguments carry the new values, consistent with its frozen revision.
+    train = next(stage for stage in segment["stages"] if stage["name"] == "train")
+    assert argument(train["args"], "--learning_rate") == "0.0002"
+    assert argument(train["args"], "--gradient_accumulation_steps") == "2"
+    assert argument(train["args"], "--timestep_sampling") == "sigmoid"
+    assert argument(train["args"], "--sigmoid_scale") == "2.0"
+    assert "--discrete_flow_shift" not in train["args"]
+    assert {change["field"]: change["tier"] for change in segment["segment"]["changes"]}["learning_rate"] == "warned"
+    # The trainer writes the configured rate over the restored one, and says so in the training log.
+    assert "Resume learning rate: applied 0.0002; the saved state had 0.0001." in train_log(segment)
+    progress = segment["segment"]
+    assert (progress["step_offset"], progress["target_steps"]) == (3, 5)

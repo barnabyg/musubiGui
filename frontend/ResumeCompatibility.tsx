@@ -20,6 +20,8 @@ export type ResumeCompatibility = {
   changes: ResumeChange[];
   blocking: string[];
   errors: string[];
+  // Why the warned changes matter; resuming asks the user to acknowledge them.
+  warnings: string[];
   notes: string[];
   // Job review: the Job's latest resumable training.
   run_id?: string;
@@ -46,6 +48,30 @@ function valueLabel(value: unknown) {
   return JSON.stringify(value);
 }
 
+// The acknowledgement a resume confirmation requires when the revision has warned changes.
+export const WARNED_ACKNOWLEDGEMENT =
+  'I understand these changes change what the LoRA learns';
+
+export function hasWarnedChanges(result: ResumeCompatibility) {
+  return result.changes.some((change) => change.tier === 'warned');
+}
+
+export function changeText(change: ResumeChange) {
+  return `${change.label}: ${valueLabel(change.before)} → ${valueLabel(change.after)}`;
+}
+
+export function ResumeWarnings({ result }: { result: ResumeCompatibility }) {
+  return (
+    <>
+      {result.warnings.map((warning) => (
+        <p key={warning} className="resume-warning">
+          {warning}
+        </p>
+      ))}
+    </>
+  );
+}
+
 export function ResumeChanges({ result }: { result: ResumeCompatibility }) {
   return (
     <div className="resume-changes">
@@ -69,12 +95,10 @@ export function ResumeChanges({ result }: { result: ResumeCompatibility }) {
                 <h4>{title}</h4>
                 <ul aria-label={title}>
                   {changes.map((change) => (
-                    <li key={change.field}>
-                      {change.label}: {valueLabel(change.before)} →{' '}
-                      {valueLabel(change.after)}
-                    </li>
+                    <li key={change.field}>{changeText(change)}</li>
                   ))}
                 </ul>
+                {tier === 'warned' && <ResumeWarnings result={result} />}
               </div>
             )
           );

@@ -12,10 +12,45 @@ from typing import Any
 # Accelerate executes this file in the separate managed environment.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from musubi_gui.checkpoint_names import expert_step_name  # noqa: E402
+from musubi_gui.resume_learning_rate import LearningRateOverride  # noqa: E402
 from musubi_gui.step_offset import ENVIRONMENT, OffsetStepName, StepSchedule  # noqa: E402
 from musubi_gui.trainer_control import ENVIRONMENT as CONTROL_ENVIRONMENT  # noqa: E402
 from musubi_gui.trainer_control import TrainerControl  # noqa: E402
 from musubi_gui.training_timing import TrainingTiming  # noqa: E402
+
+
+def override_learning_rate(trainer: Any) -> None:
+    """Train a resumed state with the configured learning rate rather than the one restored with it.
+
+    Upstream builds the optimizer and scheduler from the arguments in `get_lr_scheduler`, then `--resume` loads the
+    saved state over them in `resume_from_local_or_hf_if_specified`. That method gets neither object, and its caller
+    is private, so the configured values are recorded when the scheduler is built and written back at
+    `on_train_start`: the public hook that runs after the state loads and before the first optimizer step.
+    """
+    override = LearningRateOverride()
+    build = trainer.get_lr_scheduler
+    start = trainer.on_train_start
+
+    def on_get_lr_scheduler(self: Any, args: Any, optimizer: Any, *rest: Any, **kwargs: Any) -> Any:
+        scheduler = build(self, args, optimizer, *rest, **kwargs)
+        override.capture(optimizer, scheduler)
+        return scheduler
+
+    def on_train_start(
+        self: Any, args: Any, accelerator: Any, network: Any, transformer: Any, optimizer: Any, *rest: Any
+    ) -> Any:
+        result = start(self, args, accelerator, network, transformer, optimizer, *rest)
+        line = override.apply(
+            resuming=bool(getattr(args, "resume", None)),
+            learning_rate=getattr(args, "learning_rate", None),
+            optimizer=optimizer,
+        )
+        if line:
+            print(line, flush=True)
+        return result
+
+    trainer.get_lr_scheduler = on_get_lr_scheduler
+    trainer.on_train_start = on_train_start
 
 
 def observe_trainer(
@@ -110,6 +145,8 @@ def observe_trainer(
     trainer.sample_images = on_sample
     trainer.on_after_sample_images = on_after
     trainer.on_post_optimizer_step = on_optimizer_step
+    if hasattr(trainer, "get_lr_scheduler") and hasattr(trainer, "on_train_start"):
+        override_learning_rate(trainer)
     # The next step starts with its batch; an epoch that ends first calls its end hook.
     for name in ("process_batch", "on_epoch_end"):
         if hasattr(trainer, name):

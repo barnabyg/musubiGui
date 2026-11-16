@@ -6,9 +6,11 @@ import os
 import time
 import tomllib
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 from musubi_gui.checkpoint_names import expert_step_name
+from musubi_gui.resume_learning_rate import LearningRateOverride
 from musubi_gui.step_offset import ENVIRONMENT, StepSchedule
 from musubi_gui.trainer_control import ENVIRONMENT as CONTROL_ENVIRONMENT
 from musubi_gui.trainer_control import TrainerControl
@@ -47,6 +49,7 @@ def main(stage: str | None = None) -> None:
     parser.add_argument("--save_state", action="store_true")
     parser.add_argument("--save_state_on_train_end", action="store_true")
     parser.add_argument("--resume", type=Path)
+    parser.add_argument("--learning_rate", type=float)
     parser.add_argument("--save_path", type=Path)
     parser.add_argument("--video_size", nargs=2, type=int, default=[256, 256])
     parser.add_argument("--video_length", type=int, default=17)
@@ -106,11 +109,22 @@ def main(stage: str | None = None) -> None:
         if Path(args.output_name).name != args.output_name or args.output_name in {"", ".", ".."}:
             parser.error("--output_name must be a simple filename")
         previous = 0
+        # A stand-in optimizer with one param group, built from the arguments as upstream's is.
+        optimizer = SimpleNamespace(param_groups=[{"lr": args.learning_rate, "initial_lr": args.learning_rate}])
+        override = LearningRateOverride()
+        if args.learning_rate is not None:
+            override.capture(optimizer, None)
         if args.resume:
             saved = json.loads((args.resume / "trainer_state.json").read_text(encoding="utf-8"))
             if not saved.get("synthetic"):
                 parser.error("fixture resumes accept only synthetic saved state")
             previous = int(saved["optimizer_step"])
+            # As loading the state does; states saved before the fixture recorded a rate keep the configured one.
+            restored = saved.get("learning_rate", args.learning_rate)
+            optimizer.param_groups = [{"lr": restored, "initial_lr": restored}]
+        # As the app's trainer entry point does at on_train_start, after the state loads.
+        if line := override.apply(resuming=bool(args.resume), learning_rate=args.learning_rate, optimizer=optimizer):
+            print(line, flush=True)
 
         def save_state(state: Path, step: int) -> None:
             state.mkdir(parents=True, exist_ok=True)
@@ -122,6 +136,11 @@ def main(stage: str | None = None) -> None:
                         "global_step": step,
                         "optimizer_step": previous + step,
                         "segment_steps": step,
+                        **(
+                            {"learning_rate": optimizer.param_groups[0]["lr"]}
+                            if optimizer.param_groups[0]["lr"] is not None
+                            else {}
+                        ),
                     }
                 ),
                 encoding="utf-8",

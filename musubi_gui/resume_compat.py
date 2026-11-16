@@ -1,8 +1,10 @@
 """Which edits in a newer Job revision a resumed segment can take, compared field by field with the frozen revision.
 
 A saved optimizer state belongs to one LoRA shape, dataset and training recipe. Fields that only change what the
-segment saves, samples or how it fits in memory can change on resume; anything else needs a new Run. A field this
-module doesn't name, including one added to the Job later, needs a new Run until someone decides otherwise.
+segment saves, samples or how it fits in memory can change on resume. The learning rate, timestep distribution and
+gradient accumulation can change too, with a warning, because they change what the LoRA learns from then on. Anything
+else needs a new Run. A field this module doesn't name, including one added to the Job later, needs a new Run until
+someone decides otherwise.
 """
 
 from dataclasses import dataclass
@@ -33,10 +35,15 @@ EDITABLE: dict[str, str] = {
     "gradient_checkpointing": "Gradient checkpointing",
     "offload_inactive_dit": "Offload inactive DiT",
 }
-# Applied on resume, with a warning that changing them mid-training changes what the LoRA learns. Empty until the
-# trainer wrapper overrides the restored optimizer's learning rate; learning_rate, timestep_sampling, sigmoid_scale,
-# discrete_flow_shift and gradient_accumulation then move here from NEW_RUN.
-WARNED: dict[str, str] = {}
+# Applied on resume, with a warning that changing them mid-training changes what the LoRA learns. The segment's
+# arguments carry them; the trainer entry point writes the learning rate over the restored optimizer's.
+WARNED: dict[str, str] = {
+    "learning_rate": "Learning rate",
+    "timestep_sampling": "Timestep strategy",
+    "sigmoid_scale": "Sigmoid scale",
+    "discrete_flow_shift": "Flow shift",
+    "gradient_accumulation": "Gradient accumulation",
+}
 # Labels for the fields known to need a new Run; any other field needs one too, labelled by its name.
 NEW_RUN: dict[str, str] = {
     "family": "Model family",
@@ -46,11 +53,6 @@ NEW_RUN: dict[str, str] = {
     "rank": "LoRA rank",
     "alpha": "LoRA alpha",
     "optimizer": "Optimizer",
-    "learning_rate": "Learning rate",
-    "timestep_sampling": "Timestep strategy",
-    "sigmoid_scale": "Sigmoid scale",
-    "discrete_flow_shift": "Flow shift",
-    "gradient_accumulation": "Gradient accumulation",
     "fp8_scaled": "Runtime FP8 scaling",
     "block_swap_h2d_only": "H2D-only block swapping",
     "save_state": "Save optimizer/training state",
@@ -71,6 +73,14 @@ NEW_RUN: dict[str, str] = {
     "audio_policy": "Audio policy",
     "seed": "Seed",
 }
+WARNING = (
+    "Changing these mid-training changes what the LoRA learns: the saved state was trained with the earlier values, "
+    "and the result can differ from a Run trained with either throughout."
+)
+ACCUMULATION_WARNING = (
+    "Gradient accumulation also changes what a step means: each step after the saved one averages a different "
+    "number of batches, though steps still count optimizer updates."
+)
 DATA_ORDER_NOTE = (
     "Resuming restores the saved optimizer, scheduler and RNG state, but the data order restarts from the "
     "beginning of the dataset."
@@ -147,6 +157,10 @@ def compatibility(
     if saved_step is not None and target_steps <= saved_step:
         errors.append(f"Training steps: choose a total after the saved step {saved_step}.")
     blocking = [change.label for change in changes if change.tier == "new_run"]
+    warned = {change.field for change in changes if change.tier == "warned"}
+    warnings = [WARNING] if warned else []
+    if "gradient_accumulation" in warned:
+        warnings.append(ACCUMULATION_WARNING)
     return {
         "compatible": not blocking and not errors,
         "frozen_revision": frozen.get("revision"),
@@ -156,6 +170,8 @@ def compatibility(
         "changes": [change.record() for change in changes],
         "blocking": blocking,
         "errors": errors,
+        # Shown with the warned fields; resuming asks the user to acknowledge them.
+        "warnings": warnings,
         "notes": [DATA_ORDER_NOTE],
     }
 
@@ -223,5 +239,6 @@ def resume_review(runs: list[dict[str, Any]], job: dict[str, Any]) -> dict[str, 
             "changes": [],
             "blocking": [],
             "errors": [str(error)],
+            "warnings": [],
             "notes": [],
         }

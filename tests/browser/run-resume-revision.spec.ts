@@ -88,12 +88,13 @@ test('a stopped Run resumes with an edited revision of its Job, after review sho
       }),
     ).toBeDisabled();
 
-    // Restore the rank; edit the preview prompt and raise the total.
+    // Restore the rank; edit the preview prompt, raise the total and the learning rate.
     const revision = await save({
       rank: 8,
       sample_prompt: NEW_PROMPT,
       preview_every: 70,
       steps: 210,
+      learning_rate: 0.0002,
     });
 
     // Job review lists the changes by tier against the Job's latest resumable training.
@@ -113,11 +114,21 @@ test('a stopped Run resumes with an edited revision of its Job, after review sho
     );
     const applies = compatibility.getByRole('list', {
       name: 'Applies on resume',
+      exact: true,
     });
     await expect(applies).toContainText(`Sample prompt: “`);
     await expect(applies).toContainText(NEW_PROMPT);
     await expect(applies).toContainText('Training steps: 200 → 210');
     await expect(applies).toContainText('Preview every N steps: 0 → 70');
+    // A changed learning rate applies too, with a warning that it changes what the LoRA learns.
+    await expect(
+      compatibility.getByRole('list', {
+        name: 'Applies on resume, but changes what the LoRA learns',
+      }),
+    ).toHaveText('Learning rate: 0.0001 → 0.0002');
+    await expect(compatibility).toContainText(
+      'Changing these mid-training changes what the LoRA learns',
+    );
     await expect(compatibility).toContainText('data order restarts');
     await noHorizontalScroll(page);
 
@@ -131,8 +142,16 @@ test('a stopped Run resumes with an edited revision of its Job, after review sho
     );
     await expect(latest).toContainText(/until step 210/);
     await expect(
-      latest.getByRole('list', { name: 'Applies on resume' }),
+      latest.getByRole('list', { name: 'Applies on resume', exact: true }),
     ).toContainText('Training steps: 200 → 210');
+    await expect(
+      latest.getByRole('list', {
+        name: 'Applies on resume, but changes what the LoRA learns',
+      }),
+    ).toHaveText('Learning rate: 0.0001 → 0.0002');
+    await expect(latest).toContainText(
+      'Changing these mid-training changes what the LoRA learns',
+    );
     await noHorizontalScroll(page);
     await latest
       .getByRole('button', {
@@ -143,12 +162,25 @@ test('a stopped Run resumes with an edited revision of its Job, after review sho
     const dialog = page.getByRole('dialog');
     await expect(dialog).toContainText('The data order restarts.');
     await expect(dialog).toContainText('until step 210');
+    // The warned change must be acknowledged before resuming.
+    await expect(
+      dialog.getByRole('list', {
+        name: 'Changes that change what the LoRA learns',
+      }),
+    ).toHaveText('Learning rate: 0.0001 → 0.0002');
+    const confirm = dialog.getByRole('button', {
+      name: `Resume with revision ${revision}`,
+      exact: true,
+    });
+    await expect(confirm).toBeDisabled();
     await dialog
-      .getByRole('button', {
-        name: `Resume with revision ${revision}`,
-        exact: true,
+      .getByRole('checkbox', {
+        name: 'I understand these changes change what the LoRA learns',
       })
-      .click();
+      .check();
+    await expect(confirm).toBeEnabled();
+    await noHorizontalScroll(page);
+    await confirm.click();
     await expect(
       page.getByText('State: Completed', { exact: true }),
     ).toBeVisible({ timeout: 240_000 });
@@ -170,6 +202,11 @@ test('a stopped Run resumes with an edited revision of its Job, after review sho
     expect(logs.text).toContain(
       `SYNTHETIC preview complete at step 210: ${NEW_PROMPT}`,
     );
+    // The trainer applied the new learning rate over the restored one.
+    expect(logs.text).toContain(
+      'Resume learning rate: applied 0.0002; the saved state had 0.0001.',
+    );
+    expect(detail.job.config.learning_rate).toBe(0.0002);
     const source = records.find((run) => run.id === original.id)!;
     expect(source.status).toBe('stopped');
     expect(source.job.revision).toBe(2);

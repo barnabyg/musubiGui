@@ -13,6 +13,8 @@ type Question = {
   confirmLabel: string;
   cancelLabel?: string;
   danger?: boolean;
+  // A checkbox the user must tick before the confirm button is enabled.
+  acknowledge?: string;
 };
 type Pending = Question & { answer: (confirmed: boolean) => void };
 
@@ -36,12 +38,16 @@ function returnFocus(target: HTMLElement | null, tries: number) {
 
 export function ConfirmDialogHost() {
   const [pending, setPending] = useState<Pending | null>(null);
+  const [acknowledged, setAcknowledged] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null);
   const cancel = useRef<HTMLButtonElement>(null);
   const lastFocus = useRef<HTMLElement | null>(null);
   const titleId = useId();
   useEffect(() => {
-    show = setPending;
+    show = (question) => {
+      setAcknowledged(false);
+      setPending(question);
+    };
     // Tracked here because a screen's busy state can disable the control before the dialog opens.
     const remember = (event: FocusEvent) => {
       if (!dialog.current?.contains(event.target as Node))
@@ -71,7 +77,7 @@ export function ConfirmDialogHost() {
     if (event.key !== 'Tab') return;
     const controls = [
       ...(dialog.current?.querySelectorAll<HTMLElement>(
-        'a[href], button:not(:disabled)',
+        'a[href], button:not(:disabled), input:not(:disabled)',
       ) ?? []),
     ];
     const last = controls[controls.length - 1];
@@ -97,12 +103,23 @@ export function ConfirmDialogHost() {
     >
       <h2 id={titleId}>{pending.title}</h2>
       <div className="confirm-body">{pending.body}</div>
+      {pending.acknowledge && (
+        <label className="confirm-acknowledge">
+          <input
+            type="checkbox"
+            checked={acknowledged}
+            onChange={(event) => setAcknowledged(event.target.checked)}
+          />
+          {pending.acknowledge}
+        </label>
+      )}
       <div className="actions">
         <button ref={cancel} onClick={() => finish(false)}>
           {pending.cancelLabel ?? 'Cancel'}
         </button>
         <button
           className={pending.danger ? 'danger solid' : 'primary'}
+          disabled={Boolean(pending.acknowledge) && !acknowledged}
           onClick={() => finish(true)}
         >
           {pending.confirmLabel}

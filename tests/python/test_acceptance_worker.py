@@ -121,3 +121,49 @@ def test_fake_worker_numbers_a_restored_segment_by_global_step(tmp_path: Path, f
     assert "steps: 4/4" in result.stdout
     timing = json.loads((tmp_path / "timing.json").read_text(encoding="utf-8"))
     assert (timing["training"]["step"], timing["previews"]["completed"]) == (7, 2)
+
+
+def test_fake_worker_resumes_with_the_configured_learning_rate(tmp_path: Path) -> None:
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    (checkout / ".musubi-gui-fixture.json").write_text(
+        json.dumps({"version": 1, "kind": "synthetic-worker"}), encoding="utf-8"
+    )
+
+    def train(name: str, learning_rate: str, resume: Path | None = None) -> str:
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "musubi_gui.acceptance_worker",
+                "train",
+                "--output_dir",
+                str(tmp_path / name),
+                "--output_name",
+                "fixture",
+                "--save_state",
+                "--learning_rate",
+                learning_rate,
+                *(["--resume", str(resume)] if resume else []),
+            ],
+            cwd=checkout,
+            env={"PYTHONPATH": str(Path(__file__).resolve().parents[2])},
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        return result.stdout
+
+    def saved_rate(name: str) -> float:
+        state = tmp_path / name / "fixture-state" / "trainer_state.json"
+        return float(json.loads(state.read_text(encoding="utf-8"))["learning_rate"])
+
+    assert "Resume learning rate" not in train("first", "1e-4")
+    assert saved_rate("first") == 1e-4
+    # As the trainer entry point does after the state loads: the configured rate replaces the saved one.
+    changed = train("changed", "2e-4", tmp_path / "first" / "fixture-state")
+    assert "Resume learning rate: applied 0.0002; the saved state had 0.0001." in changed
+    assert saved_rate("changed") == 2e-4
+    unchanged = train("unchanged", "2e-4", tmp_path / "changed" / "fixture-state")
+    assert "Resume learning rate: 0.0002, unchanged from the saved state." in unchanged

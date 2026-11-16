@@ -1,7 +1,14 @@
 import { useState } from 'react';
 import { apiClient } from './api';
 import { confirmDialog } from './ConfirmDialog';
-import { ResumeChanges, type ResumeCompatibility } from './ResumeCompatibility';
+import {
+  ResumeChanges,
+  ResumeWarnings,
+  WARNED_ACKNOWLEDGEMENT,
+  changeText,
+  hasWarnedChanges,
+  type ResumeCompatibility,
+} from './ResumeCompatibility';
 import type { Run } from './runTypes';
 
 const request = apiClient('Resume check failed.');
@@ -73,13 +80,30 @@ export function ResumeRevision({
               void confirmDialog({
                 title: `Resume with revision ${result.revision}?`,
                 body: (
-                  <p>
-                    Training continues from step {result.saved_step} until step{' '}
-                    {result.target_steps} with revision {result.revision}’s
-                    settings, as a new segment. The data order restarts. This
-                    Run stays as it is.
-                  </p>
+                  <>
+                    <p>
+                      Training continues from step {result.saved_step} until
+                      step {result.target_steps} with revision {result.revision}
+                      ’s settings, as a new segment. The data order restarts.
+                      This Run stays as it is.
+                    </p>
+                    {hasWarnedChanges(result) && (
+                      <>
+                        <ul aria-label="Changes that change what the LoRA learns">
+                          {result.changes
+                            .filter((change) => change.tier === 'warned')
+                            .map((change) => (
+                              <li key={change.field}>{changeText(change)}</li>
+                            ))}
+                        </ul>
+                        <ResumeWarnings result={result} />
+                      </>
+                    )}
+                  </>
                 ),
+                acknowledge: hasWarnedChanges(result)
+                  ? WARNED_ACKNOWLEDGEMENT
+                  : undefined,
                 confirmLabel: `Resume with revision ${result.revision}`,
               }).then((confirmed) => {
                 if (confirmed)

@@ -6,7 +6,16 @@ from typing import Any
 import pytest
 
 from musubi_gui.job_models import Job, JobConfig, JobDataset
-from musubi_gui.resume_compat import EDITABLE, WARNED, changed_fields, compatibility, flatten, resume_review
+from musubi_gui.resume_compat import (
+    ACCUMULATION_WARNING,
+    EDITABLE,
+    WARNED,
+    WARNING,
+    changed_fields,
+    compatibility,
+    flatten,
+    resume_review,
+)
 
 
 def frozen(family: str = "wan", **config: Any) -> dict[str, Any]:
@@ -42,6 +51,13 @@ EDITABLE_CHANGES = {
     "gradient_checkpointing": False,
     "offload_inactive_dit": True,
 }
+WARNED_CHANGES = {
+    "learning_rate": 0.0002,
+    "timestep_sampling": "sigmoid",
+    "sigmoid_scale": 2.0,
+    "discrete_flow_shift": 5.0,
+    "gradient_accumulation": 2,
+}
 NEW_RUN_CHANGES = {
     "recipe": "alternating",
     "components": {"wan_low": "other.safetensors"},
@@ -65,12 +81,6 @@ NEW_RUN_CHANGES = {
     "latent_cache_policy": "rebuild",
     "text_cache_policy": "rebuild",
     "seed": 7,
-    # Separate ticket: these move to the warned tier once a resumed trainer applies them.
-    "learning_rate": 0.0002,
-    "timestep_sampling": "sigmoid",
-    "sigmoid_scale": 2.0,
-    "discrete_flow_shift": 5.0,
-    "gradient_accumulation": 2,
     # Not in any tier's list, so it conservatively needs a new Run.
     "audio_policy": "allow-missing",
 }
@@ -92,6 +102,7 @@ def test_editable_fields_resume(field: str, value: Any) -> None:
     assert result["compatible"], result
     assert [(change["field"], change["tier"]) for change in result["changes"]] == [(field, "editable")]
     assert result["changes"][0]["label"] == EDITABLE[field]
+    assert result["warnings"] == []
 
 
 @pytest.mark.parametrize("field,value", NEW_RUN_CHANGES.items())
@@ -105,8 +116,38 @@ def test_fields_that_change_what_is_trained_need_a_new_run(field: str, value: An
     assert change["label"] != field or field not in EDITABLE
 
 
-def test_the_warned_tier_is_empty_until_the_trainer_applies_those_fields() -> None:
-    assert WARNED == {}
+@pytest.mark.parametrize("field,value", WARNED_CHANGES.items())
+def test_fields_that_change_what_the_lora_learns_resume_with_a_warning(field: str, value: Any) -> None:
+    job = frozen()
+    result = compatibility(job, edited(job, **{field: value}), saved_step=100, target_steps=600)
+    assert result["compatible"], result
+    [change] = result["changes"]
+    assert (change["field"], change["label"], change["tier"]) == (field, WARNED[field], "warned")
+    assert result["blocking"] == []
+    assert result["warnings"] == [WARNING] + ([ACCUMULATION_WARNING] if field == "gradient_accumulation" else [])
+    assert "changes what the LoRA learns" in WARNING
+    assert "what a step means" in ACCUMULATION_WARNING
+
+
+def test_warned_and_editable_changes_resume_together_with_one_warning() -> None:
+    job = frozen()
+    result = compatibility(
+        job, edited(job, learning_rate=0.0002, discrete_flow_shift=5.0, steps=600), saved_step=100, target_steps=600
+    )
+    assert result["compatible"]
+    assert [(change["field"], change["tier"]) for change in result["changes"]] == [
+        ("discrete_flow_shift", "warned"),
+        ("learning_rate", "warned"),
+        ("steps", "editable"),
+    ]
+    assert result["warnings"] == [WARNING]
+
+
+def test_a_warned_change_beside_a_new_run_field_still_needs_a_new_run() -> None:
+    job = frozen()
+    result = compatibility(job, edited(job, learning_rate=0.0002, rank=16), saved_step=100, target_steps=600)
+    assert not result["compatible"]
+    assert result["blocking"] == ["LoRA rank"]
 
 
 @pytest.mark.parametrize(
