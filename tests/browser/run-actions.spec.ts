@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { writeFile } from 'node:fs/promises';
+import { rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { runWorkspace, type RunRecord } from './runHarness';
 
@@ -96,6 +96,28 @@ test('queued training cancellation and frozen-input retry describe the work they
         .find((run) => ![original.id, retry.id].includes(run.id))
         ?.stages.find((stage) => stage.name === 'train')?.status,
     ).toBe('pending');
+    await rm(path.join(app.fixture, 'checkout', 'fail-train'));
+    await page
+      .getByRole('button', { name: 'Start training', exact: true })
+      .click();
+    await expect(
+      page.getByText('State: Completed', { exact: true }),
+    ).toBeVisible({ timeout: 240_000 });
+    const completedUrl = page.url();
+    await page.goto(`${app.url}/#/jobs/${job.id}`);
+    const inspect = page.getByRole('button', {
+      name: 'Review configuration',
+      exact: true,
+    });
+    await inspect.click();
+    await expect(inspect).toBeEnabled();
+    const results = page.getByRole('button', {
+      name: 'View results',
+      exact: true,
+    });
+    await expect(results).toBeVisible();
+    await results.click();
+    await expect(page).toHaveURL(completedUrl);
   } finally {
     await app.close();
   }
