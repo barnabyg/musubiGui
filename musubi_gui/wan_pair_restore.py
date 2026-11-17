@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 from musubi_gui.recipe import Stage
 from musubi_gui.run_paths import job_folder
 from musubi_gui.run_restore import (
+    ENDED_FIELDS,
     SegmentFolder,
     continuous_segment,
     resume_step,
@@ -130,23 +131,7 @@ def restored_pair(
         if snapshot:
             record.update({**snapshot.fields(), "input_files": files}, order=time.time_ns())
             record["segment"].update(dataset_changes=snapshot.dataset)
-        for key in [
-            "stop_requested",
-            "stop_kind",
-            "finished",
-            "execution_end_unknown",
-            "exit_code",
-            "checkpoints",
-            "removed_duplicates",
-            "retention",
-            "sample_pair",
-            "samples",
-            "state_source",
-            "controller",
-            "job_objects",
-            "launch_pending",
-            "control_request",
-            "controls",
-        ]:
+        # A paired segment resumes from `pair_sources`, never a single `state_source`.
+        for key in [*ENDED_FIELDS, "state_source"]:
             record.pop(key, None)
         return record

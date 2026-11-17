@@ -20,8 +20,8 @@ if TYPE_CHECKING:
     from musubi_gui.job_models import Job
     from musubi_gui.resume_refresh import Refresh
 
-# Outcome fields of the original Run that a restored segment starts without.
-_ENDED_FIELDS = [
+# Outcome and process fields of the original Run that a restored segment, single or paired, starts without.
+ENDED_FIELDS = (
     "stop_requested",
     "stop_kind",
     "finished",
@@ -30,9 +30,14 @@ _ENDED_FIELDS = [
     "checkpoints",
     "removed_duplicates",
     "retention",
+    "sample_pair",
+    "samples",
+    "controller",
+    "job_objects",
+    "launch_pending",
     "control_request",
     "controls",
-]
+)
 
 
 class SegmentFolder:
@@ -180,7 +185,7 @@ def restored_segment(
             segment={**continuous_segment(saved, target_steps), "optimizer_step_before": state["optimizer_step"]},
             state_source={"path": state["path"], "files": state["files"]},
         )
-        for key in _ENDED_FIELDS:
+        for key in ENDED_FIELDS:
             record.pop(key, None)
         if revision:
             record["job"] = revision.model_dump()
