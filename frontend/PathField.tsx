@@ -207,6 +207,7 @@ function CheckMessage({ id, check }: { id: string; check?: Check }) {
 export function PathField({
   label,
   value,
+  inheritedValue,
   kind,
   inputId,
   roots = [],
@@ -219,6 +220,7 @@ export function PathField({
 }: {
   label: string;
   value: string;
+  inheritedValue?: string;
   kind: Kind;
   inputId?: string;
   roots?: string[];
@@ -233,7 +235,8 @@ export function PathField({
   const generatedId = useId();
   const id = inputId ?? generatedId;
   const [focused, setFocused] = useState(false);
-  const result = usePathCheck(value, kind, roots);
+  const effective = value || inheritedValue || '';
+  const result = usePathCheck(effective, kind, roots);
   const check =
     result?.state === 'missing' && missingMessage
       ? { ...result, message: missingMessage }
@@ -245,9 +248,9 @@ export function PathField({
         <input
           id={id}
           value={value}
-          title={value || undefined}
+          title={effective || undefined}
           disabled={disabled}
-          placeholder={placeholder}
+          placeholder={inheritedValue || placeholder}
           aria-invalid={check?.message ? true : undefined}
           aria-describedby={check?.message ? `${id}-check` : undefined}
           onFocus={() => setFocused(true)}
@@ -257,13 +260,13 @@ export function PathField({
         <Browse
           label={label}
           kind={kind}
-          start={value || roots[0] || ''}
+          start={effective || roots[0] || ''}
           disabled={disabled}
           onChoose={onChange}
         />
       </div>
       <CheckMessage id={`${id}-check`} check={check} />
-      {focused && value && <small className="path-full">{value}</small>}
+      {focused && effective && <small className="path-full">{effective}</small>}
       {help && <small>{help}</small>}
     </div>
   );
