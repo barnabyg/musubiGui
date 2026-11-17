@@ -335,7 +335,12 @@ test('an H3 job adds an image dataset, warns that it is experimental and uses th
     await expect(panel).toContainText('experimental');
     await expect(panel).toContainText('every other model using it');
     await expect(panel).toContainText('1 supervised / 1 included');
+    const perItem = panel.getByText('Per-item audio diagnostics', {
+      exact: true,
+    });
+    await expect(perItem).toBeHidden();
     await page.getByText('Configuration details', { exact: true }).click();
+    await expect(perItem).toBeVisible();
     const args = (name: string) =>
       panel
         .locator('details details')

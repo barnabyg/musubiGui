@@ -299,14 +299,16 @@ export function JobReview({
             {review.audio_coverage.included} included;{' '}
             {review.audio_coverage.missing} without audio.
           </p>
-          <details>
-            <summary>Per-item audio diagnostics</summary>
-            <pre>{JSON.stringify(review.audio_coverage.items, null, 2)}</pre>
-          </details>
         </>
       )}
       <details>
         <summary>Configuration details</summary>
+        {job.family === 'h3' && review.audio_coverage.included > 0 && (
+          <details>
+            <summary>Per-item audio diagnostics</summary>
+            <pre>{JSON.stringify(review.audio_coverage.items, null, 2)}</pre>
+          </details>
+        )}
         <PreviewMemory stages={review.stages} />
         <p>Optimizer: {review.optimizer}</p>
         <p>
