@@ -1,5 +1,63 @@
 import { expect, test } from '@playwright/test';
+import { readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import type { Job, Review } from '../../frontend/jobTypes';
 import { runWorkspace } from './runHarness';
+
+test('clearing a model override restores the Settings path for display and review', async ({
+  page,
+}) => {
+  const app = await runWorkspace();
+  try {
+    const wan = app.manifest.jobs.find((draft) => draft.family === 'wan')!;
+    const settings = (await (
+      await page.request.get(`${app.url}/api/settings`)
+    ).json()) as { models: Record<string, string> };
+    // Previously saved drafts may store an explicit empty-string override.
+    const file = path.join(app.manifest.state, 'jobs', wan.id, '1.json');
+    const legacy = JSON.parse(await readFile(file, 'utf8')) as Job;
+    legacy.config.components.wan_low = '';
+    await writeFile(file, JSON.stringify(legacy));
+    const component = page.getByRole('textbox', { name: 'Wan low-noise DiT' });
+    const openComponents = () =>
+      page.getByText('Model components', { exact: true }).click();
+    async function reviewedPath() {
+      const response = page.waitForResponse(
+        (response) =>
+          response.url().endsWith(`/api/jobs/${wan.id}/review`) &&
+          response.request().method() === 'POST',
+      );
+      await page
+        .getByRole('button', { name: 'Review configuration', exact: true })
+        .click();
+      const review = (await (await response).json()) as Review;
+      expect(review.errors).toEqual([]);
+      return review.models.wan_low;
+    }
+    await page.goto(`${app.url}/#/jobs/${wan.id}`);
+    await openComponents();
+    await expect(component).toHaveAttribute('title', settings.models.wan_low);
+    expect(await reviewedPath()).toBe(settings.models.wan_low);
+
+    await page.getByRole('tab', { name: 'Job & dataset', exact: true }).click();
+    await component.fill(settings.models.wan_high);
+    await expect(page.getByText('Job override', { exact: true })).toBeVisible();
+    expect(await reviewedPath()).toBe(settings.models.wan_high);
+    await page.getByRole('tab', { name: 'Job & dataset', exact: true }).click();
+    await component.fill('');
+    await page.getByRole('button', { name: 'Save draft', exact: true }).click();
+    await expect(page.getByRole('status')).toContainText('Draft saved');
+    await page.reload();
+    await openComponents();
+    await expect(component).toHaveAttribute('title', settings.models.wan_low);
+    await expect(page.getByText('Job override', { exact: true })).toHaveCount(
+      0,
+    );
+    expect(await reviewedPath()).toBe(settings.models.wan_low);
+  } finally {
+    await app.close();
+  }
+});
 
 test('contextual help preserves the draft and run notifications persist in Settings', async ({
   page,

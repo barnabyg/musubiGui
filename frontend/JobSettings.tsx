@@ -172,16 +172,19 @@ export function JobIdentity({
             help={
               job.config.components[key]
                 ? 'Job override'
-                : 'Inherited from Settings'
+                : models[key]
+                  ? 'Inherited from Settings'
+                  : 'Choose a file here or set the default in Settings.'
             }
             kind="file"
             roots={modelRoots}
             disabled={busy}
-            value={job.config.components[key] ?? models[key] ?? ''}
+            inheritedValue={models[key]}
+            value={job.config.components[key] ?? ''}
             onChange={(value) =>
               config('components', {
                 ...job.config.components,
-                [key]: value,
+                [key]: value.trim() ? value : '',
               })
             }
           />

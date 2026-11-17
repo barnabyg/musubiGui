@@ -59,8 +59,9 @@ edits as a new revision first; if the save fails, the review stops and the edits
 screen. Prepare only and Prepare and start use the revision that passed review. If another
 tab saves a newer revision, preparation reports the old and new revision numbers and stops.
 Choose Review configuration to load the saved changes and review them before preparing.
-Component overrides must stay inside the configured
-model roots. The original Wan recipe trains the low-noise expert. A separate
+Component overrides must stay inside the configured model roots. Clear an
+override to inherit that component from Settings again. The field shows the
+inherited path, and Review uses the current default. The original Wan recipe trains the low-noise expert. A separate
 [native-weight CLI acceptance scenario](reference/wan.md#native-weight-qualification)
 also passed high-noise-only training; that recipe is not exposed by the GUI.
 The [alternating recipe](jobs-training.md#alternating-wan-highlow-loras) trains both

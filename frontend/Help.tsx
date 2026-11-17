@@ -17,7 +17,7 @@ const topics = {
   'Time estimates':
     'Training ETA is the trainer’s forecast for its current training stage. In alternating Wan training, Phase ETA covers only the current expert phase. Estimated training remaining projects the observed step speed to the target, excluding future model loading, previews and final sampling. Estimated Run remaining also budgets measured sampling and overhead. A partial estimate covers only the measured components. Unknown means the required timings are still unavailable.',
   'Model paths':
-    'Settings holds the model, dataset, output and cache folders for this installation. Jobs inherit the model component files configured there. A path entered under Job & dataset overrides that component for the job and must be inside a configured model folder.',
+    'Settings holds the model, dataset, output and cache folders for this installation. Jobs inherit the model component files configured there. A path entered under Job & dataset overrides that component for the job and must be inside a configured model folder. Clear the override to use the Settings path again.',
 };
 type Topic = keyof typeof topics;
 const OpenHelp = createContext<(topic: Topic) => void>(() => {});
