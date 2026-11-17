@@ -152,6 +152,8 @@ export function Jobs(props: JobsProps) {
         <JobActionBar
           actionBar={actionBar}
           status={status}
+          current={current}
+          openRun={(id) => onRun?.(id)}
           job={job}
           dirty={dirty}
           busy={busy}

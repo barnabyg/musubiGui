@@ -219,7 +219,7 @@ test('a queued Run refuses delete and archive; archiving hides a job, keeps its 
       .getByRole('button', { name: 'Review configuration', exact: true })
       .click();
     await page
-      .getByRole('button', { name: 'Prepare run', exact: true })
+      .getByRole('button', { name: 'Prepare only', exact: true })
       .click();
     await expect
       .poll(async () => (await app.records())[0]?.status, { timeout: 240_000 })

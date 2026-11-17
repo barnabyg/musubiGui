@@ -226,8 +226,8 @@ export function JobReview({
               : `, saved at step ${review.resume_compatibility.saved_step}`}
             ).{' '}
             {review.resume_compatibility.compatible
-              ? 'Its saved state can resume with this revision. Prepare and start resumes it.'
-              : 'Its saved state can’t resume with this revision; Prepare and start offers a fresh training.'}
+              ? 'Its saved state can resume with this revision.'
+              : 'Its saved state can’t resume with this revision. Starting fresh requires confirmation.'}
           </p>
           <ResumeChanges result={review.resume_compatibility} />
         </section>

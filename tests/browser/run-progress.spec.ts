@@ -124,7 +124,7 @@ test('Prepare and start keeps going with the tab closed, and the tab title signa
     // Prepare alone stops at prepared, and says so in the title from any screen.
     await openJob(first.name);
     await page
-      .getByRole('button', { name: 'Prepare run', exact: true })
+      .getByRole('button', { name: 'Prepare only', exact: true })
       .click();
     await expect(page).toHaveTitle(`Ready: ${first.name} — Musubi`, {
       timeout: 240_000,

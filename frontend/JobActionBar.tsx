@@ -1,11 +1,15 @@
 import type { ReactNode, RefObject } from 'react';
 import { ActionMenu } from './ActionMenu';
+import { hasActiveWork, type CurrentTraining } from './currentTraining';
+import { runStatus } from './runStatus';
 import { sections } from './jobSections';
 import type { Job, Review } from './jobTypes';
 
 export function JobActionBar({
   actionBar,
   status,
+  current,
+  openRun,
   job,
   dirty,
   busy,
@@ -27,6 +31,8 @@ export function JobActionBar({
 }: {
   actionBar: RefObject<HTMLDivElement | null>;
   status: string;
+  current: CurrentTraining;
+  openRun: (id: string) => void;
   job: Job | null;
   dirty: boolean;
   busy: boolean;
@@ -46,10 +52,30 @@ export function JobActionBar({
   deleteJob: (target: Job) => Promise<void>;
   setTransferOpen: (open: boolean) => void;
 }) {
+  const latest = current.latest;
+  const active = hasActiveWork(latest?.status);
+  const completedRevision =
+    latest?.status === 'completed' && latest.job.revision === job?.revision;
+  const view = !dirty && latest && (active || completedRevision);
+  const compatibility = review?.resume_compatibility;
+  const saved = current.resume;
+  const checkedSource =
+    saved && compatibility?.run_id === saved.run_id ? compatibility : undefined;
+  const savedStep = checkedSource?.saved_step ?? saved?.saved_step;
+  let startLabel = 'Prepare and start';
+  if (saved) {
+    if (checkedSource && !checkedSource.compatible)
+      startLabel = 'Start fresh training';
+    else if (savedStep != null) startLabel = `Resume from step ${savedStep}`;
+    else startLabel = 'Check saved state and resume';
+  }
   return (
     <div className="job-action-bar" ref={actionBar}>
       <div className="actions">
-        <span role="status">{status}</span>
+        <span role="status">
+          {status ||
+            (latest ? runStatus(latest.status).label : 'Training submitted')}
+        </span>
         {job && (
           <>
             <button
@@ -60,29 +86,39 @@ export function JobActionBar({
               Save draft
             </button>
             <button
-              className={!dirty && !review?.valid ? 'primary' : ''}
+              className={!view && !dirty && !review?.valid ? 'primary' : ''}
               disabled={busy}
               onClick={() => void inspect()}
             >
               Review configuration
             </button>
             <button
-              disabled={busy || !!prepareReason}
+              disabled={busy || active || !!prepareReason}
               title={prepareReason || undefined}
               aria-describedby={prepareReason ? 'prepare-reason' : undefined}
               onClick={() => void prepare()}
             >
-              Prepare run
+              Prepare only
             </button>
-            <button
-              className={prepareReason ? '' : 'primary'}
-              disabled={busy || !!prepareReason}
-              title={prepareReason || undefined}
-              aria-describedby={prepareReason ? 'prepare-reason' : undefined}
-              onClick={() => void start()}
-            >
-              Prepare and start
-            </button>
+            {view ? (
+              <button
+                className="primary"
+                disabled={busy}
+                onClick={() => openRun(latest.id)}
+              >
+                {active ? 'View active Run' : 'View results'}
+              </button>
+            ) : (
+              <button
+                className={prepareReason ? '' : 'primary'}
+                disabled={busy || active || !!prepareReason}
+                title={prepareReason || undefined}
+                aria-describedby={prepareReason ? 'prepare-reason' : undefined}
+                onClick={() => void start()}
+              >
+                {startLabel}
+              </button>
+            )}
           </>
         )}
         <ActionMenu

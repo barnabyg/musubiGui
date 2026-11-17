@@ -35,7 +35,7 @@ test('a late review cannot authorize a different job at the same revision', asyn
       page.getByRole('button', { name: 'Review configuration' }),
     ).toBeEnabled();
     await expect(
-      page.getByRole('button', { name: 'Prepare run', exact: true }),
+      page.getByRole('button', { name: 'Prepare only', exact: true }),
     ).toBeDisabled();
     await expect(
       page.getByRole('region', { name: 'Configuration review' }),
@@ -62,7 +62,7 @@ test('a second tab changing a reviewed job blocks both prepare actions until the
 
     for (const [index, action] of [
       'Prepare and start',
-      'Prepare run',
+      'Prepare only',
     ].entries()) {
       const revision = index + 2;
       const name = `Renamed in tab B ${revision}`;
@@ -77,7 +77,7 @@ test('a second tab changing a reviewed job blocks both prepare actions until the
         `changed from revision ${revision - 1} to revision ${revision}`,
       );
       await expect(
-        page.getByRole('button', { name: 'Prepare run', exact: true }),
+        page.getByRole('button', { name: 'Prepare only', exact: true }),
       ).toBeDisabled();
       expect(await app.records()).toHaveLength(0);
 
@@ -89,7 +89,7 @@ test('a second tab changing a reviewed job blocks both prepare actions until the
     }
 
     await page
-      .getByRole('button', { name: 'Prepare run', exact: true })
+      .getByRole('button', { name: 'Prepare only', exact: true })
       .click();
     await expect(page.getByLabel('Run stages')).toBeVisible();
     await expect(

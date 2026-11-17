@@ -152,7 +152,7 @@ for (const family of ['wan', 'h3'] as const) {
             review.getByRole('heading', { name: 'Audio coverage' }),
           ).toHaveCount(0);
         await page
-          .getByRole('button', { name: 'Prepare run', exact: true })
+          .getByRole('button', { name: 'Prepare only', exact: true })
           .click();
         await expect
           .poll(
@@ -293,7 +293,7 @@ test('mixed folders and matching filenames keep separate captions and caches acr
         .locator('tbody tr'),
     ).toHaveCount(3);
     await page
-      .getByRole('button', { name: 'Prepare run', exact: true })
+      .getByRole('button', { name: 'Prepare only', exact: true })
       .click();
     await expect
       .poll(

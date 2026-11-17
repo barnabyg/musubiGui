@@ -56,7 +56,7 @@ follow. The disk breakdown is collapsed, and Advanced holds the resolved compone
 paths, model provenance, native dataset TOML and each upstream argument array. Errors
 block preparation while the draft remains editable. Review configuration saves unsaved
 edits as a new revision first; if the save fails, the review stops and the edits stay on
-screen. Prepare run and Prepare and start use the revision that passed review. If another
+screen. Prepare only and Prepare and start use the revision that passed review. If another
 tab saves a newer revision, preparation reports the old and new revision numbers and stops.
 Choose Review configuration to load the saved changes and review them before preparing.
 Component overrides must stay inside the configured
@@ -90,7 +90,7 @@ before the saved step are reported too. The saved step comes from the Run's last
 saved states**; before that, review reports state folders without a step and skips that
 check. Review never hashes states; it hashes the datasets' media to compare their contents,
 as preparing does. Prepare and start resumes that Run when the revision can take it, and
-otherwise offers a fresh training; Prepare run always prepares a new Run. Run details offers
+otherwise offers a fresh training; Prepare only always prepares a new Run. Run details offers
 the same check as [Resume](runs-saved-state.md#resuming-with-an-edited-job-revision), which
 also lists the tiers.
 
@@ -186,7 +186,7 @@ Focused checks: `npm.cmd run typecheck` and
 `.venv\Scripts\python.exe -m pytest tests/python/test_jobs_api.py -q`. Browser checks
 cover the editor through the API and persistent storage. For manual review, save an
 incomplete draft, restart, change frame count to 18 and enable inactive-DiT offload.
-Review must explain both errors and disable Prepare run. Correct the fields, compare
+Review must explain both errors and disable Prepare only. Correct the fields, compare
 the reviewed TOML and arguments with the controls, and verify reopening retains them.
 Real preparation/training requires the compatible model files and environment described
 in [reference workflows](reference/README.md); fake acceptance fixtures do not prove
@@ -200,7 +200,7 @@ To check two-tab review in an isolated CPU fixture, run this from the repository
 
 Open WAN acceptance 1 in two tabs. Review in A, rename and save in B, then choose
 Prepare and start in A. Expect the revision-change message and an empty Run history.
-In A, choose Review configuration, confirm the new name, then choose Prepare run.
+In A, choose Review configuration, confirm the new name, then choose Prepare only.
 The Run in history shows the new name and the revision that passed review.
 
 Browser checks: `npm.cmd run test:browser -- tests/browser/job-` runs every

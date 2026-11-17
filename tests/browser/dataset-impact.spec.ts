@@ -79,7 +79,7 @@ test('dataset inclusion and removal name dependent drafts while prepared Runs ke
       page.getByText('Review passed for revision 1', { exact: true }),
     ).toBeVisible({ timeout: 240_000 });
     await page
-      .getByRole('button', { name: 'Prepare run', exact: true })
+      .getByRole('button', { name: 'Prepare only', exact: true })
       .click();
     await expect(
       page.getByText('State: Ready to start', { exact: true }),

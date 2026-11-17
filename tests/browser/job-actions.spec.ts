@@ -174,7 +174,7 @@ test('Review saves a dirty draft first, and disabled actions explain themselves'
       .click();
 
     const prepare = page.getByRole('button', {
-      name: 'Prepare run',
+      name: 'Prepare only',
       exact: true,
     });
     const review = page.getByRole('button', {

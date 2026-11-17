@@ -102,7 +102,7 @@ PowerShell 7:
 ```
 
 Open a Wan job, apply **Smoke test · Wan alternating · 4 steps**, save and review,
-then choose **Prepare run**. Both expert checkpoints should say **Checkpoint pending**
+then choose **Prepare only**. Both expert checkpoints should say **Checkpoint pending**
 without an incomplete-pair warning. Choose **Start training**; after completion,
 both expert download links should appear. This synthetic fixture checks the UI and
 orchestration without model weights or GPU training.

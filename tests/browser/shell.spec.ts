@@ -121,7 +121,7 @@ test('each view has one primary action, destructive actions look dangerous and f
     await expect(preset).toHaveCSS('outline-style', 'solid');
     await expect(preset).toHaveCSS('outline-width', '2px');
 
-    await named('Prepare run').click();
+    await named('Prepare only').click();
     await expect(page.getByLabel('Run stages')).toBeVisible();
     await expect(named('Delete run')).toHaveClass(/danger/);
     await expect

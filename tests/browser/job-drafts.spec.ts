@@ -67,7 +67,7 @@ test('Wan draft controls, validation and reviewed native configuration survive s
       page.getByText('Frames: Wan requires 4*n+1 frames.', { exact: true }),
     ).toBeVisible();
     await expect(
-      page.getByRole('button', { name: 'Prepare run', exact: true }),
+      page.getByRole('button', { name: 'Prepare only', exact: true }),
     ).toBeDisabled();
     await page
       .getByRole('tab', { name: 'Dataset preparation', exact: true })

@@ -173,7 +173,7 @@ test('a Wan job combines an image dataset and a video dataset through review, re
       .click();
     await expect(page.getByRole('status')).toContainText('Review passed');
     await page
-      .getByRole('button', { name: 'Prepare run', exact: true })
+      .getByRole('button', { name: 'Prepare only', exact: true })
       .click();
     await expect(
       page.getByRole('heading', { name: 'Run details' }),

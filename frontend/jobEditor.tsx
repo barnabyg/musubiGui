@@ -2,7 +2,11 @@ import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import { confirmDialog } from './ConfirmDialog';
 import { apiClient } from './api';
 import { type CaptionSession, useJobCaptionState } from './captionSession';
-import { type JobTrainingInfo, useCurrentTraining } from './currentTraining';
+import {
+  hasActiveWork,
+  type JobTrainingInfo,
+  useCurrentTraining,
+} from './currentTraining';
 import { jobFields } from './jobFields';
 import { jobMedia } from './jobMedia';
 import type {
@@ -408,7 +412,7 @@ export function useJobEditor({
     }
     // The Job page follows the training it started; Run details is a link away.
     await refreshRunHistory();
-    setStatus('Training submitted: preparation runs first');
+    setStatus('');
   }
   async function prepare() {
     if (!job || !review?.valid || dirty) return;
@@ -426,6 +430,10 @@ export function useJobEditor({
       const training = await request<JobTrainingInfo>(
         `/api/jobs/${job.id}/training`,
       );
+      if (training.run_id && hasActiveWork(training.status)) {
+        await refreshRunHistory();
+        return;
+      }
       const source = training.resume;
       if (source) {
         let check: ResumeCompatibility | undefined;
@@ -454,9 +462,7 @@ export function useJobEditor({
           );
           await refreshRunHistory();
           current.reload();
-          setStatus(
-            `Resuming from step ${check.saved_step} until step ${check.target_steps}`,
-          );
+          setStatus('');
           return;
         }
         const fresh = await confirmDialog({

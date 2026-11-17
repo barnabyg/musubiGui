@@ -41,16 +41,14 @@ async function pacedJob(app: Workspace, config: Record<string, unknown> = {}) {
   return job;
 }
 
-async function reviewAndStart(page: Page) {
+async function reviewAndStart(page: Page, action = 'Prepare and start') {
   await page
     .getByRole('button', { name: 'Review configuration', exact: true })
     .click();
   await expect(page.getByText(/^Review passed for revision \d+$/)).toBeVisible({
     timeout: 240_000,
   });
-  await page
-    .getByRole('button', { name: 'Prepare and start', exact: true })
-    .click();
+  await page.getByRole('button', { name: action, exact: true }).click();
 }
 
 // Starts the Job from its page and stops it with Save and stop there; returns the stop step.
@@ -143,13 +141,7 @@ test('Start on the Job page resumes a stopped training with an edited prompt and
     await page.getByRole('tab', { name: 'Samples', exact: true }).click();
     await page.getByLabel('Sample prompt').fill(NEW_PROMPT);
     await instantSteps(app);
-    await reviewAndStart(page);
-    // A plain resume needs no confirmation: no warned change, no re-prepare.
-    await expect(
-      page.getByText(`Resuming from step ${step} until step 210`, {
-        exact: true,
-      }),
-    ).toBeVisible({ timeout: 240_000 });
+    await reviewAndStart(page, `Resume from step ${step}`);
     await expect(
       panel.getByText('State: Completed', { exact: true }),
     ).toBeVisible({ timeout: 240_000 });
@@ -177,6 +169,10 @@ test('Start on the Job page resumes a stopped training with an edited prompt and
       'stopped',
     );
     await noHorizontalScroll(page);
+    await page
+      .getByRole('button', { name: 'View results', exact: true })
+      .click();
+    await expect(page).toHaveURL(`${app.url}/#/runs/${segment.id}`);
   } finally {
     await app.close();
   }
@@ -206,7 +202,7 @@ test('an edit that needs a new Run makes Start name the fields and start fresh o
     }
     await page.getByRole('tab', { name: 'Training', exact: true }).click();
     await page.getByLabel('LoRA rank', { exact: true }).fill('16');
-    await reviewAndStart(page);
+    await reviewAndStart(page, 'Start fresh training');
     const dialog = page.getByRole('dialog');
     await expect(dialog).toContainText('Start a fresh training?', {
       timeout: 240_000,
@@ -223,7 +219,7 @@ test('an edit that needs a new Run makes Start name the fields and start fresh o
     expect(await app.records()).toHaveLength(1);
 
     await page
-      .getByRole('button', { name: 'Prepare and start', exact: true })
+      .getByRole('button', { name: 'Start fresh training', exact: true })
       .click();
     await page
       .getByRole('dialog')
@@ -265,6 +261,9 @@ test('live progress on the Job page matches Run details', async ({
     await expect(
       panel.getByText('State: Training', { exact: true }),
     ).toBeVisible({ timeout: 240_000 });
+    await expect(
+      page.getByRole('button', { name: 'View active Run' }),
+    ).toBeVisible();
     const [run] = await app.records();
     const details = await context.newPage();
     await details.goto(`${app.url}/#/runs/${run.id}`);

@@ -81,7 +81,7 @@ for each and set the dataset training sizes to 320 × 256 and 256 × 320. Save a
 reload: both sizes should remain, marked **custom**. Change the default: neither
 custom size should change. In **Samples**, set sample width and height to 256.
 Review should list both training sizes and pass, while the sample remains 256 × 256.
-Choose **Prepare run** and expect a prepared Run. Repeat with an invalid width of
+Choose **Prepare only** and expect a prepared Run. Repeat with an invalid width of
 65: review should link to that dataset's width and block preparation. The default
 fixture uses CPU workers; it proves orchestration and persistence, not GPU capacity
 or useful training. Real GPU geometry changes still require capacity qualification.
@@ -151,7 +151,7 @@ video-only and combined jobs for both model families:
 
 Open the printed URL (normally `http://127.0.0.1:8767`). In Jobs, compare **WAN
 images only**, **WAN acceptance 1** (videos) and **WAN images + videos**. Open
-each relevant tab and check the applicable controls. Review and **Prepare run**
+each relevant tab and check the applicable controls. Review and **Prepare only**
 each job. Expect one image section, one video section, or both respectively; the
 combined job's images have repeats 2. Reopen the job and expect its dataset list
 and repeats to remain. Repeat for H3, checking its experimental image warning

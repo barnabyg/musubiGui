@@ -121,7 +121,7 @@ test('alternating Wan settings persist, train both experts and restore the paire
     await expect(schedule).toContainText('High-noise: 8 steps');
     await expect(schedule).toContainText('fresh dataset pass');
     await page
-      .getByRole('button', { name: 'Prepare run', exact: true })
+      .getByRole('button', { name: 'Prepare only', exact: true })
       .click();
     await expect(
       page.getByRole('button', { name: 'Start training', exact: true }),

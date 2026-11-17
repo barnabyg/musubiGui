@@ -83,7 +83,7 @@ test('leaving a pending bulk caption repair via Jobs waits before preparation an
       .click();
     await expect(page.getByText('Review passed for revision 1')).toBeVisible();
     const prepare = page.getByRole('button', {
-      name: 'Prepare run',
+      name: 'Prepare only',
       exact: true,
     });
     await expect(prepare).toBeDisabled();

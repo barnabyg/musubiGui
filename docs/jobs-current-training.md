@@ -16,7 +16,7 @@ LoRA checkpoint with a download link, from every segment's files in step order; 
 lists them all.
 
 **Prepare and start** stays on the Job page, which then follows the new training.
-**Prepare run** still opens Run details, where the prepared Run is started.
+**Prepare only** still opens Run details, where the prepared Run is started.
 
 ## Start resumes implicitly
 
@@ -32,12 +32,13 @@ fresh training.** It stays editable. Save optimizer/training state is marked onl
 for a training that kept state: turning it on always resumes. The fields and tiers are listed in
 [Resuming with an edited Job revision](runs-saved-state.md#resuming-with-an-edited-job-revision).
 
-**Prepare and start** on the reviewed revision then decides:
+The action bar follows the current Run. **View active Run** opens queued or running work.
+**View results** opens the finished Run for the completed revision. After changing the target,
+save and review the draft. The launch action uses the reviewed settings:
 
 - **Resume.** It checks the saved states and compares the reviewed revision with the one that
   trained them. When the revision can take it, it resumes the latest valid state as a new
-  segment until the Job's Training steps, with the revision's settings, and says
-  `Resuming from step 300 until step 600`. Numbering continues across segments. A plain resume
+  segment until the Job's Training steps, with the revision's settings. Numbering continues across segments. A plain resume
   asks nothing; one with warned changes (learning rate, timestep strategy and the like) or a
   dataset re-prepare first shows a confirmation with the work and, for warned changes, the
   acknowledgement.
@@ -46,8 +47,7 @@ for a training that kept state: turning it on always resumes. The fields and tie
   names each changed field that needs a new Run with its old and new value, and any other
   reason. **Start fresh** prepares and starts a new Run from step 0; **Keep editing** changes
   nothing. The previous training stays in Runs.
-- **Prepare and start as before** when there is no saved state, or the current training is
-  still preparing, queued or training.
+- **Prepare and start** starts training when there is no saved state.
 
 The resumed state belongs to the current training's line: the most recently created ended
 segment with a saved state, so a segment that failed before saving resumes from the state it
@@ -77,10 +77,10 @@ state. Choose Review configuration, then **Prepare and start**.
 2. Choose **Save and stop** on the Job page. Expect Stopped, a note that training stopped at
    step N with its last state saved at step N, and the steps label
    `Training steps (total; training is at step N)`. LoRA rank shows the Needs a new Run hint.
-3. Set Training steps to 210 and change the sample prompt. Review, then **Prepare and start**.
-   Expect no dialog, `Resuming from step N until step 210`, then Segment 2 of 2 completing at
+3. Set Training steps to 210 and change the sample prompt. Review, then choose **Resume from step …**.
+   Expect no dialog, then Segment 2 of 2 completing at
    Step 210/210 without leaving the Job page.
-4. Set LoRA rank to 16, review and **Prepare and start**. Expect **Start a fresh training?**
+4. Set LoRA rank to 16, review and choose **Start fresh training**. Expect **Start a fresh training?**
    listing `LoRA rank: 8 → 16`. Keep editing creates nothing; Start fresh starts a new Run,
    and the stopped training stays in Runs.
 5. At 375 px wide, the page has no horizontal scroll.
