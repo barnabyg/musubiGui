@@ -30,7 +30,8 @@ Settings shows the next outstanding step and groups completed steps under **Comp
 Use **Go to installation** to reach the installer, **Configure folders** to reach the first missing
 location, or **Check setup now** to run diagnostics. A failed check links to the relevant
 installation or storage control. **Start a Run** opens a prepared Run or a saved job and offers
-a choice when several are available. When every job is already running or has completed its saved
+a choice when several are available. Prepared Runs stay available after later revisions finish or the
+job is archived. When there are no prepared Runs and every job is active or has completed its saved
 revision, the checklist links to those Runs or their results. Training begins only after you choose
 its start action.
 
