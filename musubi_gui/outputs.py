@@ -22,6 +22,7 @@ from musubi_gui.runs import RunService
 from musubi_gui.safetensors_file import complete_safetensors
 from musubi_gui.settings import atomic_json, load_settings, within_root
 from musubi_gui.snapshots import digest_file
+from musubi_gui.step_offset import numbers_continuously
 from musubi_gui.wan_pair_runtime import is_paired
 
 _lock = threading.RLock()
@@ -241,7 +242,7 @@ class OutputBrowser:
                                     "seed": run["job"]["config"].get("seed"),
                                     "counter": (
                                         "total optimizer updates"
-                                        if "target_steps" in run.get("segment", {})
+                                        if numbers_continuously(run)
                                         else "segment optimizer updates"
                                     ),
                                 }

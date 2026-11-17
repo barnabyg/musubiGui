@@ -8,6 +8,14 @@ from typing import Any
 ENVIRONMENT = "MUSUBI_STEP_OFFSET"
 
 
+def numbers_continuously(run: dict[str, Any]) -> bool:
+    """Whether `run` is a restored segment that continues its source's step numbering.
+
+    False for a fresh Run, and for a legacy segment restored before continuous numbering, which counts its own steps.
+    """
+    return "target_steps" in (run.get("segment") or {})
+
+
 def segment_step_offset(run: dict[str, Any], stage: dict[str, Any]) -> int:
     """Optimizer updates completed before this segment's training stage started counting.
 

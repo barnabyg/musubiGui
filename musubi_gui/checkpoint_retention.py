@@ -14,7 +14,7 @@ from musubi_gui.safetensors_file import complete_safetensors
 from musubi_gui.saved_state import inspect_state
 from musubi_gui.settings import atomic_json, within_root
 from musubi_gui.snapshots import digest_file
-from musubi_gui.step_offset import segment_step_offset
+from musubi_gui.step_offset import numbers_continuously, segment_step_offset
 from musubi_gui.wan_pair import phase_counts
 from musubi_gui.wan_pair_runtime import is_paired
 
@@ -101,7 +101,7 @@ def retention_scope(runs: list[dict[str, Any]], run_id: str) -> list[dict[str, A
         len(line) < 2
         or run_id not in chain.line
         or any(is_paired(member) for member in line)
-        or any("target_steps" not in member.get("segment", {}) for member in line[1:])
+        or not all(numbers_continuously(member) for member in line[1:])
     ):
         return [by_id[run_id]]
     return line

@@ -15,6 +15,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any, NamedTuple
 
+from musubi_gui.step_offset import numbers_continuously
+
 
 class StepRange(NamedTuple):
     """The global steps a Run trains: from `start` (its saved step) until `target`.
@@ -33,7 +35,7 @@ def step_range(run: dict[str, Any]) -> StepRange:
     if not segment:
         config = run.get("job", {}).get("config") or {}
         return StepRange(0, int(config.get("steps") or 0), False)
-    if "target_steps" in segment:
+    if numbers_continuously(run):
         return StepRange(int(segment.get("step_offset", 0)), int(segment["target_steps"]), False)
     start = int(segment.get("schedule_start", segment.get("optimizer_step_before", 0)) or 0)
     return StepRange(start, start + int(segment.get("additional_steps", 0)), True)

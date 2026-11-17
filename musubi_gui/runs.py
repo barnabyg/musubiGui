@@ -43,7 +43,7 @@ from musubi_gui.run_store import (
 from musubi_gui.saved_state import discover_states
 from musubi_gui.settings import Settings, atomic_json, load_settings, managed_settings
 from musubi_gui.snapshots import identify_snapshot, materialize_snapshot, verify_inputs
-from musubi_gui.step_offset import segment_step_offset
+from musubi_gui.step_offset import numbers_continuously, segment_step_offset
 from musubi_gui.wan_pair_runtime import is_paired, paired_saved_states, stage_log
 
 
@@ -232,7 +232,7 @@ class RunService:
             progress["unsaved_steps"] = unsaved_steps(run, stage, progress["step"])
         segment = run.get("segment", {})
         # Segments restored before continuous numbering report their own steps and requested additional steps.
-        continuous = "target_steps" in segment
+        continuous = numbers_continuously(run)
         if progress and stage.get("training"):
             phase = stage["training"]
             from musubi_gui.wan_pair import phase_counts
