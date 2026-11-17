@@ -1,4 +1,9 @@
 import { useEffect, useState } from 'react';
+import {
+  MediaPreview,
+  useOutputPreviews,
+  type OutputPreviews,
+} from './OutputPreview';
 import { apiClient } from './api';
 import { trainingOf, trainings } from './runChains';
 import { useRunHistory } from './runHistory';
@@ -61,18 +66,6 @@ function mediaFiles(outputs: Output[]) {
   );
 }
 
-function latestSample(outputs: Output[]) {
-  return mediaFiles(outputs).reduce<Output | undefined>(
-    (latest, item) =>
-      item.status === 'available' &&
-      item.file_url &&
-      (!latest || (item.modified_ms ?? 0) >= (latest.modified_ms ?? 0))
-        ? item
-        : latest,
-    undefined,
-  );
-}
-
 // Whether a list merges more than one segment of a training.
 function merged(result: OutputList | null | undefined) {
   return (result?.segments?.length ?? 1) > 1;
@@ -89,38 +82,6 @@ function byteLabel(item: Output) {
   return item.bytes === undefined ? 'Size unknown' : sizeLabel(item.bytes);
 }
 
-function MediaPreview({ output }: { output: Output }) {
-  if (output.status !== 'available' || !output.file_url) return null;
-  if (output.kind === 'image')
-    return (
-      <img
-        className="output-media"
-        src={output.file_url}
-        alt={`Sample ${output.name}`}
-      />
-    );
-  if (output.kind === 'video')
-    return (
-      <video
-        className="output-media"
-        controls
-        preload="metadata"
-        src={output.file_url}
-        aria-label="Output video"
-      />
-    );
-  if (output.kind === 'audio')
-    return (
-      <audio
-        controls
-        preload="metadata"
-        src={output.file_url}
-        aria-label="Output audio"
-      />
-    );
-  return null;
-}
-
 function ComparisonSamples({
   result,
   label,
@@ -129,7 +90,8 @@ function ComparisonSamples({
   label: string;
 }) {
   const samples = mediaFiles(result.outputs);
-  const available = samples.filter((item) => item.status === 'available');
+  const previews = useOutputPreviews();
+  const available = samples.filter(previews.playable);
   const preview =
     available.find((item) => item.path.startsWith('samples/')) ??
     available.find((item) => item.kind === 'video') ??
@@ -181,7 +143,11 @@ function ComparisonSamples({
             <>
               <p>{outputLabel(sample, result)}</p>
               {sample.error && <p className="error">{sample.error}</p>}
-              <MediaPreview key={sample.id} output={sample} />
+              <MediaPreview
+                key={sample.id}
+                output={sample}
+                previews={previews}
+              />
             </>
           )}
         </>
@@ -252,8 +218,10 @@ export function useRunOutputs(
       controller.abort();
     };
   }, [runId, runState, chain, refresh]);
+  const previews = useOutputPreviews();
   const chosen = selection?.runId === runId ? selection : undefined;
   return {
+    previews,
     selected: chosen?.sample,
     select(item: Output) {
       if (!runId) return;
@@ -264,6 +232,7 @@ export function useRunOutputs(
     error: failure?.runId === runId ? failure?.message : '',
     busy,
     reload() {
+      previews.retry();
       setBusy(true);
       setRefresh((value) => value + 1);
     },
@@ -306,9 +275,15 @@ function Chooser({ item, outputs }: { item: Output; outputs: RunOutputs }) {
   );
 }
 
-function OutputDetail({ output, label }: { output: Output; label: string }) {
+function OutputDetail({
+  output,
+  previews,
+}: {
+  output: Output;
+  previews: OutputPreviews;
+}) {
   return (
-    <div className="output-detail" aria-label={label}>
+    <div className="output-detail" aria-label="Selected sample">
       <p>
         <strong>{output.name}</strong>
       </p>
@@ -323,11 +298,11 @@ function OutputDetail({ output, label }: { output: Output; label: string }) {
         )}
       </p>
       {output.error && <p className="error">{output.error}</p>}
-      <MediaPreview output={output} />
+      <MediaPreview output={output} previews={previews} />
       {output.file_url &&
         !['missing', 'blocked', 'unreadable'].includes(output.status) && (
           <p>
-            {output.status === 'available' && output.kind !== 'checkpoint' && (
+            {previews.playable(output) && (
               <>
                 <a href={output.file_url} target="_blank" rel="noreferrer">
                   Open output in browser
@@ -374,7 +349,7 @@ export function RunOutputActions({
 }) {
   const [copy, setCopy] = useState<'idle' | 'copied' | 'manual'>('idle');
   const { result } = outputs;
-  const latest = latestSample(
+  const latest = outputs.previews.latest(
     result?.outputs.filter((item) => item.run_id === result.run_id) ?? [],
   );
   async function copyFolder() {
@@ -462,7 +437,7 @@ export function RunSamples({ outputs }: { outputs: RunOutputs }) {
           ))}
         </div>
       )}
-      {output && <OutputDetail output={output} label="Selected sample" />}
+      {output && <OutputDetail output={output} previews={outputs.previews} />}
     </section>
   );
 }
@@ -637,14 +612,14 @@ export function RunComparison({
 
 // The latest playable sample across this Job's training segments.
 export function LatestOutputs({ outputs }: { outputs: RunOutputs }) {
-  const sample = latestSample(outputs.result?.outputs ?? []);
+  const sample = outputs.previews.latest(outputs.result?.outputs ?? []);
   return (
     <div role="group" aria-label="Latest outputs" className="latest-outputs">
       <LoadError outputs={outputs} />
       {outputs.result && !sample && <p>No previews yet.</p>}
       {sample && (
         <figure>
-          <MediaPreview output={sample} />
+          <MediaPreview output={sample} previews={outputs.previews} />
           <figcaption>
             Latest preview: {sample.name}
             {sample.step === undefined ? '' : ` · step ${sample.step}`}

@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import {
   openRunTab,
   preparedRun,
+  PNG,
   runPanel,
   runSummary,
   runTab,
@@ -229,6 +230,77 @@ test('a partial Run shows the outputs it has, with their problems', async ({
     await expect(summary).toContainText('sample.mp4: Sample has no audio.');
     await expect(
       page.getByRole('button', { name: 'Copy output folder' }),
+    ).toBeVisible();
+  } finally {
+    await app.close();
+  }
+});
+
+test('View sample skips unsupported formats and handles browser decoding failures', async ({
+  page,
+}) => {
+  const app = await runWorkspace();
+  try {
+    const { run } = await preparedRun(app);
+    await page.route('**/api/runs/*/outputs', (route) =>
+      route.fulfill({
+        json: outputList(run, 'completed', [
+          {
+            id: 'tiff',
+            path: 'samples/newest.tiff',
+            name: 'newest.tiff',
+            kind: 'image',
+            status: 'available',
+            modified_ms: 3,
+          },
+          {
+            id: 'video',
+            path: 'samples/preview.mp4',
+            name: 'preview.mp4',
+            kind: 'video',
+            status: 'available',
+            modified_ms: 2,
+            file_url: '/broken-preview.mp4',
+          },
+          {
+            id: 'png',
+            path: 'samples/still.png',
+            name: 'still.png',
+            kind: 'image',
+            status: 'available',
+            modified_ms: 1,
+            file_url: '/still.png',
+          },
+        ]),
+      }),
+    );
+    // The backend decoded this sample, but the client's media pipeline cannot.
+    await page.route('**/broken-preview.mp4', (route) =>
+      route.fulfill({ contentType: 'video/mp4', body: 'invalid media' }),
+    );
+    await page.route('**/still.png', (route) =>
+      route.fulfill({ contentType: 'image/png', body: PNG }),
+    );
+    await page.goto(`${app.url}/#/runs/${run.id}`);
+    const view = page.getByRole('button', { name: 'View sample' });
+    await view.click();
+    const selected = page.getByLabel('Selected sample', { exact: true });
+    expect(await selected.innerText()).toContain('preview.mp4');
+    await expect(selected).toContainText(
+      'This browser cannot preview this sample.',
+    );
+    await openRunTab(page, 'overview');
+    await view.click();
+    await expect(
+      selected.getByRole('img', { name: 'Sample still.png' }),
+    ).toBeVisible();
+    await page.getByRole('button', { name: 'newest.tiff · available' }).click();
+    await expect(selected).toContainText(
+      'This browser cannot preview this sample.',
+    );
+    await expect(selected.getByRole('img')).toHaveCount(0);
+    await expect(
+      selected.getByRole('link', { name: 'Download output' }),
     ).toBeVisible();
   } finally {
     await app.close();
