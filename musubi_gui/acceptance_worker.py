@@ -6,9 +6,14 @@ import os
 import time
 import tomllib
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 from musubi_gui.checkpoint_names import expert_step_name
+from musubi_gui.resume_learning_rate import LearningRateOverride
+from musubi_gui.step_offset import ENVIRONMENT, StepSchedule
+from musubi_gui.trainer_control import ENVIRONMENT as CONTROL_ENVIRONMENT
+from musubi_gui.trainer_control import TrainerControl, post_optimizer_step
 from musubi_gui.training_timing import TrainingTiming
 
 # In the synthetic checkout, lets checks that never act while a stage runs skip the paced steps.
@@ -35,6 +40,7 @@ def main(stage: str | None = None) -> None:
     parser.add_argument("--task", default="t2v-A14B")
     parser.add_argument("--uncond_output", type=Path)
     parser.add_argument("--one_frame", action="store_true")
+    parser.add_argument("--skip_existing", action="store_true")
     parser.add_argument("--output_dir", type=Path)
     parser.add_argument("--output_name", default="fixture")
     parser.add_argument("--max_train_steps", type=int, default=2)
@@ -42,7 +48,9 @@ def main(stage: str | None = None) -> None:
     parser.add_argument("--sample_every_n_steps", type=int)
     parser.add_argument("--sample_prompts", type=Path)
     parser.add_argument("--save_state", action="store_true")
+    parser.add_argument("--save_state_on_train_end", action="store_true")
     parser.add_argument("--resume", type=Path)
+    parser.add_argument("--learning_rate", type=float)
     parser.add_argument("--save_path", type=Path)
     parser.add_argument("--video_size", nargs=2, type=int, default=[256, 256])
     parser.add_argument("--video_length", type=int, default=17)
@@ -66,6 +74,7 @@ def main(stage: str | None = None) -> None:
             parser.error("--dataset_config is required for cache fixtures")
         data: dict[str, Any] = tomllib.loads(args.dataset_config.read_text(encoding="utf-8"))
         architecture = "mmh3" if args.task == "t2va" else "wan"
+        written, skipped = 0, 0
         for dataset in data.get("datasets", []):
             if args.task == "t2va" and "image_directory" in dataset and not args.one_frame:
                 # As upstream's cache plan does, so the fixture catches a job missing the flag.
@@ -91,7 +100,14 @@ def main(stage: str | None = None) -> None:
                 if media.suffix.lower() not in suffixes:
                     continue
                 suffix = f"0256x0256_{architecture}" if stage == "latent_cache" else f"{architecture}_te"
-                tensor(Path(dataset["cache_directory"]) / f"{media.stem}_{suffix}.safetensors")
+                file = Path(dataset["cache_directory"]) / f"{media.stem}_{suffix}.safetensors"
+                # As upstream's --skip_existing does, an item whose cache file exists isn't cached again.
+                if args.skip_existing and file.is_file():
+                    skipped += 1
+                    continue
+                tensor(file)
+                written += 1
+        print(f"SYNTHETIC {stage}: cached {written} items, skipped {skipped} existing", flush=True)
         if args.uncond_output:
             tensor(args.uncond_output)
         if stage == "latent_cache":
@@ -102,11 +118,22 @@ def main(stage: str | None = None) -> None:
         if Path(args.output_name).name != args.output_name or args.output_name in {"", ".", ".."}:
             parser.error("--output_name must be a simple filename")
         previous = 0
+        # A stand-in optimizer with one param group, built from the arguments as upstream's is.
+        optimizer = SimpleNamespace(param_groups=[{"lr": args.learning_rate, "initial_lr": args.learning_rate}])
+        override = LearningRateOverride()
+        if args.learning_rate is not None:
+            override.capture(optimizer, None)
         if args.resume:
             saved = json.loads((args.resume / "trainer_state.json").read_text(encoding="utf-8"))
             if not saved.get("synthetic"):
                 parser.error("fixture resumes accept only synthetic saved state")
             previous = int(saved["optimizer_step"])
+            # As loading the state does; states saved before the fixture recorded a rate keep the configured one.
+            restored = saved.get("learning_rate", args.learning_rate)
+            optimizer.param_groups = [{"lr": restored, "initial_lr": restored}]
+        # As the app's trainer entry point does at on_train_start, after the state loads.
+        if line := override.apply(resuming=bool(args.resume), learning_rate=args.learning_rate, optimizer=optimizer):
+            print(line, flush=True)
 
         def save_state(state: Path, step: int) -> None:
             state.mkdir(parents=True, exist_ok=True)
@@ -118,6 +145,11 @@ def main(stage: str | None = None) -> None:
                         "global_step": step,
                         "optimizer_step": previous + step,
                         "segment_steps": step,
+                        **(
+                            {"learning_rate": optimizer.param_groups[0]["lr"]}
+                            if optimizer.param_groups[0]["lr"] is not None
+                            else {}
+                        ),
                     }
                 ),
                 encoding="utf-8",
@@ -134,21 +166,40 @@ def main(stage: str | None = None) -> None:
             if os.environ.get("MUSUBI_RUN_TIMING_FILE")
             else None
         )
+        expert_offset = os.environ.get("MUSUBI_EXPERT_STEP_OFFSET")
+        # As the app's trainer entry point does: a restored segment names saves and previews by global step,
+        # at interval multiples after the offset, while its progress bar counts this segment's updates.
+        step_offset = int(os.environ.get(ENVIRONMENT) or 0) if expert_offset is None else 0
+        schedule = StepSchedule(step_offset)
+        request = os.environ.get(CONTROL_ENVIRONMENT)
+        control = TrainerControl(Path(request)) if request else None
         for step in range(1, args.max_train_steps + 1):
+            if control:
+                # The next batch after a Save and stop step ends the process cleanly.
+                control.after_save()
             time.sleep(step_seconds)
+            current = step_offset + step
             if timing:
-                timing.step(step)
+                timing.step(current)
             print(
                 f"steps: {step}/{args.max_train_steps} loss=0.0 (synthetic optimizer_step={previous + step})",
                 flush=True,
             )
+            # The app's trainer hook: this step's intervals, and any control request.
+            post_optimizer_step(
+                args,
+                step,
+                schedule,
+                expert_step_offset=int(expert_offset) if expert_offset is not None else None,
+                control=control,
+            )
             if args.sample_every_n_steps and step % args.sample_every_n_steps == 0:
                 if timing:
-                    timing.preview_start(step)
+                    timing.preview_start(current)
                 if args.sample_prompts is None:
                     parser.error("--sample_prompts is required for previews")
                 prompt = json.loads(args.sample_prompts.read_text(encoding="utf-8"))[0]
-                stem = f"{args.output_name}_{step:06d}_00_20261110000000_{prompt['seed']}"
+                stem = f"{args.output_name}_{current:06d}_00_20261110000000_{prompt['seed']}"
                 destination = (
                     args.output_dir / "sample" / (f"{stem}_000.png" if prompt["frame_count"] == 1 else f"{stem}.mp4")
                 )
@@ -168,26 +219,22 @@ def main(stage: str | None = None) -> None:
                         width=prompt["width"],
                         height=prompt["height"],
                     )
-                print(f"SYNTHETIC preview complete at step {step}", flush=True)
+                # The prompt shows which revision's previews.json a resumed segment read.
+                print(f"SYNTHETIC preview complete at step {current}: {prompt.get('prompt', '')}", flush=True)
                 if timing:
                     timing.preview_finish(completed=True)
             # Like upstream, interval saves stamp their own metadata and include the last step.
-            offset = os.environ.get("MUSUBI_EXPERT_STEP_OFFSET")
-            if (
-                args.save_every_n_steps
-                and step % args.save_every_n_steps == 0
-                and not (offset is not None and step == args.max_train_steps)
-            ):
+            if args.save_every_n_steps and step % args.save_every_n_steps == 0:
                 name = (
-                    expert_step_name(args.output_name, int(offset), step)
-                    if offset is not None
-                    else f"{args.output_name}-step{step:08d}"
+                    expert_step_name(args.output_name, int(expert_offset), step)
+                    if expert_offset is not None
+                    else f"{args.output_name}-step{current:08d}"
                 )
-                tensor(args.output_dir / f"{name}.safetensors", saved=f"step {step}")
+                tensor(args.output_dir / f"{name}.safetensors", saved=f"step {current}")
                 if args.save_state:
                     save_state(args.output_dir / f"{name}-state", step)
         tensor(args.output_dir / f"{args.output_name}.safetensors", saved="train end")
-        if args.save_state:
+        if args.save_state or args.save_state_on_train_end:
             save_state(args.output_dir / f"{args.output_name}-state", args.max_train_steps)
     elif stage == "generate":
         if args.save_path is None:

@@ -95,21 +95,17 @@ def test_optimizer_reaches_training_and_restore_keeps_original_optimizer(tmp_pat
         draft.config.optimizer = "AdamW"
         draft.config.timestep_sampling = "uniform"
         store.save(job.id, draft, saved.revision)
-        states = service.saved_states(run["id"])
+        valid = next(state for state in service.saved_states(run["id"]) if state["valid"])
         service.store.update(run["id"], lambda record: record["job"]["config"].update(optimizer="AdamW"))
         with pytest.raises(ValueError, match="Optimizer differs"):
-            service.restore_state(run["id"], next(state["id"] for state in states if state["valid"]), 1, confirmed=True)
+            service.restore_state(run["id"], valid["id"], valid["resume_step"] + 1, confirmed=True)
         service.store.update(run["id"], lambda record: record["job"]["config"].update(optimizer="AdamW8bit"))
         if family == "wan":
             service.store.update(run["id"], lambda record: record["job"]["config"].update(timestep_sampling="uniform"))
             with pytest.raises(ValueError, match="Timestep strategy differs"):
-                service.restore_state(
-                    run["id"], next(state["id"] for state in states if state["valid"]), 1, confirmed=True
-                )
+                service.restore_state(run["id"], valid["id"], valid["resume_step"] + 1, confirmed=True)
             service.store.update(run["id"], lambda record: record["job"]["config"].update(timestep_sampling="sigmoid"))
-        restored = service.restore_state(
-            run["id"], next(state["id"] for state in states if state["valid"]), 1, confirmed=True
-        )
+        restored = service.restore_state(run["id"], valid["id"], valid["resume_step"] + 1, confirmed=True)
         assert restored["job"]["config"]["optimizer"] == "AdamW8bit"
         assert restored["job"]["config"]["timestep_sampling"] == ("sigmoid" if family == "wan" else "uniform")
         train = next(stage["args"] for stage in restored["stages"] if stage["name"] == "train")

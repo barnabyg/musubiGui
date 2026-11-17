@@ -68,6 +68,32 @@ experts sequentially. Simultaneous combined
 training remains unqualified. Runtime FP8 scaling requires native FP16 sources,
 not saved scaled-FP8 weights. Inactive-DiT offload is not supported by this recipe.
 
+### Resume compatibility
+
+When the Job has resumable training, Configuration review adds **Resume compatibility**.
+It compares the reviewed revision with the Run that **Prepare and start** would resume: in the
+Job's current training, once it has ended, the most recently created stopped, completed,
+failed, cancelled or interrupted segment with a saved state (see
+[Training from the Job page](jobs-current-training.md)). It links that Run, gives its revision and saved step, and says
+whether its saved state can resume with this revision. Changed fields are listed by tier
+(Applies on resume, Applies on resume with a warning, Resume with re-prepare, Needs a new
+Run), each with its old and new value, followed by the note that the data order restarts.
+Datasets, repeats and per-dataset resolutions resume with re-prepare, and so do caption and
+media edits in the datasets since that Run froze them, listed as `Dataset contents` lines;
+**Preparation before resuming** then gives the caching and disk use that resuming adds (see
+[Resuming with a refreshed dataset](runs-saved-state.md#resuming-with-a-refreshed-dataset)). Learning rate, timestep
+strategy, sigmoid scale, flow shift and gradient accumulation apply with a warning that
+changing them mid-training changes what the LoRA learns, and for gradient accumulation what
+a step means; resuming asks to acknowledge it (see
+[Warned changes](runs-saved-state.md#warned-changes)). Training steps at or
+before the saved step are reported too. The saved step comes from the Run's last **Inspect
+saved states**; before that, review reports state folders without a step and skips that
+check. Review never hashes states; it hashes the datasets' media to compare their contents,
+as preparing does. Prepare and start resumes that Run when the revision can take it, and
+otherwise offers a fresh training; Prepare run always prepares a new Run. Run details offers
+the same check as [Resume](runs-saved-state.md#resuming-with-an-edited-job-revision), which
+also lists the tiers.
+
 ## Drafts and revisions
 
 Launch with `launch.cmd`, register a dataset, and open Jobs. Jobs are listed in a table

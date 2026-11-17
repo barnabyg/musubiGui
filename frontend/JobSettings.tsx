@@ -123,6 +123,7 @@ export function JobIdentity({
           )}
         </select>
         {problemText('recipe')}
+        {fields.resumeHint('recipe')}
         <small>
           {job.family === 'wan' ? (
             job.config.recipe === 'alternating' ? (
@@ -278,6 +279,7 @@ export function JobControls({
                   ))}
                 </select>
                 {problemText('frame_extraction')}
+                {fields.resumeHint('frame_extraction')}
               </label>
               {job.config.frame_extraction === 'slide' &&
                 number('Slide stride', 'frame_stride')}
@@ -323,6 +325,7 @@ export function JobControls({
                 <option value="reuse">Reuse compatible cache</option>
                 <option value="rebuild">Rebuild cache</option>
               </select>
+              {fields.resumeHint(key)}
             </label>
           ))}
         </div>
@@ -351,6 +354,7 @@ export function JobControls({
               resolve explicit → same-stem sidecar → embedded track. Original
               media is never repaired.
             </small>
+            {fields.resumeHint('audio_policy')}
           </label>
         )}
       </JobSection>
@@ -406,7 +410,7 @@ export function JobControls({
           {number(
             'Maximum checkpoint saves to keep',
             'keep_checkpoints',
-            '0 keeps all saves. Applies per expert; final results and states needed for restoration are protected and may exceed the limit.',
+            '0 keeps all saves. Applies per expert; final results and states needed for restoration are protected and may exceed the limit. A training resumed in segments counts its saves across all segments by step, and its latest segment’s limit applies.',
           )}
         </div>
         {toggle(
@@ -461,6 +465,7 @@ export function JobTrainingControls({
         </select>
         {problemText('optimizer')}
         <small>{trainingOptions.reason}</small>
+        {fields.resumeHint('optimizer')}
       </label>
       <label className="field">
         Timestep strategy

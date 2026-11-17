@@ -21,6 +21,9 @@ from musubi_gui.settings import Settings, atomic_json, training_settings, within
 from musubi_gui.training_sections import dataset_toml, layout_identity, plan_sections, section_folders
 from musubi_gui.video_sampling import WAN_FPS, source_rates
 
+# Left in an incomplete Run folder, saying the snapshot failed and the folder can be removed after inspection.
+SNAPSHOT_ERROR = "snapshot-error.json"
+
 
 def digest_file(path: Path, *, cancelled: Event | None = None) -> str:
     hasher = hashlib.sha256()
@@ -192,6 +195,11 @@ def identify_snapshot(
         )
     if JobStore(root).is_archived(job_id):
         raise ValueError("This job is archived. Restore it from Jobs before preparing a new Run.")
+    return identify_job(root, job, fixture_mode=fixture_mode)
+
+
+def identify_job(root: Path, job: Job, *, fixture_mode: bool = False) -> SnapshotIdentity:
+    """The inputs a snapshot of `job` would freeze, after review confirms it can be prepared."""
     settings = effective_settings(job, training_settings(root, fixture_mode=fixture_mode))
     review = review_job(root, job, settings, fixture_mode=fixture_mode)
     if not review["valid"]:
@@ -233,14 +241,19 @@ def identify_snapshot(
     return SnapshotIdentity(root, job, settings, manifest, provenance, keys, identity)
 
 
-def materialize_snapshot(inputs: SnapshotIdentity) -> dict[str, Any]:
+def materialize_snapshot(
+    inputs: SnapshotIdentity, *, directory: Path | None = None, cache: Path | None = None
+) -> dict[str, Any]:
+    """Copy the inputs into a new Run folder, or into `directory` and `cache` that a resumed segment created."""
     job, settings, manifest = inputs.job, inputs.settings, inputs.manifest
     provenance, keys, identity = inputs.provenance, inputs.stage_keys, inputs.fingerprint
     store: Any = import_module("musubi_gui.datasets").DatasetStore(inputs.root)
-    output_runs = within_root(Path(settings.output_root) / "runs", [Path(settings.output_root)])
-    directory = create_run_directory(output_runs, job.name)
-    cache_runs = within_root(Path(settings.cache_root) / "runs", [Path(settings.cache_root)])
-    cache = create_run_directory(cache_runs, job.name)
+    if directory is None:
+        output_runs = within_root(Path(settings.output_root) / "runs", [Path(settings.output_root)])
+        directory = create_run_directory(output_runs, job.name)
+    if cache is None:
+        cache_runs = within_root(Path(settings.cache_root) / "runs", [Path(settings.cache_root)])
+        cache = create_run_directory(cache_runs, job.name)
     snapshot_record: dict[str, Any] = {
         "version": 1,
         "status": "materializing",
@@ -329,7 +342,7 @@ def materialize_snapshot(inputs: SnapshotIdentity) -> dict[str, Any]:
         snapshot_record.update(status="incomplete")
         atomic_json(directory / "snapshot.json", snapshot_record)
         atomic_json(
-            directory / "snapshot-error.json",
+            directory / SNAPSHOT_ERROR,
             {
                 "status": "incomplete",
                 "message": "Snapshot creation failed; sources were preserved. Remove this incomplete run directory after inspecting it.",

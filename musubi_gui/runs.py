@@ -4,29 +4,46 @@ import builtins
 import threading
 import time
 import uuid
+from collections.abc import Callable
 from contextlib import nullcontext
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from musubi_gui.checkpoint_retention import retained_states
+from musubi_gui.job_models import Job
+from musubi_gui.job_store import JobStore
+from musubi_gui.job_validation import configuration_errors
 from musubi_gui.managed_checkout import checkout_gate
 from musubi_gui.processes import process_identity
 from musubi_gui.recipe import Stage
 from musubi_gui.redaction import redact
-from musubi_gui.run_cache import reuse_cache
+from musubi_gui.resume_compat import ResumeIncompatible, compatibility, refusal
+from musubi_gui.resume_refresh import Refresh, inspect_refresh, refreshed_snapshot
+from musubi_gui.run_cache import reuse_cache, seed_refreshed
+from musubi_gui.run_chains import chain_fields, chain_of
+from musubi_gui.run_control import request as request_control
+from musubi_gui.run_control import unsaved_steps
 from musubi_gui.run_deletion import failure_message, folder_bytes, output_index_file, plan_deletion, remove_folder
 from musubi_gui.run_estimate import freeze_training_timing
 from musubi_gui.run_execution import ExecutionContext, RunExecution
 from musubi_gui.run_progress import estimated_remaining, parse_progress
 from musubi_gui.run_recovery import RECONCILED_STATUSES, reconcile, terminate_orphan
-from musubi_gui.run_restore import create_segment, restored_segment
+from musubi_gui.run_restore import create_segment, restored_segment, resume_step
 from musubi_gui.run_retention import RetentionScheduler
 from musubi_gui.run_retry import retried_plan
-from musubi_gui.run_store import DeviceLease, RunStore, blocks_revision, preparation_transaction, utc_now
+from musubi_gui.run_store import (
+    DeviceLease,
+    RunStore,
+    blocks_revision,
+    is_active,
+    preparation_transaction,
+    utc_now,
+)
 from musubi_gui.saved_state import discover_states
 from musubi_gui.settings import Settings, atomic_json, load_settings, managed_settings
 from musubi_gui.snapshots import identify_snapshot, materialize_snapshot, verify_inputs
+from musubi_gui.step_offset import numbers_continuously, segment_step_offset
 from musubi_gui.wan_pair_runtime import is_paired, paired_saved_states, stage_log
 
 
@@ -211,6 +228,11 @@ class RunService:
         with file.open("rb") as stream:
             stream.seek(max(0, file.stat().st_size - 64_000))
             progress = parse_progress(stream.read().decode("utf-8", errors="replace"))
+        if progress:
+            progress["unsaved_steps"] = unsaved_steps(run, stage, progress["step"])
+        segment = run.get("segment", {})
+        # Segments restored before continuous numbering report their own steps and requested additional steps.
+        continuous = numbers_continuously(run)
         if progress and stage.get("training"):
             phase = stage["training"]
             from musubi_gui.wan_pair import phase_counts
@@ -220,19 +242,28 @@ class RunService:
                 expert=phase["expert"],
                 phase_step=progress["step"],
                 phase_total=progress["total"],
-                step=absolute - run.get("segment", {}).get("schedule_start", 0),
+                step=absolute - (0 if continuous else segment.get("schedule_start", 0)),
                 total=(
-                    sum(item["training"]["steps"] for item in run["stages"] if item.get("training"))
+                    (segment.get("schedule_start", 0) if continuous else 0)
+                    + sum(item["training"]["steps"] for item in run["stages"] if item.get("training"))
                     if phase.get("per_expert")
-                    else run.get("segment", {}).get("additional_steps", run["job"]["config"]["steps"])
+                    else segment.get("target_steps", segment.get("additional_steps", run["job"]["config"]["steps"]))
                 ),
                 expert_steps=phase_counts(phase, progress["step"]),
                 eta_scope="phase",
             )
+        elif progress and (offset := segment_step_offset(run, stage)):
+            # The trainer counts this segment from zero; show the global step and target total.
+            progress.update(
+                phase_step=progress["step"],
+                phase_total=progress["total"],
+                step=offset + progress["step"],
+                total=offset + progress["total"],
+            )
         if progress:
             progress["estimated_remaining_seconds"] = estimated_remaining(progress)
             if stage.get("training", {}).get("per_expert"):
-                initial = run.get("pair_sources", {})
+                initial = {} if continuous else run.get("pair_sources", {})
                 initial_steps = min(initial.get(expert, {}).get("optimizer_step", 0) for expert in ("low", "high"))
                 last = next(item["training"] for item in reversed(run["stages"]) if item.get("training"))
                 target = min(phase_counts(last, last["steps"]).values())
@@ -248,9 +279,14 @@ class RunService:
         self.retention.join()
 
     def retry(self, run_id: str) -> dict[str, Any]:
-        plan = ExecutionPlan(**retried_plan(self.get(run_id), self._verify_inputs))
+        previous = self.get(run_id)
+        plan = ExecutionPlan(**retried_plan(previous, self._verify_inputs))
         retried = self.submit(plan)
-        return self.store.update(retried["id"], lambda r: r.update(retry_of=run_id))
+        # Retrying a restored segment resumes the same state, so it keeps the segment's step numbering.
+        segment = {"segment": previous["segment"]} if "segment" in previous else {}
+        # A refreshed segment's retry copies the same unchanged items' caches from the same source Run.
+        refresh = {"refresh": previous["refresh"]} if "refresh" in previous else {}
+        return self.store.update(retried["id"], lambda r: r.update(retry_of=run_id, **segment, **refresh))
 
     def reconcile(self, run_id: str) -> dict[str, Any]:
         return reconcile(self.store, self.device, self.root, run_id)
@@ -278,6 +314,10 @@ class RunService:
             run_id, lambda r: r.update(status="stopping", stop_requested="force" if force else "graceful")
         )
 
+    def control(self, run_id: str, action: str) -> dict[str, Any]:
+        """Save now, Sample now or Save and stop at the training process's next step."""
+        return request_control(self.store, run_id, action)
+
     def saved_states(self, run_id: str) -> builtins.list[dict[str, Any]]:
         run = self.get(run_id)
         if run["status"] not in {"completed", "stopped", "failed", "cancelled", "interrupted"}:
@@ -288,6 +328,9 @@ class RunService:
         run = self.get(run_id)
         states = paired_saved_states(run) if is_paired(run) else discover_states(run)
         states = retained_states(run, states)
+        for state in states:
+            if state["valid"]:
+                state["resume_step"] = resume_step(run, state)
         self.store.update(run_id, lambda r: r.update(saved_states=states))
         return states
 
@@ -300,14 +343,13 @@ class RunService:
         self.retention.request(run_id)
 
     def restore_state(
-        self, run_id: str, state_id: str, additional_steps: int, *, confirmed: bool = False
+        self, run_id: str, state_id: str, target_steps: int, *, confirmed: bool = False
     ) -> dict[str, Any]:
+        """Queue a new segment that trains `state` until global step `target_steps`."""
         if not confirmed:
             raise ValueError(
-                "Please confirm restoration as a new segment: upstream restores optimizer state but resets the displayed counter and data position."
+                "Please confirm restoration as a new segment: upstream restores optimizer state but restarts the data position."
             )
-        if not 1 <= additional_steps <= 1_000_000:
-            raise ValueError("Choose between 1 and 1000000 additional training steps.")
         original = self.get(run_id)
         self._verify_inputs(original)
         state = next((state for state in self.saved_states(run_id) if state["id"] == state_id), None)
@@ -318,11 +360,107 @@ class RunService:
         if state.get("paired"):
             from musubi_gui.wan_pair_restore import restored_pair
 
-            record = restored_pair(original, state, additional_steps)
+            record = restored_pair(original, state, target_steps)
         else:
-            record = restored_segment(original, state, additional_steps)
+            record = restored_segment(original, state, target_steps)
         create_segment(self.store, record, run_id)
         return self.enqueue(record["id"])
+
+    def resume_check(
+        self,
+        run_id: str,
+        job_revision: int | None = None,
+        target_steps: int | None = None,
+        state_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Whether a revision of the Run's Job (the latest by default) can resume a valid saved state.
+
+        The state is `state_id`, or the latest valid one; the total is `target_steps`, or the revision's steps.
+        """
+        _, state, _, result = self._resume_plan(run_id, job_revision, target_steps, state_id)
+        return {**result, "run_id": run_id, "state_id": state["id"], "state_name": state["name"]}
+
+    def resume(
+        self, run_id: str, job_revision: int, target_steps: int | None = None, state_id: str | None = None
+    ) -> dict[str, Any]:
+        """Queue a new segment that resumes a saved state with `job_revision` of the Run's Job.
+
+        Its training and sampling commands come from that revision. The frozen dataset and caches are reused, unless
+        the datasets changed: then the segment snapshots them again and prepares the caches whose inputs changed
+        before it trains. A revision that changes what the state was trained with raises ResumeIncompatible naming
+        the fields.
+        """
+        original, state, revision, result = self._resume_plan(run_id, job_revision, target_steps, state_id)
+        target = result["target_steps"]
+        if not result["compatible"]:
+            raise ResumeIncompatible(refusal(result))
+        changes = result["changes"]
+        refresh = self._refresh(original, revision) if result["reprepare"] else None
+        if state.get("paired"):
+            from musubi_gui.wan_pair_restore import restored_pair
+
+            record = restored_pair(original, state, target, revision=revision, changes=changes, refresh=refresh)
+        else:
+            record = restored_segment(original, state, target, revision=revision, changes=changes, refresh=refresh)
+        create_segment(self.store, record, run_id)
+        # A refreshed segment is queued to prepare, and trains after it.
+        return self.get(record["id"]) if record.get("refresh") else self.enqueue(record["id"])
+
+    def _refresh(self, original: dict[str, Any], revision: Job) -> Callable[[Path], Refresh]:
+        """Snapshot `revision`'s datasets into a segment folder, as preparing a Run does."""
+
+        def snapshot(directory: Path) -> Refresh:
+            with nullcontext() if self.fixture_mode else checkout_gate(), preparation_transaction(self.root):
+                return refreshed_snapshot(self.root, original, revision, directory, fixture_mode=self.fixture_mode)
+
+        return snapshot
+
+    def _resume_plan(
+        self, run_id: str, job_revision: int | None, target_steps: int | None, state_id: str | None
+    ) -> tuple[dict[str, Any], dict[str, Any], Job, dict[str, Any]]:
+        """The Run, the chosen valid state, the revision and their compatibility."""
+        original = self.get(run_id)
+        jobs = JobStore(self.root)
+        job_id = original["job"]["id"]
+        if jobs.is_archived(job_id):
+            raise ValueError("This job is archived. Restore it from Jobs before resuming with one of its revisions.")
+        try:
+            revision = jobs.get(job_id, job_revision)
+        except FileNotFoundError as error:
+            raise ValueError(
+                f"Revision {job_revision} of this Run's Job doesn't exist."
+                if job_revision
+                else "This Run's Job is gone."
+            ) from error
+        videos = any(item["kind"] == "video" for item in original["manifest"]["items"])
+        if errors := configuration_errors(revision, has_videos=videos):
+            raise ValueError(f"Revision {revision.revision} can't train: " + " ".join(errors))
+        self._verify_inputs(original)
+        states = [state for state in self.saved_states(run_id) if state["valid"]]
+        if not states:
+            raise ValueError(
+                "This Run has no valid saved state to resume. Resume after it stops or completes with a saved state."
+            )
+        if state_id is None:
+            # The furthest-trained state; the last listed of equals is the latest save.
+            state = max(reversed(states), key=lambda item: item["resume_step"])
+        else:
+            found = next((item for item in states if item["id"] == state_id), None)
+            if found is None:
+                raise ValueError(
+                    "Saved state is incomplete, changed or missing. Inspect saved states and choose again."
+                )
+            state = found
+        target = target_steps if target_steps is not None else revision.config.steps
+        contents = inspect_refresh(self.root, original, revision, fixture_mode=self.fixture_mode)
+        result = compatibility(
+            original["job"],
+            revision.model_dump(),
+            saved_step=resume_step(original, state),
+            target_steps=target,
+            **contents,
+        )
+        return original, state, revision, result
 
     def deletion_preview(self, run_id: str) -> dict[str, Any]:
         run = self.reconcile(run_id)
@@ -333,6 +471,85 @@ class RunService:
             return {"run_id": run_id, "refusal": str(refusal)}
         size = sum(folder_bytes(Path(folder)) for folder in plan["folders"])
         return {**plan, "run_id": run_id, "refusal": None, "bytes": size}
+
+    def chain_deletion_preview(self, run_id: str) -> dict[str, Any]:
+        """What deleting the whole training `run_id` belongs to removes: every segment, or why it can't be deleted."""
+        for member in chain_of(self.list(), run_id).segments:
+            self.reconcile(member["id"])
+        runs = self.list()
+        chain = chain_of(runs, run_id)
+        fields = chain_fields(runs)
+        segments = [
+            {
+                "id": member["id"],
+                "status": member["status"],
+                "job": {key: member["job"][key] for key in ("name", "revision")},
+                "position": fields[member["id"]]["position"],
+                "steps": fields[member["id"]]["steps"],
+            }
+            for member in chain.segments
+        ]
+        base = {"run_id": run_id, "chain": chain.id, "segments": segments}
+        try:
+            plan = self._chain_plan(chain.segments, runs)
+        except ValueError as refusal:
+            return {**base, "refusal": str(refusal)}
+        size = sum(folder_bytes(Path(folder)) for folder in plan["folders"])
+        return {**base, **plan, "refusal": None, "bytes": size}
+
+    def _chain_plan(
+        self, segments: builtins.list[dict[str, Any]], runs: builtins.list[dict[str, Any]]
+    ) -> dict[str, Any]:
+        """Every segment's deletion plan together, or a ValueError naming the first segment that refuses it."""
+        for member in segments:
+            if is_active(member):
+                if member.get("processes"):
+                    raise ValueError(
+                        f"Segment {member['id'][:8]} still records processes. "
+                        "Choose Check for leftover processes on it before deleting this training."
+                    )
+                raise ValueError(
+                    f"Segment {member['id'][:8]} is active ({member['status']}). "
+                    "Stop or cancel it before deleting this training."
+                )
+        ids = {member["id"] for member in segments}
+        outside = [run for run in runs if run["id"] not in ids]
+        settings = load_settings(self.root)
+        folders: builtins.list[str] = []
+        shared: builtins.list[str] = []
+        dependents: builtins.list[dict[str, Any]] = []
+        for member in segments:
+            plan = plan_deletion(member, outside, settings)
+            folders += [folder for folder in plan["folders"] if folder not in folders]
+            if plan["shared_cache"] and plan["shared_cache"] not in shared:
+                shared.append(plan["shared_cache"])
+            dependents += [item for item in plan["dependents"] if item not in dependents]
+        return {
+            "folders": [folder for folder in folders if folder not in shared],
+            "shared_cache": shared[0] if shared else None,
+            "dependents": dependents,
+        }
+
+    def delete_chain(self, run_id: str, *, confirmed: bool = False) -> dict[str, Any]:
+        """Delete every segment of the training `run_id` belongs to, latest first, so each goes as a leaf.
+
+        Nothing is removed unless every segment can be deleted; a delete that fails partway stops there, leaving
+        the earlier segments and the unfinished one listed to delete again.
+        """
+        if not confirmed:
+            raise ValueError("Explicit confirmation is required to permanently delete a training.")
+        preview = self.chain_deletion_preview(run_id)
+        if preview["refusal"]:
+            raise ValueError(preview["refusal"])
+        deleted: builtins.list[str] = []
+        freed = 0
+        for member in reversed(preview["segments"]):
+            result = self.delete(member["id"], confirmed=True)
+            if not result["deleted"]:
+                return {**result, "deleted_ids": deleted}
+            deleted.append(member["id"])
+            freed += result["freed_bytes"]
+        return {"deleted": True, "id": preview["chain"], "deleted_ids": deleted, "freed_bytes": freed}
 
     def delete(self, run_id: str, *, confirmed: bool = False) -> dict[str, Any]:
         """Mark the Run first, so anything short of a finished delete leaves it visible and deletable again."""
@@ -402,4 +619,4 @@ class RunService:
         RunExecution(context, run).execute()
 
     def _reuse(self, run: dict[str, Any], stage_name: str, index: int) -> bool:
-        return reuse_cache(self.store, run, stage_name, index)
+        return reuse_cache(self.store, run, stage_name, index) or seed_refreshed(self.store, run, stage_name, index)

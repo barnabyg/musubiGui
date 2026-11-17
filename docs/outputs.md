@@ -50,6 +50,20 @@ upstream/environment provenance of the two Runs' frozen inputs.
 It compares recorded facts and offers no quality ranking. Comparing changes no Job or
 Run.
 
+A training resumed in segments lists every segment's checkpoints and samples together, in
+global step order, marked with their segment; each file is still served by the Run that
+made it. The final LoRA is the latest segment's. `GET
+/api/runs/{id}/outputs?chain=true` returns this list for the training `{id}` belongs to,
+adding `segment` (`run_id`, `position`, `revision`, `status`) and `step` to each output and
+`segments` and `latest` to the result; a Run never resumed returns its own list unchanged,
+plus `segments` and `latest`. Without `chain`, a segment lists only its own files.
+
+The picker also offers each training resumed in segments as **Training: name · r… · N
+segments**. Such a side compares the inputs of the training's latest segment, the revision it
+trains now, and its sample selector lists the samples of every segment. When the current Run
+is a segment, **Compare from** chooses between its whole training (the default) and this
+segment only. Any single segment can still be picked as the other side.
+
 Comparison also shows an independent sample selector for each Run alongside those
 differences. Both sides identify the job, frozen revision and full Run ID, and show
 the sample prompt and seed recorded in the Run settings when present. These settings

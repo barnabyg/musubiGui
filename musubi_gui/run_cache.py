@@ -60,6 +60,8 @@ def reuse_cache(store: RunStore, run: dict[str, Any], stage_name: str, index: in
                 target = Path(run["cache"]) / file["path"]
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(Path(previous["cache"]) / file["path"], target)
+                # Copies keep their build time, which shows that nothing cached them again.
+                shutil.copystat(Path(previous["cache"]) / file["path"], target)
         except (FileNotFoundError, PermissionError):
             # That Run was deleted meanwhile; its cache simply isn't available to reuse.
             continue
@@ -74,6 +76,53 @@ def reuse_cache(store: RunStore, run: dict[str, Any], stage_name: str, index: in
             ),
         )
         return True
+    return False
+
+
+def seed_refreshed(store: RunStore, run: dict[str, Any], stage_name: str, index: int) -> bool:
+    """Copy a refreshed segment's reusable cache files from its source Run; returns whether nothing is left to cache.
+
+    The copies keep their source's modification time. A file that changed or went missing since resuming is left
+    out, so the stage caches that item itself.
+    """
+    refresh = run.get("refresh")
+    plan = (refresh or {}).get("caches", {}).get(stage_name)
+    if not refresh or not plan or not plan["copy"]:
+        return False
+    source, cache = Path(refresh["source_cache"]), Path(run["cache"])
+    copied = 0
+    for entry in plan["copy"]:
+        target = cache / entry["to"]
+        target.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            shutil.copy2(source / entry["from"], target)
+        except OSError:
+            continue
+        if digest_file(target) != entry["sha256"]:
+            target.unlink()
+            continue
+        copied += 1
+    source_name = refresh["source_run"][:8]
+    if copied == len(plan["copy"]) and not plan["rebuild"]:
+        artifacts = cache_artifacts(run, stage_name)
+        store.update(
+            run["id"],
+            lambda r: r["stages"][index].update(
+                status="reused",
+                artifacts=artifacts,
+                reused_from=refresh["source_run"],
+                cache_reason=f"Every item's inputs are unchanged; copied its cache files from Run {source_name}.",
+                exit_code=0,
+            ),
+        )
+        return True
+    missing = len(plan["copy"]) - copied
+    reason = f"Copied {copied} cache files of unchanged items from Run {source_name}"
+    reason += f"; {missing} changed or went missing there and are cached again." if missing else "."
+    if plan["rebuild"]:
+        reason += f" Caching {len(plan['rebuild'])} changed items: {', '.join(plan['rebuild'][:5])}"
+        reason += "…" if len(plan["rebuild"]) > 5 else "."
+    store.update(run["id"], lambda r: r["stages"][index].update(cache_reason=reason))
     return False
 
 

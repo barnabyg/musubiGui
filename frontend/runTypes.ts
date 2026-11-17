@@ -20,7 +20,13 @@ export type Run = {
     name: string;
     family: string;
     revision: number;
-    config?: { recipe?: string; save_state?: boolean; save_every?: number };
+    config?: {
+      recipe?: string;
+      save_state?: boolean;
+      save_every?: number;
+      steps?: number;
+      preview_every?: number;
+    };
   };
   manifest: {
     items: { name?: string; path: string; caption: { text: string } }[];
@@ -39,18 +45,42 @@ export type Run = {
   order: number;
   start_after_prepare?: boolean;
   resume_of?: string;
+  // Save now, Sample now or Save and stop, waiting for the next training step.
+  control_request?: { id: string; action: ControlAction; requested: string };
+  controls?: {
+    id: string;
+    action: ControlAction;
+    step?: number;
+    handled?: string;
+    dropped?: string;
+    error?: string;
+  }[];
   deletion?: {
     error: string | null;
     remaining: { path: string; bytes?: number }[];
   };
 };
+export type ControlAction = 'save' | 'sample' | 'save_and_stop';
 export type DeletePreview = {
   refusal: string | null;
   bytes?: number;
   shared_cache?: string | null;
   dependents?: { id: string; status: string }[];
+  // Deleting a whole training: its segments in creation order.
+  chain?: string;
+  segments?: {
+    id: string;
+    status: string;
+    job: { name: string; revision: number };
+    position: number;
+    steps: { start: number; target: number; end: number | null };
+  }[];
 };
-export type DeleteResult = { deleted: boolean; freed_bytes?: number };
+export type DeleteResult = {
+  deleted: boolean;
+  freed_bytes?: number;
+  deleted_ids?: string[];
+};
 export type Progress = {
   step: number;
   total: number;
@@ -64,6 +94,8 @@ export type Progress = {
   phase_step?: number;
   phase_total?: number;
   expert_steps?: { low: number; high: number };
+  // Updates of the training stage since its latest save, which Stop now loses.
+  unsaved_steps?: number | null;
 };
 export type CompletionEstimate = {
   remaining_seconds: number | null;

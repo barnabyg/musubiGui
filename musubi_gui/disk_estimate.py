@@ -42,8 +42,8 @@ def _latent_bytes(family: str, config: "JobConfig", frames: int) -> int:
     return int((13.875 * width * height + 53_860) * max(0, frames) / 124)
 
 
-def estimate_disk(family: str, config: "JobConfig", items: list[dict[str, Any]], *, media_bytes: int) -> dict[str, Any]:
-    """Peak bytes per category. A final save on the interval counts until the duplicate is removed after training."""
+def latent_cache_bytes(family: str, config: "JobConfig", items: list[dict[str, Any]]) -> int:
+    """Latent cache bytes of images and planned video windows, each at its own `resolution` when it has one."""
     latents = 0
     for item in items:
         resolution = item.get("resolution")
@@ -54,6 +54,12 @@ def estimate_disk(family: str, config: "JobConfig", items: list[dict[str, Any]],
             # A clip without a window count still caches once when it has an unknown length.
             windows = item.get("windows")
             latents += _latent_bytes(family, geometry, config.frames) * (1 if windows is None else windows)
+    return latents
+
+
+def estimate_disk(family: str, config: "JobConfig", items: list[dict[str, Any]], *, media_bytes: int) -> dict[str, Any]:
+    """Peak bytes per category. A final save on the interval counts until the duplicate is removed after training."""
+    latents = latent_cache_bytes(family, config, items)
     caches = latents + TEXT_CACHE_BYTES[family] * len(items) + HUGGING_FACE_BYTES[family]
     saves = config.steps // config.save_every + 1 if config.steps >= 1 and config.save_every >= 1 else 0
     if (

@@ -49,10 +49,11 @@ Full paired-preview hardware qualification remains tracked in #129.
 Completed previews appear automatically on the active Run within about five seconds
 plus file inspection time. Run outputs labels their segment step and model scope; select
 a preview there to play it. New arrivals preserve the selected preview and playback.
-For native single-process previews, restore starts a new segment whose preview counter
-begins at zero, matching the pinned trainer's reset counter. Frozen prompt inputs belong
-to the Run and cannot be changed
-by editing its Job. Retry copies and seals that input like the dataset configuration.
+For native single-process previews, a restored segment continues the original Run's step
+numbering. Frozen prompt inputs belong to the Run, and restoring a state keeps them.
+[Resuming with an edited revision](runs-saved-state.md#resuming-with-an-edited-job-revision)
+writes that revision's prompt into the new segment instead. Retry copies and seals that input
+like the dataset configuration.
 
 From `C:/docs/git/musubiGui`, in PowerShell 7, this command prepares and launches
 an isolated 15-image, 500-step test with previews every 100 steps:

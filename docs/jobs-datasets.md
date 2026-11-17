@@ -136,7 +136,10 @@ its experimental warning described under [H3 images](#h3-images).
 Review lists each image/video section, item count, repeats and share of training.
 Set an image dataset's repeats to 2 to double its samples per epoch without
 duplicating source files. Preparation freezes captions and media into the Run
-and gives each section its own cache directory.
+and gives each section its own cache directory. Caption and media edits made later
+reach a stopped Run when it resumes with a refreshed snapshot, which caches only the
+changed items again; see
+[Resuming with a refreshed dataset](runs-saved-state.md#resuming-with-a-refreshed-dataset).
 
 From `C:/docs/git/musubiGui` in PowerShell 7, this single command installs the app
 dependencies, builds and launches an isolated CPU workspace with image-only,

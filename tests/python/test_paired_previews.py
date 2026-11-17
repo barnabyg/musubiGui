@@ -49,7 +49,7 @@ def test_paired_previews_use_the_pair_at_each_total_step_and_restore_the_schedul
         assert previews[0]["metadata"]["lora_pair"] == samples[0]["lora_pair"]
         # The last save is inside the high phase; the restored schedule continues through it and back to low.
         state = next(state for state in service.saved_states(run["id"]) if state["schedule_step"] == 5)
-        restored = service.restore_state(run["id"], state["id"], 3, confirmed=True)
+        restored = service.restore_state(run["id"], state["id"], state["resume_step"] + 3, confirmed=True)
         resumed = wait_for(service, restored["id"], "completed", device_released=True)
         assert [
             (sample["preview_step"], sample["lora_pair"]["low"]["steps"], sample["lora_pair"]["high"]["steps"])
@@ -94,7 +94,7 @@ def test_retention_preserves_paired_previews_and_latest_restoration(tmp_path: Pa
         assert [output["metadata"]["preview"]["step"] for output in previews] == [4, 8]
         assert all(output["status"] == "available" for output in previews)
         assert all(outputs["lora_pair"][expert]["output"]["status"] == "available" for expert in ("low", "high"))
-        restored = service.restore_state(run["id"], states[-1]["id"], 2, confirmed=True)
+        restored = service.restore_state(run["id"], states[-1]["id"], states[-1]["resume_step"] + 2, confirmed=True)
         completed = wait_for(service, restored["id"], "completed", device_released=True)
         assert completed["expert_states"]["low"]["optimizer_step"] == 6
         assert completed["expert_states"]["high"]["optimizer_step"] == 4

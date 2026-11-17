@@ -125,6 +125,19 @@ def training_plan(root: Path, name: str = "one", *, fail_cache: bool = False) ->
     return execution
 
 
+def test_capabilities_report_qualified_saved_state_restoration(tmp_path: Path) -> None:
+    service = RunService(tmp_path / "state", device_path=tmp_path / "gpu.sqlite", autostart=False)
+    app = FastAPI()
+    app.include_router(runs_router(service))
+    try:
+        resume = TestClient(app).get("/api/runs/capabilities").json()["resume"]
+    finally:
+        service.close()
+    # Qualified on the target GPU by docs/reference/evidence/h3-resume.json and wan-resume.json.
+    assert resume.startswith("Saved-state restoration is qualified on the target GPU for H3 and alternating Wan")
+    assert "LoRA weights alone are not resumable state" in resume
+
+
 @pytest.mark.parametrize("together", [False, True])
 def test_execution_clock_excludes_queue_and_separate_preparation_and_survives_restart(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, together: bool
@@ -424,8 +437,8 @@ def test_saved_optimizer_state_restores_as_a_new_segment_and_rejects_tampering(t
         assert states[0]["valid"]
         assert states[0]["optimizer_step"] == 2
         with pytest.raises(ValueError, match="confirm"):
-            service.restore_state(run["id"], states[0]["id"], 1)
-        restored = service.restore_state(run["id"], states[0]["id"], 1, confirmed=True)
+            service.restore_state(run["id"], states[0]["id"], states[0]["resume_step"] + 1)
+        restored = service.restore_state(run["id"], states[0]["id"], states[0]["resume_step"] + 1, confirmed=True)
         assert restored["execution_started"] is None
         # Training results of the original run are not the new segment's.
         assert service.get(run["id"])["removed_duplicates"]
@@ -434,10 +447,12 @@ def test_saved_optimizer_state_restores_as_a_new_segment_and_rejects_tampering(t
         assert resumed["execution_started"] > service.get(run["id"])["execution_started"]
         assert service.saved_states(restored["id"])[0]["optimizer_step"] == 3
         assert service.get(restored["id"])["resume_of"] == run["id"]
-        assert service.get(restored["id"])["segment"]["counter_resets"]
+        segment = service.get(restored["id"])["segment"]
+        # Step numbering continues from the saved step to the requested total.
+        assert (segment["step_offset"], segment["target_steps"], segment["counter_resets"]) == (2, 3, False)
         state_path = Path(states[0]["path"])
         (state_path / "optimizer.bin").write_bytes(b"incomplete")
         with pytest.raises(ValueError, match="changed|incomplete"):
-            service.restore_state(run["id"], states[0]["id"], 1, confirmed=True)
+            service.restore_state(run["id"], states[0]["id"], states[0]["resume_step"] + 1, confirmed=True)
     finally:
         service.close()

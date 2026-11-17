@@ -103,8 +103,9 @@ step count, elapsed time, ETA and loss from upstream's progress bar. Unreported
 values show as unknown. Training elapsed is explicitly scoped to the span of training
 stages; Run elapsed above it covers the full execution. A separately labelled estimate extrapolates the observed speed to
 maximum steps, as [remaining-time estimates](runs-timing.md#remaining-time-estimates)
-describes. A restored segment counts its own steps, because
-upstream resets the displayed counter. Stage logs are collapsed below that, and open by
+describes. A restored segment continues the original Run's step count up to its
+**Train until step** total, although upstream restarts its own counter; segments
+restored by earlier versions count their own steps. Stage logs are collapsed below that, and open by
 themselves when a Run has failed.
 
 ## Alternating Wan runs
@@ -126,7 +127,10 @@ The logs API keeps `progress.eta` in its upstream time format and adds
 ## Prepare and start
 
 Prepare and start on a reviewed Job prepares a Run and then trains it with no further
-click. The request is stored with the Run, so it continues with the browser closed and
+click, and stays on the Job page, whose Current training panel follows it. When the Job's
+current training has ended with a saved state, it resumes that training instead, or offers a
+fresh one when the revision can't resume (see
+[Training from the Job page](jobs-current-training.md)). The request is stored with the Run, so it continues with the browser closed and
 across a backend restart. It joins the same queue as Add to queue, so it waits its turn
 if the GPU is busy. If preparation fails or is cancelled, training doesn't start. Used
 on a revision that already has an unfinished Run, it asks that Run to continue instead
@@ -171,12 +175,58 @@ explanation. Retry should again prepare a new Run and wait for Start training. R
 the marker before trying a successful training run. The CPU fixture checks control
 flow, not GPU training quality.
 
+## Save now, Sample now and Save and stop
+
+While a Run is training, its Actions offer three requests that the trainer honours at
+its next optimizer step:
+
+- **Save now** saves that step's checkpoint and, when the Job saves training state,
+  its state. Training continues.
+- **Sample now** generates a preview at that step with the Run's frozen preview
+  settings. It is unavailable, with the reason shown, when previews are off for the
+  Job or the Run is alternating Wan, whose previews run as separate sampling stages.
+- **Save and stop** saves that step's checkpoint and state, even when the Job doesn't
+  save state otherwise, then ends the trainer cleanly before the next step. The Run
+  ends as Stopped with a state from that step, which Resume and Prepare and start on
+  the Job page continue, and Inspect saved states accepts.
+
+One request waits at a time: the buttons stay disabled, and the Actions panel says
+which request is waiting, until the step applies it. Then it says the step it ran at.
+Extra saves and previews are named by their step like interval ones, so restored
+segments name them by global step and alternating Wan by the expert's cumulative
+step, and they appear with the Run's outputs. Checkpoint retention counts an extra
+save like an interval save. At the final step the train-end save already saves, so
+nothing extra is written.
+
+The request is a file, `control-request.json`, in the Run folder, holding the action
+and a request ID. Only training stages read it, at their post-optimizer hook; the
+trainer reports the step in `control-handled.json` and removes the request. A
+request still waiting when training reaches a sampling stage, or when the Run ends,
+is removed and listed as not applied, so it never fires in a later stage or segment.
+A request made after training's final step, while the Run still shows Training, is
+listed as not applied because training finished before the next step and its final
+save is the latest. The Run then samples and completes as usual, whether or not the
+Job samples. Only between alternating Wan phases does a waiting Save and stop stop
+the Run at the preview stage, since the finished phase saved its state. `POST /api/runs/{id}/control` with
+`{"action": "save" | "sample" | "save_and_stop"}` makes a request; it returns 409 with
+the reason when the Run isn't training, a request is already waiting or Sample now is
+unavailable. The Run records the waiting request as `control_request`, each outcome
+in `controls` with its step, and `stop_kind: "save"` after Save and stop.
+
+To check them, open the acceptance workspace from [Queueing](#queueing), set a Wan
+Job to 200 steps with a preview interval, then prepare, start and use Save now,
+Sample now and Save and stop in turn. Each reports
+the step it ran at; the checkpoint and preview appear in the outputs, and the stopped
+Run's Inspect saved states lists a valid state at the stop step.
+
 ## Stopping
 
-Request graceful stop first. Windows console signalling can be unavailable for
-some launch environments; inspect the reported result and use the separately
-confirmed Force terminate action when necessary. Neither action promises a save
-on stop. Only the observed process tree belonging to that Run is signalled.
+**Stop now** asks for confirmation that says how many steps trained since the last
+save it will lose; Save and stop keeps them. It requests a graceful stop. Windows
+console signalling can be unavailable for some launch environments; inspect the
+reported result and use the separately confirmed Force terminate action when
+necessary. Neither action saves on stop. Only the observed process tree belonging to
+that Run is signalled.
 A graceful stop sends one console break to the stage launcher's process group,
 which its descendants share; if the launcher has already exited, nothing is left
 to signal gracefully and remaining descendants need Force terminate.
@@ -227,17 +277,43 @@ A delete is refused, with the reason, in these cases. Nothing is removed.
 - A Run that is prepared or active still needs its files. A restored segment reads its
   source's saved state, frozen media and dataset files, and a retry reads the frozen media
   of the Run it came from. Cancel or delete that Run first.
+- Later segments of its training continue from it. Delete the whole training, or its later
+  segments first.
 - Its folders aren't exactly `<root>/runs/<token>` under the current Settings roots after
   resolving symlinks and junctions, or a folder is itself a link. A Run recorded under a
   root that is no longer configured stays visible until you restore that root in Settings;
   it can't be deleted or forgotten before then.
 
-A finished Run doesn't block the delete of the Run it came from, and the confirmation
-warns when there are any. The later Run keeps its own logs, checkpoints, samples and saved
-states, and its `resume_of`, `retry_of` and `reused_from` fields keep the deleted ID. The
-Runs screen doesn't show those IDs, apart from "verified cache reused", so nothing there
-dangles. Its frozen inputs are gone, so Retry and Restore as new segment on it are refused
-with the frozen-inputs message; use Prepare for a new Run instead.
+A finished retry doesn't block the delete of the Run it came from, and the confirmation
+warns when there are any. The retry keeps its own logs, checkpoints, samples and saved
+states, and its `retry_of` and `reused_from` fields keep the deleted ID. The Runs screen
+doesn't show those IDs, apart from "verified cache reused", so nothing there dangles. Its
+frozen inputs are gone, so Retry and Restore as new segment on it are refused with the
+frozen-inputs message; use Prepare for a new Run instead. A segment whose source an earlier
+version deleted on its own behaves the same way and starts its training in Runs.
+
+### Deleting a training resumed in segments
+
+Runs shows a training resumed in segments as one row (see
+[chains of segments](runs-details.md#trainings-resumed-in-segments)). **Delete training**, on
+that row or in the Actions of any of its segments, removes every segment after one
+confirmation that lists them with their steps, revision and status. Each segment's folders
+go as for Delete run, latest segment first, and the cache they share goes with the first
+segment unless a Run outside the training still uses it. It is refused, with nothing removed,
+while any segment is queued, preparing, training, sampling or stopping, or still records
+processes, and when a Run outside the training is prepared or active and needs its files.
+A delete that fails partway stops at that segment and leaves it and the earlier segments
+listed; Delete training again finishes it.
+
+Only the latest segment can be deleted on its own: **Delete segment** in the expanded row or
+its Actions. An earlier segment is the source of a later one, so it goes with the training or
+once the segments after it are gone. On a branched training each segment nothing continued
+from, including a side branch's last segment, can go on its own.
+
+`GET /api/runs/{id}/delete-preview?chain=true` returns the training's `chain` (its first
+segment), `segments` and the combined `folders`, `bytes`, `shared_cache`, `dependents` and
+`refusal`. `POST /api/runs/{id}/delete {"confirmed": true, "chain": true}` deletes it and
+returns `deleted_ids`, latest first, and `freed_bytes`.
 
 A restored segment shares its source's cache folder. That folder stays until the last Run
 using it is deleted, and the confirmation says so and leaves it out of the space freed.

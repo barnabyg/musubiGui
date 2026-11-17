@@ -532,6 +532,16 @@ summary:focus-visible,
   max-height: 50vh;
   overflow: auto;
 }
+.confirm-acknowledge {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin-top: var(--space-7);
+}
+.confirm-acknowledge input {
+  width: auto;
+  margin: 0;
+}
 .confirm-dialog .actions {
   justify-content: flex-end;
   margin-top: var(--space-7);
@@ -546,6 +556,17 @@ summary:focus-visible,
 }
 .hint {
   font-size: var(--text-small);
+}
+/* Resume compatibility quotes prompts and paths, which may have few break opportunities. */
+.resume-changes {
+  overflow-wrap: anywhere;
+}
+.resume-changes h4 {
+  margin: var(--space-6) 0 var(--space-2);
+  font-size: var(--text-base);
+}
+.resume-warning {
+  color: var(--color-warning);
 }
 .check {
   display: grid;

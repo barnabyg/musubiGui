@@ -340,7 +340,7 @@ def test_a_run_prepared_before_dataset_lists_still_opens_compares_retries_and_re
         wait_for(service, newer["id"], "prepared", device_released=True)
 
         states = service.saved_states(run["id"])
-        restored = service.restore_state(run["id"], states[0]["id"], 1, confirmed=True)
+        restored = service.restore_state(run["id"], states[0]["id"], states[0]["resume_step"] + 1, confirmed=True)
         assert restored["job"]["dataset_id"] == job["dataset_id"]
         wait_for(service, restored["id"], "completed", device_released=True)
 

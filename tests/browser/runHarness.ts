@@ -188,18 +188,27 @@ export async function preparedRun(
   return { job, run: (await app.records())[0] };
 }
 
+// Prepare and start stays on the Job page, whose Current training panel links to the Run.
+export async function openCurrentRun(page: Page) {
+  await page
+    .getByRole('region', { name: 'Current training' })
+    .getByRole('link', { name: 'Open Run details', exact: true })
+    .click();
+}
+
 // Run details structure. Specs name a tab or panel by key and reach it through these helpers,
 // so renaming a tab or panel heading changes only the names below (and
 // run-details-layout.spec.ts, which checks the layout itself).
 const runTabNames = { overview: 'Overview', samples: 'Samples' } as const;
 const runPanelNames = {
   actions: 'Actions',
-  resume: 'Resume training',
+  resume: 'Resume from an earlier save',
   caching: 'Cache preparation results',
   checkpoints: 'Checkpoints',
   compare: 'Compare with another Run',
   inputs: 'Inputs and output folder',
   samples: 'Samples',
+  segments: 'Segments',
 } as const;
 export type RunTabKey = keyof typeof runTabNames;
 export type RunPanelKey = keyof typeof runPanelNames;

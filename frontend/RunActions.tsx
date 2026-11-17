@@ -1,12 +1,19 @@
+import type { ReactNode } from 'react';
 import { confirmDialog } from './ConfirmDialog';
 import { formatRoute } from './route';
+import { RunControls } from './RunControls';
 import { RunStages } from './RunStages';
-import { sizeLabel } from './runStatus';
-import type { DeletePreview, Run } from './runTypes';
+import { runStatus, sizeLabel } from './runStatus';
+import type { RunSummary } from './runHistory';
+import type { DeletePreview, Progress, Run } from './runTypes';
 
-export function confirmDelete(run: Run, preview: DeletePreview) {
+export function confirmDelete(
+  run: { id: string; job: { name: string; revision: number } },
+  preview: DeletePreview,
+) {
+  const segments = preview.segments ?? [];
   const lines = [
-    `This frees ${sizeLabel(preview.bytes ?? 0)} and can't be undone. Its checkpoints, samples, saved states, logs and saved inputs are removed, so download any LoRA you want to keep first.`,
+    `This frees ${sizeLabel(preview.bytes ?? 0)} and can't be undone. ${segments.length ? 'Every segment’s' : 'Its'} checkpoints, samples, saved states, logs and saved inputs are removed, so download any LoRA you want to keep first.`,
   ];
   if (preview.shared_cache)
     lines.push(
@@ -17,9 +24,29 @@ export function confirmDelete(run: Run, preview: DeletePreview) {
       `${preview.dependents.length} later run(s) came from this one. They stay browsable, but can no longer be retried or restored from.`,
     );
   return confirmDialog({
-    title: `Permanently delete run ${run.id.slice(0, 8)} of ${run.job.name} (r${run.job.revision})?`,
-    body: lines.map((line) => <p key={line}>{line}</p>),
-    confirmLabel: 'Delete run',
+    title: segments.length
+      ? `Permanently delete this training of ${run.job.name} (${segments.length} segments)?`
+      : `Permanently delete run ${run.id.slice(0, 8)} of ${run.job.name} (r${run.job.revision})?`,
+    body: (
+      <>
+        {segments.length > 0 && (
+          <ul aria-label="Segments to delete">
+            {segments.map((segment) => (
+              <li key={segment.id}>
+                Segment {segment.position} · Run {segment.id.slice(0, 8)} · r
+                {segment.job.revision} · steps {segment.steps.start}–
+                {segment.steps.end ?? segment.steps.target} ·{' '}
+                {runStatus(segment.status).label}
+              </li>
+            ))}
+          </ul>
+        )}
+        {lines.map((line) => (
+          <p key={line}>{line}</p>
+        ))}
+      </>
+    ),
+    confirmLabel: segments.length ? 'Delete training' : 'Delete run',
     danger: true,
   });
 }
@@ -27,17 +54,27 @@ export function confirmDelete(run: Run, preview: DeletePreview) {
 // The Actions panel: what the user can do with the Run in its current state.
 export function RunActions({
   run,
+  progress,
   busy,
   pairedStarted,
+  segments,
   action,
   deleteRun,
+  resume,
 }: {
   run: Run;
+  progress: Progress | null;
   busy: boolean;
   pairedStarted: boolean;
+  // The training's segments when it was resumed, in creation order; otherwise empty.
+  segments: RunSummary[];
   action: (name: string, body?: object) => Promise<void>;
-  deleteRun: () => Promise<void>;
+  deleteRun: (chain: boolean) => Promise<void>;
+  // Resume, for an ended Run that no later segment continues.
+  resume?: ReactNode;
 }) {
+  const place = segments.find((segment) => segment.id === run.id)?.chain;
+  const chained = segments.length > 1 && run.status !== 'deleting';
   return (
     <section className="panel" aria-label="Actions">
       <h2>Actions</h2>
@@ -54,9 +91,10 @@ export function RunActions({
       {pairedStarted &&
         ['failed', 'stopped', 'interrupted'].includes(run.status) && (
           <p>
-            Inspect paired saved states in Resume training to continue both
-            experts and the schedule as a new segment. Updates after the
-            selected save are lost. Prepare from Jobs to restart both experts.
+            Resume, or choose a paired save in Resume from an earlier save, to
+            continue both experts and the schedule as a new segment. Updates
+            after the selected save are lost. Prepare from Jobs to restart both
+            experts.
             {run.resume_of && (
               <>
                 {' '}
@@ -87,8 +125,8 @@ export function RunActions({
             </p>
             <p>
               To change the build, edit the job, save and review it, then
-              prepare from Jobs. For saved optimizer state, use Inspect saved
-              states in Resume training.
+              prepare from Jobs. For saved optimizer state, use Resume, or
+              choose a save in Resume from an earlier save.
             </p>
           </div>
         )}
@@ -113,6 +151,15 @@ export function RunActions({
           )}
         </div>
       )}
+      {['training', 'generating', 'stopping'].includes(run.status) && (
+        <RunControls
+          run={run}
+          progress={progress}
+          busy={busy}
+          action={action}
+        />
+      )}
+      {resume}
       <div className="actions">
         {['orphaned', 'uncertain', 'interrupted'].includes(run.status) && (
           <>
@@ -147,41 +194,6 @@ export function RunActions({
             )}
           </>
         )}
-        {['training', 'generating', 'stopping'].includes(run.status) && (
-          <>
-            <button
-              disabled={busy || run.status === 'stopping'}
-              onClick={() => void action('stop', { force: false })}
-            >
-              Request graceful stop
-            </button>
-            <button
-              className="danger"
-              disabled={busy}
-              onClick={() =>
-                void confirmDialog({
-                  title: 'Force terminate this Run?',
-                  body: (
-                    <p>
-                      This ends the Run's whole process tree. Unsaved
-                      checkpoints and optimizer state may be lost.
-                    </p>
-                  ),
-                  confirmLabel: 'Force terminate',
-                  danger: true,
-                }).then((confirmed) => {
-                  if (confirmed)
-                    void action('stop', {
-                      force: true,
-                      confirmed: true,
-                    });
-                })
-              }
-            >
-              Force terminate
-            </button>
-          </>
-        )}
         {run.status === 'prepared' && (
           <button
             disabled={busy}
@@ -213,14 +225,35 @@ export function RunActions({
               Prepare new Run from frozen inputs
             </button>
           )}
-        <button
-          className="danger"
-          disabled={busy}
-          onClick={() => void deleteRun()}
-        >
-          {run.status === 'deleting' ? 'Delete again' : 'Delete run'}
-        </button>
+        {chained && (
+          <button
+            className="danger"
+            disabled={busy}
+            onClick={() => void deleteRun(true)}
+          >
+            Delete training
+          </button>
+        )}
+        {(!chained || place?.later_segments === 0) && (
+          <button
+            className="danger"
+            disabled={busy}
+            onClick={() => void deleteRun(false)}
+          >
+            {run.status === 'deleting'
+              ? 'Delete again'
+              : chained
+                ? 'Delete segment'
+                : 'Delete run'}
+          </button>
+        )}
       </div>
+      {chained && !!place?.later_segments && (
+        <p>
+          Later segments continue from this one, so it is deleted with the whole
+          training, or after its later segments.
+        </p>
+      )}
       <RunStages run={run} />
     </section>
   );

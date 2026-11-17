@@ -21,6 +21,23 @@ inspection. Run details show removal counts, protected exceptions and errors. A 
 failure does not fail training; inspect its reported error before removing a quarantine
 remainder manually. Quarantined and intentionally pruned artifacts are not offered as outputs
 or restoration choices. Restored segments start their own retention journal.
+
+### Across a training resumed in segments
+
+A training resumed in segments counts its saves as one Run does: the newest saves across all
+segments of its line, by global step, under the latest segment's **Maximum checkpoint saves to
+keep**. With a limit of 1, a training stopped at step 300 and resumed until 500 with saves
+every 100 keeps the saves at 400 and 500, and the earlier segment's saves at 100 and 200 are
+pruned. A saved state that a later segment resumed from is never pruned, nor its checkpoint,
+so the state at 300 stays beyond the limit, as does anything a queued or prepared Run reads.
+Each segment keeps its own journal and status; checking the latest segment prunes the ended
+earlier ones too, while a segment still training prunes only its own folder at its own checks.
+Zero on the latest segment keeps everything, including the earlier segments' remaining saves.
+
+Alternating Wan trainings, and trainings with a segment restored before continuous step
+numbering, still count each segment on its own, as before. So does a side branch of a
+training resumed twice from the same step, and a Run never resumed is unchanged. Run details
+explain this under Checkpoint retention, and the setting says so.
 Inspection runs independently of training process supervision so Stop remains responsive.
 Closing the service cancels chunked hashing, terminates/reaps its state probe (including
 the Windows interpreter-launcher child), and joins the inspection worker. This does not
@@ -41,7 +58,8 @@ to 2 in Job & dataset. In Checkpoints, set Save every N steps to 1 and Maximum c
 saves to keep to 1. Review, then Prepare
 and start. Expect older saves to be pruned while both final expert LoRAs and their latest
 restorable pair remain available. Inspect Run details for retention status, restore the latest
-pair for four additional steps, and confirm the new segment completes. Zero should retain
+pair with **Train until step** four steps after its saved step, and confirm the new segment
+completes. Zero should retain
 history as before. This command uses synthetic CPU workers and does not qualify GPU training.
 
 ## Disk estimates

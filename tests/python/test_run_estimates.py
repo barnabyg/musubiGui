@@ -178,12 +178,13 @@ def test_native_trainer_hooks_remove_preview_wall_time_from_observed_step_interv
         "def main():\n"
         " trainer=WanNetworkTrainer()\n original=time.monotonic\n"
         " times=iter([0,10,10,610,620])\n time.monotonic=lambda:next(times)\n"
-        " trainer.on_post_optimizer_step(None,None,None,None,True,0)\n"
-        " trainer.on_post_optimizer_step(None,None,None,None,True,1)\n"
-        " args=(None,SimpleNamespace(output_dir='checkpoints'),None,2)\n"
+        " ns=SimpleNamespace(output_dir='checkpoints',max_train_steps=20,save_every_n_steps=None,sample_every_n_steps=2)\n"
+        " trainer.on_post_optimizer_step(ns,None,None,None,True,0)\n"
+        " trainer.on_post_optimizer_step(ns,None,None,None,True,1)\n"
+        " args=(None,ns,None,2)\n"
         " trainer.on_before_sample_images(*args)\n trainer.sample_images(*args)\n"
         " trainer.on_after_sample_images(*args)\n"
-        " trainer.on_post_optimizer_step(None,None,None,None,True,2)\n"
+        " trainer.on_post_optimizer_step(ns,None,None,None,True,2)\n"
         " time.monotonic=original\n print('steps: 3/20 loss=0.5',flush=True)\n"
         " Path('ready').touch()\n deadline=time.monotonic()+900\n"
         " while not Path('release').exists() and time.monotonic()<deadline: time.sleep(.02)\n",
@@ -330,3 +331,47 @@ def test_measured_loading_budget_remains_while_a_later_phase_starts(
     assert estimate["training_remaining_seconds"] == 1000
     assert estimate["overhead_remaining_seconds"] == expected_overhead
     assert estimate["remaining_seconds"] == 1000 + expected_overhead
+
+
+def test_restored_segment_forecast_reads_global_timing_steps(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("musubi_gui.runs_api.utc_now", lambda: "2026-11-15T10:02:00Z")
+    service = RunService(tmp_path / "state", device_path=tmp_path / "device.sqlite", autostart=False)
+    run = service.submit(
+        ExecutionPlan(
+            job={"id": "job", "name": "Job", "family": "h3", "revision": 1, "config": {"steps": 20}},
+            settings=Settings(),
+            manifest={"items": []},
+            directory=tmp_path / "run",
+            cache=tmp_path / "cache",
+            stages=[Stage("train", ["python", "trainer.py", "--max_train_steps", "5", "--sample_every_n_steps", "2"])],
+            fingerprint="timing",
+        )
+    )
+    # Resumed at 3 to train until 8: previews fall due at global 4, 6 and 8.
+    service.store.update(
+        run["id"],
+        lambda r: r.update(
+            status="training",
+            segment={"target_steps": 8, "step_offset": 3, "additional_steps": 5},
+            stages=[{**r["stages"][0], "status": "running", "started": "2026-11-15T10:00:00Z"}],
+        ),
+    )
+    (tmp_path / "run/train.log").write_text("steps: 3/5 [00:30<00:20, 10s/it]\n", encoding="utf-8")
+    (tmp_path / "run/timing-train.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "training": {"step": 6, "intervals": 2, "seconds": 20},
+                "previews": {"completed": 2, "seconds": 100, "active": None},
+            }
+        ),
+        encoding="utf-8",
+    )
+    app = FastAPI()
+    app.include_router(runs_router(service))
+    response = TestClient(app).get(f"/api/runs/{run['id']}/logs").json()
+    estimate = response["run_estimate"]
+    assert (estimate["completed_previews"], estimate["outstanding_previews"]) == (2, 1)
+    assert estimate["training_remaining_seconds"] == 20
+    assert estimate["preview_remaining_seconds"] == 50
+    assert (response["progress"]["step"], response["progress"]["total"]) == (6, 8)

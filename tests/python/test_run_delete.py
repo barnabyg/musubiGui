@@ -1,4 +1,5 @@
 import json
+import shutil
 import sqlite3
 import subprocess
 import threading
@@ -194,26 +195,99 @@ def test_a_similar_folder_name_is_not_a_dependency(state: Path, service: RunServ
     assert client.post(f"/api/runs/{source['id']}/delete", json={"confirmed": True}).status_code == 200
 
 
-def test_a_finished_segment_survives_its_source_and_shows_the_lost_lineage(state: Path, service: RunService) -> None:
+def test_a_source_with_a_finished_later_segment_is_refused_alone_and_goes_with_its_training(
+    state: Path, service: RunService
+) -> None:
     client = client_for(state, service)
-    source = add_run(service, "source")
+    source = add_run(service, "source", status="stopped")
     media = str(Path(source["directory"]) / "media" / "item000000.mp4")
     segment = add_run(service, "segment", resume_of=source["id"], input_files={media: "digest"})
+    own_cache = Path(segment["cache"])
     service.store.update(segment["id"], lambda record: record.update(cache=source["cache"]))
 
     preview = client.get(f"/api/runs/{source['id']}/delete-preview").json()
-    assert preview["refusal"] is None
-    assert [item["id"] for item in preview["dependents"]] == [segment["id"]]
-    # The segment shares the source's cache folder, so that stays until the last user is deleted.
-    assert preview["folders"] == [source["directory"]]
-    assert preview["shared_cache"] == source["cache"]
-    assert preview["bytes"] == size(source["directory"])
+    assert segment["id"][:8] in preview["refusal"]
+    assert "Delete the whole training" in preview["refusal"]
+    refused = client.post(f"/api/runs/{source['id']}/delete", json={"confirmed": True})
+    assert refused.status_code == 409
+    assert all(folder.exists() for folder in folders(source))
 
-    assert client.post(f"/api/runs/{source['id']}/delete", json={"confirmed": True}).json()["deleted"]
+    whole = client.get(f"/api/runs/{segment['id']}/delete-preview", params={"chain": True}).json()
+    assert whole["refusal"] is None
+    assert whole["chain"] == source["id"]
+    assert [item["id"] for item in whole["segments"]] == [source["id"], segment["id"]]
+    assert [item["position"] for item in whole["segments"]] == [1, 2]
+    # The shared cache is the source's; the segment's unrecorded folder is nobody's to delete.
+    assert sorted(whole["folders"]) == sorted([source["directory"], source["cache"], segment["directory"]])
+    assert whole["bytes"] == size(source["directory"], source["cache"], segment["directory"])
+    assert whole["dependents"] == []
+    assert client.post(f"/api/runs/{source['id']}/delete", json={"confirmed": True, "chain": False}).status_code == 409
 
-    assert not Path(source["directory"]).exists()
-    assert Path(source["cache"]).exists()
-    assert Path(segment["directory"]).exists()
+    deleted = client.post(f"/api/runs/{source['id']}/delete", json={"confirmed": True, "chain": True}).json()
+    assert deleted["deleted"] is True
+    assert deleted["deleted_ids"] == [segment["id"], source["id"]]
+    assert deleted["freed_bytes"] == whole["bytes"]
+    assert client.get("/api/runs").json() == []
+    assert not any(Path(folder).exists() for folder in whole["folders"])
+    assert own_cache.exists()
+
+
+def test_a_whole_training_delete_must_be_confirmed_and_is_refused_while_any_segment_is_active(
+    state: Path, service: RunService
+) -> None:
+    client = client_for(state, service)
+    source = add_run(service, "source", status="stopped")
+    middle = add_run(service, "middle", status="stopped", resume_of=source["id"])
+    latest = add_run(service, "latest", status="pending_training", resume_of=middle["id"])
+    unconfirmed = client.post(f"/api/runs/{source['id']}/delete", json={"chain": True})
+    assert unconfirmed.status_code == 409 and "confirm" in unconfirmed.json()["detail"]
+
+    preview = client.get(f"/api/runs/{source['id']}/delete-preview", params={"chain": True}).json()
+    assert latest["id"][:8] in preview["refusal"] and "active" in preview["refusal"]
+    assert len(preview["segments"]) == 3
+    refused = client.post(f"/api/runs/{middle['id']}/delete", json={"confirmed": True, "chain": True})
+    assert refused.status_code == 409
+    assert len(client.get("/api/runs").json()) == 3
+    assert all(Path(run["directory"]).exists() for run in (source, middle, latest))
+
+    # Once the latest is cancelled, the earlier segments still can't go alone, but the latest can.
+    service.store.update(latest["id"], lambda record: record.update(status="cancelled"))
+    assert client.post(f"/api/runs/{middle['id']}/delete", json={"confirmed": True}).status_code == 409
+    assert client.post(f"/api/runs/{latest['id']}/delete", json={"confirmed": True}).json()["deleted"]
+    assert client.post(f"/api/runs/{middle['id']}/delete", json={"confirmed": True}).json()["deleted"]
+    assert [run["id"] for run in client.get("/api/runs").json()] == [source["id"]]
+
+
+def test_a_training_delete_keeps_runs_outside_the_chain_that_share_its_files(state: Path, service: RunService) -> None:
+    client = client_for(state, service)
+    source = add_run(service, "source", status="failed")
+    segment = add_run(service, "segment", resume_of=source["id"])
+    media = str(Path(source["directory"]) / "media" / "item000000.mp4")
+    retry = add_run(service, "retry", status="prepared", retry_of=source["id"], input_files={media: "digest"})
+    preview = client.get(f"/api/runs/{segment['id']}/delete-preview", params={"chain": True}).json()
+    assert retry["id"][:8] in preview["refusal"]
+    service.store.update(retry["id"], lambda record: record.update(status="completed"))
+    preview = client.get(f"/api/runs/{segment['id']}/delete-preview", params={"chain": True}).json()
+    assert preview["dependents"] == [{"id": retry["id"], "status": "completed"}]
+    assert client.post(f"/api/runs/{segment['id']}/delete", json={"confirmed": True, "chain": True}).json()["deleted"]
+    assert [run["id"] for run in client.get("/api/runs").json()] == [retry["id"]]
+    assert all(folder.exists() for folder in folders(retry))
+
+
+def test_a_segment_whose_source_an_older_version_deleted_still_reads_and_deletes(
+    state: Path, service: RunService
+) -> None:
+    client = client_for(state, service)
+    source = add_run(service, "source")
+    segment = add_run(service, "segment", resume_of=source["id"])
+    service.store.update(segment["id"], lambda record: record.update(cache=source["cache"]))
+    # Earlier versions let a source go alone; its cache stayed for the segment.
+    service.store.remove(source["id"])
+    shutil.rmtree(source["directory"])
+
+    [summary] = client.get("/api/runs/summaries").json()
+    assert summary["chain"]["id"] == segment["id"]
+    assert summary["chain"]["missing_source"] == source["id"]
     remaining = client.get(f"/api/runs/{segment['id']}").json()
     assert remaining["resume_of"] == source["id"]
     assert client.get(f"/api/runs/{segment['id']}/outputs").json()["outputs"][0]["name"] == "trained.safetensors"
@@ -502,7 +576,7 @@ def test_a_run_that_reused_a_deleted_runs_cache_keeps_working(tmp_path: Path) ->
         running.close()
 
 
-def test_a_real_restored_segment_blocks_its_source_until_finished_then_outlives_it(tmp_path: Path) -> None:
+def test_a_real_restored_segment_blocks_its_source_and_goes_with_its_training(tmp_path: Path) -> None:
     fixture = acceptance_workspace(tmp_path)
     root = Path(fixture["state"])
     running = RunService(root, fixture_mode=True, device_path=tmp_path / "device.sqlite")
@@ -516,36 +590,28 @@ def test_a_real_restored_segment_blocks_its_source_until_finished_then_outlives_
 
         # Another owner of the GPU keeps the restored segment waiting.
         assert running.device.acquire("other-work", {})
-        segment = running.restore_state(source["id"], state["id"], 1, confirmed=True)
+        segment = running.restore_state(source["id"], state["id"], state["resume_step"] + 1, confirmed=True)
         assert segment["status"] == "pending_training"
         assert segment["cache"] == source["cache"]
         refused = client.post(f"/api/runs/{source['id']}/delete", json={"confirmed": True})
         assert refused.status_code == 409
         assert segment["id"][:8] in refused.json()["detail"]
+        whole = client.post(f"/api/runs/{source['id']}/delete", json={"confirmed": True, "chain": True})
+        assert whole.status_code == 409 and "active" in whole.json()["detail"]
         assert Path(state["path"]).is_dir()
         running.device.release("other-work")
         wait_for(running, segment["id"], "completed", device_released=True)
 
-        preview = client.get(f"/api/runs/{source['id']}/delete-preview").json()
-        assert preview["shared_cache"] == source["cache"]
-        assert [item["id"] for item in preview["dependents"]] == [segment["id"]]
-        assert client.post(f"/api/runs/{source['id']}/delete", json={"confirmed": True}).json()["deleted"]
-
-        assert not Path(source["directory"]).exists()
-        assert Path(source["cache"]).is_dir()
-        assert client.get(f"/api/runs/{segment['id']}").json()["resume_of"] == source["id"]
-        names = [item["path"] for item in client.get(f"/api/runs/{segment['id']}/outputs").json()["outputs"]]
-        assert any(name.startswith("checkpoints/") for name in names)
-        kept = running.saved_states(segment["id"])[0]
-        refused = client.post(
-            f"/api/runs/{segment['id']}/restore-state",
-            json={"state_id": kept["id"], "additional_steps": 1, "confirmed": True},
-        )
-        assert refused.status_code == 409
-        assert "Frozen dataset inputs" in refused.json()["detail"]
-
-        assert client.post(f"/api/runs/{segment['id']}/delete", json={"confirmed": True}).json()["deleted"]
-        assert not Path(source["cache"]).exists()
+        # Finished, the segment still continues from its source, so the source only goes with the training.
+        alone = client.get(f"/api/runs/{source['id']}/delete-preview").json()
+        assert segment["id"][:8] in alone["refusal"]
+        preview = client.get(f"/api/runs/{source['id']}/delete-preview", params={"chain": True}).json()
+        assert preview["refusal"] is None
+        assert source["cache"] in preview["folders"]
+        result = client.post(f"/api/runs/{source['id']}/delete", json={"confirmed": True, "chain": True}).json()
+        assert result["deleted"] and result["deleted_ids"] == [segment["id"], source["id"]]
+        assert not any(Path(folder).exists() for folder in preview["folders"])
+        assert client.get("/api/runs").json() == []
     finally:
         running.close()
 

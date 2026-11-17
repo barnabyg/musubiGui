@@ -15,11 +15,14 @@ from fastapi.responses import FileResponse
 from musubi_gui.media_probe import inspect
 from musubi_gui.preview import preview_step
 from musubi_gui.redaction import redact
+from musubi_gui.resume_dataset import dataset_changes
+from musubi_gui.run_chains import StepRange, chain_of, step_range
 from musubi_gui.run_deletion import output_index_file
 from musubi_gui.runs import RunService
 from musubi_gui.safetensors_file import complete_safetensors
 from musubi_gui.settings import atomic_json, load_settings, within_root
 from musubi_gui.snapshots import digest_file
+from musubi_gui.step_offset import numbers_continuously
 from musubi_gui.wan_pair_runtime import is_paired
 
 _lock = threading.RLock()
@@ -49,6 +52,27 @@ def download_name(job: dict[str, Any], file: Path) -> str:
     elif source.endswith(("-low-source", "-high-source")):
         tag = "-" + source.rsplit("-", 2)[1] + "-source"
     return f"{name}-r{job.get('revision', 0)}{tag}{f'-state-{file.stem}' if state else ''}{file.suffix}"
+
+
+def output_step(entry: dict[str, Any], run: dict[str, Any], steps: StepRange) -> int:
+    """The global step an output was made at, to order a chain's outputs as one training.
+
+    Previews and interval saves carry their step; a final save or sample belongs to the segment's target and a
+    copied source checkpoint to its start. Segments restored before continuous numbering count their own steps.
+    """
+    shift = steps.start if steps.legacy and not is_paired(run) else 0
+    preview = (entry.get("metadata") or {}).get("preview") or {}
+    path = Path(entry["path"])
+    if "step" in preview:
+        return int(preview["step"]) + shift
+    if path.parent.name == "sample" and (step := preview_step(path)) is not None:
+        return step + shift
+    source = path.parent.name.removesuffix("-state") if path.parent.name.endswith("-state") else path.stem
+    if source.endswith(("-low-source", "-high-source")):
+        return steps.start
+    if path.parts[0] == "checkpoints" and (match := re.search(r"-step(\d+)$", source)):
+        return int(match[1]) + shift
+    return steps.target
 
 
 def output_id(run_id: str, relative: str) -> str:
@@ -216,7 +240,11 @@ class OutputBrowser:
                                     "scope": "low-noise expert only" if run["job"]["family"] == "wan" else "H3",
                                     "prompt": run["job"]["config"].get("sample_prompt", ""),
                                     "seed": run["job"]["config"].get("seed"),
-                                    "counter": "segment optimizer updates",
+                                    "counter": (
+                                        "total optimizer updates"
+                                        if numbers_continuously(run)
+                                        else "segment optimizer updates"
+                                    ),
                                 }
                                 entry["name"] = f"Step {step} preview · {metadata['preview']['scope']}"
                         entry.update(metadata=_scrub(metadata), stamp=stamp)
@@ -307,6 +335,51 @@ class OutputBrowser:
             "lora_pair": pair,
         }
 
+    def scan_chain(self, run_id: str) -> dict[str, Any]:
+        """The outputs of every segment of `run_id`'s training, ordered by global step.
+
+        The training is its chain's line, or a side branch's own history. Each output keeps its own Run and file
+        URL, and gains `segment` and `step`; `job`, `status` and the paired LoRA are the latest segment's. A Run
+        never resumed lists exactly what `scan` does, plus `segments` and `latest`.
+        """
+        chain = chain_of(self.service.list(), run_id)
+        ids = chain.lineage(run_id)
+        records = {member["id"]: member for member in chain.segments}
+        positions = {member["id"]: index for index, member in enumerate(chain.segments, start=1)}
+        outputs: list[dict[str, Any]] = []
+        warnings: list[str] = []
+        segments = []
+        result: dict[str, Any] = {}
+        if len(ids) == 1:
+            result = self.scan(run_id)
+            segment = {"run_id": run_id, "position": positions[run_id], "revision": result["job"].get("revision", 0)}
+            return {**result, "segments": [{**segment, "status": result["status"]}], "latest": run_id}
+        for member in ids:
+            result = self.scan(member)
+            run = records[member]
+            segment = {
+                "run_id": member,
+                "position": positions[member],
+                "revision": run["job"].get("revision", 0),
+                "status": result["status"],
+            }
+            segments.append(segment)
+            steps = step_range(run)
+            outputs += [
+                {**entry, "segment": segment, "step": output_step(entry, run, steps)} for entry in result["outputs"]
+            ]
+            warnings += [warning for warning in result["warnings"] if warning not in warnings]
+        outputs.sort(key=lambda entry: (entry["step"], entry["segment"]["position"], entry["path"]))
+        return {
+            **result,
+            "run_id": run_id,
+            "outputs": outputs,
+            "warnings": warnings,
+            "note": f"These files belong to the {len(ids)} segments of this training.",
+            "segments": segments,
+            "latest": ids[-1],
+        }
+
     def file(self, run_id: str, identity: str, download: bool) -> FileResponse:
         run = self.service.get(run_id)
         if run["status"] == "deleting":
@@ -341,10 +414,18 @@ def _job_view(job: dict[str, Any]) -> dict[str, Any]:
     return view
 
 
+def _item_view(item: dict[str, Any]) -> dict[str, Any]:
+    """An item as compared: its id already includes its dataset, which the job lists, and where a Run or segment
+    keeps its own copy says nothing about the item."""
+    view = {key: value for key, value in item.items() if key not in {"dataset_id", "snapshot_path"}}
+    if isinstance(view.get("audio"), dict):
+        view["audio"] = {key: value for key, value in view["audio"].items() if key != "snapshot_path"}
+    return view
+
+
 def _comparison_view(run: dict[str, Any]) -> dict[str, Any]:
     manifest = {key: value for key, value in run.get("manifest", {}).items() if key != "datasets"}
-    # Each item's id already includes its dataset, and the job lists the datasets.
-    items = [{key: value for key, value in item.items() if key != "dataset_id"} for item in manifest.get("items", [])]
+    items = [_item_view(item) for item in manifest.get("items", [])]
     return dict(
         _scrub(
             {
@@ -375,6 +456,8 @@ def compare_runs(first: dict[str, Any], second: dict[str, Any]) -> dict[str, Any
         "before": first["id"],
         "after": second["id"],
         "changes": changes,
+        # Caption and media differences between the two snapshots, counted, such as a resumed segment's.
+        "dataset": dataset_changes(first.get("manifest", {}), second.get("manifest", {}))["summary"],
         "quality_ranking": None,
         "note": "This compares what each Run recorded as its inputs, not the quality of its results.",
     }
@@ -398,9 +481,9 @@ def output_router(service: RunService) -> APIRouter:
     browser = OutputBrowser(service)
 
     @router.get("/{run_id}/outputs")
-    def outputs(run_id: str) -> dict[str, Any]:
+    def outputs(run_id: str, chain: bool = False) -> dict[str, Any]:
         with output_errors():
-            return browser.scan(run_id)
+            return browser.scan_chain(run_id) if chain else browser.scan(run_id)
 
     @router.get("/{run_id}/outputs/{identity}/file")
     def file(run_id: str, identity: str, download: bool = False) -> FileResponse:

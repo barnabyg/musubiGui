@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from musubi_gui.step_offset import due_steps, segment_step_offset
 from musubi_gui.wan_pair_runtime import stage_log
 
 
@@ -195,7 +196,9 @@ def completion_estimate(run: dict[str, Any], progress: dict[str, Any] | None, no
         if name == "train":
             total = argument_number(stage, "--max_train_steps")
             training, previews = observed["training"], observed["previews"]
-            step = total if done else int(number(training, "step"))
+            # A restored segment's trainer reports global steps; its own stage counts local updates.
+            offset = segment_step_offset(run, stage)
+            step = total if done else max(0, int(number(training, "step")) - offset)
             if not step and progress and index == live_training:
                 step = int(progress.get("phase_step", progress["step"]))
             remaining = max(0, total - step)
@@ -232,7 +235,7 @@ def completion_estimate(run: dict[str, Any], progress: dict[str, Any] | None, no
                 else:
                     gaps.add("checkpoint/state saving and stage transitions")
             interval = argument_number(stage, "--sample_every_n_steps")
-            scheduled = total // interval if interval else 0
+            scheduled = len(due_steps(interval, offset, total))
             completed = scheduled if done else min(scheduled, int(number(previews, "completed")))
             result["completed_previews"] += completed
             outstanding = 0 if done else max(0, scheduled - completed)

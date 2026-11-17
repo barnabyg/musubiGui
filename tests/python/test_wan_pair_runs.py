@@ -82,7 +82,7 @@ def test_review_training_both_experts_and_sampling_the_exact_pair(tmp_path: Path
         assert states[-1]["counts"] == {"low": 4, "high": 4}
         # Restore from inside the first high phase, not its final save.
         source = next(state for state in states if state["schedule_step"] == 3)
-        restored = service.restore_state(run["id"], source["id"], 5, confirmed=True)
+        restored = service.restore_state(run["id"], source["id"], source["resume_step"] + 5, confirmed=True)
         assert restored["execution_started"] is None
         resumed = wait_for(service, restored["id"], "completed", device_released=True)
         assert resumed["execution_started"] > service.get(run["id"])["execution_started"]
@@ -135,7 +135,7 @@ def test_changed_expert_state_or_checkpoint_is_not_restorable(tmp_path: Path) ->
         path = Path(source["sources"]["low"]["path"]) / "scheduler.bin"
         path.write_text("changed", encoding="utf-8")
         with pytest.raises(ValueError, match="incomplete or changed"):
-            service.restore_state(run["id"], source["id"], 2, confirmed=True)
+            service.restore_state(run["id"], source["id"], source["resume_step"] + 2, confirmed=True)
         assert not service.saved_states(run["id"])[-1]["valid"]
         assert completed["status"] == "completed"
     finally:
@@ -167,7 +167,7 @@ def test_stop_at_switch_keeps_gpu_ownership_and_restores_both_states(
         assert [stage["status"] for stage in phases] == ["completed", "completed", "pending", "pending"]
         states = service.saved_states(run["id"])
         source = next(state for state in states if state["schedule_step"] == 6)
-        restored = service.restore_state(run["id"], source["id"], 6, confirmed=True)
+        restored = service.restore_state(run["id"], source["id"], source["resume_step"] + 6, confirmed=True)
         completed = wait_for(service, restored["id"], "completed", device_released=True)
         assert {expert: state["optimizer_step"] for expert, state in completed["expert_states"].items()} == {
             "low": 6,
@@ -200,7 +200,7 @@ def test_stop_inside_first_phase_restores_partial_phase_before_starting_high(tmp
         assert source["valid"] and source["counts"] == {"low": 1, "high": 0}
         # Only the stop needed paced steps; the restored segment runs straight through.
         instant_steps(root)
-        restored = service.restore_state(run["id"], source["id"], 11, confirmed=True)
+        restored = service.restore_state(run["id"], source["id"], source["resume_step"] + 11, confirmed=True)
         completed = wait_for(service, restored["id"], "completed", device_released=True)
         assert completed["stages"][0]["training"]["steps"] == 5
         assert completed["sample_pair"]["low"]["steps"] == completed["sample_pair"]["high"]["steps"] == 6
@@ -247,7 +247,7 @@ def test_one_update_restoration_still_publishes_both_loras(tmp_path: Path) -> No
         run = service.prepare(job_id, start=True)
         wait_for(service, run["id"], "completed", device_released=True)
         source = next(state for state in service.saved_states(run["id"]) if state["schedule_step"] == 4)
-        restored = service.restore_state(run["id"], source["id"], 1, confirmed=True)
+        restored = service.restore_state(run["id"], source["id"], source["resume_step"] + 1, confirmed=True)
         wait_for(service, restored["id"], "completed", device_released=True)
         outputs = OutputBrowser(service).scan(restored["id"])
         assert outputs["lora_pair"]["low"]["steps"] == 3
@@ -318,13 +318,15 @@ def test_per_expert_job_saves_matching_pairs_and_restores(tmp_path: Path) -> Non
         assert progress and (progress["step"], progress["total"]) == (7, 7)
         source = next(state for state in states if state["counts"] == {"low": 3, "high": 3})
         # Two more updates per expert cross the switch interval at 4.
-        restored = service.restore_state(run["id"], source["id"], 2, confirmed=True)
+        restored = service.restore_state(run["id"], source["id"], source["resume_step"] + 2, confirmed=True)
         resumed = wait_for(service, restored["id"], "completed", device_released=True)
         assert {expert: state["optimizer_step"] for expert, state in resumed["expert_states"].items()} == {
             "low": 5,
             "high": 5,
         }
-        assert service.progress(restored["id"])["step"] == 2
+        # Progress shows the global step and the total trained until, not the segment's own updates.
+        progress = service.progress(restored["id"])
+        assert progress and (progress["step"], progress["total"]) == (5, 5)
     finally:
         service.close()
 
@@ -364,7 +366,7 @@ def test_legacy_phase_named_run_restores_using_completed_expert_step_names(tmp_p
         states = service.saved_states(run["id"])
         assert states and all(state["valid"] for state in states)
         source = next(state for state in states if state["counts"] == {"low": 2, "high": 1})
-        restored = service.restore_state(run["id"], source["id"], 1, confirmed=True)
+        restored = service.restore_state(run["id"], source["id"], source["resume_step"] + 1, confirmed=True)
         resumed = wait_for(service, restored["id"], "completed", device_released=True)
         assert resumed["sample_pair"]["low"]["steps"] == resumed["sample_pair"]["high"]["steps"] == 2
         assert Path(resumed["sample_pair"]["high"]["path"]).name == "Paired-Wan-r1-high-step00000002.safetensors"

@@ -2,12 +2,13 @@
 
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Iterator, Literal
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict
 
+from musubi_gui.resume_compat import ResumeIncompatible
 from musubi_gui.run_estimate import completion_estimate
 from musubi_gui.run_store import utc_now
 from musubi_gui.runs import RunService
@@ -31,22 +32,46 @@ class StopRequest(BaseModel):
     confirmed: bool = False
 
 
+class ControlRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    action: Literal["save", "sample", "save_and_stop"]
+
+
 class DeleteRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     confirmed: bool = False
+    # Every segment of the training the Run belongs to, latest first.
+    chain: bool = False
 
 
 class RestoreRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     state_id: str
-    additional_steps: int
+    # Train until this global step; the saved state's step is subtracted for the trainer.
+    target_steps: int
     confirmed: bool = False
+
+
+class ResumeCheck(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    # The Job's latest revision when omitted.
+    job_revision: int | None = None
+    # A total; the revision's training steps when omitted.
+    target_steps: int | None = None
+    # The latest valid saved state when omitted.
+    state_id: str | None = None
+
+
+class ResumeRequest(ResumeCheck):
+    job_revision: int
 
 
 @contextmanager
 def run_errors() -> Iterator[None]:
     try:
         yield
+    except ResumeIncompatible as error:
+        raise HTTPException(422, str(error)) from error
     except (ValueError, KeyError) as error:
         raise HTTPException(409, str(error)) from error
     except OSError as error:
@@ -68,7 +93,10 @@ def runs_router(service: RunService) -> APIRouter:
         return {
             "fixture": service.fixture_mode,
             "gpu_owner": service.device.owner(),
-            "resume": "Saved-state restoration needs recipe qualification; LoRA weights alone are not resumable state.",
+            "resume": (
+                "Saved-state restoration is qualified on the target GPU for H3 and alternating Wan, including "
+                "resuming with an edited revision; LoRA weights alone are not resumable state."
+            ),
         }
 
     @router.get("/summaries")
@@ -147,6 +175,11 @@ def runs_router(service: RunService) -> APIRouter:
         with run_errors():
             return service.stop(run_id, force=request.force, confirmed=request.confirmed)
 
+    @router.post("/{run_id}/control")
+    def control(run_id: str, request: ControlRequest) -> dict[str, Any]:
+        with run_errors():
+            return service.control(run_id, request.action)
+
     @router.get("/{run_id}/states")
     def states(run_id: str) -> list[dict[str, Any]]:
         with run_errors():
@@ -155,9 +188,17 @@ def runs_router(service: RunService) -> APIRouter:
     @router.post("/{run_id}/restore-state")
     def restore(run_id: str, request: RestoreRequest) -> dict[str, Any]:
         with run_errors():
-            return service.restore_state(
-                run_id, request.state_id, request.additional_steps, confirmed=request.confirmed
-            )
+            return service.restore_state(run_id, request.state_id, request.target_steps, confirmed=request.confirmed)
+
+    @router.post("/{run_id}/resume-check")
+    def resume_check(run_id: str, request: ResumeCheck) -> dict[str, Any]:
+        with run_errors():
+            return service.resume_check(run_id, request.job_revision, request.target_steps, request.state_id)
+
+    @router.post("/{run_id}/resume")
+    def resume(run_id: str, request: ResumeRequest) -> dict[str, Any]:
+        with run_errors():
+            return service.resume(run_id, request.job_revision, request.target_steps, request.state_id)
 
     @router.post("/{run_id}/reconcile")
     def reconcile(run_id: str) -> dict[str, Any]:
@@ -175,13 +216,15 @@ def runs_router(service: RunService) -> APIRouter:
             return service.cancel(run_id)
 
     @router.get("/{run_id}/delete-preview")
-    def delete_preview(run_id: str) -> dict[str, Any]:
+    def delete_preview(run_id: str, chain: bool = False) -> dict[str, Any]:
         with run_errors():
-            return service.deletion_preview(run_id)
+            return service.chain_deletion_preview(run_id) if chain else service.deletion_preview(run_id)
 
     @router.post("/{run_id}/delete")
     def delete(run_id: str, request: DeleteRequest) -> dict[str, Any]:
         with run_errors():
+            if request.chain:
+                return service.delete_chain(run_id, confirmed=request.confirmed)
             return service.delete(run_id, confirmed=request.confirmed)
 
     return router

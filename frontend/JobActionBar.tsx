@@ -18,6 +18,7 @@ export function JobActionBar({
   save,
   inspect,
   prepare,
+  start,
   duplicate,
   convert,
   archive,
@@ -37,7 +38,8 @@ export function JobActionBar({
   goToSection: (id: string) => void;
   save: () => Promise<void>;
   inspect: () => Promise<void>;
-  prepare: (start?: boolean) => Promise<void>;
+  prepare: () => Promise<void>;
+  start: () => Promise<void>;
   duplicate: () => Promise<void>;
   convert: () => Promise<void>;
   archive: () => Promise<void>;
@@ -77,7 +79,7 @@ export function JobActionBar({
               disabled={busy || !!prepareReason}
               title={prepareReason || undefined}
               aria-describedby={prepareReason ? 'prepare-reason' : undefined}
-              onClick={() => void prepare(true)}
+              onClick={() => void start()}
             >
               Prepare and start
             </button>

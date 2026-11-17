@@ -185,9 +185,8 @@ test('alternating Wan settings persist, train both experts and restore the paire
       'low-noise 2 steps · high-noise 1 steps',
       { timeout: 240_000 },
     );
-    await page
-      .getByLabel('Additional segment steps', { exact: true })
-      .fill('5');
+    // Both experts train until step 7: low continues from 2 and high catches up from 1.
+    await page.getByLabel('Train until step', { exact: true }).fill('7');
     await partial
       .getByRole('button', { name: 'Restore as new segment', exact: true })
       .click();
@@ -199,19 +198,27 @@ test('alternating Wan settings persist, train both experts and restore the paire
       .getByRole('button', { name: 'Restore as new segment', exact: true })
       .click();
     await expect(page.getByLabel('Training progress')).toContainText(
-      'Step 6/6',
+      'Step 7/7',
       { timeout: 240_000 },
     );
     await expect(
       page.getByText('State: Completed', { exact: true }),
     ).toBeVisible({ timeout: 240_000 });
+    // The training's merged list also has the source's step-7 low checkpoint; the segment's is last.
     await expect(
-      (await openCheckpointPanel(page)).getByRole('button', {
-        name: /-low-step0*7\.safetensors · available$/,
-      }),
+      (await openCheckpointPanel(page))
+        .getByRole('row')
+        .filter({ has: page.getByRole('cell', { name: '2', exact: true }) })
+        .getByRole('button', {
+          name: /-low-step0*7\.safetensors · available$/,
+        }),
     ).toBeVisible();
     await openRunTab(page, 'samples');
-    await page.getByRole('button', { name: /sample.mp4.*available/ }).click();
+    // The source Run's final sample comes first in the training's merged list.
+    await page
+      .getByRole('button', { name: /sample.mp4.*available/ })
+      .last()
+      .click();
     await expect(page.getByLabel('Output video')).toBeVisible();
     const video = page.getByLabel('Output video');
     await video.evaluate(async (element) => {

@@ -125,8 +125,14 @@ test('a stopped Run resumes saved optimizer state through the UI after a backend
         { timeout: 240_000 },
       )
       .toBeTruthy();
+    await page.getByRole('button', { name: 'Stop now', exact: true }).click();
+    // Stop now says what it loses; Save and stop would keep it.
+    await expect(page.getByRole('dialog')).toContainText(
+      'trained since the last save',
+    );
     await page
-      .getByRole('button', { name: 'Request graceful stop', exact: true })
+      .getByRole('dialog')
+      .getByRole('button', { name: 'Stop now' })
       .click();
     await expect(page.getByText('State: Stopped', { exact: true })).toBeVisible(
       { timeout: 240_000 },
@@ -137,7 +143,10 @@ test('a stopped Run resumes saved optimizer state through the UI after a backend
     const resume = runPanel(page, 'resume');
     await resume.getByText('How resuming works', { exact: true }).click();
     await expect(
-      resume.getByText(/Work since the last saved state must run again/),
+      resume.getByText(/Work since the chosen save must run again/),
+    ).toBeVisible();
+    await expect(
+      resume.getByText(/data order restarts from the beginning/),
     ).toBeVisible();
     await resume
       .getByRole('button', { name: 'Inspect saved states', exact: true })
@@ -146,25 +155,46 @@ test('a stopped Run resumes saved optimizer state through the UI after a backend
       .getByRole('button', { name: 'Restore as new segment', exact: true })
       .first();
     await expect(restore).toBeEnabled({ timeout: 240_000 });
-    await resume.getByLabel('Additional segment steps').fill('1');
+    // The first listed state is the save at step 1, so training continues to a total, not for extra steps.
+    await expect(resume).toContainText('optimizer step 1');
+    const target = resume.getByLabel('Train until step');
+    await target.fill('1');
+    await expect(restore).toBeDisabled();
+    await expect(resume).toContainText('Choose a step after 1');
+    await target.fill('2');
     await restore.click();
     const dialog = page.getByRole('dialog');
-    await expect(dialog).toContainText(
-      'displayed step counter and data position restart',
-    );
+    await expect(dialog).toContainText('Training continues until step 2');
+    await expect(dialog).toContainText('The data order restarts.');
     await dialog
       .getByRole('button', { name: 'Restore as new segment', exact: true })
       .click();
     await expect(
       page.getByText('State: Completed', { exact: true }),
     ).toBeVisible({ timeout: 240_000 });
+    // Progress continues the original numbering up to the chosen total.
+    await expect(page.getByText('Step 2/2', { exact: true })).toBeVisible();
     const records = await app.records();
     const segment = records.find((run) => run.id !== original.id)!;
     const detail = await (
       await fetch(`${app.url}/api/runs/${segment.id}`)
     ).json();
     expect(detail.resume_of).toBe(original.id);
-    expect(detail.segment.additional_steps).toBe(1);
+    expect(detail.segment).toMatchObject({
+      target_steps: 2,
+      step_offset: 1,
+      additional_steps: 1,
+    });
+    const segmentCheckpoints = await readdir(
+      path.join(detail.directory, 'checkpoints'),
+    );
+    // The segment's interval save at global step 2 repeated its final save and was removed.
+    expect(detail.removed_duplicates).toEqual(
+      expect.arrayContaining([expect.stringMatching(/-step00000002-state$/)]),
+    );
+    expect(
+      segmentCheckpoints.filter((name) => name.includes('-step00000001')),
+    ).toEqual([]);
     const states = await (
       await fetch(`${app.url}/api/runs/${segment.id}/states`)
     ).json();
@@ -274,8 +304,10 @@ test('a gracefully stopped revision can be prepared and started again', async ({
     await expect(page.getByLabel('Run logs')).toContainText(
       'SYNTHETIC ACCEPTANCE FIXTURE: train',
     );
+    await page.getByRole('button', { name: 'Stop now', exact: true }).click();
     await page
-      .getByRole('button', { name: 'Request graceful stop', exact: true })
+      .getByRole('dialog')
+      .getByRole('button', { name: 'Stop now' })
       .click();
     await expect(page.getByText('State: Stopped', { exact: true })).toBeVisible(
       { timeout: 240_000 },

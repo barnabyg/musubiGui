@@ -3,8 +3,10 @@ import { Fragment } from 'react';
 import { focusField, type JobFields } from './jobFields';
 import type { Job, Review } from './jobTypes';
 import { plural } from './labels';
-import { datasetItemRoute } from './route';
+import { datasetItemRoute, formatRoute } from './route';
 import { PreviewMemory } from './PreviewMemory';
+import { ResumeChanges } from './ResumeCompatibility';
+import { runStatus } from './runStatus';
 
 function rateLabel(fps: number | null) {
   return fps === null ? 'unknown fps' : `${Number(fps.toPrecision(6))} fps`;
@@ -200,6 +202,34 @@ export function JobReview({
               ))}
             </ol>
           </details>
+        </section>
+      )}
+      {review.resume_compatibility && (
+        <section aria-label="Resume compatibility">
+          <h3>Resume compatibility</h3>
+          <p>
+            Compared with the Job’s current training,{' '}
+            <a
+              href={formatRoute({
+                screen: 'Runs',
+                id: review.resume_compatibility.run_id,
+              })}
+            >
+              Run {review.resume_compatibility.run_id?.slice(0, 8)}
+            </a>{' '}
+            (revision {review.resume_compatibility.frozen_revision},{' '}
+            {runStatus(
+              review.resume_compatibility.run_status ?? '',
+            ).label.toLowerCase()}
+            {review.resume_compatibility.saved_step === null
+              ? '; inspect its saved states for the saved step'
+              : `, saved at step ${review.resume_compatibility.saved_step}`}
+            ).{' '}
+            {review.resume_compatibility.compatible
+              ? 'Its saved state can resume with this revision. Prepare and start resumes it.'
+              : 'Its saved state can’t resume with this revision; Prepare and start offers a fresh training.'}
+          </p>
+          <ResumeChanges result={review.resume_compatibility} />
         </section>
       )}
       <section aria-label="Cache preparation policy">

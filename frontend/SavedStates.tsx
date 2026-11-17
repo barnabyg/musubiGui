@@ -7,7 +7,8 @@ import type { Run } from './runTypes';
 
 const request = apiClient('Run request failed.');
 
-// The Resume training panel: inspect a Run's saved optimizer states and restore one as a new segment.
+// Resume from an earlier save: inspect a Run's saved optimizer states and restore one, with this
+// Run's own revision, as a new segment.
 export function SavedStates({
   runId,
   files,
@@ -28,9 +29,12 @@ export function SavedStates({
       optimizer_step?: number;
       paired?: boolean;
       counts?: { low: number; high: number };
+      // The step a segment restored from this state continues numbering from.
+      resume_step?: number;
     }[]
   >([]);
-  const [steps, setSteps] = useState(1);
+  // A total, not an increment: the Job's step count unless a state has already passed it.
+  const [steps, setSteps] = useState(config?.steps ?? 1);
   const [error, setError] = useState('');
   const [inspecting, setInspecting] = useState(false);
   const [inspected, setInspected] = useState(false);
@@ -48,22 +52,25 @@ export function SavedStates({
     }
   }
   return (
-    <section className="panel" aria-label="Resume training">
-      <h2>Resume training from saved state</h2>
+    <section className="panel" aria-label="Resume from an earlier save">
+      <h2>Resume from an earlier save</h2>
       {/* Reference text: closed by default so the controls come first. */}
       <details>
         <summary>How resuming works</summary>
         <p>
           Restoration starts a new segment with saved optimizer, scheduler and
-          RNG state. Upstream resets its displayed step counter and data
-          position. A LoRA checkpoint alone cannot restore training state.
-          Stopping does not guarantee a checkpoint or state save.
+          RNG state. Step numbering continues from the saved step, so
+          checkpoints, states and previews are named for the overall step. The
+          data order restarts from the beginning of the dataset. A LoRA
+          checkpoint alone cannot restore training state. Stopping does not
+          guarantee a checkpoint or state save.
         </p>
         <p>
-          After stopping or restarting the app, inspect saved states, choose the
-          additional steps to train and select Restore as new segment. Work
-          since the last saved state must run again. The original Run stays in
-          history.
+          Resume in Actions, or Prepare and start on the Job page, continues the
+          latest save. To go back to an earlier one, inspect saved states,
+          choose the step to train until and select Restore as new segment; it
+          trains with this Run’s revision. Work since the chosen save must run
+          again. The original Run stays in history.
         </p>
         {config?.save_state === false ? (
           <p>
@@ -115,7 +122,7 @@ export function SavedStates({
         </p>
       )}
       <label className="field number-field">
-        Additional segment steps
+        Train until step
         <input
           type="number"
           min={1}
@@ -131,16 +138,26 @@ export function SavedStates({
               ? `low-noise ${state.counts.low} steps · high-noise ${state.counts.high} steps`
               : `optimizer step ${state.optimizer_step}`
             : state.error}
+          {state.valid &&
+            state.resume_step !== undefined &&
+            !(steps > state.resume_step) &&
+            ` · Choose a step after ${state.resume_step} to restore this state.`}
           <button
-            disabled={!state.valid || !Number.isInteger(steps) || steps < 1}
+            disabled={
+              !state.valid ||
+              !Number.isInteger(steps) ||
+              steps < 1 ||
+              (state.resume_step !== undefined && steps <= state.resume_step)
+            }
             onClick={() =>
               void confirmDialog({
                 title: 'Restore this optimizer state as a new segment?',
                 body: (
                   <p>
                     {state.paired &&
-                      'Both expert states and the alternating schedule continue from this saved position. New paired runs extend each expert by the requested steps after catching up an interrupted pair; legacy runs count total updates. '}
-                    The displayed step counter and data position restart.
+                      'Both expert states and the alternating schedule continue from this saved position. New paired runs train each expert until the chosen step after catching up an interrupted pair; legacy runs count total updates. '}
+                    Training continues until step {steps}; step numbering
+                    continues from the saved step. The data order restarts.
                     Original run inputs are preserved.
                   </p>
                 ),

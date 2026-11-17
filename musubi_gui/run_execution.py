@@ -5,6 +5,7 @@ import subprocess  # nosec B404
 import threading
 import time
 from collections.abc import Callable
+from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TextIO
@@ -15,11 +16,14 @@ from musubi_gui.processes import identity_status, observed_tree, process_identit
 from musubi_gui.recipe import reference_environment
 from musubi_gui.redaction import redact
 from musubi_gui.run_cache import cache_artifacts, seed_wan_tokenizer, share_wan_tokenizer
+from musubi_gui.run_control import TRAINING_FINISHED, collect, drop, request_file, stopped_by_save
 from musubi_gui.run_performance import RunPerformance, start_performance
-from musubi_gui.run_stage_outputs import record_checkpoints, record_samples
+from musubi_gui.run_stage_outputs import record_checkpoints, record_samples, remove_final_duplicate_saves
 from musubi_gui.run_store import DeviceLease, RunStore, utc_now
 from musubi_gui.settings import Settings
 from musubi_gui.snapshots import digest, digest_file
+from musubi_gui.step_offset import ENVIRONMENT, segment_step_offset
+from musubi_gui.trainer_control import ENVIRONMENT as CONTROL_ENVIRONMENT
 from musubi_gui.wan_pair_runtime import is_paired, sampling_pair, stage_log, validate_phase_input
 from musubi_gui.windows_job import ProcessJob, WindowsProcess
 
@@ -98,6 +102,9 @@ class RunExecution:
             verified = False
             if not self._run_stage(index, stage):
                 return
+        if not self.preparing:
+            # Recorded as when sampling follows, so the outcome doesn't depend on the Job sampling.
+            drop(self.store, self.run, TRAINING_FINISHED)
         self.store.update(self.run_id, self._finish)
 
     def _run_stage(self, index: int, stage: dict[str, Any]) -> bool:
@@ -111,6 +118,18 @@ class RunExecution:
             return False
         if self.preparing and self.context.reuse(self.run, stage["name"], index):
             return True
+        if stage["name"] != "train" and not self.preparing:
+            # Only training steps read a request.
+            if not any(later["name"] == "train" for later in self.run["stages"][index + 1 :]):
+                # Training finished; a request no step reached leaves the Run to sample and complete.
+                drop(self.store, self.run, TRAINING_FINISHED)
+            elif (dropped := drop(self.store, self.run)) and dropped["action"] == "save_and_stop":
+                # A paired phase ends by saving its state, so Save and stop stops at this preview.
+                self.store.update(
+                    self.run_id,
+                    lambda r: r.update(status="stopped", stop_kind="save", processes=[], finished=utc_now()),
+                )
+                return False
         pair = self._mark_running(index, stage, fresh_run)
         code = self._launch(index, stage)
         if code is None:
@@ -179,8 +198,16 @@ class RunExecution:
     ) -> WindowsProcess | subprocess.Popen[str]:
         environment = reference_environment(Path(self.run["cache"]))
         environment.pop("MUSUBI_EXPERT_STEP_OFFSET", None)
+        environment.pop(ENVIRONMENT, None)
+        environment.pop(CONTROL_ENVIRONMENT, None)
+        if stage["name"] == "train":
+            # Save now, Sample now and Save and stop act at a training step.
+            environment[CONTROL_ENVIRONMENT] = str(request_file(self.run))
         if (offset := stage.get("training", {}).get("checkpoint_step_offset")) is not None:
             environment["MUSUBI_EXPERT_STEP_OFFSET"] = str(offset)
+        if step_offset := segment_step_offset(self.run, stage):
+            # A restored segment continues the original Run's step numbering.
+            environment[ENVIRONMENT] = str(step_offset)
         if seed_wan_tokenizer(self.run):
             environment["HF_HUB_OFFLINE"] = "1"
             log.write("Using the shared Wan tokenizer; Hugging Face Hub access is off for this stage.\n")
@@ -233,6 +260,8 @@ class RunExecution:
                 job_object.terminate()
                 terminate_owned(identities, force=True)
             signalled = signal_stop(self.store, self.run_id, job_object, identities, signalled)
+            if stage["name"] == "train":
+                collect(self.store, self.run)
             if stage["name"] == "train" and time.monotonic() >= retention_at:
                 self.context.request_retention(self.run_id)
                 retention_at = time.monotonic() + 5
@@ -294,7 +323,13 @@ class RunExecution:
     def _record_outcome(self, index: int, stage: dict[str, Any], code: int, pair: dict[str, Any] | None) -> bool:
         """Record how the stage ended; returns False when the Run ended with it."""
         run_id = self.run_id
-        requested = self.store.get(run_id).get("stop_requested")
+        if stage["name"] == "train":
+            # The process may have reported a request just before it exited.
+            collect(self.store, self.run)
+        record = self.store.get(run_id)
+        requested = record.get("stop_requested")
+        if not requested and stage["name"] == "train" and code == 0 and stopped_by_save(record):
+            requested = "save"
         self.store.update(
             run_id,
             lambda r: r["stages"][index].update(
@@ -304,6 +339,10 @@ class RunExecution:
             ),
         )
         if requested:
+            if requested == "save":
+                # A Save and stop at the final step also wrote the train-end save.
+                remove_final_duplicate_saves(self.run, stage)
+                self.context.request_retention(run_id)
             self.store.update(
                 run_id,
                 lambda r: r.update(
@@ -346,6 +385,11 @@ class RunExecution:
     def _clean_up(self) -> None:
         if self.performance:
             self.performance.close()
+        if not self.preparing:
+            # A request no step read must not fire later. Unreadable files never block releasing the GPU.
+            with suppress(OSError):
+                collect(self.store, self.run)
+                drop(self.store, self.run)
         if isinstance(self.process, WindowsProcess):
             self.process.close()
         if self.job_object:

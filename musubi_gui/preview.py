@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 from musubi_gui.media_probe import inspect
 from musubi_gui.sampling import native_preview_frames, sample_geometry
 from musubi_gui.settings import Settings
+from musubi_gui.step_offset import due_steps
 
 if TYPE_CHECKING:
     from musubi_gui.job_models import Job
@@ -56,15 +57,18 @@ def preview_step(file: Path) -> int | None:
     return int(match[1]) if match else None
 
 
-def validate_previews(args: list[str], family: str) -> None:
-    """A trainer's success exit alone does not establish that requested previews exist."""
+def validate_previews(args: list[str], family: str, step_offset: int = 0) -> None:
+    """A trainer's success exit alone does not establish that requested previews exist.
+
+    A restored segment names previews by global step, at interval multiples after `step_offset`.
+    """
     if "--sample_every_n_steps" not in args:
         return
     interval = int(args[args.index("--sample_every_n_steps") + 1])
     steps = int(args[args.index("--max_train_steps") + 1])
     directory = Path(args[args.index("--output_dir") + 1]) / "sample"
     found = {preview_step(file): file for file in directory.glob("*") if file.suffix.lower() in {".mp4", ".png"}}
-    for step in range(interval, steps + 1, interval):
+    for step in due_steps(interval, step_offset, steps):
         if step not in found:
             raise ValueError(f"Training exited successfully but the preview at step {step} is missing.")
         metadata = inspect(found[step])

@@ -9,6 +9,8 @@ Each topic has its own page:
 - [Job editor and revisions](jobs-editor.md): editor tabs, compact setup, drafts,
   revisions and export versions, configuration review, model conversion, import and
   export, archiving and deleting a job, and focused checks.
+- [Training from the Job page](jobs-current-training.md): the current training's
+  progress and controls, and how Prepare and start resumes a stopped training.
 - [Training settings](jobs-training.md): timestep strategy, optimizer, default
   configuration, presets, caching and alternating Wan high/low LoRAs.
 - [Datasets and media in a job](jobs-datasets.md): datasets and repeats, training

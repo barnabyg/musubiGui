@@ -1,0 +1,391 @@
+{
+  "version": 1,
+  "date": "2026-11-17",
+  "scenario": "H3 stop, edit and resume on the GPU through the app API: Save and stop partway, a new Job revision with another preview prompt, more steps and a doubled learning rate, then resume (#206)",
+  "gpu_evidence": true,
+  "status": "passed",
+  "application_revision": "da7bb38e0651d5eb41bcf04e6c2b31339bcfc46a",
+  "upstream_revision": "f8a1b03794a49239a3539015075f5123d6c07d66",
+  "hardware": {
+    "gpu": "NVIDIA GeForce RTX 3090",
+    "vram_mib": 24576,
+    "host_ram_gb": 96,
+    "os": "Windows 11",
+    "gpu_power_note": "The owner's fixed power limit (280 W of 350 W) and fan profile were left unchanged. Clocks varied with GPU temperature during the trial."
+  },
+  "environment": {
+    "python": "3.12.10",
+    "torch": "2.13.0+cu130",
+    "accelerate": "1.15.0",
+    "transformers": "5.17.0",
+    "musubi-tuner": "0.3.6",
+    "triton-windows": "3.7.1.post27",
+    "cuda": "13.0"
+  },
+  "method": {
+    "workspace": "Isolated GPU acceptance workspace (.\\acceptance.cmd's preparation with --mode gpu --settings <owner settings, read only> --prepare-only) under an ignored .cache trial folder. Only the configured model paths came from the owner's settings; output, cache and app state were new folders. The backend ran from this checkout (python -m musubi_gui --no-browser) with MUSUBI_GUI_STATE pointing at the workspace state, below-normal CPU priority.",
+    "dataset": "The workspace's synthetic H3 acceptance dataset: one generated 124-frame 256x256 24 fps clip (a brightening blue field) with a same-stem 440 Hz WAV and a one-line caption. One clip at one repeat makes each epoch one step.",
+    "driver": "A script sending the GUI's requests in order: PUT /api/jobs/{id}, POST /api/jobs/{id}/review, POST /api/runs/prepare {start: true}, polling GET /api/runs/{id} and /logs, POST /api/runs/{id}/control {save_and_stop}, GET /api/runs/{id}/states (Inspect saved states), PUT /api/jobs/{id} (the new revision), POST /api/jobs/{id}/review, POST /api/runs/{id}/resume-check, POST /api/runs/{id}/resume {job_revision}, then control {save} and {sample} on the segment.",
+    "vram_sampling": "nvidia-smi whole-device memory.used every 2 s (includes about 870 MiB of desktop use); sampling can miss brief peaks.",
+    "step_time": "The trainer's timing record (training seconds excluding previews, divided by step intervals) and per-step differences of upstream's progress-bar elapsed time, whole seconds."
+  },
+  "jobs": {
+    "revision_3_source": {
+      "recipe": "guidance-loss",
+      "width": 256,
+      "height": 256,
+      "frames": 124,
+      "rank": 4,
+      "alpha": 4,
+      "optimizer": "AdamW",
+      "learning_rate": 0.0001,
+      "timestep_sampling": "uniform",
+      "blocks_to_swap": 48,
+      "block_swap_h2d_only": true,
+      "gradient_checkpointing": true,
+      "steps": 40,
+      "save_every": 10,
+      "save_state": true,
+      "preview_every": 10,
+      "sample_enabled": true,
+      "sample_steps": 4,
+      "sample_prompt": "A red square moves across a blue background. A steady sine tone plays.",
+      "seed": 42
+    },
+    "revision_4_resumed": {
+      "changed": {
+        "steps": 60,
+        "learning_rate": 0.0002,
+        "sample_prompt": "A green circle drifts over a white field. A steady sine tone plays."
+      }
+    }
+  },
+  "runs": {
+    "source": {
+      "id": "84e5058a",
+      "folder": "H3-acceptance-1-2026-11-17_00-25-35Z",
+      "status": "stopped",
+      "stop_kind": "save",
+      "save_and_stop": { "requested_at_step": 25, "handled_step": 26 },
+      "stages": {
+        "latent_cache": "completed",
+        "text_cache": "completed",
+        "train": "stopped",
+        "generate": "pending"
+      },
+      "saved_states": [
+        {
+          "name": "H3-acceptance-1-r3-step00000010-state",
+          "valid": true,
+          "optimizer_step": 10,
+          "scheduler_step": 10
+        },
+        {
+          "name": "H3-acceptance-1-r3-step00000020-state",
+          "valid": true,
+          "optimizer_step": 20,
+          "scheduler_step": 20
+        },
+        {
+          "name": "H3-acceptance-1-r3-step00000026-state",
+          "valid": true,
+          "optimizer_step": 26,
+          "scheduler_step": 26
+        }
+      ],
+      "checkpoints": [
+        "H3-acceptance-1-r3-step00000010.safetensors",
+        "H3-acceptance-1-r3-step00000020.safetensors",
+        "H3-acceptance-1-r3-step00000026.safetensors"
+      ],
+      "previews": [
+        {
+          "step": 10,
+          "prompt": "A red square moves across a blue background. A steady sine tone plays.",
+          "frames": 124,
+          "audio_seconds": 5.167
+        },
+        {
+          "step": 20,
+          "prompt": "A red square moves across a blue background. A steady sine tone plays.",
+          "frames": 124,
+          "audio_seconds": 5.167
+        }
+      ]
+    },
+    "resume_check": {
+      "compatible": true,
+      "frozen_revision": 3,
+      "revision": 4,
+      "saved_step": 26,
+      "target_steps": 60,
+      "state_name": "H3-acceptance-1-r3-step00000026-state",
+      "changes": [
+        {
+          "field": "learning_rate",
+          "tier": "warned",
+          "before": 0.0001,
+          "after": 0.0002
+        },
+        { "field": "sample_prompt", "tier": "editable" },
+        { "field": "steps", "tier": "editable", "before": 40, "after": 60 }
+      ],
+      "job_review_resume_compatibility": "Same comparison, compatible, against the stopped Run."
+    },
+    "segment": {
+      "id": "b564c5f9",
+      "folder": "H3-acceptance-1-resume-2026-11-17_00-34-00Z",
+      "status": "completed",
+      "resume_of": "84e5058a",
+      "segment": {
+        "step_offset": 26,
+        "target_steps": 60,
+        "additional_steps": 34,
+        "optimizer_step_before": 26,
+        "source_revision": 3
+      },
+      "train_arguments": {
+        "--learning_rate": "0.0002",
+        "--max_train_steps": "34",
+        "--resume": "<source>/checkpoints/H3-acceptance-1-r3-step00000026-state",
+        "--sample_prompts": "<segment>/previews.json",
+        "--output_name": "H3-acceptance-1-r4",
+        "--save_every_n_steps": "10",
+        "--sample_every_n_steps": "10"
+      },
+      "stages": {
+        "latent_cache": "completed (source caches)",
+        "text_cache": "completed (source caches)",
+        "train": "completed",
+        "generate": "completed"
+      },
+      "controls": [
+        {
+          "action": "save",
+          "handled_step": 30,
+          "note": "Requested at step 29; coincided with the interval save at 30"
+        },
+        { "action": "sample", "handled_step": 32 },
+        {
+          "action": "save",
+          "handled_step": 44,
+          "note": "Off the save interval"
+        }
+      ],
+      "saved_states": [
+        {
+          "name": "H3-acceptance-1-r4-step00000030-state",
+          "valid": true,
+          "optimizer_step": 30,
+          "scheduler_step": 30
+        },
+        {
+          "name": "H3-acceptance-1-r4-step00000040-state",
+          "valid": true,
+          "optimizer_step": 40,
+          "scheduler_step": 40
+        },
+        {
+          "name": "H3-acceptance-1-r4-step00000044-state",
+          "valid": true,
+          "optimizer_step": 44,
+          "scheduler_step": 44
+        },
+        {
+          "name": "H3-acceptance-1-r4-step00000050-state",
+          "valid": true,
+          "optimizer_step": 50,
+          "scheduler_step": 50
+        },
+        {
+          "name": "H3-acceptance-1-r4-state",
+          "valid": true,
+          "optimizer_step": 60,
+          "scheduler_step": 60
+        }
+      ],
+      "removed_duplicates": [
+        "H3-acceptance-1-r4-step00000060.safetensors",
+        "H3-acceptance-1-r4-step00000060-state"
+      ],
+      "previews": [
+        {
+          "step": 30,
+          "prompt": "A green circle drifts over a white field. A steady sine tone plays.",
+          "frames": 124,
+          "audio_seconds": 5.167
+        },
+        {
+          "step": 32,
+          "prompt": "A green circle drifts over a white field. A steady sine tone plays.",
+          "frames": 124,
+          "audio_seconds": 5.167,
+          "note": "Sample now"
+        },
+        {
+          "step": 40,
+          "prompt": "A green circle drifts over a white field. A steady sine tone plays.",
+          "frames": 124,
+          "audio_seconds": 5.167
+        },
+        {
+          "step": 50,
+          "prompt": "A green circle drifts over a white field. A steady sine tone plays.",
+          "frames": 124,
+          "audio_seconds": 5.167
+        },
+        {
+          "step": 60,
+          "prompt": "A green circle drifts over a white field. A steady sine tone plays.",
+          "frames": 124,
+          "audio_seconds": 5.167
+        }
+      ],
+      "final_sample": {
+        "path": "samples/sample.mp4",
+        "status": "playable",
+        "frames": 124,
+        "fps": 24.0,
+        "audio": "32 kHz stereo AAC, 5.184 s"
+      },
+      "train_log": [
+        "resume training from local state: <source>/checkpoints/H3-acceptance-1-r3-step00000026-state",
+        "Resume learning rate: applied 0.0002; the saved state had 0.0001.",
+        "prompt: A green circle drifts over a white field. A steady sine tone plays. (each of the five preview generations; the old prompt does not appear)"
+      ]
+    },
+    "control_fresh_run": {
+      "id": "b0105d29",
+      "purpose": "A fresh Run of the second acceptance Job with the source's training settings, no previews and no saves, started right after the segment, to compare step time at the same GPU warmth. Stopped after 27 steps.",
+      "status": "stopped"
+    }
+  },
+  "measurements": {
+    "per_step_loss_avr_loss": {
+      "note": "Upstream's avr_loss; with one clip per epoch it is each step's own loss. Uniform timestep sampling makes it noisy step to step. Global steps; the segment's local steps are offset by 26.",
+      "source_steps_1_26": [
+        21.3, 1.96, 1.22, 1.44, 1.27, 8.01, 1.69, 15.4, 3.05, 1.51, 1.55, 1.76,
+        1.45, 0.896, 2.46, 1.5, 1.46, 1.58, 4.91, 2.59, 2.0, 6.29, 1.49, 1.05,
+        1.11, 7.24
+      ],
+      "segment_steps_27_60": [
+        1.13, 0.974, 0.0693, 0.966, 0.0822, 1.57, 0.979, 0.927, 8.58, 2.44,
+        0.651, 0.817, 1.15, 0.86, 7.09, 0.781, 0.59, 0.0623, 0.832, 2.48, 0.645,
+        2.35, 0.629, 1.38, 0.559, 0.73, 7.9, 0.675, 0.658, 0.0614, 0.5, 0.909,
+        0.724, 0.563
+      ],
+      "control_steps_1_27": [
+        21.3, 1.97, 1.23, 1.44, 1.27, 8.12, 1.71, 15.4, 3.07, 1.5, 1.55, 1.76,
+        1.45, 0.894, 2.43, 1.5, 1.48, 1.6, 4.94, 2.68, 1.99, 6.31, 1.48, 1.06,
+        1.12, 7.31, 1.14
+      ],
+      "window_mean_median": {
+        "steps_1_10": [5.685, 1.825],
+        "steps_17_26": [2.972, 1.79],
+        "steps_27_36_first_resumed": [1.772, 0.976],
+        "steps_51_60": [1.328, 0.667]
+      },
+      "first_resumed_step": "Step 27 resumed at 1.13; the fresh control Run, whose weights at step 26 are identical, had 1.14 at step 27. The restored RNG reproduced the continuing timestep and noise draw, and nothing restarted from step 1's 21.3."
+    },
+    "lora_up_l2_norm": {
+      "note": "L2 norm over all lora_up tensors of each checkpoint; zero at initialisation, growing as training proceeds.",
+      "step_10": 1.4488,
+      "step_20": 2.1004,
+      "step_26": 2.4736,
+      "step_30": 3.0247,
+      "step_40": 4.23,
+      "step_44": 4.6489,
+      "step_50": 5.1094,
+      "step_60": 5.7007,
+      "growth_per_step": {
+        "steps_20_26_lr_0.0001": 0.0622,
+        "steps_26_30_lr_0.0002": 0.1378
+      },
+      "reading": "The resumed weights continue from the step-26 norm without a reset, and grow about 2.2 times faster per step after the learning rate doubled."
+    },
+    "step_time_seconds": {
+      "source_timing_record": {
+        "intervals": 25,
+        "seconds": 327.125,
+        "mean": 13.09,
+        "includes": "interval saves at 10 and 20"
+      },
+      "segment_timing_record": {
+        "intervals": 33,
+        "seconds": 466.811,
+        "mean": 14.15,
+        "includes": "saves at 30, 40, 44 and 50"
+      },
+      "control_timing_record": {
+        "intervals": 26,
+        "seconds": 369.203,
+        "mean": 14.2,
+        "includes": "no saves or previews"
+      },
+      "per_step_median": { "source": 13, "segment": 15, "control": 14 },
+      "gpu_clock_note": "Median power during busy training sampled 268 W in the source, 229 W in the segment and 240 W (1590 MHz SM, 70 C) in the fresh control right after it. The fresh, never-resumed control Run took as long per step as the resumed segment, so the slower later steps follow GPU temperature and clocks, not resuming."
+    },
+    "vram_mib_whole_device": {
+      "source_training": { "peak": 10620, "median_busy": 10436 },
+      "segment_training": { "peak": 10620, "median_busy": 10436 },
+      "control_training": { "peak": 10620, "median_busy": 10620 },
+      "segment_final_sample": { "peak": 11466 }
+    },
+    "previews": {
+      "source": { "count": 2, "seconds": 31.33 },
+      "segment": { "count": 5, "seconds": 71.72 }
+    }
+  },
+  "checks": [
+    {
+      "check": "Save and stop ends the Run Stopped with a valid state at the stop step",
+      "result": "passed",
+      "detail": "Stopped at step 26 with H3-acceptance-1-r3-step00000026-state valid, optimizer and scheduler step 26."
+    },
+    {
+      "check": "resume-check reports the edited revision compatible with the learning rate as a warned change",
+      "result": "passed"
+    },
+    {
+      "check": "Continuous numbering of checkpoints, states and previews",
+      "result": "passed",
+      "detail": "Segment saves 30, 40, 44 and 50 plus the final save at 60 (its numbered duplicate removed), previews 30, 32, 40, 50 and 60; saved optimizer steps 30-60 continue from 26."
+    },
+    {
+      "check": "Previews from the saved step onwards use the new prompt",
+      "result": "passed",
+      "detail": "previews.json, the training log and each preview's metadata carry prompt B; prompt A appears only in the source."
+    },
+    {
+      "check": "The train log shows the applied learning rate",
+      "result": "passed",
+      "detail": "Resume learning rate: applied 0.0002; the saved state had 0.0001."
+    },
+    {
+      "check": "Loss continues rather than jumping back to its starting level",
+      "result": "passed",
+      "detail": "First resumed step 1.13 against 21.3 at step 1 and 1.14 for the fresh control at step 27; resumed medians 0.98 (27-36) and 0.67 (51-60) against 1.79 (17-26)."
+    },
+    {
+      "check": "VRAM matches the original segment",
+      "result": "passed",
+      "detail": "10,620 MiB peak in both."
+    },
+    {
+      "check": "Step time matches the original segment",
+      "result": "passed",
+      "detail": "14.15 s mean against 13.09 s, explained by GPU clocks: a fresh control Run at the same warmth measured 14.2 s."
+    },
+    {
+      "check": "Save now and Sample now during the resumed segment produce outputs",
+      "result": "passed",
+      "detail": "Save now at 44 wrote a valid checkpoint and state; Sample now at 32 wrote a preview with prompt B."
+    }
+  ],
+  "limits": [
+    "Synthetic one-clip data at 256x256 and rank 4 proves the mechanics of resuming, not useful learning or production-size capacity.",
+    "Upstream restarts its data order on resume; with one clip per epoch this trial cannot show data-position effects.",
+    "The first Save now coincided with the interval save at step 30; the later one at step 44 tests an off-interval save.",
+    "Whole-device VRAM sampled every 2 s includes desktop use and can miss brief peaks."
+  ]
+}
