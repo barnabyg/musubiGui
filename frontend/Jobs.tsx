@@ -189,6 +189,16 @@ export function Jobs(props: JobsProps) {
           setTransferOpen={setTransferOpen}
         />
       )}
+      {job && review && (
+        <JobSectionContext value={section}>
+          <JobReview
+            prepareReason={prepareReason}
+            job={job}
+            review={review}
+            reviewField={fields.reviewField}
+          />
+        </JobSectionContext>
+      )}
       {job && <JobTraining key={job.id} current={current} />}
       {transferOpen && (
         <JobTransfer
@@ -264,14 +274,6 @@ export function Jobs(props: JobsProps) {
                 preparing a Run.
               </p>
             </JobSection>
-          )}
-          {review && (
-            <JobReview
-              prepareReason={prepareReason}
-              job={job}
-              review={review}
-              reviewField={fields.reviewField}
-            />
           )}
         </JobSectionContext>
       )}

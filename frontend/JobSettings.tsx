@@ -358,7 +358,7 @@ export function JobControls({
           </label>
         )}
       </JobSection>
-      <JobSection className="panel" id="job-section-memory">
+      <JobSection className="panel" id="job-section-advanced">
         <h2>Memory</h2>
         {number(
           'Blocks to swap',
@@ -396,8 +396,6 @@ export function JobControls({
               toggle('Offload inactive DiT', 'offload_inactive_dit')}
           </>
         )}
-      </JobSection>
-      <JobSection className="panel" id="job-section-checkpoints">
         <h2>Checkpoints</h2>
         <div className="number-row">
           {number('Save every N steps', 'save_every')}

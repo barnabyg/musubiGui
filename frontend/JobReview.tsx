@@ -63,33 +63,11 @@ export function JobReview({
             : `Review failed: resolve ${plural(review.errors.length, 'error')} before preparation.`}
         </strong>
         <span>
+          Revision {review.revision} ·{' '}
           {plural(review.effective_count, 'included item')} ·{' '}
           {diskVerdict(review.disk)}
         </span>
       </div>
-      {(job.config.sample_enabled || job.config.preview_every > 0) &&
-        review.sample && (
-          <p>
-            Sample output: {review.sample.width} × {review.sample.height} ·{' '}
-            {review.sample.frames} frames ·{' '}
-            {review.sample.frames === 1
-              ? 'image sample'
-              : `${review.sample.fps} fps · ${Number(review.sample.duration.toFixed(6))} seconds`}
-            .
-          </p>
-        )}
-      {job.family === 'wan' &&
-        job.config.recipe !== 'alternating' &&
-        job.config.preview_every > 0 &&
-        review.sample?.frames > 1 && (
-          <p>
-            Native preview: {review.sample.width} × {review.sample.height} ·{' '}
-            {review.sample.native_preview_frames} frames · 24 fps ·{' '}
-            {Number((review.sample.native_preview_frames / 24).toFixed(6))}{' '}
-            seconds. Native previews use the pinned trainer's 24 fps frame grid.
-          </p>
-        )}
-      <PreviewMemory stages={review.stages} />
       {(['errors', 'warnings'] as const).map((level) => {
         const errors = level === 'errors';
         return (
@@ -158,24 +136,36 @@ export function JobReview({
           )
         );
       })}
-      <p>Optimizer: {review.optimizer}</p>
       <p>
-        Timestep strategy: {review.timestep_sampling}
-        {Object.entries(review.timestep_parameters).map(([key, value]) => (
-          <span key={key}>
-            {' '}
-            · {key === 'sigmoid_scale' ? 'Sigmoid scale' : 'Flow shift'}:{' '}
-            {value}
-          </span>
-        ))}
+        Datasets:{' '}
+        {review.datasets.map((dataset) => dataset.name).join(', ') ||
+          'None selected'}
       </p>
-      <p>
-        {review.timestep_range_policy === 'original'
-          ? 'Original recipe: preserve the distribution within each expert’s range.'
-          : review.timestep_range_policy === 'bounded'
-            ? 'The selected distribution is scaled into each expert’s range, keeping every draw inside it.'
-            : 'H3 shares one uniform base draw between video and audio.'}
-      </p>
+      {(job.config.sample_enabled || job.config.preview_every > 0) &&
+        review.sample && (
+          <p>
+            Sample output: {review.sample.width} × {review.sample.height} ·{' '}
+            {review.sample.frames} frames ·{' '}
+            {review.sample.frames === 1
+              ? 'image sample'
+              : `${review.sample.fps} fps · ${Number(review.sample.duration.toFixed(6))} seconds`}
+            .
+          </p>
+        )}
+      {job.family === 'wan' &&
+        job.config.recipe !== 'alternating' &&
+        job.config.preview_every > 0 &&
+        review.sample?.frames > 1 && (
+          <p>
+            Native preview: {review.sample.width} × {review.sample.height} ·{' '}
+            {review.sample.native_preview_frames} frames · 24 fps ·{' '}
+            {Number((review.sample.native_preview_frames / 24).toFixed(6))}{' '}
+            seconds. Native previews use the pinned trainer's 24 fps frame grid.
+          </p>
+        )}
+      {!job.config.sample_enabled && job.config.preview_every === 0 && (
+        <p>Sample output: disabled.</p>
+      )}
       {review.expert_schedule && (
         <section aria-label="Expert training schedule">
           <h3>Alternating expert schedule</h3>
@@ -232,25 +222,6 @@ export function JobReview({
           <ResumeChanges result={review.resume_compatibility} />
         </section>
       )}
-      <section aria-label="Cache preparation policy">
-        <h3>Caching</h3>
-        <p>
-          Latents:{' '}
-          {review.cache_policy.latent_cache === 'rebuild'
-            ? 'Rebuild cache'
-            : 'Reuse compatible cache'}
-          . Text embeddings:{' '}
-          {review.cache_policy.text_cache === 'rebuild'
-            ? 'Rebuild cache'
-            : 'Reuse compatible cache'}
-          .
-        </p>
-        <p className="hint">
-          Both cache stages are required. Preparation verifies compatible
-          artifacts before reuse; otherwise it rebuilds them. Run stages show
-          the actual result. Other Runs’ caches are preserved.
-        </p>
-      </section>
       <details data-testid="disk-estimate">
         <summary>Estimated disk use</summary>
         {job.config.keep_checkpoints > 0 && (
@@ -319,27 +290,6 @@ export function JobReview({
           </table>
         </div>
       )}
-      {review.video_windows.items.length > 0 && (
-        <div data-testid="video-windows">
-          <h3>Cached video windows</h3>
-          <p>
-            {review.video_windows.total} cached video windows from{' '}
-            {review.video_windows.items.length} videos (
-            {job.config.frame_extraction}).
-          </p>
-          <ul>
-            {review.video_windows.items.map((item) => (
-              <li key={item.id}>
-                {item.name}: {rateLabel(item.source_fps)},{' '}
-                {item.source_frames ?? '?'}
-                {item.resampled_frames !== item.source_frames &&
-                  ` → ${item.resampled_frames ?? '?'}`}{' '}
-                frames · {item.windows ?? '?'} windows
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
       {job.family === 'h3' && review.audio_coverage.included > 0 && (
         <>
           <h3>Audio coverage</h3>
@@ -355,7 +305,67 @@ export function JobReview({
         </>
       )}
       <details>
-        <summary>Advanced</summary>
+        <summary>Configuration details</summary>
+        <PreviewMemory stages={review.stages} />
+        <p>Optimizer: {review.optimizer}</p>
+        <p>
+          Timestep strategy: {review.timestep_sampling}
+          {Object.entries(review.timestep_parameters).map(([key, value]) => (
+            <span key={key}>
+              {' '}
+              · {key === 'sigmoid_scale' ? 'Sigmoid scale' : 'Flow shift'}:{' '}
+              {value}
+            </span>
+          ))}
+        </p>
+        <p>
+          {review.timestep_range_policy === 'original'
+            ? 'Original recipe: preserve the distribution within each expert’s range.'
+            : review.timestep_range_policy === 'bounded'
+              ? 'The selected distribution is scaled into each expert’s range, keeping every draw inside it.'
+              : 'H3 shares one uniform base draw between video and audio.'}
+        </p>
+        <section aria-label="Cache preparation policy">
+          <h3>Caching</h3>
+          <p>
+            Latents:{' '}
+            {review.cache_policy.latent_cache === 'rebuild'
+              ? 'Rebuild cache'
+              : 'Reuse compatible cache'}
+            . Text embeddings:{' '}
+            {review.cache_policy.text_cache === 'rebuild'
+              ? 'Rebuild cache'
+              : 'Reuse compatible cache'}
+            .
+          </p>
+          <p className="hint">
+            Both cache stages are required. Preparation verifies compatible
+            artifacts before reuse; otherwise it rebuilds them. Run stages show
+            the actual result. Other Runs’ caches are preserved.
+          </p>
+        </section>
+        {review.video_windows.items.length > 0 && (
+          <div data-testid="video-windows">
+            <h3>Cached video windows</h3>
+            <p>
+              {review.video_windows.total} cached video windows from{' '}
+              {review.video_windows.items.length} videos (
+              {job.config.frame_extraction}).
+            </p>
+            <ul>
+              {review.video_windows.items.map((item) => (
+                <li key={item.id}>
+                  {item.name}: {rateLabel(item.source_fps)},{' '}
+                  {item.source_frames ?? '?'}
+                  {item.resampled_frames !== item.source_frames &&
+                    ` → ${item.resampled_frames ?? '?'}`}{' '}
+                  frames · {item.windows ?? '?'} windows
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         <h3>Resolved paths</h3>
         <p>
           The Run/output folder uses the Job name. A unique suffix is allocated

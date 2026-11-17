@@ -20,7 +20,7 @@ test('Run and output folders keep readable frozen Job names without collisions',
         .getByRole('button', { name: 'Review configuration', exact: true })
         .click();
       const review = page.getByLabel('Configuration review');
-      await review.getByText('Advanced', { exact: true }).click();
+      await review.getByText('Configuration details', { exact: true }).click();
       await expect(review).toContainText('Summer---test-{timestamp}');
       await page
         .getByRole('button', { name: 'Prepare only', exact: true })

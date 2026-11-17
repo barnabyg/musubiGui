@@ -335,7 +335,7 @@ test('an H3 job adds an image dataset, warns that it is experimental and uses th
     await expect(panel).toContainText('experimental');
     await expect(panel).toContainText('every other model using it');
     await expect(panel).toContainText('1 supervised / 1 included');
-    await page.getByText('Advanced', { exact: true }).click();
+    await page.getByText('Configuration details', { exact: true }).click();
     const args = (name: string) =>
       panel
         .locator('details details')
@@ -355,7 +355,7 @@ test('an H3 job adds an image dataset, warns that it is experimental and uses th
     await expect(
       panel.getByRole('heading', { name: 'Audio coverage', exact: true }),
     ).toHaveCount(0);
-    await page.getByText('Advanced', { exact: true }).click();
+    await page.getByText('Configuration details', { exact: true }).click();
     await page.getByText('train arguments', { exact: true }).click();
     await expect(args('train')).toContainText('--video_only');
   } finally {

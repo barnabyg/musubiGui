@@ -156,7 +156,7 @@ test('review leads with the verdict, comes into view and collapses technical det
     await expect(page.getByTestId('dataset-toml')).toBeHidden();
     await expect(page.getByText('Resolved paths')).toBeHidden();
     await expect(page.getByText('latent_cache arguments')).toBeHidden();
-    await page.getByText('Advanced', { exact: true }).click();
+    await page.getByText('Configuration details', { exact: true }).click();
     await expect(page.getByTestId('dataset-toml')).toBeVisible();
   } finally {
     await app.close();

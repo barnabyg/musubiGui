@@ -5,7 +5,7 @@ How to edit, save, review and manage a job. [Jobs](jobs.md) lists the other job 
 ## Compact job setup
 
 Jobs opens on **Job & dataset**. Separate tabs contain Training, Samples, Dataset preparation,
-Memory, Checkpoints, Presets and Review. Training holds the required choices, step count,
+Advanced, Presets and Review. Advanced groups Memory and Checkpoints. Training holds the required choices, step count,
 optimizer, timestep strategy and LoRA settings. Use Left/Right arrows to switch tabs,
 or Home/End to select the first/last tab. This follows the separate-panel behaviour of Runs tabs.
 Samples holds final-sample enablement, preview cadence, prompt, inference steps,
@@ -29,7 +29,7 @@ a link that focuses that field.
 Open the relevant tab to change its fields. Reopening a saved job or importing a configuration
 preserves every value. Review configuration opens the Review tab when its result arrives.
 Review error links select the owning tab and open any collapsed details before focusing the
-field. Generated configuration remains under Advanced in Configuration review.
+field. Review starts with blocking issues, warnings, selected datasets and sample output. Expand Configuration details for optimizer values, timestep settings, cache policy, per-clip calculations and generated configuration.
 
 To verify manually, run this from the repository root in PowerShell 7:
 

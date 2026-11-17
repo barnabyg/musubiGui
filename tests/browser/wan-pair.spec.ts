@@ -50,7 +50,7 @@ test('Wan offers only alternating training for new jobs and presets', async ({
     await expect(
       page.getByLabel('Steps per expert before switching', { exact: true }),
     ).toHaveValue('1');
-    await page.getByRole('tab', { name: 'Checkpoints', exact: true }).click();
+    await page.getByRole('tab', { name: 'Advanced', exact: true }).click();
     await expect(
       page.getByRole('checkbox', { name: /^Save optimizer\/training state/ }),
     ).toBeChecked();
@@ -77,7 +77,7 @@ test('Wan offers only alternating training for new jobs and presets', async ({
     await expect(
       page.getByLabel('Steps per expert before switching', { exact: true }),
     ).toHaveValue('100');
-    await page.getByRole('tab', { name: 'Checkpoints', exact: true }).click();
+    await page.getByRole('tab', { name: 'Advanced', exact: true }).click();
     await expect(
       page.getByRole('checkbox', { name: /^Save optimizer\/training state/ }),
     ).toBeChecked();

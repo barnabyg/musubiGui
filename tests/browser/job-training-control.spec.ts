@@ -118,7 +118,7 @@ test('Start on the Job page resumes a stopped training with an edited prompt and
       'Needs a new Run',
     );
     // This training kept state, so only turning state saving off needs a new Run.
-    await page.getByRole('tab', { name: 'Checkpoints', exact: true }).click();
+    await page.getByRole('tab', { name: 'Advanced', exact: true }).click();
     const saveState = page.getByRole('checkbox', {
       name: /^Save optimizer\/training state/,
     });
@@ -189,7 +189,7 @@ test('an edit that needs a new Run makes Start name the fields and start fresh o
     const { run } = await startAndSaveAndStop(page, app, job.id);
 
     // Turning state saving on resumes, so it isn't marked either way.
-    await page.getByRole('tab', { name: 'Checkpoints', exact: true }).click();
+    await page.getByRole('tab', { name: 'Advanced', exact: true }).click();
     const saveState = page.getByRole('checkbox', {
       name: /^Save optimizer\/training state/,
     });

@@ -29,7 +29,7 @@ test('invalid fields are flagged while typing and review errors lead to their fi
     await expect(frames).toHaveAccessibleDescription(/4\*n\+1/);
     await frames.fill('33');
     const blocks = page.getByRole('spinbutton', { name: 'Blocks to swap' });
-    await page.getByRole('tab', { name: 'Memory', exact: true }).click();
+    await page.getByRole('tab', { name: 'Advanced', exact: true }).click();
     await blocks.fill('39');
     await expect(blocks).toHaveAccessibleDescription('Enter 0 to 38.');
     await blocks.fill('1.5');
@@ -170,7 +170,7 @@ test('a saved value Review rejects has a control to fix it, even where the form 
       .click();
     const toggle = page.getByRole('checkbox', { name: /^Runtime FP8 scaling/ });
     await expect(toggle).toBeFocused();
-    await page.getByRole('tab', { name: 'Memory', exact: true }).click();
+    await page.getByRole('tab', { name: 'Advanced', exact: true }).click();
     await toggle.click();
     await expect(toggle).toHaveCount(0);
   } finally {
