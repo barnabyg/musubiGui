@@ -1,0 +1,403 @@
+{
+  "version": 1,
+  "date": "2026-11-17",
+  "scenario": "Alternating (paired) Wan stop, edit and resume on the GPU through the app API: Save and stop partway through a low-noise phase, a new Job revision with another preview prompt, a higher total and a doubled learning rate, then resume (#206)",
+  "gpu_evidence": true,
+  "status": "passed",
+  "application_revision": "da7bb38e0651d5eb41bcf04e6c2b31339bcfc46a",
+  "upstream_revision": "f8a1b03794a49239a3539015075f5123d6c07d66",
+  "hardware": {
+    "gpu": "NVIDIA GeForce RTX 3090",
+    "vram_mib": 24576,
+    "host_ram_gb": 96,
+    "os": "Windows 11",
+    "gpu_power_note": "The owner's fixed power limit (280 W of 350 W) and fan profile were left unchanged."
+  },
+  "environment": {
+    "python": "3.12.10",
+    "torch": "2.13.0+cu130",
+    "accelerate": "1.15.0",
+    "transformers": "5.17.0",
+    "musubi-tuner": "0.3.6",
+    "cuda": "13.0"
+  },
+  "method": {
+    "workspace": "The same isolated GPU acceptance workspace, backend and request sequence as h3-resume.json. Configured native FP16 Wan 2.2 experts, Wan 2.1 VAE and UMT5 from the owner's settings, read only.",
+    "dataset": "The workspace's synthetic Wan acceptance dataset: one generated 17-frame 256x256 16 fps clip with a one-line caption; one step per epoch.",
+    "stop": "A poller sent POST /api/runs/{id}/control {save_and_stop} once the low-noise expert had trained 13 updates, partway through its third phase (low 10 to 15).",
+    "segment_controls": "Save now when low reached 17, mid-phase. Sample now was refused with 409 'Sample now is unavailable: alternating Wan previews run as separate sampling stages.', as documented in runs-lifecycle.md; the segment's scheduled paired previews at 20, 30 and 40 and the final sample cover sampling.",
+    "vram_sampling": "nvidia-smi whole-device memory.used every 2 s, grouped by each stage's recorded start and finish; includes about 870 MiB of desktop use.",
+    "step_time": "Each phase's trainer timing record (training seconds excluding previews, divided by step intervals)."
+  },
+  "jobs": {
+    "revision_2_source": {
+      "recipe": "alternating",
+      "wan_steps_per_expert": true,
+      "expert_interval": 10,
+      "steps": 30,
+      "width": 256,
+      "height": 256,
+      "frames": 17,
+      "rank": 8,
+      "alpha": 8,
+      "optimizer": "AdamW",
+      "learning_rate": 0.0001,
+      "timestep_sampling": "shift",
+      "discrete_flow_shift": 3.0,
+      "blocks_to_swap": 36,
+      "fp8_scaled": true,
+      "gradient_checkpointing": true,
+      "save_every": 5,
+      "save_state": true,
+      "preview_every": 10,
+      "sample_enabled": true,
+      "sample_steps": 4,
+      "sample_prompt": "A red square moves across a blue background.",
+      "seed": 42
+    },
+    "revision_3_resumed": {
+      "changed": {
+        "steps": 40,
+        "learning_rate": 0.0002,
+        "sample_prompt": "A green circle drifts over a white field."
+      }
+    },
+    "schedule_note": "Paired phases end at the next switch, save or preview boundary, so with save every 5 each phase trains 5 updates of one expert: low 0-5, high 0-5, low 5-10, high 5-10, preview at 10, low 10-15, and so on."
+  },
+  "runs": {
+    "source": {
+      "id": "1014a8af",
+      "folder": "WAN-acceptance-1-2026-11-17_00-52-47Z",
+      "status": "stopped",
+      "stop_kind": "save",
+      "save_and_stop": {
+        "requested_at": "low 13",
+        "handled_step": 14,
+        "expert": "low",
+        "phase": "low 10 to 15, schedule position 20"
+      },
+      "phases_trained": [
+        { "expert": "low", "updates": "0-5" },
+        { "expert": "high", "updates": "0-5" },
+        { "expert": "low", "updates": "5-10" },
+        { "expert": "high", "updates": "5-10" },
+        { "expert": "paired preview", "step": 10 },
+        { "expert": "low", "updates": "10-14", "status": "stopped" }
+      ],
+      "checkpoints": [
+        "WAN-acceptance-1-r2-low-step00000005",
+        "WAN-acceptance-1-r2-high-step00000005",
+        "WAN-acceptance-1-r2-low-step00000010",
+        "WAN-acceptance-1-r2-high-step00000010",
+        "WAN-acceptance-1-r2-low-step00000014"
+      ],
+      "inspect_saved_states": [
+        { "name": "Paired recovery: low 5 / high 0", "valid": true },
+        { "name": "Paired step 5", "valid": true },
+        { "name": "Paired recovery: low 10 / high 5", "valid": true },
+        { "name": "Paired step 10", "valid": true },
+        {
+          "name": "Paired recovery: low 14 / high 10",
+          "valid": true,
+          "schedule_step": 24,
+          "sources": {
+            "low": "WAN-acceptance-1-r2-low-step00000014-state (optimizer step 14)",
+            "high": "WAN-acceptance-1-r2-high-step00000010-state (optimizer step 10)"
+          }
+        }
+      ],
+      "previews": [
+        {
+          "step": 10,
+          "pair": "low 10 / high 10",
+          "prompt": "A red square moves across a blue background.",
+          "status": "playable",
+          "frames": 17
+        }
+      ]
+    },
+    "resume_check": {
+      "compatible": true,
+      "frozen_revision": 2,
+      "revision": 3,
+      "saved_step": 14,
+      "target_steps": 40,
+      "state": "Paired recovery: low 14 / high 10",
+      "changes": [
+        {
+          "field": "learning_rate",
+          "tier": "warned",
+          "before": 0.0001,
+          "after": 0.0002
+        },
+        { "field": "sample_prompt", "tier": "editable" },
+        { "field": "steps", "tier": "editable", "before": 30, "after": 40 }
+      ]
+    },
+    "segment": {
+      "id": "2ff2e77b",
+      "folder": "WAN-acceptance-1-resume-2026-11-17_01-00-59Z",
+      "status": "completed",
+      "resume_of": "1014a8af",
+      "segment": {
+        "step_offset": 14,
+        "target_steps": 40,
+        "additional_steps": 26,
+        "schedule_start": 24,
+        "optimizer_step_before": 24,
+        "source_revision": 2
+      },
+      "phases": [
+        {
+          "expert": "high",
+          "updates": "10-14",
+          "resumes": "source high-step00000010-state",
+          "note": "catches up the unmatched pair"
+        },
+        {
+          "expert": "low",
+          "updates": "14-15",
+          "resumes": "source low-step00000014-state"
+        },
+        { "expert": "high", "updates": "14-15" },
+        { "expert": "low", "updates": "15-20", "note": "Save now at 18" },
+        { "expert": "high", "updates": "15-20" },
+        { "expert": "paired preview", "step": 20 },
+        {
+          "expert": "low and high alternating",
+          "updates": "20-30",
+          "preview": 30
+        },
+        {
+          "expert": "low and high alternating",
+          "updates": "30-40",
+          "preview": 40
+        },
+        { "expert": "final paired sample" }
+      ],
+      "controls": [
+        { "action": "save", "requested_at": "low 17", "handled_step": 18 },
+        {
+          "action": "sample",
+          "result": "409, unavailable for alternating Wan by design"
+        }
+      ],
+      "checkpoints_low": [
+        "r3-low-step00000015",
+        "r3-low-step00000018",
+        "r3-low-step00000020",
+        "r3-low-step00000025",
+        "r3-low-step00000030",
+        "r3-low-step00000035",
+        "r3-low-step00000040"
+      ],
+      "checkpoints_high": [
+        "r3-high-step00000014",
+        "r3-high-step00000015",
+        "r3-high-step00000020",
+        "r3-high-step00000025",
+        "r3-high-step00000030",
+        "r3-high-step00000035",
+        "r3-high-step00000040"
+      ],
+      "source_lora_copies": [
+        "WAN-acceptance-1-r2-low-step00000014.safetensors",
+        "WAN-acceptance-1-r2-high-step00000010.safetensors"
+      ],
+      "inspect_saved_states": "14 paired positions from Paired step 14 to Paired step 40, all valid, including Paired recovery: low 18 / high 15 from Save now.",
+      "previews": [
+        {
+          "step": 20,
+          "pair": "low 20 / high 20",
+          "prompt": "A green circle drifts over a white field.",
+          "loras": "r3-low-step00000020 + r3-high-step00000020",
+          "status": "playable",
+          "frames": 17
+        },
+        {
+          "step": 30,
+          "pair": "low 30 / high 30",
+          "prompt": "A green circle drifts over a white field.",
+          "loras": "r3-low-step00000030 + r3-high-step00000030",
+          "status": "playable",
+          "frames": 17
+        },
+        {
+          "step": 40,
+          "pair": "low 40 / high 40",
+          "prompt": "A green circle drifts over a white field.",
+          "loras": "r3-low-step00000040 + r3-high-step00000040",
+          "status": "playable",
+          "frames": 17
+        }
+      ],
+      "final_sample": {
+        "prompt": "A green circle drifts over a white field.",
+        "status": "playable",
+        "frames": 17,
+        "fps": 16.0
+      },
+      "train_logs": {
+        "first_high_phase": "Resume learning rate: applied 0.0002; the saved state had 0.0001.",
+        "first_low_phase": "Resume learning rate: applied 0.0002; the saved state had 0.0001.",
+        "later_phases": "Resume learning rate: 0.0002, unchanged from the saved state. (each later phase resumes the segment's own 0.0002 states)"
+      }
+    }
+  },
+  "measurements": {
+    "per_step_loss_avr_loss": {
+      "note": "Each step's own loss (one clip per epoch); expert step numbers.",
+      "source_low_1_5": [0.00406, 0.0198, 0.053, 0.00539, 0.0156],
+      "source_high_1_5": [0.0143, 0.0111, 0.0507, 0.0441, 0.0245],
+      "source_low_11_14_before_stop": [0.0211, 0.0094, 0.0116, 0.00869],
+      "segment_high_11_14_first_resumed": [0.0123, 0.0045, 0.00395, 0.00168],
+      "segment_low_15_first_resumed": [0.00782],
+      "segment_low_16_20": [0.00613, 0.00946, 0.00244, 0.0123, 0.00459],
+      "segment_low_36_40": [0.0023, 0.0164, 0.000847, 0.00056, 0.00525],
+      "segment_high_36_40": [0.00119, 0.000582, 0.00152, 0.000483, 0.00135],
+      "reading": "The resumed phases start at or below the losses before the stop and keep falling, not back at the first phases' levels."
+    },
+    "lora_up_l2_norm": {
+      "low": {
+        "5": 0.9095,
+        "10": 1.5847,
+        "14": 2.0315,
+        "15": 2.2477,
+        "18": 2.8194,
+        "20": 3.1296,
+        "30": 4.1368,
+        "40": 4.7152
+      },
+      "high": {
+        "5": 1.2127,
+        "10": 2.0728,
+        "14": 3.09,
+        "15": 3.3159,
+        "20": 4.0585,
+        "30": 4.8663,
+        "40": 5.3212
+      },
+      "growth_per_update": {
+        "low_10_14_lr_0.0001": 0.1117,
+        "low_14_15_lr_0.0002": 0.2162,
+        "high_5_10_lr_0.0001": 0.172,
+        "high_10_14_lr_0.0002": 0.2543
+      },
+      "reading": "Both experts continue from their saved weights, and grow faster per update once the doubled learning rate applies."
+    },
+    "step_time_seconds": {
+      "source_phases": [
+        { "phase": "low 0-5", "intervals": 4, "seconds": 16.66 },
+        { "phase": "high 0-5", "intervals": 4, "seconds": 16.58 },
+        { "phase": "low 5-10", "intervals": 4, "seconds": 16.47 },
+        { "phase": "high 5-10", "intervals": 4, "seconds": 16.69 },
+        { "phase": "low 10-14", "intervals": 3, "seconds": 12.56 }
+      ],
+      "segment_phases": [
+        { "phase": "high 10-14", "intervals": 3, "seconds": 12.58 },
+        {
+          "phase": "low 15-20",
+          "intervals": 4,
+          "seconds": 17.41,
+          "note": "includes Save now at 18"
+        },
+        { "phase": "high 15-20", "intervals": 4, "seconds": 16.69 },
+        { "phase": "low 20-25", "intervals": 4, "seconds": 16.72 },
+        { "phase": "high 20-25", "intervals": 4, "seconds": 16.83 },
+        { "phase": "low 25-30", "intervals": 4, "seconds": 16.75 },
+        { "phase": "high 25-30", "intervals": 4, "seconds": 16.73 },
+        { "phase": "low 30-35", "intervals": 4, "seconds": 16.78 },
+        { "phase": "high 30-35", "intervals": 4, "seconds": 16.73 },
+        { "phase": "low 35-40", "intervals": 4, "seconds": 16.77 },
+        { "phase": "high 35-40", "intervals": 4, "seconds": 16.8 }
+      ],
+      "mean_per_step": { "source": 4.16, "segment": 4.2 }
+    },
+    "vram_mib_whole_device": {
+      "source_training": {
+        "peak": 7094,
+        "median_busy_low": 6306,
+        "median_busy_high": 6294
+      },
+      "segment_training": {
+        "peak": 7094,
+        "median_busy_low": 6264,
+        "median_busy_high": 6258
+      },
+      "source_paired_preview": { "peak": 11954 },
+      "segment_previews_and_final_sample": {
+        "peak": 12466,
+        "median_busy": 11954
+      }
+    },
+    "busy_power_and_clock": {
+      "source_training": "279 W, 1710 MHz",
+      "segment_training": "278 W, 1710-1725 MHz"
+    }
+  },
+  "checks": [
+    {
+      "check": "Save and stop partway through an expert phase ends the Run Stopped with a valid paired state",
+      "result": "passed",
+      "detail": "Stopped at low 14 inside the low 10-15 phase; Inspect saved states pairs low 14 with high 10 as a valid position."
+    },
+    {
+      "check": "resume-check reports the edited revision compatible with the learning rate as a warned change",
+      "result": "passed"
+    },
+    {
+      "check": "Paired states restore",
+      "result": "passed",
+      "detail": "The first high and low phases resume the source's high-step10 and low-step14 states; saved optimizer counters continue to 40 per expert."
+    },
+    {
+      "check": "The schedule continues",
+      "result": "passed",
+      "detail": "High catches up 10 to 14, then 14-15 for both, then 5-update phases to 40 per expert with paired previews at 20, 30 and 40 and the final sample."
+    },
+    {
+      "check": "Per-expert numbering and naming are continuous",
+      "result": "passed",
+      "detail": "r3-high-step14, 15, 20 ... 40 and r3-low-step15, 18, 20 ... 40, with local copies of the source's r2 LoRAs."
+    },
+    {
+      "check": "Previews use the new prompt",
+      "result": "passed",
+      "detail": "Every segment preview and the final sample generate with prompt B and the segment's paired LoRAs; the source preview at 10 used prompt A."
+    },
+    {
+      "check": "The train log shows the applied learning rate",
+      "result": "passed",
+      "detail": "Resume learning rate: applied 0.0002; the saved state had 0.0001. on each expert's first resumed phase."
+    },
+    {
+      "check": "Loss continues rather than jumping back to its starting level",
+      "result": "passed"
+    },
+    {
+      "check": "VRAM matches the original segment",
+      "result": "passed",
+      "detail": "Training peak 7,094 MiB in both."
+    },
+    {
+      "check": "Step time matches the original segment",
+      "result": "passed",
+      "detail": "4.16 s against 4.20 s per update, including the Save now step."
+    },
+    {
+      "check": "Save now during the resumed segment produces outputs",
+      "result": "passed",
+      "detail": "Low 18 checkpoint and state, paired as Paired recovery: low 18 / high 15."
+    },
+    {
+      "check": "Sample now during the resumed segment",
+      "result": "not applicable",
+      "detail": "Refused by design for alternating Wan (documented); scheduled paired previews produced outputs."
+    }
+  ],
+  "limits": [
+    "Synthetic one-clip data at 256x256x17 and rank 8 proves the mechanics of resuming, not useful learning or production-size capacity.",
+    "Upstream restarts its data order at every phase, restored or not; with one clip per epoch this trial cannot show data-position effects.",
+    "Whole-device VRAM sampled every 2 s includes desktop use and can miss brief peaks."
+  ]
+}

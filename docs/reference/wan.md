@@ -138,6 +138,30 @@ useful-learning result or production-size paired capacity qualification. Sampled
 sums recorded stage processes and excludes short-lived validation probes; device VRAM
 includes desktop/browser use, and sampling can miss transient peaks.
 
+### Stop, edit and resume, 17 November 2026
+
+[Issue #206](https://github.com/barnabyg/musubiGui/issues/206) ran the GUI's stop → edit → resume
+for the alternating recipe through the app API on the RTX 3090, at its unchanged power limit, in
+an isolated acceptance workspace: one synthetic 256×256, 17-frame clip, rank 8, AdamW, learning
+rate 0.0001, 30 steps per expert, expert interval 10, saves every 5 and previews every 10, so
+each phase trained 5 updates. **Save and stop**, sent at low-noise step 13, stopped the Run at
+low 14, partway through the low 10–15 phase, and Inspect saved states paired it with high 10. A
+new revision changed the preview prompt, raised the total to 40 and doubled the learning rate;
+the resumed segment completed at 40 updates per expert ([evidence](evidence/wan-resume.json)).
+
+| Check          | Result                                                                                                         |
+| -------------- | -------------------------------------------------------------------------------------------------------------- |
+| Paired restore | High resumed its step-10 state and caught up to 14, low resumed its step-14 state, then the schedule continued |
+| Numbering      | `-high-step00000014`, `15`, `20` … `40` and `-low-step00000015`, `18` (Save now), `20` … `40`                  |
+| Prompt         | Paired previews at 20, 30 and 40 and the final sample used the new prompt and the segment's LoRAs              |
+| Learning rate  | Each expert's first resumed phase logged `Resume learning rate: applied 0.0002; the saved state had 0.0001.`   |
+| Loss           | Resumed losses started at or below those before the stop and kept falling                                      |
+| Training VRAM  | 7,094 MiB peak in both segments                                                                                |
+| Step time      | 4.16 s per update before the stop and 4.20 s after                                                             |
+
+Sample now is unavailable for alternating Wan, as designed, so the scheduled paired previews
+covered sampling. This proves the mechanics on synthetic data, not useful learning.
+
 ## Production-size trial, 29 October 2026
 
 [Issue #26](https://github.com/barnabyg/musubiGui/issues/26) ran the GUI recipe at

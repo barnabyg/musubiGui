@@ -1,0 +1,162 @@
+{
+  "version": 1,
+  "date": "2026-11-17",
+  "scenario": "Does a changed --learning_rate take effect after --resume with the pinned upstream, with and without the app's learning-rate override (#202 step 1)",
+  "gpu_evidence": true,
+  "status": "passed",
+  "application_revision": "da7bb38e0651d5eb41bcf04e6c2b31339bcfc46a",
+  "upstream_revision": "f8a1b03794a49239a3539015075f5123d6c07d66",
+  "hardware": {
+    "gpu": "NVIDIA GeForce RTX 3090",
+    "vram_mib": 24576,
+    "host_ram_gb": 96,
+    "os": "Windows 11"
+  },
+  "environment": {
+    "python": "3.12.10",
+    "torch": "2.13.0+cu130",
+    "accelerate": "1.15.0",
+    "transformers": "5.17.0",
+    "diffusers": "0.40.0",
+    "bitsandbytes": "0.50.2",
+    "device": "cuda"
+  },
+  "method": "A standalone probe run with the managed training Python. It builds a small two-layer LoRA-shaped module on CUDA and creates its optimizer and scheduler through the pinned upstream NetworkTrainer's own get_optimizer and get_lr_scheduler, from upstream's own argument parser (setup_parser_common), then accelerator.prepare. Save: learning rate 0.0001, six training steps, accelerator.save_state. Load, in a fresh process: learning rate 0.0002 and --resume pointing at that state, resumed through upstream's resume_from_local_or_hf_if_specified (accelerator.load_state), then on_train_start and one more training step. The override run wraps the trainer class with the app's timed_trainer.override_learning_rate, the function the app's trainer entry point applies.",
+  "reproduction": "Kept outside the repository; the method above is complete. Each case is three processes: save, load, load with the override.",
+  "configured": {
+    "saved_learning_rate": 0.0001,
+    "resumed_learning_rate": 0.0002,
+    "saved_after_steps": 6,
+    "max_train_steps": 20
+  },
+  "answer": "No. Without the override the pinned upstream trains a resumed state with the saved learning rate: accelerator.load_state restores each param group's lr and initial_lr and the scheduler's base_lrs, overwriting the values built from the new --learning_rate, and the next scheduler step keeps the saved rate. With the app's override the configured rate is written back at on_train_start, before the first optimizer step, and kept by later scheduler steps; a cosine-with-warmup schedule keeps its factor at the saved step.",
+  "cases": [
+    {
+      "case": "AdamW, constant scheduler (the app's default optimizer and upstream's default scheduler)",
+      "arguments": ["--optimizer_type", "AdamW"],
+      "built_before_resume": {
+        "lr": 0.0002,
+        "initial_lr": 0.0002,
+        "scheduler_base_lrs": [0.0002]
+      },
+      "without_override": {
+        "after_load_state": {
+          "lr": 0.0001,
+          "initial_lr": 0.0001,
+          "scheduler_base_lrs": [0.0001],
+          "scheduler_last_epoch": 6
+        },
+        "after_one_more_step": {
+          "lr": 0.0001,
+          "initial_lr": 0.0001,
+          "scheduler_base_lrs": [0.0001],
+          "get_last_lr": [0.0001]
+        },
+        "result": "saved learning rate kept; configured 0.0002 ignored"
+      },
+      "with_override": {
+        "after_on_train_start": {
+          "lr": 0.0002,
+          "initial_lr": 0.0002,
+          "scheduler_base_lrs": [0.0002],
+          "get_last_lr": [0.0001]
+        },
+        "after_one_more_step": {
+          "lr": 0.0002,
+          "initial_lr": 0.0002,
+          "scheduler_base_lrs": [0.0002],
+          "get_last_lr": [0.0002]
+        },
+        "result": "configured learning rate applied"
+      }
+    },
+    {
+      "case": "AdamW8bit (bitsandbytes), constant scheduler",
+      "arguments": ["--optimizer_type", "AdamW8bit"],
+      "built_before_resume": {
+        "lr": 0.0002,
+        "initial_lr": 0.0002,
+        "scheduler_base_lrs": [0.0002]
+      },
+      "without_override": {
+        "after_load_state": {
+          "lr": 0.0001,
+          "initial_lr": 0.0001,
+          "scheduler_base_lrs": [0.0001],
+          "scheduler_last_epoch": 6
+        },
+        "after_one_more_step": {
+          "lr": 0.0001,
+          "initial_lr": 0.0001,
+          "scheduler_base_lrs": [0.0001],
+          "get_last_lr": [0.0001]
+        },
+        "result": "saved learning rate kept; configured 0.0002 ignored"
+      },
+      "with_override": {
+        "after_on_train_start": {
+          "lr": 0.0002,
+          "initial_lr": 0.0002,
+          "scheduler_base_lrs": [0.0002],
+          "get_last_lr": [0.0001]
+        },
+        "after_one_more_step": {
+          "lr": 0.0002,
+          "initial_lr": 0.0002,
+          "scheduler_base_lrs": [0.0002],
+          "get_last_lr": [0.0002]
+        },
+        "result": "configured learning rate applied"
+      }
+    },
+    {
+      "case": "AdamW, cosine scheduler with 4 warmup steps (a factor other than one at the saved step)",
+      "arguments": [
+        "--optimizer_type",
+        "AdamW",
+        "--lr_scheduler",
+        "cosine",
+        "--lr_warmup_steps",
+        "4"
+      ],
+      "saved": {
+        "lr": 9.619397662556435e-5,
+        "initial_lr": 0.0001,
+        "scheduler_base_lrs": [0.0001],
+        "scheduler_last_epoch": 6
+      },
+      "without_override": {
+        "after_load_state": {
+          "lr": 9.619397662556435e-5,
+          "initial_lr": 0.0001,
+          "scheduler_base_lrs": [0.0001]
+        },
+        "after_one_more_step": {
+          "lr": 9.157348061512727e-5,
+          "initial_lr": 0.0001,
+          "scheduler_base_lrs": [0.0001]
+        },
+        "result": "saved base learning rate kept"
+      },
+      "with_override": {
+        "after_on_train_start": {
+          "lr": 0.0001923879532511287,
+          "initial_lr": 0.0002,
+          "scheduler_base_lrs": [0.0002]
+        },
+        "after_one_more_step": {
+          "lr": 0.00018314696123025454,
+          "initial_lr": 0.0002,
+          "scheduler_base_lrs": [0.0002]
+        },
+        "result": "configured base rate applied with the schedule's factor at step 6 (0.96194) kept"
+      }
+    }
+  ],
+  "real_runs": "The override was also confirmed in GUI training: the resumed H3 segment and the resumed alternating Wan segment logged 'Resume learning rate: applied 0.0002; the saved state had 0.0001.' See h3-resume.json and wan-resume.json.",
+  "limits": [
+    "The probe uses a small module, not a full model; it checks optimizer and scheduler state handling, which does not depend on model size.",
+    "Until the first scheduler step after the override, scheduler.get_last_lr() still returns the saved rate. The optimizer step itself uses the configured rate; only a learning-rate value logged for that first step (upstream's tracker logs, which the app doesn't enable) would show the old rate.",
+    "Only AdamW, AdamW8bit and the constant and cosine-with-warmup schedulers were probed; the app offers AdamW and AdamW8bit with upstream's default constant scheduler."
+  ]
+}

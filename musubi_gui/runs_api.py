@@ -93,7 +93,10 @@ def runs_router(service: RunService) -> APIRouter:
         return {
             "fixture": service.fixture_mode,
             "gpu_owner": service.device.owner(),
-            "resume": "Saved-state restoration needs recipe qualification; LoRA weights alone are not resumable state.",
+            "resume": (
+                "Saved-state restoration is qualified on the target GPU for H3 and alternating Wan, including "
+                "resuming with an edited revision; LoRA weights alone are not resumable state."
+            ),
         }
 
     @router.get("/summaries")

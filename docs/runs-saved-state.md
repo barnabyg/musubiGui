@@ -135,8 +135,12 @@ such as LoRA+'s scaled group, and the scheduler's warmup or decay factor at the 
 kept. The training log then shows
 `Resume learning rate: applied 0.0002; the saved state had 0.0001.`, or
 `Resume learning rate: 0.0001, unchanged from the saved state.` when nothing changes. A
-Run that isn't resuming is untouched. This override awaits confirmation on a real GPU run
-for H3 and Wan; the CPU fixture logs the same line through the same code.
+Run that isn't resuming is untouched. Without it the pinned upstream keeps the saved learning
+rate, for AdamW and AdamW8bit alike ([probe](reference/evidence/resume-learning-rate.json)).
+Real GPU runs confirmed the override for H3 and alternating Wan, where each expert's first
+resumed phase logs the applied rate ([H3](reference/h3.md#stop-edit-and-resume-17-november-2026),
+[Wan](reference/wan.md#stop-edit-and-resume-17-november-2026)); the CPU fixture logs the same
+line through the same code.
 
 The segment's training and sampling commands are built from the new revision, plus `--resume`,
 the saved step's numbering offset and `--max_train_steps` set to the total minus the saved

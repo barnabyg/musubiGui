@@ -125,6 +125,19 @@ def training_plan(root: Path, name: str = "one", *, fail_cache: bool = False) ->
     return execution
 
 
+def test_capabilities_report_qualified_saved_state_restoration(tmp_path: Path) -> None:
+    service = RunService(tmp_path / "state", device_path=tmp_path / "gpu.sqlite", autostart=False)
+    app = FastAPI()
+    app.include_router(runs_router(service))
+    try:
+        resume = TestClient(app).get("/api/runs/capabilities").json()["resume"]
+    finally:
+        service.close()
+    # Qualified on the target GPU by docs/reference/evidence/h3-resume.json and wan-resume.json.
+    assert resume.startswith("Saved-state restoration is qualified on the target GPU for H3 and alternating Wan")
+    assert "LoRA weights alone are not resumable state" in resume
+
+
 @pytest.mark.parametrize("together", [False, True])
 def test_execution_clock_excludes_queue_and_separate_preparation_and_survives_restart(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, together: bool
