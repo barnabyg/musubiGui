@@ -55,7 +55,12 @@ export function JobActionBar({
   const latest = current.latest;
   const active = hasActiveWork(latest?.status);
   const completedRevision =
-    latest?.status === 'completed' && latest.job.revision === job?.revision;
+    latest?.status === 'completed' &&
+    latest.job.revision === job?.revision &&
+    !(
+      review?.completed_training?.run_id === latest.id &&
+      !review.completed_training.matches_inputs
+    );
   const view = !dirty && latest && (active || completedRevision);
   const compatibility = review?.resume_compatibility;
   const saved = current.resume;

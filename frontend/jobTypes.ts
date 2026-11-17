@@ -135,6 +135,7 @@ export type Review = {
     args: string[];
     preview_memory?: import('./PreviewMemory').PreviewMemoryChoice;
   }[];
+  completed_training?: { run_id: string; matches_inputs: boolean };
   // Against the Run Start resumes in the Job's current training; null without one.
   resume_compatibility?:
     import('./ResumeCompatibility').ResumeCompatibility | null;

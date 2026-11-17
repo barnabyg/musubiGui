@@ -183,6 +183,18 @@ class SnapshotIdentity:
     stage_keys: dict[str, str]
     fingerprint: str
 
+    def matches_run(self, run: dict[str, Any]) -> bool:
+        if not run.get("segment"):
+            return self.fingerprint == run["fingerprint"]
+        # Restored segments get their own execution fingerprint. Their frozen cache keys still identify
+        # media, captions and cache producers; the saved settings and models identify the other inputs.
+        return (
+            self.job.revision == run["job"]["revision"]
+            and self.stage_keys == run.get("stage_keys")
+            and self.provenance["models"] == run.get("provenance", {}).get("models")
+            and self.settings.model_dump() == run["settings"]
+        )
+
 
 def identify_snapshot(
     root: Path, job_id: str, *, fixture_mode: bool = False, reviewed_revision: int | None = None
@@ -202,6 +214,13 @@ def identify_job(root: Path, job: Job, *, fixture_mode: bool = False) -> Snapsho
     """The inputs a snapshot of `job` would freeze, after review confirms it can be prepared."""
     settings = effective_settings(job, training_settings(root, fixture_mode=fixture_mode))
     review = review_job(root, job, settings, fixture_mode=fixture_mode)
+    return reviewed_identity(root, job, settings, review, fixture_mode=fixture_mode)
+
+
+def reviewed_identity(
+    root: Path, job: Job, settings: Settings, review: dict[str, Any], *, fixture_mode: bool
+) -> SnapshotIdentity:
+    """Identify the exact inputs of an existing review without repeating validation."""
     if not review["valid"]:
         raise ValueError("Preparation blocked: " + " ".join(review["errors"]))
     store: Any = import_module("musubi_gui.datasets").DatasetStore(root)

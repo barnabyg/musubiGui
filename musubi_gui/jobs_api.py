@@ -22,11 +22,13 @@ from musubi_gui.job_models import (
     export_draft,
 )
 from musubi_gui.job_review import review_job
+from musubi_gui.job_stages import effective_settings
 from musubi_gui.job_store import JobStore
-from musubi_gui.resume_compat import job_training, resume_review
+from musubi_gui.resume_compat import current_training, job_training, resume_review
 from musubi_gui.resume_refresh import inspect_refresh
 from musubi_gui.run_store import RunStore
 from musubi_gui.settings import training_settings
+from musubi_gui.snapshots import reviewed_identity
 from musubi_gui.training_options import optimizer_options
 
 
@@ -171,11 +173,19 @@ def jobs_router(root: Path, *, fixture_mode: bool = False) -> APIRouter:
     def review(job_id: str) -> dict[str, Any]:
         with job_errors():
             job = store.get(job_id)
-            result = review_job(
-                root, job, training_settings(root, fixture_mode=fixture_mode), fixture_mode=fixture_mode
-            )
+            settings = effective_settings(job, training_settings(root, fixture_mode=fixture_mode))
+            result = review_job(root, job, settings, fixture_mode=fixture_mode)
+            runs = RunStore(root).list()
+            chain = current_training(runs, job_id)
+            if chain and chain.latest["status"] == "completed":
+                run = chain.latest
+                matches = False
+                if result["valid"] and run["job"]["revision"] == job.revision:
+                    inputs = reviewed_identity(root, job, settings, result, fixture_mode=fixture_mode)
+                    matches = inputs.matches_run(run)
+                result["completed_training"] = {"run_id": run["id"], "matches_inputs": matches}
             result["resume_compatibility"] = resume_review(
-                RunStore(root).list(),
+                runs,
                 job.model_dump(),
                 refresh=lambda run: inspect_refresh(root, run, job, fixture_mode=fixture_mode),
             )

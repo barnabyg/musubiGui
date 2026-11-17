@@ -250,6 +250,44 @@ test('an edit that needs a new Run makes Start name the fields and start fresh o
   }
 });
 
+test('reviewing changed captions after completion offers training on the new inputs', async ({
+  page,
+}) => {
+  const app = await runWorkspace();
+  try {
+    const job = await pacedJob(app, { save_state: false });
+    await instantSteps(app);
+    await page.goto(`${app.url}/#/jobs/${job.id}`);
+    await reviewAndStart(page);
+    const results = page.getByRole('button', {
+      name: 'View results',
+      exact: true,
+    });
+    await expect(results).toBeVisible({ timeout: 240_000 });
+    const inspect = page.getByRole('button', {
+      name: 'Review configuration',
+      exact: true,
+    });
+    await inspect.click();
+    await expect(inspect).toBeEnabled();
+    await expect(results).toBeVisible();
+    await writeFile(
+      path.join(app.fixture, 'datasets/wan/motion.txt'),
+      'A revised caption.',
+    );
+    await inspect.click();
+    await expect(inspect).toBeEnabled();
+    await expect(results).toBeHidden();
+    await expect(
+      page.getByRole('button', {
+        name: /^(Prepare and start|Start fresh training)$/,
+      }),
+    ).toBeEnabled();
+  } finally {
+    await app.close();
+  }
+});
+
 test('live progress on the Job page matches Run details', async ({
   page,
   context,
