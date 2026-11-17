@@ -1,3 +1,4 @@
+import { HelpLink } from './Help';
 import { useEffect, useState } from 'react';
 import { apiClient } from './api';
 import { formatRoute } from './route';
@@ -55,7 +56,7 @@ export function RunJobLink({ frozen }: { frozen: JobIdentity }) {
       </p>
       <p>
         Frozen for this Run: {frozen.name} · {frozen.family.toUpperCase()} · r
-        {frozen.revision}. Its saved inputs and outputs stay with this revision.
+        {frozen.revision}. <HelpLink topic="Frozen revisions" />
       </p>
       {error ? (
         <p>

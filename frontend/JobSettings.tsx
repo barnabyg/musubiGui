@@ -1,3 +1,4 @@
+import { HelpLink } from './Help';
 import { JobSection } from './JobSection';
 import type { RefObject } from 'react';
 import { JobDatasets } from './JobDatasets';
@@ -158,8 +159,7 @@ export function JobIdentity({
       <details>
         <summary>Model components</summary>
         <p>
-          Paths inherit Settings unless overridden here. Overrides must remain
-          inside configured model roots.
+          <HelpLink topic="Model paths" />
         </p>
         {(job.family === 'wan'
           ? ['wan_low', 'wan_high', 'wan_vae', 'wan_t5']
@@ -169,6 +169,11 @@ export function JobIdentity({
             key={key}
             label={componentLabels[key]}
             inputId={fieldId(key)}
+            help={
+              job.config.components[key]
+                ? 'Job override'
+                : 'Inherited from Settings'
+            }
             kind="file"
             roots={modelRoots}
             disabled={busy}
@@ -302,9 +307,7 @@ export function JobControls({
         {toggle('Do not upscale buckets', 'bucket_no_upscale')}
         <h3>Caching</h3>
         <p className="hint">
-          Latents and text embeddings are required. Compatible caches are copied
-          into each Run’s private storage. Rebuilding leaves other Runs
-          unchanged.
+          <HelpLink topic="Cache reuse" />
         </p>
         <div className="columns">
           {(

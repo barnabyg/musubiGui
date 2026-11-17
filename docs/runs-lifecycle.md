@@ -137,9 +137,7 @@ on a revision that already has an unfinished Run, it asks that Run to continue i
 of creating another.
 
 While the app is open on any screen, the tab title announces when a Run is ready,
-finished, stopped or failed, until you return to the tab or change screen. The Runs
-screen also offers an opt-in browser notification for the same events; the choice is
-kept in that browser only.
+finished, stopped or failed, until you return to the tab or change screen. Enable browser notifications for these events in Settings. The preference is local to each browser. Use Help or the Background training link on Runs for details about closing the browser.
 
 ## Queueing
 

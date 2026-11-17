@@ -23,7 +23,7 @@ import { trainingOf } from './runChains';
 import { refreshRunHistory, useRunHistory } from './runHistory';
 import { useRunDetail, useRunLogs } from './runLive';
 import { RunSegments } from './RunSegments';
-import { notificationsWanted } from './runSignals';
+import { HelpLink } from './Help';
 import { sizeLabel } from './runStatus';
 import type { DeletePreview, DeleteResult, Run } from './runTypes';
 import { ResumeRevision } from './ResumeRevision';
@@ -56,7 +56,6 @@ export function Runs({
   const [busy, setBusy] = useState(false);
   const [owner, setOwner] = useState<{ run_id: string } | null>(null);
   const [fixture, setFixture] = useState(false);
-  const [notify, setNotify] = useState(notificationsWanted);
   const summary = runs.find((record) => record.id === selected);
   const changeKey = summary?.change_key;
   const training = selected ? trainingOf(runs, selected) : undefined;
@@ -230,16 +229,15 @@ export function Runs({
           <h1>Run details</h1>
           {/* Joined only visually: the status stays its own live region. */}
           <p className="run-status-line">
-            <span role="status">{gpuStatus}</span> · Closing the browser leaves
-            training running.
+            <span role="status">{gpuStatus}</span> ·{' '}
+            <HelpLink topic="Background training" />
           </p>
         </section>
       ) : (
         <section className="title">
           <h1>Runs</h1>
           <p>
-            Each Run keeps the job settings and dataset files it was prepared
-            with. Closing the browser leaves training running.
+            <HelpLink topic="Background training" />
           </p>
         </section>
       )}
@@ -266,8 +264,6 @@ export function Runs({
             moveEarlier={moveEarlier}
             onDelete={remove}
             busy={busy}
-            notify={notify}
-            setNotify={setNotify}
           />
         )}
         {selected && (

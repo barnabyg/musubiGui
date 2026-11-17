@@ -1,3 +1,4 @@
+import { HelpLink } from './Help';
 import { JobSection } from './JobSection';
 import { Fragment } from 'react';
 import { focusField, type JobFields } from './jobFields';
@@ -339,9 +340,7 @@ export function JobReview({
             .
           </p>
           <p className="hint">
-            Both cache stages are required. Preparation verifies compatible
-            artifacts before reuse; otherwise it rebuilds them. Run stages show
-            the actual result. Other Runs’ caches are preserved.
+            <HelpLink topic="Cache reuse" />
           </p>
         </section>
         {review.video_windows.items.length > 0 && (

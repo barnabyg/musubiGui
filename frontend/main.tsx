@@ -14,6 +14,8 @@ import {
   Settings as SettingsIcon,
   type LucideIcon,
 } from 'lucide-react';
+import { HelpLink, WorkspaceHelp } from './Help';
+import { NotificationSettings } from './NotificationSettings';
 import { apiClient } from './api';
 import type { CaptionSession } from './captionSession';
 import './style.css';
@@ -401,6 +403,7 @@ function App() {
             );
           })}
         </nav>
+        <HelpLink entry topic="Background training" />
         <button
           className={`local ${health.state}`}
           onClick={() => void showReport()}
@@ -547,6 +550,7 @@ function App() {
                     Save settings before running diagnostics.
                   </p>
                 )}
+                <NotificationSettings />
                 {report && (
                   <section className="panel" id="diagnostics-report">
                     <h2>Installation diagnostics</h2>
@@ -598,4 +602,8 @@ function App() {
   );
 }
 
-createRoot(document.getElementById('root')!).render(<App />);
+createRoot(document.getElementById('root')!).render(
+  <WorkspaceHelp>
+    <App />
+  </WorkspaceHelp>,
+);

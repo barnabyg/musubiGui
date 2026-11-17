@@ -4,10 +4,9 @@ import { RunBadge } from './RunBadge';
 import { segmentLabel, stepRange, trainings } from './runChains';
 import type { Training } from './runChains';
 import { readableTime } from './runStatus';
-import { setNotificationsWanted } from './runSignals';
 import type { RunSummary } from './runHistory';
 
-// The Runs screen without a selection: the pending queue, Run history and notification opt-in.
+// The Runs screen without a selection: the pending queue and Run history.
 export function RunList({
   runs,
   queue,
@@ -16,8 +15,6 @@ export function RunList({
   moveEarlier,
   onDelete,
   busy,
-  notify,
-  setNotify,
 }: {
   runs: RunSummary[];
   queue: RunSummary[];
@@ -26,8 +23,6 @@ export function RunList({
   moveEarlier: (id: string) => Promise<void>;
   onDelete: (runId: string, chain: boolean) => Promise<void>;
   busy: boolean;
-  notify: boolean;
-  setNotify: (wanted: boolean) => void;
 }) {
   return (
     <div>
@@ -85,16 +80,6 @@ export function RunList({
           ),
         )}
       </section>
-      <label className="job-toggle">
-        <input
-          type="checkbox"
-          checked={notify}
-          onChange={(event) =>
-            void setNotificationsWanted(event.target.checked).then(setNotify)
-          }
-        />
-        <span>Send a browser notification when a Run is ready or finished</span>
-      </label>
     </div>
   );
 }

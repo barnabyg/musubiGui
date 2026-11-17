@@ -513,6 +513,17 @@ summary:focus-visible,
 .status-badge.failure {
   color: var(--color-danger);
 }
+.help-entry {
+  align-self: flex-start;
+}
+.help-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-accent-text);
+  text-decoration: underline;
+}
+.help-dialog,
 .confirm-dialog {
   width: min(520px, calc(100vw - 32px));
   padding: var(--space-9);
@@ -521,6 +532,7 @@ summary:focus-visible,
   border: 1px solid var(--color-border-control);
   border-radius: var(--radius-lg);
 }
+.help-dialog::backdrop,
 .confirm-dialog::backdrop {
   background: var(--color-overlay);
 }

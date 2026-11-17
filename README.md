@@ -60,6 +60,7 @@ saving drops blank lines and surrounding spaces. Save, then Run diagnostics: it 
 configured root that is not an existing folder, such as two paths joined on one line. The probe
 records the selected environment's Python, packages, CUDA/GPU, upstream revision, host RAM,
 disk space and write checks. It does not log raw subprocess output or environment variables.
+Help in the sidebar explains background training, frozen revisions, cache reuse, timing estimates and inherited model paths. Browser notifications can be enabled in Settings.
 Settings live in `.state/settings.json`; dataset/run metadata uses versioned SQLite
 and job revisions remain versioned JSON. Set `MUSUBI_GUI_STATE` to an absolute path for a
 different application state directory. Unknown persisted versions are preserved and blocked.

@@ -1,3 +1,4 @@
+import { HelpLink } from './Help';
 import { useEffect, useState } from 'react';
 import type { CompletionEstimate, Progress, Run } from './runTypes';
 
@@ -55,7 +56,7 @@ export function RunCompletion({
         </p>
       )}
       <small>
-        Based on measured step and sampling wall time.{' '}
+        <HelpLink topic="Time estimates" />{' '}
         {estimate?.unknown_components.length
           ? `Unestimated or assumed: ${estimate.unknown_components.join('; ')}.`
           : 'Timings vary between executions.'}
@@ -191,8 +192,7 @@ export function TrainingProgress({
         {remainingDuration(progress.estimated_remaining_seconds)}
       </p>
       <small>
-        Assumes the current observed step speed for all remaining steps.
-        Excludes future model loading, previews and final sampling.
+        <HelpLink topic="Time estimates" />
       </small>
     </div>
   );

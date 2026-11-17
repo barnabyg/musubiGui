@@ -50,9 +50,12 @@ test('cache policies persist from the job form and review explains preparation',
     });
     await expect(review).toContainText('Latents: Reuse compatible cache');
     await expect(review).toContainText('Text embeddings: Rebuild cache');
-    await expect(review).toContainText(
-      'Preparation verifies compatible artifacts',
+    await review.getByRole('button', { name: 'Cache reuse' }).click();
+    const help = page.getByRole('dialog', { name: 'Help' });
+    await expect(help).toContainText(
+      'Missing or incompatible items are rebuilt',
     );
+    await help.getByRole('button', { name: 'Close help' }).click();
     const prepared = (await app.post('/api/runs/prepare', {
       job_id: fixtureJob.id,
       reviewed_revision: saved.revision,
