@@ -9,6 +9,7 @@ from musubi_gui.redaction import redact
 from musubi_gui.wan_pair import PAIRED_RECIPE
 
 NEW_DRAFT_STEPS = 2000
+NEW_DRAFT_EXPERT_INTERVAL = 100
 
 
 class JobConfig(BaseModel):
@@ -91,7 +92,7 @@ def default_config(family: str) -> JobConfig:
     return smoke_config(family).model_copy(
         update={
             **size,
-            **({"recipe": PAIRED_RECIPE} if family == "wan" else {}),
+            **({"recipe": PAIRED_RECIPE, "expert_interval": NEW_DRAFT_EXPERT_INTERVAL} if family == "wan" else {}),
             "steps": NEW_DRAFT_STEPS,
             "save_every": 100,
             "save_state": True,
