@@ -1,6 +1,6 @@
 import { ArrowRight, Images } from 'lucide-react';
 import type { Dataset } from './Datasets';
-import { contentsLabel } from './labels';
+import { contentsLabel, plural } from './labels';
 
 export function DatasetLibrary({
   busy,
@@ -12,7 +12,7 @@ export function DatasetLibrary({
   busy: boolean;
   loaded: boolean;
   datasets: Dataset[];
-  open: (id: string) => Promise<void>;
+  open: (id: string, filter?: 'invalid' | 'missing') => Promise<void>;
   remove: (value: Dataset) => Promise<void>;
 }) {
   return (
@@ -32,50 +32,87 @@ export function DatasetLibrary({
           </p>
         </div>
       )}
-      {datasets.map((value) => (
-        <article className="dataset-library-row" key={value.id}>
-          <button
-            className="dataset-open"
-            disabled={busy}
-            onClick={() => void open(value.id)}
-          >
-            <strong>{value.name}</strong>
-            <small className="dataset-contents">
-              {contentsLabel(value.counts)}
-            </small>
-            <small>
-              {value.counts.total} media · {value.counts.captioned} captioned ·{' '}
-              {value.counts.included} included
-            </small>
-            <span className="dataset-path">{value.path}</span>
-            <span className="dataset-edit-label">
-              Edit dataset <ArrowRight />
-            </span>
-          </button>
-          <div className="dataset-row-actions">
-            <span className={`dataset-kind ${value.missing ? 'missing' : ''}`}>
-              {value.missing
-                ? 'Folder missing'
-                : value.managed
-                  ? 'Managed'
-                  : 'Local folder'}
-            </span>
+      {datasets.map((value) => {
+        const scanning = ['pending', 'scanning'].includes(value.scan.state);
+        const countsReady = !value.missing && value.scan.state === 'complete';
+        const { total, valid, captioned, included } = value.counts;
+        const invalid = total - valid;
+        const missingCaptions = total - captioned;
+        return (
+          <article className="dataset-library-row" key={value.id}>
             <button
-              className="danger"
-              aria-label={`Remove ${value.name} from library`}
-              disabled={
-                busy || ['pending', 'scanning'].includes(value.scan.state)
-              }
-              onClick={() => void remove(value)}
+              className="dataset-open"
+              disabled={busy}
+              onClick={() => void open(value.id)}
             >
-              Remove from library
+              <strong>
+                {value.name} <ArrowRight />
+              </strong>
+              {countsReady && (
+                <>
+                  <small>
+                    {plural(total, 'media file')} · {captioned} captioned
+                  </small>
+                  <small>
+                    {included > 0 && `${included} included · `}
+                    <span className="dataset-contents">
+                      {contentsLabel(value.counts)}
+                    </span>
+                  </small>
+                </>
+              )}
             </button>
-            {['pending', 'scanning'].includes(value.scan.state) && (
-              <small>Scan in progress; open to check.</small>
-            )}
-          </div>
-        </article>
-      ))}
+            <div className="dataset-row-actions">
+              {value.missing && (
+                <strong className="dataset-problem">Folder missing</strong>
+              )}
+              {scanning && <small>Scan in progress</small>}
+              {!scanning && !value.missing && !countsReady && (
+                <strong className="dataset-problem">
+                  Scan incomplete · re-scan in Dataset settings
+                </strong>
+              )}
+              {countsReady && invalid > 0 && (
+                <button
+                  className="dataset-problem"
+                  disabled={busy}
+                  onClick={() => void open(value.id, 'invalid')}
+                >
+                  {plural(invalid, 'invalid media file')} · skipped
+                </button>
+              )}
+              {countsReady && missingCaptions > 0 && (
+                <button
+                  title="Review captions across all scanned files, including invalid or excluded media"
+                  disabled={busy}
+                  onClick={() => void open(value.id, 'missing')}
+                >
+                  {plural(missingCaptions, 'missing caption')}
+                </button>
+              )}
+            </div>
+            <details className="dataset-row-details">
+              <summary aria-label={`Dataset details for ${value.name}`}>
+                Details
+              </summary>
+              <small>
+                {value.managed
+                  ? 'Managed upload folder'
+                  : 'Registered local folder'}
+              </small>
+              <span className="dataset-path">{value.path}</span>
+              <button
+                className="danger"
+                aria-label={`Remove ${value.name} from library`}
+                disabled={busy || scanning}
+                onClick={() => void remove(value)}
+              >
+                Remove from library
+              </button>
+            </details>
+          </article>
+        );
+      })}
     </section>
   );
 }

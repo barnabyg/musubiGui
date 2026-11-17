@@ -241,7 +241,7 @@ export function Datasets({
   }
   const followRoute = useEffectEvent((signal: AbortSignal) => {
     if (!loaded || repair || selectedId === dataset?.id) return;
-    if (selectedId) void open(selectedId, true, signal);
+    if (selectedId) void open(selectedId, 'all', signal);
     else if (screen === 'edit') void back();
   });
   useEffect(() => {
@@ -291,7 +291,7 @@ export function Datasets({
       setReturning(false);
     }
   }
-  async function open(id: string, fromRoute = false, signal?: AbortSignal) {
+  async function open(id: string, initialFilter = 'all', signal?: AbortSignal) {
     if (!(await captions.flushAll())) {
       if (!signal?.aborted) onSelect?.(dataset?.id, true);
       return;
@@ -300,9 +300,9 @@ export function Datasets({
     setBusy(true);
     try {
       const list = await refresh(id, signal);
-      showDataset(id, list);
+      showDataset(id, list, initialFilter);
       setError('');
-      if (!fromRoute) onSelect?.(id);
+      if (id !== currentSelection.current) onSelect?.(id);
     } catch (reason) {
       if (signal?.aborted) return;
       setError((reason as Error).message);
@@ -311,12 +311,12 @@ export function Datasets({
       setBusy(false);
     }
   }
-  function showDataset(id: string, list: Dataset[]) {
+  function showDataset(id: string, list: Dataset[], initialFilter = 'all') {
     setPreview(null);
     setSelected(new Set());
     setEditing(null);
     setQuery('');
-    setFilter('all');
+    setFilter(initialFilter);
     setScroll(0);
     setName(list.find((value) => value.id === id)?.name ?? '');
     setScreen('edit');

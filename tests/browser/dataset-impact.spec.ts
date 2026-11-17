@@ -139,6 +139,9 @@ test('dataset inclusion and removal name dependent drafts while prepared Runs ke
       .getByRole('button', { name: 'Back to datasets', exact: true })
       .click();
     await page
+      .getByLabel('Dataset details for WAN acceptance', { exact: true })
+      .press('Enter');
+    await page
       .getByRole('button', {
         name: 'Remove WAN acceptance from library',
         exact: true,
