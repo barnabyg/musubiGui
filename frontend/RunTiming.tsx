@@ -177,9 +177,17 @@ export function TrainingProgress({
         value={progress.step}
       />
       <p>
-        Training elapsed {elapsed} ·{' '}
-        {progress.eta_scope === 'phase' ? 'Phase ETA' : 'Training ETA'}{' '}
-        {progress.eta ?? 'unknown'} · Loss {progress.loss ?? 'unknown'}
+        Training elapsed {elapsed}
+        {run.status !== 'completed' && (
+          <>
+            {' '}
+            · {progress.eta_scope === 'phase'
+              ? 'Phase ETA'
+              : 'Training ETA'}{' '}
+            {progress.eta ?? 'unknown'}
+          </>
+        )}
+        {' · '}Loss {progress.loss ?? 'unknown'}
       </p>
       <p>
         Seconds per step:{' '}
@@ -187,13 +195,17 @@ export function TrainingProgress({
           ? 'unknown'
           : `${progress.seconds_per_step.toFixed(2)} s/step (trainer reported)`}
       </p>
-      <p>
-        Estimated training remaining to max steps:{' '}
-        {remainingDuration(progress.estimated_remaining_seconds)}
-      </p>
-      <small>
-        <HelpLink topic="Time estimates" />
-      </small>
+      {run.status !== 'completed' && (
+        <>
+          <p>
+            Estimated training remaining to max steps:{' '}
+            {remainingDuration(progress.estimated_remaining_seconds)}
+          </p>
+          <small>
+            <HelpLink topic="Time estimates" />
+          </small>
+        </>
+      )}
     </div>
   );
 }

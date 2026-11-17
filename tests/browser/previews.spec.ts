@@ -1,10 +1,5 @@
 import { test, expect } from '@playwright/test';
-import {
-  openCheckpointPanel,
-  openRunTab,
-  runWorkspace,
-  openCurrentRun,
-} from './runHarness';
+import { openRunTab, runWorkspace, openCurrentRun } from './runHarness';
 
 test('paired Wan previews show matching per-expert steps', async ({ page }) => {
   const app = await runWorkspace({ previewImages: true });
@@ -78,15 +73,11 @@ test('paired Wan previews show matching per-expert steps', async ({ page }) => {
         name: /^Step 12 preview · paired Wan · low 12 \/ high 12 trained steps.*available$/,
       }),
     ).toBeVisible();
-    const checkpoints = await openCheckpointPanel(page);
-    for (const expert of ['low', 'high'])
-      await expect(
-        checkpoints
-          .getByRole('button', {
-            name: new RegExp(`-${expert}-step\\d+\\.safetensors · available$`),
-          })
-          .first(),
-      ).toBeVisible();
+    await openRunTab(page, 'overview');
+    await page.getByRole('button', { name: 'View sample' }).click();
+    await expect(
+      page.getByLabel('Selected sample', { exact: true }),
+    ).toContainText(/sample\.mp4/);
   } finally {
     await app.close();
   }

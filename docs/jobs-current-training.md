@@ -11,9 +11,7 @@ recently. It shows the state, the segment and revision, a link to **Open Run det
 step progress (Step X/N, elapsed, ETA and estimated time remaining) and, while it trains,
 **Save now**, **Sample now**, **Save and stop**, **Stop now** and **Force terminate**. These
 are the same controls, progress and requests as the Actions panel in Run details, read from the
-same Run, so both pages show the same step. Below them are the training's newest preview and
-LoRA checkpoint with a download link, from every segment's files in step order; Run details
-lists them all.
+same Run, so both pages show the same step. Below them is the latest playable sample. Open Run details and use **Copy output folder** to collect checkpoints in File Explorer.
 
 **Prepare and start** stays on the Job page, which then follows the new training.
 **Prepare only** still opens Run details, where the prepared Run is started.

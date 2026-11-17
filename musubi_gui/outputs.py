@@ -227,7 +227,12 @@ class OutputBrowser:
                         if suffix in VIDEOS
                         else "audio"
                     )
-                    entry.update(kind=kind, bytes=stat.st_size, file_url=f"/api/runs/{run_id}/outputs/{identity}/file")
+                    entry.update(
+                        kind=kind,
+                        bytes=stat.st_size,
+                        modified_ms=stat.st_mtime_ns // 1_000_000,
+                        file_url=f"/api/runs/{run_id}/outputs/{identity}/file",
+                    )
                     if not stat.st_size:
                         raise ValueError("Output is empty; its producer may still be writing it.")
                     if entry.get("stamp") != stamp or entry.get("status") != "available":

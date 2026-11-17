@@ -68,7 +68,7 @@ async function expectCompareControls(page: Page, panel: Locator) {
   await page.setViewportSize({ width: 1366, height: 768 });
 }
 
-test('comparison plays both Runs and keeps provenance and downloads when a sample is missing', async ({
+test('comparison plays both Runs and keeps provenance when a sample is missing', async ({
   page,
 }) => {
   const parent = await mkdtemp(path.join(tmpdir(), 'musubi-compare-'));
@@ -191,13 +191,9 @@ test('comparison plays both Runs and keeps provenance and downloads when a sampl
             )
             .toBeGreaterThan(0);
         }
-        const download = page.waitForEvent('download');
-        await side
-          .getByRole('link', { name: 'Download final LoRA', exact: true })
-          .click();
-        expect((await download).suggestedFilename()).toBe(
-          `${family}-revision-${record.revision}-r${record.revision}.safetensors`,
-        );
+        await expect(
+          side.getByRole('link', { name: /download.*LoRA/i }),
+        ).toHaveCount(0);
       }
       await expect(comparison).toContainText('job.config.rank');
       if (family === 'h3') {

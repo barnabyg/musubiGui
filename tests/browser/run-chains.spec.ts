@@ -256,8 +256,8 @@ test('a training stopped and resumed twice is one row with every preview in step
       current.getByLabel('Sample', { exact: true }).getByRole('option'),
     ).toHaveCount(expected.length);
     await expect(
-      compared.getByRole('link', { name: 'Download final LoRA', exact: true }),
-    ).toHaveAttribute('href', new RegExp(`/api/runs/${otherLatest.id}/`));
+      comparison.getByRole('link', { name: /download.*LoRA/i }),
+    ).toHaveCount(0);
     // A single segment can still be one side.
     await compare
       .getByLabel('Compare from', { exact: true })

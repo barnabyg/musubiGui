@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import path from 'node:path';
 import { access, readdir } from 'node:fs/promises';
-import { checkpointDownload, runWorkspace, type RunRecord } from './runHarness';
+import { runWorkspace, type RunRecord } from './runHarness';
 
 test('Run and output folders keep readable frozen Job names without collisions', async ({
   page,
@@ -44,12 +44,18 @@ test('Run and output folders keep readable frozen Job names without collisions',
     await expect(
       page.getByText('State: Completed', { exact: true }),
     ).toBeVisible({ timeout: 240_000 });
-    const download = await checkpointDownload(
-      page,
-      /^Summer---test-r2\.safetensors · available$/,
+    // Capture the public clipboard write without changing the user's system clipboard.
+    const copiedPath = page.evaluate(
+      () =>
+        new Promise<string>((resolve) => {
+          Object.defineProperty(navigator, 'clipboard', {
+            configurable: true,
+            value: { writeText: async (path: string) => resolve(path) },
+          });
+        }),
     );
-    const href = await download.getAttribute('href');
-    expect((await fetch(app.url + href)).ok).toBe(true);
+    await page.getByRole('button', { name: 'Copy output folder' }).click();
+    expect(await copiedPath).toBe(records[0].directory);
     const files = await readdir(path.join(records[0].directory, 'checkpoints'));
     expect(files).toContain('Summer---test-r2.safetensors');
     expect(files).toContain('Summer---test-r2-state');
@@ -68,7 +74,6 @@ test('Run and output folders keep readable frozen Job names without collisions',
       page.getByText(`Output: ${records[0].directory}`, { exact: true }),
     ).toBeVisible();
     await access(records[0].directory);
-    expect((await fetch(app.url + href)).ok).toBe(true);
   } finally {
     await app.close();
   }

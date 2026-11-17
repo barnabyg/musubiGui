@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { apiClient } from './api';
 import {
-  RunCheckpoints,
+  RunOutputActions,
   RunComparison,
   RunSamples,
   RunWarnings,
@@ -288,9 +288,25 @@ export function Runs({
                   <p>
                     State: <RunBadge status={run.status} />
                   </p>
+                  <RunElapsed run={run} />
+                  {showFiles && (
+                    <RunOutputActions
+                      key={`outputs-${run.id}`}
+                      directory={run.directory}
+                      outputs={outputs}
+                      completed={run.status === 'completed'}
+                      samplingDisabled={
+                        run.job.config?.sample_enabled === false &&
+                        !run.job.config?.preview_every
+                      }
+                      openSamples={() => {
+                        setView({ runId: selected, tab: 'samples' });
+                        document.getElementById('run-tab-samples')?.focus();
+                      }}
+                    />
+                  )}
                   {run.error && <p className="error">{run.error}</p>}
                   {showFiles && <RunWarnings outputs={outputs} />}
-                  <RunElapsed run={run} />
                   <RunCompletion run={run} estimate={current?.run_estimate} />
                   <PreviewMemory stages={run.stages} />
                   <TrainingProgress
@@ -343,7 +359,6 @@ export function Runs({
                   />
                 )}
                 <RunCaching run={run} chained={segments.length > 1} />
-                {showFiles && <RunCheckpoints outputs={outputs} />}
                 {showFiles && (
                   <RunComparison
                     key={`compare-${run.id}`}
@@ -354,6 +369,13 @@ export function Runs({
                 <RunRecords
                   run={run}
                   logText={current?.text}
+                  refreshOutputs={
+                    showFiles && (
+                      <button disabled={outputs.busy} onClick={outputs.reload}>
+                        Refresh outputs
+                      </button>
+                    )
+                  }
                   performanceAvailable={current?.performance_available}
                 />
               </div>

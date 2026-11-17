@@ -1,10 +1,7 @@
+import { stat } from 'node:fs/promises';
+import path from 'node:path';
 import { test, expect } from '@playwright/test';
-import {
-  checkpointDownload,
-  openCheckpointPanel,
-  openRunTab,
-  runWorkspace,
-} from './runHarness';
+import { openRunTab, runWorkspace } from './runHarness';
 
 test('Wan offers only alternating training for new jobs and presets', async ({
   page,
@@ -139,18 +136,6 @@ test('alternating Wan settings persist, train both experts and restore the paire
     await expect(
       page.getByText('State: Completed', { exact: true }),
     ).toBeVisible({ timeout: 240_000 });
-    for (const expert of ['low', 'high'] as const) {
-      const downloaded = page.waitForEvent('download');
-      await (
-        await checkpointDownload(
-          page,
-          new RegExp(`-${expert}-step0*8\\.safetensors · available$`),
-        )
-      ).click();
-      expect((await downloaded).suggestedFilename()).toMatch(
-        new RegExp(`-${expert}-step8\\.safetensors$`),
-      );
-    }
     const [run] = await app.records();
     const full = (await (
       await fetch(`${app.url}/api/runs/${run.id}`)
@@ -158,6 +143,18 @@ test('alternating Wan settings persist, train both experts and restore the paire
       sample_pair: Record<string, { steps: number; path: string }>;
       stages: { name: string; args: string[]; training?: { expert: string } }[];
     };
+    await expect(
+      page.getByRole('button', { name: 'Copy output folder' }),
+    ).toHaveAttribute('title', run.directory);
+    for (const expert of ['low', 'high']) {
+      const file = full.sample_pair[expert].path;
+      expect(path.relative(run.directory, file)).toMatch(
+        new RegExp(
+          '^checkpoints[/\\\\].*-' + expert + '-step0*8\\.safetensors$',
+        ),
+      );
+      expect((await stat(file)).size).toBeGreaterThan(0);
+    }
     expect(full.sample_pair.low.steps).toBe(8);
     expect(full.sample_pair.high.steps).toBe(8);
     expect(
@@ -171,10 +168,8 @@ test('alternating Wan settings persist, train both experts and restore the paire
     await app.start();
     await page.reload();
     await expect(
-      (await openCheckpointPanel(page)).getByRole('button', {
-        name: /-high-step0*8\.safetensors · available$/,
-      }),
-    ).toBeVisible();
+      page.getByRole('button', { name: 'Copy output folder' }),
+    ).toHaveAttribute('title', run.directory);
     await page
       .getByRole('button', { name: 'Inspect saved states', exact: true })
       .click();
@@ -204,15 +199,10 @@ test('alternating Wan settings persist, train both experts and restore the paire
     await expect(
       page.getByText('State: Completed', { exact: true }),
     ).toBeVisible({ timeout: 240_000 });
-    // The training's merged list also has the source's step-7 low checkpoint; the segment's is last.
+    const segment = (await app.records()).find((item) => item.id !== run.id)!;
     await expect(
-      (await openCheckpointPanel(page))
-        .getByRole('row')
-        .filter({ has: page.getByRole('cell', { name: '2', exact: true }) })
-        .getByRole('button', {
-          name: /-low-step0*7\.safetensors · available$/,
-        }),
-    ).toBeVisible();
+      page.getByRole('button', { name: 'Copy output folder' }),
+    ).toHaveAttribute('title', segment.directory);
     await openRunTab(page, 'samples');
     // The source Run's final sample comes first in the training's merged list.
     await page

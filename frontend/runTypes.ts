@@ -26,6 +26,7 @@ export type Run = {
       save_every?: number;
       steps?: number;
       preview_every?: number;
+      sample_enabled?: boolean;
     };
   };
   manifest: {
