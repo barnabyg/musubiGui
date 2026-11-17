@@ -15,7 +15,7 @@ from musubi_gui.checkpoint_names import expert_step_name  # noqa: E402
 from musubi_gui.resume_learning_rate import LearningRateOverride  # noqa: E402
 from musubi_gui.step_offset import ENVIRONMENT, OffsetStepName, StepSchedule  # noqa: E402
 from musubi_gui.trainer_control import ENVIRONMENT as CONTROL_ENVIRONMENT  # noqa: E402
-from musubi_gui.trainer_control import TrainerControl  # noqa: E402
+from musubi_gui.trainer_control import TrainerControl, post_optimizer_step  # noqa: E402
 from musubi_gui.training_timing import TrainingTiming  # noqa: E402
 
 
@@ -119,17 +119,9 @@ def observe_trainer(
             step = int(args[5]) + 1
             timing.step(global_step(step))
             namespace = args[0]
-            schedule.before_step(namespace, step)
             if expert_step_offset is not None:
                 namespace.output_name = expert_step_name(namespace.output_name, expert_step_offset, step)
-                if step == namespace.max_train_steps:
-                    # The mandatory train-end save writes this same checkpoint/state.
-                    # Avoid publishing it twice with different epoch/RNG metadata.
-                    namespace.save_every_n_steps = None
-            if control:
-                # Saves are named by the expert's cumulative step in alternating Wan phases.
-                named = expert_step_offset + step if expert_step_offset is not None else global_step(step)
-                control.at_step(namespace, step, named)
+            post_optimizer_step(namespace, step, schedule, expert_step_offset=expert_step_offset, control=control)
         return result
 
     def stop_after_save(original: Any) -> Any:

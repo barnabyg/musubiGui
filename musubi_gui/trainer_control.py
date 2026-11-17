@@ -13,6 +13,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from musubi_gui.step_offset import StepSchedule
+
 ENVIRONMENT = "MUSUBI_CONTROL_REQUEST"
 REQUEST_FILE = "control-request.json"
 HANDLED_FILE = "control-handled.json"
@@ -100,3 +102,25 @@ class TrainerControl:
         if self.stopping:
             print("Saved; stopping as requested.", flush=True)
             raise StopAfterSave
+
+
+def post_optimizer_step(
+    namespace: Any,
+    local_step: int,
+    schedule: StepSchedule,
+    *,
+    expert_step_offset: int | None = None,
+    control: TrainerControl | None = None,
+) -> None:
+    """The app's work at the post-optimizer hook of 1-based update `local_step`, before upstream's save and sample checks.
+
+    The schedule sets this step's save and preview intervals. An alternating Wan phase's final step leaves its save to
+    the mandatory train-end save, which writes the same checkpoint and state. Then a control request can make this step
+    save or preview, named by the expert's cumulative step in an alternating Wan phase and by global step otherwise.
+    """
+    schedule.before_step(namespace, local_step)
+    if expert_step_offset is not None and local_step == namespace.max_train_steps:
+        namespace.save_every_n_steps = None
+    if control:
+        named = expert_step_offset + local_step if expert_step_offset is not None else schedule.global_step(local_step)
+        control.at_step(namespace, local_step, named)

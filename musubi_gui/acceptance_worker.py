@@ -13,7 +13,7 @@ from musubi_gui.checkpoint_names import expert_step_name
 from musubi_gui.resume_learning_rate import LearningRateOverride
 from musubi_gui.step_offset import ENVIRONMENT, StepSchedule
 from musubi_gui.trainer_control import ENVIRONMENT as CONTROL_ENVIRONMENT
-from musubi_gui.trainer_control import TrainerControl
+from musubi_gui.trainer_control import TrainerControl, post_optimizer_step
 from musubi_gui.training_timing import TrainingTiming
 
 # In the synthetic checkout, lets checks that never act while a stage runs skip the paced steps.
@@ -185,14 +185,14 @@ def main(stage: str | None = None) -> None:
                 f"steps: {step}/{args.max_train_steps} loss=0.0 (synthetic optimizer_step={previous + step})",
                 flush=True,
             )
-            # As the app's trainer hook does: the schedule sets this step's intervals, then a control request
-            # can make this step save or preview.
-            schedule.before_step(args, step)
-            if expert_offset is not None and step == args.max_train_steps:
-                # The train-end save writes this same checkpoint and state.
-                args.save_every_n_steps = None
-            if control:
-                control.at_step(args, step, int(expert_offset) + step if expert_offset is not None else current)
+            # The app's trainer hook: this step's intervals, and any control request.
+            post_optimizer_step(
+                args,
+                step,
+                schedule,
+                expert_step_offset=int(expert_offset) if expert_offset is not None else None,
+                control=control,
+            )
             if args.sample_every_n_steps and step % args.sample_every_n_steps == 0:
                 if timing:
                     timing.preview_start(current)
