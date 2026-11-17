@@ -84,22 +84,11 @@ export function DatasetTopbar({
             </>
           )}
         </small>
-        <DatasetTrainingJob
-          key={dataset.id}
-          dataset={dataset}
-          busy={busy}
-          beforeCreate={async () => {
-            const saved = await captions.flushAll();
-            if (!saved) reviewFailed();
-            return saved;
-          }}
-          onCreated={onTrainingJob}
-        />
       </div>
       <div className="dataset-filters">
         <input
           aria-label="Search media and captions"
-          placeholder="Search media and captions"
+          placeholder="Search files or captions"
           value={query}
           onChange={(event) => {
             setQuery(event.target.value);
@@ -145,7 +134,22 @@ export function DatasetTopbar({
           {items.filter(hasCaption).length} of {items.length} captioned
         </button>
       </div>
-      <div className="dataset-topbar-actions">
+      <div
+        className="dataset-topbar-actions"
+        role="group"
+        aria-label="Dataset actions"
+      >
+        <DatasetTrainingJob
+          key={dataset.id}
+          dataset={dataset}
+          busy={busy}
+          beforeCreate={async () => {
+            const saved = await captions.flushAll();
+            if (!saved) reviewFailed();
+            return saved;
+          }}
+          onCreated={onTrainingJob}
+        />
         {dataset.managed && (
           <button
             className={items.length ? '' : 'primary'}

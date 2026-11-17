@@ -53,6 +53,22 @@ test('register mixed media, preview, and recover library after service restart',
     await expect(page.locator('.dataset-contents')).toHaveText(
       '2 images · 1 video',
     );
+    const invalid = page.getByRole('button', { name: '1 invalid media file' });
+    await expect(invalid).toBeVisible();
+    await invalid.click();
+    const filter = page.getByRole('combobox', { name: 'Filter media' });
+    const gallery = page.getByLabel('Dataset gallery');
+    await expect(filter).toHaveValue('invalid');
+    await expect(gallery.getByRole('button')).toHaveCount(1);
+    await expect(gallery.getByText('invalid.mp4')).toBeVisible();
+    await filter.selectOption('all');
+    await expect(gallery.getByRole('button')).toHaveCount(4);
+    await page.getByRole('button', { name: 'Back to datasets' }).click();
+    await page.getByRole('button', { name: '2 missing captions' }).click();
+    await expect(filter).toHaveValue('missing');
+    await expect(gallery.getByRole('button')).toHaveCount(2);
+    await expect(gallery.getByText('blue.png')).toBeVisible();
+    await expect(gallery.getByText('invalid.mp4')).toBeVisible();
   } finally {
     await app.cleanup();
   }
