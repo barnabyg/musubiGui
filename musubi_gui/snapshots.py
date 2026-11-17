@@ -186,7 +186,8 @@ class SnapshotIdentity:
     def matches_run(self, run: dict[str, Any]) -> bool:
         if not run.get("segment"):
             # A retry appends its execution ID to the original input fingerprint on each attempt.
-            return self.fingerprint == run["fingerprint"].partition(":retry:")[0]
+            fingerprint: str = run["fingerprint"]
+            return self.fingerprint == fingerprint.partition(":retry:")[0]
         # Restored segments get their own execution fingerprint. Their frozen cache keys still identify
         # media, captions and cache producers; the saved settings and models identify the other inputs.
         return (
