@@ -88,7 +88,6 @@ test('Run details keeps a tight header, flat Overview panels and a samples-only 
       'Actions',
       'Resume from an earlier save',
       'Caching',
-      'Checkpoints',
       'Compare with another Run',
       'Inputs and output folder',
       'Stage logs',

@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { finalCheckpointButton, runWorkspace } from './runHarness';
+import { runWorkspace } from './runHarness';
 
 test.use({ actionTimeout: 240_000 });
 
@@ -211,7 +211,9 @@ test('dataset inclusion and removal name dependent drafts while prepared Runs ke
     await expect(
       page.getByText('State: Completed', { exact: true }),
     ).toBeVisible({ timeout: 240_000 });
-    await expect(await finalCheckpointButton(page)).toHaveText(/· available$/);
+    await expect(
+      page.getByRole('button', { name: 'Copy output folder' }),
+    ).toBeVisible();
   } finally {
     await app.close();
   }

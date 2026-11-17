@@ -204,7 +204,6 @@ const runPanelNames = {
   actions: 'Actions',
   resume: 'Resume from an earlier save',
   caching: 'Cache preparation results',
-  checkpoints: 'Checkpoints',
   compare: 'Compare with another Run',
   inputs: 'Inputs and output folder',
   samples: 'Samples',
@@ -241,33 +240,4 @@ export function runPanelLabelled(page: Page, panel: RunPanelKey) {
 // The first Overview panel: the Run's name, state, warnings, timing and originating job.
 export function runSummary(page: Page) {
   return page.locator('#run-panel-overview > .panel').first();
-}
-
-// Switches Run details to Overview, expands the LoRA checkpoints table and returns its panel.
-export async function openCheckpointPanel(page: Page) {
-  await openRunTab(page, 'overview');
-  const panel = runPanel(page, 'checkpoints');
-  const table = panel.locator('details.output-checkpoints');
-  await expect(table).toBeVisible({ timeout: 240_000 });
-  if ((await table.getAttribute('open')) === null)
-    await table.locator('summary').click();
-  return panel;
-}
-
-// The file button in the Final row of the checkpoints table.
-export async function finalCheckpointButton(page: Page) {
-  const panel = await openCheckpointPanel(page);
-  return panel
-    .getByRole('row')
-    .filter({ has: page.getByRole('cell', { name: 'Final', exact: true }) })
-    .getByRole('button');
-}
-
-// Selects a checkpoint and returns the download link of its detail.
-export async function checkpointDownload(page: Page, file: RegExp) {
-  const panel = await openCheckpointPanel(page);
-  await panel.getByRole('button', { name: file }).click();
-  return panel
-    .getByLabel('Selected checkpoint', { exact: true })
-    .getByRole('link', { name: 'Download output', exact: true });
 }

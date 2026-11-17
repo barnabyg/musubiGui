@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { finalCheckpointButton, runWorkspace } from './runHarness';
+import { runWorkspace } from './runHarness';
 
 test('training elapsed spans expert switches and survives reload independently of phase ETA', async ({
   page,
@@ -57,7 +57,7 @@ test('training elapsed spans expert switches and survives reload independently o
     const progress = page.getByLabel('Training progress');
     await expect(progress).toContainText('Training elapsed 01:30');
     await expect(page.getByLabel('Run elapsed')).toContainText('02:30');
-    await expect(progress).toContainText('Phase ETA 00:20');
+    await expect(progress).not.toContainText('Phase ETA');
     await expect(progress).toContainText('Seconds per step: 83.20 s/step');
     await page.reload();
     await expect(progress).toContainText('Training elapsed 01:30');
@@ -73,7 +73,7 @@ test('training elapsed spans expert switches and survives reload independently o
     );
     await page.reload();
     await expect(progress).toContainText('Training elapsed 01:30');
-    await expect(progress).toContainText('Training ETA unknown');
+    await expect(progress).not.toContainText('Training ETA');
     await expect(progress).toContainText('Seconds per step: unknown');
     failedDuringLaunch = true;
     await page.reload();
@@ -236,7 +236,9 @@ test('H3 diagnostics download contains measurements from the completed fixture r
     await expect(
       page.getByText('State: Completed', { exact: true }),
     ).toBeVisible({ timeout: 240_000 });
-    await expect(await finalCheckpointButton(page)).toHaveText(/· available$/);
+    await expect(
+      page.getByRole('button', { name: 'Copy output folder' }),
+    ).toBeVisible();
     const link = page.getByRole('link', {
       name: 'Download performance diagnostics',
     });

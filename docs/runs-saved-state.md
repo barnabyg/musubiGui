@@ -264,7 +264,7 @@ must be after the further-trained expert's step. Legacy Runs count total updates
 across both experts, so the total is a schedule position. Progress shows the overall
 position and the total, as for other restored segments. An early save before high-noise first trains records high at zero;
 high starts fresh when its phase arrives. Restored checkpoints include a local copy
-of the inactive expert's source LoRA, so both downloads are available even if only one
+of the inactive expert's source LoRA, so both files are available even if only one
 expert trains in the new segment.
 
 Stop now does not force a new save. Save and stop saves the active expert's

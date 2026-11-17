@@ -117,7 +117,7 @@ later alternating Wan phases and the requested steps of a restored segment.
 It stays unknown until timing is available. This is a training estimate, not a
 finish-time promise: future model loading, previews and final sampling are excluded,
 and expert speeds may differ. The trainer's own Training ETA or Phase ETA remains
-visible separately. The logs API adds nullable `estimated_remaining_seconds`.
+visible separately during training. Completed Runs show recorded elapsed time and omit both estimates. The logs API adds nullable `estimated_remaining_seconds`.
 
 **Estimated Run remaining** and **Estimated finish** are separate forecasts. New
 Runs observe native Wan/H3 previews from before the trainer's sampling setup hook

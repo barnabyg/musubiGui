@@ -169,10 +169,12 @@ test('Start on the Job page resumes a stopped training with an edited prompt and
     expect(detail.segment.step_offset).toBe(step);
     expect(detail.segment.target_steps).toBe(210);
     expect(detail.job.config.sample_prompt).toBe(NEW_PROMPT);
-    // The Job page shows the training's newest sample and checkpoint.
+    // The Job page shows the training's newest sample.
     const latest = panel.getByRole('group', { name: 'Latest outputs' });
     await expect(latest).toContainText('Latest preview:', { timeout: 240_000 });
-    await expect(latest).toContainText('Latest checkpoint:');
+    await expect(latest.getByRole('link', { name: /checkpoint/i })).toHaveCount(
+      0,
+    );
     expect(records.find((record) => record.id === run.id)!.status).toBe(
       'stopped',
     );
