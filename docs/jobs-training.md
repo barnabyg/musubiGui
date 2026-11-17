@@ -95,7 +95,7 @@ New Wan job and New H3 job start from a recipe that can produce a useful LoRA:
 | Control                           | Wan                  | H3            |
 | --------------------------------- | -------------------- | ------------- |
 | Training recipe                   | Alternating high/low | Guidance loss |
-| Steps per expert before switching | 30                   | —             |
+| Steps per expert before switching | 100                  | —             |
 | Size                              | 832×480              | 640×352       |
 | Frames                            | 33                   | 124           |
 | Rank/alpha                        | 16/16                | 8/8           |
