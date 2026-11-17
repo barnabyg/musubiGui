@@ -67,7 +67,7 @@ export function DatasetPanels({
         <label className="field">
           Dataset name
           <input
-            maxLength={200}
+            maxLength={dataset.managed ? 100 : 200}
             value={name}
             onChange={(event) => setName(event.target.value)}
           />
@@ -81,7 +81,7 @@ export function DatasetPanels({
         <p className="dataset-path">{dataset.path}</p>
         <p>
           {dataset.managed
-            ? 'Upload folder · uploads are stored in this folder.'
+            ? 'Upload folder · uploads are stored in this folder, and renaming the dataset renames it.'
             : 'Registered local folder · add media in this folder, then re-scan.'}
         </p>
         <H3Coverage key={dataset.id} datasetId={dataset.id} />

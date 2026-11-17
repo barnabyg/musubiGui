@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { existsSync } from 'node:fs';
 import { copyFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { datasetHarness } from './datasetHarness';
@@ -19,22 +20,38 @@ test('upload creation uses a named managed folder under the visible default pare
     await page
       .getByLabel('Dataset name', { exact: true })
       .fill('Name only uploads');
-    await page
-      .getByRole('button', { name: 'Create a new folder for uploads' })
-      .click();
+    await page.getByRole('button', { name: 'Create dataset' }).click();
     await expect(
       page.getByRole('heading', { level: 1, name: 'Name only uploads' }),
     ).toBeVisible();
     await page
       .getByRole('button', { name: 'Dataset settings', exact: true })
       .click();
-    await expect(
-      page.getByRole('region', { name: 'Dataset settings', exact: true }),
-    ).toContainText(/managed-/);
-    await expect(
-      page.getByRole('region', { name: 'Dataset settings', exact: true }),
-    ).toContainText(app.media);
+    const settings = page.getByRole('region', {
+      name: 'Dataset settings',
+      exact: true,
+    });
+    await expect(settings).toContainText(
+      path.join(app.media, 'Name only uploads'),
+    );
     await expect(page.getByText('Scan: complete 0/0')).toBeVisible();
+    expect(existsSync(path.join(app.media, 'Name only uploads'))).toBe(true);
+
+    await settings.getByLabel('Dataset name', { exact: true }).fill('Frogs');
+    await settings
+      .getByRole('button', { name: 'Save dataset name', exact: true })
+      .click();
+    await expect(settings).toContainText(path.join(app.media, 'Frogs'));
+    expect(existsSync(path.join(app.media, 'Frogs'))).toBe(true);
+    expect(existsSync(path.join(app.media, 'Name only uploads'))).toBe(false);
+
+    await page.getByRole('button', { name: 'Back to datasets' }).click();
+    await page.getByRole('button', { name: 'New dataset' }).click();
+    await page.getByLabel('Dataset name', { exact: true }).fill('Frogs');
+    await page.getByRole('button', { name: 'Create dataset' }).click();
+    await expect(page.getByRole('alert')).toContainText(
+      'A folder named "Frogs" already exists',
+    );
   } finally {
     await app.cleanup();
   }
@@ -84,7 +101,7 @@ test('missing roots link to Settings and browser Back restores the creation form
       page.getByLabel('Upload parent folder', { exact: true }),
     ).toHaveValue(app.media);
     await expect(
-      page.getByRole('button', { name: 'Create a new folder for uploads' }),
+      page.getByRole('button', { name: 'Create dataset' }),
     ).toBeEnabled();
   } finally {
     await app.cleanup();

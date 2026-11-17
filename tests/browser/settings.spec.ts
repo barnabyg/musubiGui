@@ -405,7 +405,7 @@ test('path fields warn before saving, browse local folders and show the full pat
     await page.getByRole('button', { name: 'New dataset' }).click();
     const folder = page.getByLabel('Upload parent folder', { exact: true });
     const createUploads = page.getByRole('button', {
-      name: 'Create a new folder for uploads',
+      name: 'Create dataset',
     });
     await folder.fill(path.join(root, 'datasets', 'missing'));
     await expect(

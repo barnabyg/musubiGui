@@ -46,10 +46,24 @@ class H3Preparation:
         if not path.exists():
             return None
         record: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
+        try:
+            # Renaming the prepared dataset moves its folder.
+            record["path"] = self.store.get(record["dataset_id"])["path"]
+        except KeyError:
+            pass
         if record["state"] == "running" and dataset_id not in self.active:
             record["state"] = "interrupted"
             record["error"] = "Preparation was interrupted. Completed copies are preserved; start a new batch to retry."
         return record
+
+    def busy(self, dataset_id: str) -> bool:
+        """Whether a running batch reads this dataset or writes into it."""
+        with self.lock:
+            for source in self.active:
+                record = json.loads((self.store.root / "h3-preparation" / f"{source}.json").read_text(encoding="utf-8"))
+                if dataset_id in {source, record["dataset_id"]}:
+                    return True
+        return False
 
     def begin(self, dataset_id: str, request: H3PreparationRequest) -> dict[str, Any]:
         with self.lock:

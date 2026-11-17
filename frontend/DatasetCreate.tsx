@@ -82,7 +82,7 @@ export function DatasetCreate({
         <label className="field">
           Dataset name
           <input
-            maxLength={200}
+            maxLength={managed ? 100 : 200}
             disabled={busy}
             value={name}
             onChange={(event) => setName(event.target.value)}
@@ -95,7 +95,7 @@ export function DatasetCreate({
           className="dataset-folder-field"
           missingMessage={
             managed
-              ? "This folder doesn't exist yet. Create a new folder for uploads will create it."
+              ? "This folder doesn't exist yet. Create dataset will create it."
               : undefined
           }
           value={path}
@@ -106,7 +106,7 @@ export function DatasetCreate({
       </div>
       <p>
         {managed
-          ? 'A separate managed subfolder will be created inside the upload parent folder. Its final path appears in Dataset settings after creation.'
+          ? 'Creates a new folder named after the dataset inside the upload parent folder. Renaming the dataset renames the folder.'
           : `Index this exact folder and all its subfolders: ${path || 'choose a folder'}. Source media and captions stay in place.`}
       </p>
       {existing && (
@@ -149,7 +149,7 @@ export function DatasetCreate({
           }
           onClick={() => void create(managed, path)}
         >
-          {managed ? 'Create a new folder for uploads' : 'Use existing folder'}
+          {managed ? 'Create dataset' : 'Use existing folder'}
         </button>
       </div>
       {busy && <p role="status">Opening dataset…</p>}
