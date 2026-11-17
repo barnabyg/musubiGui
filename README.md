@@ -26,6 +26,12 @@ Registry access is required on first launch. Musubi setup is a separate action i
 The Wan reference can use the separately qualified [offline conversion](docs/reference/wan-conversion.md)
 of existing scaled-FP8 files; originals remain untouched and lost precision is not recovered.
 
+Settings shows the next outstanding step and groups completed steps under **Completed steps**.
+Use **Go to installation** to reach the installer, **Configure folders** to reach the first missing
+location, or **Check setup now** to run diagnostics. A failed check links to the relevant
+installation or storage control. **Start a Run** opens a prepared Run or a saved job and offers
+a choice when several are available. Training begins only after you choose its start action.
+
 In Settings, click **Install supported version**. The app clones the official repository into
 `musubi-tuner/` inside this project, checks out the revision supported by this GUI, and uses
 `uv` to create its separate Python 3.12 `.venv`, install the qualified CUDA 13.0

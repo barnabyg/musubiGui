@@ -74,29 +74,9 @@ export function ManagedCheckout({
     <section className="panel" id="settings-environment">
       <div className="section-heading">
         <h2>Training environment</h2>
-        <p>
-          Musubi Tuner lives inside this project. Install or update to the
-          latest version supported by this GUI. Setup downloads source and
-          training dependencies, including CUDA 13.0 PyTorch; model weights are
-          separate.
-        </p>
       </div>
       {checkout && (
         <>
-          <p>
-            Checkout: <code>{checkout.checkout}</code>
-          </p>
-          <p>
-            Training Python: <code>{checkout.python}</code>
-          </p>
-          <p>
-            Installed revision:{' '}
-            <code>{checkout.installed_revision || 'Not installed'}</code>
-          </p>
-          <p>
-            Latest supported revision:{' '}
-            <code>{checkout.supported_revision}</code>
-          </p>
           <p>
             {checkout.ready
               ? 'Supported version installed.'
@@ -104,6 +84,7 @@ export function ManagedCheckout({
           </p>
           <p aria-live="polite">{checkout.operation.message}</p>
           <button
+            id="settings-install"
             disabled={disabled || starting || running || checkout.fixture}
             onClick={() => void update()}
           >
@@ -113,11 +94,35 @@ export function ManagedCheckout({
                 ? 'Update to supported version'
                 : 'Install supported version'}
           </button>
-          <p className="hint">
-            Finish or cancel queued and active Runs first. Local source changes
-            are preserved. Setup continues if you leave this page; keep the app
-            running. After setup, run diagnostics before training.
-          </p>
+          <details>
+            <summary>Installation details</summary>
+            <p>
+              Checkout: <code>{checkout.checkout}</code>
+            </p>
+            <p>
+              Training Python: <code>{checkout.python}</code>
+            </p>
+            <p>
+              Installed revision:{' '}
+              <code>{checkout.installed_revision || 'Not installed'}</code>
+            </p>
+            <p>
+              Latest supported revision:{' '}
+              <code>{checkout.supported_revision}</code>
+            </p>
+            <p>
+              Musubi Tuner lives inside this project. Install or update to the
+              latest version supported by this GUI. Setup downloads source and
+              training dependencies, including CUDA 13.0 PyTorch; model weights
+              are separate.
+            </p>
+            <p className="hint">
+              Finish or cancel queued and active Runs first. Local source
+              changes are preserved. Setup continues if you leave this page;
+              keep the app running. After setup, run diagnostics before
+              training.
+            </p>
+          </details>
         </>
       )}
       {error && (
