@@ -4,6 +4,7 @@ import { apiClient } from './api';
 import { type CaptionSession, useJobCaptionState } from './captionSession';
 import {
   hasActiveWork,
+  hasEndedTraining,
   type JobTrainingInfo,
   useCurrentTraining,
 } from './currentTraining';
@@ -482,6 +483,23 @@ export function useJobEditor({
                 stays in Runs.
               </p>
             </>
+          ),
+          confirmLabel: 'Start fresh',
+          cancelLabel: 'Keep editing',
+        });
+        if (!fresh) {
+          setStatus('Start cancelled');
+          return;
+        }
+      } else if (hasEndedTraining(training.status)) {
+        const fresh = await confirmDialog({
+          title: 'Start a fresh training?',
+          body: (
+            <p>
+              The previous training has no resumable saved state. This Run will
+              start at step 0 with the reviewed inputs. The previous training
+              stays in Runs.
+            </p>
           ),
           confirmLabel: 'Start fresh',
           cancelLabel: 'Keep editing',

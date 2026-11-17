@@ -48,6 +48,16 @@ export function currentTraining(
   );
 }
 
+export function hasEndedTraining(status: string | null | undefined) {
+  return [
+    'completed',
+    'stopped',
+    'failed',
+    'cancelled',
+    'interrupted',
+  ].includes(status ?? '');
+}
+
 export function hasActiveWork(status: string | null | undefined) {
   return [
     'pending_preparation',

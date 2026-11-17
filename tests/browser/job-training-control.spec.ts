@@ -278,11 +278,20 @@ test('reviewing changed captions after completion offers training on the new inp
     await inspect.click();
     await expect(inspect).toBeEnabled();
     await expect(results).toBeHidden();
-    await expect(
-      page.getByRole('button', {
-        name: /^(Prepare and start|Start fresh training)$/,
-      }),
-    ).toBeEnabled();
+    const start = page.getByRole('button', {
+      name: 'Start fresh training',
+      exact: true,
+    });
+    await start.click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toContainText('step 0');
+    await dialog.getByRole('button', { name: 'Keep editing' }).click();
+    expect(await app.records()).toHaveLength(1);
+    await start.click();
+    await dialog
+      .getByRole('button', { name: 'Start fresh', exact: true })
+      .click();
+    await expect.poll(async () => (await app.records()).length).toBe(2);
   } finally {
     await app.close();
   }

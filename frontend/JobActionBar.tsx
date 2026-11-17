@@ -1,6 +1,10 @@
 import type { ReactNode, RefObject } from 'react';
 import { ActionMenu } from './ActionMenu';
-import { hasActiveWork, type CurrentTraining } from './currentTraining';
+import {
+  hasActiveWork,
+  hasEndedTraining,
+  type CurrentTraining,
+} from './currentTraining';
 import { runStatus } from './runStatus';
 import { sections } from './jobSections';
 import type { Job, Review } from './jobTypes';
@@ -73,6 +77,8 @@ export function JobActionBar({
       startLabel = 'Start fresh training';
     else if (savedStep != null) startLabel = `Resume from step ${savedStep}`;
     else startLabel = 'Check saved state and resume';
+  } else if (hasEndedTraining(latest?.status)) {
+    startLabel = current.info ? 'Start fresh training' : 'Check training state';
   }
   return (
     <div className="job-action-bar" ref={actionBar}>

@@ -31,7 +31,7 @@ for a training that kept state: turning it on always resumes. The fields and tie
 [Resuming with an edited Job revision](runs-saved-state.md#resuming-with-an-edited-job-revision).
 
 The action bar follows the current Run. **View active Run** opens queued or running work.
-**View results** opens the finished Run for the completed revision. After changing the target,
+**View results** opens the finished Run. Reviewing again checks whether its inputs still match, including dataset edits made since completion. Without a resumable saved state, **Start fresh training** asks for confirmation before starting at step 0. After changing the target,
 save and review the draft. The launch action uses the reviewed settings:
 
 - **Resume.** It checks the saved states and compares the reviewed revision with the one that
