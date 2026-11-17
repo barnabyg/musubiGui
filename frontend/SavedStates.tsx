@@ -1,8 +1,6 @@
 import { useState } from 'react';
 import { apiClient } from './api';
 import { confirmDialog } from './ConfirmDialog';
-import type { Output } from './Outputs';
-import { sizeLabel } from './runStatus';
 import type { Run } from './runTypes';
 
 const request = apiClient('Run request failed.');
@@ -11,12 +9,10 @@ const request = apiClient('Run request failed.');
 // Run's own revision, as a new segment.
 export function SavedStates({
   runId,
-  files,
   config,
   onRestore,
 }: {
   runId: string;
-  files: Output[];
   config: Run['job']['config'];
   onRestore: (stateId: string, steps: number) => Promise<void>;
 }) {
@@ -88,27 +84,6 @@ export function SavedStates({
           </p>
         )}
       </details>
-      {files.length > 0 && (
-        <details>
-          <summary>Optimizer state files ({files.length})</summary>
-          <ul className="state-files">
-            {files.map((file) => (
-              <li key={file.id}>
-                {file.path}
-                {file.bytes !== undefined && ` · ${sizeLabel(file.bytes)}`}
-                {file.file_url && (
-                  <>
-                    {' · '}
-                    <a href={`${file.file_url}?download=true`} download>
-                      Download
-                    </a>
-                  </>
-                )}
-              </li>
-            ))}
-          </ul>
-        </details>
-      )}
       <button disabled={inspecting} onClick={() => void inspect()}>
         Inspect saved states
       </button>

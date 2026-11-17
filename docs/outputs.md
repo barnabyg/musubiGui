@@ -7,9 +7,9 @@ and saved-state folders use the frozen job name and revision, for example
 expert's step or phase in the filename. Every Run has a separate folder.
 Existing Runs keep their recorded paths and filenames.
 
-Choose **View sample** to open the latest available image, video or audio preview
+Choose **View sample** to open this Run’s latest available image, video or audio preview
 in one action. Use the Samples tab to select earlier media, inspect metadata or
-download a sample. For resumed training the Samples tab includes other segments
+download a sample. Files the browser cannot preview remain available in the folder or through the sample download. **View sample** skips unsupported formats and files that failed playback. **Refresh outputs** allows another playback attempt. For resumed training the Samples tab includes other segments
 while the folder action always identifies the selected Run. Completed Runs show
 actual elapsed time. A Run with sampling disabled or no playable sample shows
 its state. Output warnings, including incomplete Wan pairs, appear in Overview.
