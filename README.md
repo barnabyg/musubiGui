@@ -30,7 +30,9 @@ Settings shows the next outstanding step and groups completed steps under **Comp
 Use **Go to installation** to reach the installer, **Configure folders** to reach the first missing
 location, or **Check setup now** to run diagnostics. A failed check links to the relevant
 installation or storage control. **Start a Run** opens a prepared Run or a saved job and offers
-a choice when several are available. Training begins only after you choose its start action.
+a choice when several are available. When every job is already running or has completed its saved
+revision, the checklist links to those Runs or their results. Training begins only after you choose
+its start action.
 
 In Settings, click **Install supported version**. The app clones the official repository into
 `musubi-tuner/` inside this project, checks out the revision supported by this GUI, and uses

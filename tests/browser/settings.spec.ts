@@ -264,6 +264,58 @@ test('setup offers diagnostics and a direct choice of training job or prepared R
   }
 });
 
+test('Start a Run lists runnable jobs and offers existing Runs when all jobs are busy or complete', async ({
+  page,
+}) => {
+  const app = await runWorkspace();
+  try {
+    const { job: finished, run } = await preparedRun(app);
+    await app.post(`/api/runs/${run.id}/start`);
+    await expect
+      .poll(async () => (await app.records())[0].status, { timeout: 240_000 })
+      .toBe('completed');
+    const [queued, ...fresh] = app.manifest.jobs.filter(
+      (job) => job.id !== finished.id,
+    );
+    await app.leaseGpu('acquire');
+    const waiting = (await app.post('/api/runs/prepare', {
+      job_id: queued.id,
+    })) as { id: string };
+    const setup = page.getByRole('region', { name: 'Setup checklist' });
+    const openCompleted = async () => {
+      await page.goto(`${app.url}/#/settings`);
+      await setup.getByText(/^Completed steps/).click();
+    };
+    await openCompleted();
+    const chooser = setup.locator('.setup-run-choices');
+    await chooser.locator('summary').click();
+    expect((await chooser.getByRole('link').allTextContents()).sort()).toEqual(
+      fresh.map((job) => job.name).sort(),
+    );
+    for (const job of fresh) await app.post(`/api/jobs/${job.id}/archive`);
+    await page.reload();
+    await setup.getByText(/^Completed steps/).click();
+    await setup.getByText('View existing Runs', { exact: true }).click();
+    await expect(
+      setup.getByRole('link', { name: `View active Run for ${queued.name}` }),
+    ).toHaveAttribute('href', `#/runs/${waiting.id}`);
+    await expect(
+      setup.getByRole('link', { name: `View results for ${finished.name}` }),
+    ).toHaveAttribute('href', `#/runs/${run.id}`);
+    await page.goto(`${app.url}/#/jobs/${finished.id}`);
+    await page.getByLabel('Job name', { exact: true }).fill('Updated training');
+    await page.getByRole('button', { name: 'Save draft', exact: true }).click();
+    await expect(page.getByRole('status')).toContainText('revision 2');
+    await openCompleted();
+    await expect(
+      setup.getByRole('link', { name: 'Start a Run', exact: true }),
+    ).toHaveAttribute('href', `#/jobs/${finished.id}`);
+    await app.leaseGpu('release');
+  } finally {
+    await app.close();
+  }
+});
+
 test('an unconfigured app opens on Settings with a checklist of real progress', async ({
   page,
 }) => {
@@ -365,6 +417,7 @@ test('an unconfigured app opens on Settings with a checklist of real progress', 
         json: [
           {
             id: 'r',
+            job: { id: 'j', name: 'Fixture', revision: 1 },
             status: 'completed',
             stages: [{ name: 'train', status: 'completed' }],
           },

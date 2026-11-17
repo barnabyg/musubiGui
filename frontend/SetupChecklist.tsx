@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { apiClient } from './api';
+import { currentTraining, hasActiveWork } from './currentTraining';
 import { formatRoute } from './route';
 import { useRunHistory, type RunSummary } from './runHistory';
 
@@ -33,29 +34,49 @@ export function focusSetupControl(id: string) {
 }
 
 function StartRun({ jobs, runs }: { jobs: Job[]; runs: RunSummary[] }) {
-  const prepared = runs.filter((run) => run.status === 'prepared');
-  const choices = [
-    ...prepared.map((run) => ({
-      href: formatRoute({ screen: 'Runs', id: run.id }),
-      name: `${run.job.name} · revision ${run.job.revision} · prepared Run ${run.id.slice(0, 8)}`,
-    })),
-    ...jobs
-      .filter(
-        (job) =>
-          !prepared.some(
-            (run) => run.job.id === job.id && run.job.revision === job.revision,
-          ),
-      )
-      .map((job) => ({
-        href: formatRoute({ screen: 'Jobs', id: job.id }),
-        name: job.name,
-      })),
-  ];
+  const startable: { href: string; name: string }[] = [];
+  const existing: { href: string; name: string }[] = [];
+  for (const job of jobs) {
+    const latest = currentTraining(runs, job.id)?.latest;
+    if (latest) {
+      const href = formatRoute({ screen: 'Runs', id: latest.id });
+      const sameRevision = job.revision === latest.job.revision;
+      const active = hasActiveWork(latest.status);
+      if (active || (sameRevision && latest.status === 'completed')) {
+        existing.push({
+          href,
+          name: active
+            ? `View active Run for ${job.name}`
+            : `View results for ${job.name}`,
+        });
+        continue;
+      }
+      if (latest.status === 'prepared') {
+        startable.push({
+          href,
+          name: `${latest.job.name} · revision ${latest.job.revision} · prepared Run ${latest.id.slice(0, 8)}`,
+        });
+        if (sameRevision) continue;
+      }
+    }
+    startable.push({
+      href: formatRoute({ screen: 'Jobs', id: job.id }),
+      name: job.name,
+    });
+  }
+  const choices = startable.length ? startable : existing;
   if (!choices.length) return <a href="#/jobs">Create a job to start a Run</a>;
-  if (choices.length === 1) return <a href={choices[0].href}>Start a Run</a>;
+  if (choices.length === 1)
+    return (
+      <a href={choices[0].href}>
+        {startable.length ? 'Start a Run' : choices[0].name}
+      </a>
+    );
   return (
     <details className="setup-run-choices">
-      <summary>Start a Run</summary>
+      <summary>
+        {startable.length ? 'Start a Run' : 'View existing Runs'}
+      </summary>
       <ul>
         {choices.map(({ name, href }) => (
           <li key={href}>
