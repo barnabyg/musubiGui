@@ -165,7 +165,7 @@ A scan probes up to four new or changed files at once and skips files whose size
 modification time are unchanged.
 
 **Pause uploads** pauses remaining files. A file already submitted for validation
-finishes publication and scanning before the job can review the dataset again.
+finishes publication and joins the gallery before the job can review the dataset again.
 
 **Remove from library** requires confirmation naming the dataset and removes its library entry
 and indexed items only. Original and uploaded media, caption sidecars, thumbnails,
@@ -303,6 +303,9 @@ hard-link publication inside the managed root. The destination filesystem must s
 (for example NTFS). Existing destinations are never overwritten. Media is limited to 64 GiB per file,
 captions to 2 MiB, and long media inspection has the same 45-second decoder limit. Captions require an
 already uploaded matching media stem; the browser orders caption uploads after media automatically.
+A completed upload adds only that file to the gallery rather than rescanning the dataset, and an
+image's validation also makes its thumbnail. Files changed on disk outside uploads still need **Re-scan**.
+During a batch the gallery refreshes at most once a second and again when the batch ends.
 
 Dataset item paths and caption sidecars must remain regular local files/directories. The application
 rejects links/reparse-point redirection even when a target stays inside an allowed root, so replacing a

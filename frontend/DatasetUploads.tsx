@@ -75,13 +75,22 @@ export function DatasetUploads({
         Number(b.file.name.toLowerCase().endsWith('.txt')),
     );
     async function send() {
+      // Incomplete uploads to resume. Only this batch starts new ones until it ends.
+      let existing: Session[] | undefined;
+      let shown = -Infinity;
+      let unshown = false;
+      async function show() {
+        unshown = false;
+        await onChanged();
+        shown = performance.now();
+      }
       for (const entry of ordered) {
         if (entry.status === 'Uploaded') continue;
         if (controller.signal.aborted) break;
         const file = entry.file;
         update(file, { status: 'Uploading', error: undefined });
         try {
-          const existing = await request<Session[]>(
+          existing ??= await request<Session[]>(
             url,
             'GET',
             undefined,
@@ -121,10 +130,12 @@ export function DatasetUploads({
             });
           }
           update(file, { status: 'Validating media', progress: 100 });
-          // Once submitted, the server commits the file and scans it even if the user pauses.
+          // Once submitted, the server commits the file and adds it to the gallery even if the user pauses.
           await request(`${url}/${session.id}/complete`, 'POST', {});
           update(file, { status: 'Uploaded', progress: 100 });
-          await onChanged();
+          unshown = true;
+          // Reloading the library reads every caption, so a fast batch refreshes the gallery at most once a second.
+          if (performance.now() - shown >= 1000) await show();
         } catch (reason) {
           update(file, {
             status: controller.signal.aborted ? 'Paused' : 'Failed',
@@ -134,6 +145,7 @@ export function DatasetUploads({
           });
         }
       }
+      if (unshown) await show();
     }
     try {
       await afterCaptionFlush(send);

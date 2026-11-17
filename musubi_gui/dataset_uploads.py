@@ -30,8 +30,7 @@ class DatasetUploads:
             yield
 
     def _folder(self, dataset_id: str) -> Path:
-        dataset = self.store.get(dataset_id)
-        if not dataset["managed"]:
+        if not self.store.managed(dataset_id):
             raise ValueError(
                 "Uploads require a managed dataset; registered source folders are not upload destinations."
             )
@@ -67,11 +66,12 @@ class DatasetUploads:
         return {**record, "received": received}
 
     def list(self, dataset_id: str) -> list[dict[str, Any]]:
+        """This dataset's incomplete uploads; completed and cancelled records stay on disk but are not listed."""
         self._folder(dataset_id)
         records = []
         for path in self.root.glob("*.json"):
             value = json.loads(path.read_text(encoding="utf-8"))
-            if value.get("dataset_id") == dataset_id:
+            if value.get("dataset_id") == dataset_id and value.get("status") == "uploading":
                 records.append(self.status(dataset_id, value["id"]))
         return records
 
@@ -146,83 +146,100 @@ class DatasetUploads:
                 os.fsync(stream.fileno())
             return self.status(dataset_id, upload_id)
 
+    def _check_media(self, partial: Path, suffix: str, thumbnail: Path | None) -> dict[str, Any]:
+        checked = self.store.probe(partial, thumbnail, timeline=True, extension=suffix)
+        if not checked["valid"]:
+            raise ValueError(checked.get("error", "Uploaded media cannot be decoded."))
+        formats = {
+            ".jpg": "JPEG",
+            ".jpeg": "JPEG",
+            ".png": "PNG",
+            ".webp": "WEBP",
+            ".bmp": "BMP",
+            ".tif": "TIFF",
+            ".tiff": "TIFF",
+            ".gif": "GIF",
+        }
+        if suffix in formats and checked["metadata"].get("format") != formats[suffix]:
+            raise ValueError(
+                "Uploaded image content does not match its filename extension. Rename or re-encode the original."
+            )
+        containers = {
+            ".mp4": {"mov", "mp4"},
+            ".mov": {"mov", "mp4"},
+            ".mkv": {"matroska"},
+            ".webm": {"webm", "matroska"},
+            ".avi": {"avi"},
+            ".wav": {"wav"},
+            ".flac": {"flac"},
+            ".mp3": {"mp3"},
+            ".aac": {"aac"},
+            ".m4a": {"mov", "mp4"},
+            ".ogg": {"ogg"},
+            ".opus": {"ogg"},
+        }
+        if suffix in containers and not containers[suffix].intersection(
+            str(checked["metadata"].get("format", "")).split(",")
+        ):
+            raise ValueError(
+                "Uploaded media container does not match its filename extension. Rename or re-encode the original."
+            )
+        if suffix in AUDIO and not checked["metadata"].get("audio"):
+            raise ValueError("Uploaded audio file contains no decodable audio stream.")
+        return checked
+
     def complete(self, dataset_id: str, upload_id: str) -> dict[str, Any]:
-        with self._lock():
-            record = self._record(dataset_id, upload_id)
-            if record["status"] == "complete":
-                return self.status(dataset_id, upload_id)
-            if record["status"] != "uploading":
-                raise CaptionConflict("Upload was cancelled. Select the file to start again.")
-            partial = self._partial(dataset_id, upload_id)
-            if partial.stat().st_size != record["size"]:
-                raise CaptionConflict(
-                    "Upload is incomplete. Select the same file to resume; no partial file is shown as complete media."
-                )
-            folder = self._folder(dataset_id)
-            filename = record["filename"]
-            suffix = Path(filename).suffix.lower()
-            if suffix == ".txt":
-                partial.read_text(encoding="utf-8-sig")
-                if not any(
-                    path.stem == Path(filename).stem and path.suffix.lower() in IMAGES | VIDEOS
-                    for path in folder.iterdir()
-                ):
-                    raise ValueError(
-                        "No matching image/video exists for this caption. Upload the media first, then retry this caption."
-                    )
-            else:
-                checked = self.store.probe(partial, timeline=True, extension=suffix)
-                if not checked["valid"]:
-                    raise ValueError(checked.get("error", "Uploaded media cannot be decoded."))
-                formats = {
-                    ".jpg": "JPEG",
-                    ".jpeg": "JPEG",
-                    ".png": "PNG",
-                    ".webp": "WEBP",
-                    ".bmp": "BMP",
-                    ".tif": "TIFF",
-                    ".tiff": "TIFF",
-                    ".gif": "GIF",
-                }
-                if suffix in formats and checked["metadata"].get("format") != formats[suffix]:
-                    raise ValueError(
-                        "Uploaded image content does not match its filename extension. Rename or re-encode the original."
-                    )
-                containers = {
-                    ".mp4": {"mov", "mp4"},
-                    ".mov": {"mov", "mp4"},
-                    ".mkv": {"matroska"},
-                    ".webm": {"webm", "matroska"},
-                    ".avi": {"avi"},
-                    ".wav": {"wav"},
-                    ".flac": {"flac"},
-                    ".mp3": {"mp3"},
-                    ".aac": {"aac"},
-                    ".m4a": {"mov", "mp4"},
-                    ".ogg": {"ogg"},
-                    ".opus": {"ogg"},
-                }
-                if suffix in containers and not containers[suffix].intersection(
-                    str(checked["metadata"].get("format", "")).split(",")
-                ):
-                    raise ValueError(
-                        "Uploaded media container does not match its filename extension. Rename or re-encode the original."
-                    )
-                if suffix in AUDIO and not checked["metadata"].get("audio"):
-                    raise ValueError("Uploaded audio file contains no decodable audio stream.")
-            destination = within_root(folder / filename, [folder])
-            try:
-                os.link(partial, destination)
-            except FileExistsError as error:
-                if not os.path.samefile(partial, destination):
+        # An image's validation probe is the same as a scan's, so it also makes the gallery thumbnail.
+        # It waits beside the gallery's thumbnails and replaces one only once the file is published.
+        staged = self.store.root / "thumbnails" / f"upload-{upload_id}.jpg"
+        try:
+            with self._lock():
+                record = self._record(dataset_id, upload_id)
+                if record["status"] == "complete":
+                    return self.status(dataset_id, upload_id)
+                if record["status"] != "uploading":
+                    raise CaptionConflict("Upload was cancelled. Select the file to start again.")
+                partial = self._partial(dataset_id, upload_id)
+                if partial.stat().st_size != record["size"]:
                     raise CaptionConflict(
-                        "A file with this name appeared during upload. Rename the upload; completed files are preserved."
-                    ) from error
-            record["status"] = "complete"
-            atomic_json(self.root / f"{upload_id}.json", record)
-            partial.unlink()
-        self.store.scan(dataset_id)
-        return self.status(dataset_id, upload_id)
+                        "Upload is incomplete. Select the same file to resume; no partial file is shown as complete media."
+                    )
+                folder = self._folder(dataset_id)
+                filename = record["filename"]
+                suffix = Path(filename).suffix.lower()
+                checked = None
+                if suffix == ".txt":
+                    partial.read_text(encoding="utf-8-sig")
+                    if not any(
+                        path.stem == Path(filename).stem and path.suffix.lower() in IMAGES | VIDEOS
+                        for path in folder.iterdir()
+                    ):
+                        raise ValueError(
+                            "No matching image/video exists for this caption. Upload the media first, then retry this caption."
+                        )
+                else:
+                    checked = self._check_media(partial, suffix, staged if suffix in IMAGES else None)
+                destination = within_root(folder / filename, [folder])
+                try:
+                    os.link(partial, destination)
+                except FileExistsError as error:
+                    if not os.path.samefile(partial, destination):
+                        raise CaptionConflict(
+                            "A file with this name appeared during upload. Rename the upload; completed files are preserved."
+                        ) from error
+                record["status"] = "complete"
+                atomic_json(self.root / f"{upload_id}.json", record)
+                partial.unlink()
+            # Only new media joins the gallery, without rescanning the dataset; captions and audio are read with it.
+            if suffix in IMAGES | VIDEOS:
+                if checked and staged.is_file():
+                    staged.replace(self.store.thumbnail(self.store.item_id(dataset_id, filename)))
+                else:
+                    checked = None
+                self.store.add_item(dataset_id, destination, checked)
+            return self.status(dataset_id, upload_id)
+        finally:
+            staged.unlink(missing_ok=True)
 
     def cancel(self, dataset_id: str, upload_id: str) -> dict[str, Any]:
         with self._lock():
