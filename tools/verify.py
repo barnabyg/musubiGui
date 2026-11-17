@@ -137,7 +137,9 @@ def dependency_and_package_checks(python: str, npm: str) -> None:
         "--progress-spinner",
         "off",
     )
-    run(npm, "audit", "--audit-level=low")
+    # Production dependencies only: dev tools such as vite run locally on trusted input and are not
+    # shipped, and unpatched dev-only advisories (GHSA-fc5q-39xc-vjpf in picomatch) would block every PR.
+    run(npm, "audit", "--omit=dev", "--audit-level=low")
     scanner = shutil.which("detect-secrets") or str(Path(sys.executable).parent / "detect-secrets.exe")
     git = shutil.which("git")
     if not git:

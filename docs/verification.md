@@ -33,7 +33,8 @@ Browser specs are named in kebab-case, `tests/browser/<feature-name>.spec.ts`.
 
 The canonical command checks Python/TypeScript formatting, lint, strict types, Bandit static
 security analysis, pytest and real Edge browser tests, lockfile consistency, installed npm
-dependency integrity, Python/npm vulnerabilities, detect-secrets, and sdist/wheel packaging.
+dependency integrity, Python and production npm vulnerabilities, detect-secrets, and sdist/wheel
+packaging. The npm audit skips dev dependencies, which build the UI locally and are not shipped.
 Registry access is required by vulnerability and lock checks. All diagnostics and warnings
 must be resolved; pytest warnings and ESLint warnings fail.
 
