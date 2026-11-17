@@ -371,28 +371,19 @@ small {
   display: block;
   max-width: 60ch;
 }
-.setup-checklist ol {
-  margin: 0;
-  padding: 0;
-  list-style: none;
+.setup-checklist ol,
+.setup-checklist ul {
+  padding-left: var(--space-8);
 }
 .setup-checklist li {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
   padding: var(--space-2) 0;
 }
-.setup-checklist li.done .lucide {
-  color: var(--color-success);
+.setup-checklist .setup-run-choices {
+  margin: 0;
+  padding: 0;
+  border: 0;
 }
-.setup-checklist li.noted .lucide,
-.setup-checklist li.noted small {
-  color: var(--color-warning);
-}
-.setup-checklist li small {
-  margin-left: auto;
-}
-.setup-checklist button {
+.setup-checklist > button:last-child {
   margin-top: var(--space-4);
 }
 .columns {

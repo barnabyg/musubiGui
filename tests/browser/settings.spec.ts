@@ -10,6 +10,7 @@ import {
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { localBackend } from './backend';
+import { preparedRun, runWorkspace } from './runHarness';
 
 function settingsBackend(root: string) {
   return localBackend({
@@ -219,6 +220,50 @@ test('diagnostic rows share one layout and state their status in a badge', async
   }
 });
 
+test('setup offers diagnostics and a direct choice of training job or prepared Run', async ({
+  page,
+}) => {
+  const app = await runWorkspace();
+  try {
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto(`${app.url}/#/settings`);
+    const setup = page.getByRole('region', { name: 'Setup checklist' });
+    const next = setup.getByRole('button', { name: 'Check setup now' });
+    await expect(next).toBeInViewport();
+    const diagnostic = page.waitForResponse(
+      (response) =>
+        response.url().endsWith('/api/diagnostics') &&
+        response.request().method() === 'POST',
+    );
+    await next.click();
+    expect((await diagnostic).ok()).toBe(true);
+    const job = app.manifest.jobs[0];
+    await setup.getByText(/^Other steps/).click();
+    await setup.locator('summary').filter({ hasText: 'Start a Run' }).click();
+    await setup.getByRole('link', { name: job.name, exact: true }).click();
+    await expect(page.getByLabel('Job name', { exact: true })).toHaveValue(
+      job.name,
+    );
+    expect(await app.records()).toHaveLength(0);
+    const { job: preparedJob, run } = await preparedRun(app);
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await setup.getByText(/^Other steps/).click();
+    await setup.locator('summary').filter({ hasText: 'Start a Run' }).click();
+    await setup
+      .getByRole('link', {
+        name: new RegExp(preparedJob.name + '.*prepared Run'),
+      })
+      .click();
+    await expect(page).toHaveURL(new RegExp(`#/runs/${run.id}$`));
+    await expect(
+      page.getByRole('button', { name: 'Start training', exact: true }),
+    ).toBeVisible();
+    expect((await app.records())[0].status).toBe('prepared');
+  } finally {
+    await app.close();
+  }
+});
+
 test('an unconfigured app opens on Settings with a checklist of real progress', async ({
   page,
 }) => {
@@ -233,16 +278,29 @@ test('an unconfigured app opens on Settings with a checklist of real progress', 
       page.getByRole('heading', { name: 'Settings', exact: true }),
     ).toBeVisible();
     const checklist = page.getByRole('region', { name: 'Setup checklist' });
-    const items = checklist.getByRole('listitem');
-    await expect(items).toHaveCount(5);
-    await expect(items.locator('small')).toHaveText(Array(5).fill('To do'));
+    await expect(
+      checklist.getByRole('button', { name: 'Go to installation' }),
+    ).toBeInViewport();
+    await checklist.getByRole('button', { name: 'Go to installation' }).click();
+    await expect(
+      page.getByRole('button', { name: 'Install supported version' }),
+    ).toBeFocused();
+    const details = page.getByText('Installation details', { exact: true });
+    await expect(
+      page.getByText('Checkout:', { exact: false }),
+    ).not.toBeVisible();
+    await details.click();
+    await expect(page.getByText('Checkout:', { exact: false })).toBeVisible();
     const dismiss = checklist.getByRole('button', {
       name: 'Dismiss checklist',
     });
     await expect(dismiss).toHaveCount(0);
 
     // Items link to the screen that completes them.
-    await checklist.getByRole('link', { name: 'Create a job' }).click();
+    await checklist.getByText(/^Other steps/).click();
+    await checklist
+      .getByRole('link', { name: 'Create a job to start a Run' })
+      .click();
     await expect(
       page.getByRole('heading', { name: 'Jobs', exact: true }),
     ).toBeVisible();
@@ -260,7 +318,7 @@ test('an unconfigured app opens on Settings with a checklist of real progress', 
           version: 1,
           checkout: 'C:\\checkout',
           python: 'C:\\python.exe',
-          model_roots: [],
+          model_roots: ['C:\\models'],
           dataset_roots: ['C:\\datasets'],
           models: {},
           output_root: 'C:\\output',
@@ -302,7 +360,7 @@ test('an unconfigured app opens on Settings with a checklist of real progress', 
     await page.route('**/api/jobs', (route) =>
       route.fulfill({ json: [{ id: 'j' }] }),
     );
-    await page.route('**/api/runs', (route) =>
+    await page.route('**/api/runs/summaries', (route) =>
       route.fulfill({
         json: [
           {
@@ -314,7 +372,30 @@ test('an unconfigured app opens on Settings with a checklist of real progress', 
       }),
     );
     await page.reload();
-    await expect(items.locator('small')).toHaveText(Array(5).fill('Done'));
+    const completed = checklist.getByText('Completed steps (6)', {
+      exact: true,
+    });
+    await expect(completed).toBeVisible();
+    const installed = checklist.getByText(
+      'Install the supported Musubi version',
+      { exact: true },
+    );
+    await expect(installed).not.toBeVisible();
+    await completed.click();
+    await expect(installed).toBeVisible();
+    await page
+      .getByLabel('Cache root', { exact: true })
+      .fill('C:\\edited-cache');
+    await expect(
+      checklist.getByText('Completed steps (4)', { exact: true }),
+    ).toBeVisible();
+    await expect(installed).toBeVisible();
+    await checklist
+      .getByRole('button', { name: 'Save folder settings', exact: true })
+      .click();
+    await expect(
+      page.getByRole('button', { name: 'Save settings', exact: true }),
+    ).toBeFocused();
 
     const failing = (route: Route) =>
       route.fulfill({
@@ -327,7 +408,18 @@ test('an unconfigured app opens on Settings with a checklist of real progress', 
       });
     await page.route('**/api/diagnostics', failing);
     await page.reload();
-    await expect(items.nth(1).locator('small')).toHaveText('Problems found');
+    await expect(
+      checklist.getByText(/Fix diagnostic problems.*GPU/),
+    ).toBeVisible();
+    await checklist
+      .getByRole('button', { name: 'Review failed checks' })
+      .click();
+    const failed = page.locator('.check-error');
+    await expect(failed).toBeFocused();
+    await failed.getByRole('button', { name: 'Review installation' }).click();
+    await expect(
+      page.getByRole('button', { name: 'Update to supported version' }),
+    ).toBeFocused();
     await page.unroute('**/api/diagnostics', failing);
     await page.reload();
     await dismiss.click();

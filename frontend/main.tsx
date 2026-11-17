@@ -33,7 +33,7 @@ import {
   type Screen,
 } from './route';
 import { useRunSignals } from './runSignals';
-import { SetupChecklist } from './SetupChecklist';
+import { SetupChecklist, focusSetupControl } from './SetupChecklist';
 import { ManagedCheckout } from './ManagedCheckout';
 import { StatusBadge, type Tone } from './StatusBadge';
 
@@ -72,14 +72,11 @@ const screenIcons: Record<Screen, LucideIcon> = {
 const workingStatuses = ['training', 'generating', 'stopping', 'preparing'];
 const waitingStatuses = ['pending_preparation', 'pending_training'];
 
-function setupComplete(value: Settings) {
-  return !!(
-    value.checkout &&
-    value.python &&
-    value.output_root &&
-    value.cache_root &&
-    value.dataset_roots.length
-  );
+function firstMissingFolder(value: Settings) {
+  if (!value.output_root.trim()) return 'output_root';
+  if (!value.cache_root.trim()) return 'cache_root';
+  if (!value.model_roots.length) return 'model_roots';
+  if (!value.dataset_roots.length) return 'dataset_roots';
 }
 
 function setupHealth(report: Report | null, dirty: boolean) {
@@ -97,6 +94,22 @@ function setupHealth(report: Report | null, dirty: boolean) {
   return warnings.length
     ? { state: 'warnings', label: `${warnings.length} to check` }
     : { state: 'ready', label: 'Ready' };
+}
+
+function diagnosticControl(name: string) {
+  if (Object.hasOwn(componentLabels, name))
+    return { label: 'Choose model file', id: `settings-${name}` };
+  const locations: Record<string, string> = {
+    Output: 'output_root',
+    Cache: 'cache_root',
+    Models: 'model_roots',
+    'Model roots': 'model_roots',
+    'Dataset roots': 'dataset_roots',
+    Paths: 'output_root',
+  };
+  if (locations[name])
+    return { label: 'Edit folders', id: `settings-${locations[name]}` };
+  return { label: 'Review installation', id: 'settings-install' };
 }
 
 // Root textareas keep raw text while editing so Enter can start an empty line.
@@ -269,7 +282,7 @@ function App() {
           runs
             .filter((run) => waitingStatuses.includes(run.status))
             .sort((a, b) => a.order - b.order)[0];
-        if (!checkout.ready || !setupComplete(value))
+        if (!checkout.ready || firstMissingFolder(value))
           go('Settings', undefined, true);
         else if (active) go('Runs', active.id, true);
         else go('Datasets', undefined, true);
@@ -338,6 +351,14 @@ function App() {
     );
   }
   const health = setupHealth(report, dirty);
+  const firstProblem = report?.checks.find((check) => check.status === 'error');
+  const missingFolder =
+    settings &&
+    firstMissingFolder({
+      ...settings,
+      model_roots: rootLines(rootText.model_roots),
+      dataset_roots: rootLines(rootText.dataset_roots),
+    });
   function field(
     label: string,
     key: 'checkout' | 'python' | 'output_root' | 'cache_root',
@@ -347,6 +368,7 @@ function App() {
     return (
       <PathField
         label={label}
+        inputId={`settings-${key}`}
         kind={kind}
         value={settings?.[key] ?? ''}
         disabled={busy}
@@ -366,6 +388,7 @@ function App() {
     return (
       <RootsField
         label={label}
+        inputId={`settings-${key}`}
         browseLabel={browseLabel}
         disabled={busy}
         value={rootText[key]}
@@ -458,12 +481,24 @@ function App() {
             {settings && (
               <>
                 <SetupChecklist
-                  configured={checkoutReady && setupComplete(settings)}
-                  connected={checkoutReady && !dirty && setupComplete(settings)}
-                  diagnosed={!!report && report.current && !dirty}
-                  problemsFound={
-                    !!report?.checks.some((check) => check.status === 'error')
+                  installed={checkoutReady}
+                  missingFolder={
+                    missingFolder ? `settings-${missingFolder}` : undefined
                   }
+                  dirty={dirty}
+                  busy={busy}
+                  setupRunning={setupRunning}
+                  diagnostics={
+                    !report
+                      ? 'unchecked'
+                      : !report.current || dirty
+                        ? 'stale'
+                        : firstProblem
+                          ? 'blocked'
+                          : 'checked'
+                  }
+                  firstProblem={firstProblem?.name}
+                  diagnose={diagnose}
                 />
                 <ManagedCheckout
                   disabled={busy || dirty}
@@ -513,6 +548,7 @@ function App() {
                       {Object.entries(componentLabels).map(([key, label]) => (
                         <PathField
                           key={key}
+                          inputId={`settings-${key}`}
                           label={label}
                           kind="file"
                           roots={rootLines(rootText.model_roots)}
@@ -539,6 +575,7 @@ function App() {
                   </button>
                   <button
                     className="primary"
+                    id="settings-save"
                     disabled={busy}
                     onClick={() => void save()}
                   >
@@ -573,10 +610,28 @@ function App() {
                         <div
                           className={`check check-${check.status}`}
                           key={check.name}
+                          id={
+                            check === firstProblem
+                              ? 'diagnostics-problem'
+                              : undefined
+                          }
+                          tabIndex={check === firstProblem ? -1 : undefined}
                         >
                           <div>
                             <strong>{check.name}</strong>
                             <p>{check.message}</p>
+                            {check.status === 'error' && (
+                              <button
+                                className="quiet"
+                                onClick={() =>
+                                  focusSetupControl(
+                                    diagnosticControl(check.name).id,
+                                  )
+                                }
+                              >
+                                {diagnosticControl(check.name).label}
+                              </button>
+                            )}
                           </div>
                           <StatusBadge
                             tone={checkBadges[check.status]?.tone ?? 'neutral'}

@@ -280,6 +280,7 @@ function RootLineCheck({ line }: { line: string }) {
 }
 
 export function RootsField({
+  inputId,
   label,
   browseLabel,
   value,
@@ -288,6 +289,7 @@ export function RootsField({
   disabled,
   onChange,
 }: {
+  inputId?: string;
   label: string;
   browseLabel: string;
   value: string;
@@ -296,7 +298,8 @@ export function RootsField({
   disabled?: boolean;
   onChange: (value: string) => void;
 }) {
-  const id = useId();
+  const generated = useId();
+  const id = inputId ?? generated;
   const lines = [
     ...new Set(
       value
