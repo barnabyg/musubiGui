@@ -335,6 +335,7 @@ def test_the_job_training_names_the_latest_save_from_uninspected_state_folders(t
         "status": None,
         "resume": None,
         "resumable_fields": job_training([], "job")["resumable_fields"],
+        "resumable_values": job_training([], "job")["resumable_values"],
     }
     assert job_training([run], "job")["resume"] is None
     for step in (100, 300):
@@ -405,3 +406,22 @@ def test_job_review_reports_dataset_contents_and_preparation_from_the_refresh_ch
     assert section is not None and section["compatible"] and section["reprepare"]
     assert section["dataset_changes"] == contents
     assert section["preparation"] == {"stages": ["text_cache"]}
+
+
+@pytest.mark.parametrize(("kept", "values"), [(False, None), (True, [True])])
+def test_the_job_training_says_which_save_state_values_resume(tmp_path: Path, kept: bool, values: Any) -> None:
+    run = run_record(
+        tmp_path,
+        "stopped",
+        "2026-01-01",
+        job=edited(frozen(), save_state=kept),
+        saved_states=[{"valid": True, "resume_step": 40}],
+    )
+    training = job_training([run], "job")
+    # Turning state saving on resumes, so a training that kept none takes either value; one that kept it needs it kept.
+    assert ("save_state" in training["resumable_fields"]) is (values is None)
+    assert training["resumable_values"] == ({} if values is None else {"save_state": values})
+    for value in (False, True):
+        resumes = "save_state" in training["resumable_fields"] or value in training["resumable_values"]["save_state"]
+        tier = changed_fields(flatten(run["job"]), flatten(edited(run["job"], save_state=value)))
+        assert resumes is all(change.tier != "new_run" for change in tier)

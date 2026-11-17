@@ -119,6 +119,24 @@ test('Start on the Job page resumes a stopped training with an edited prompt and
     await expect(steps.locator('xpath=..')).not.toContainText(
       'Needs a new Run',
     );
+    // This training kept state, so only turning state saving off needs a new Run.
+    await page.getByRole('tab', { name: 'Checkpoints', exact: true }).click();
+    const saveState = page.getByRole('checkbox', {
+      name: /^Save optimizer\/training state/,
+    });
+    await expect(saveState).toBeChecked();
+    await expect(saveState.locator('xpath=..')).not.toContainText(
+      'Needs a new Run',
+    );
+    await saveState.uncheck();
+    await expect(saveState.locator('xpath=..')).toContainText(
+      'Needs a new Run: changing this starts a fresh training.',
+    );
+    await saveState.check();
+    await expect(saveState.locator('xpath=..')).not.toContainText(
+      'Needs a new Run',
+    );
+    await page.getByRole('tab', { name: 'Training', exact: true }).click();
     await noHorizontalScroll(page);
 
     await steps.fill('210');
@@ -169,10 +187,23 @@ test('an edit that needs a new Run makes Start name the fields and start fresh o
 }) => {
   const app = await runWorkspace();
   try {
-    const job = await pacedJob(app);
+    // The Job keeps no state; Save and stop saved one anyway.
+    const job = await pacedJob(app, { save_state: false });
     await page.setViewportSize({ width: 375, height: 812 });
     const { run } = await startAndSaveAndStop(page, app, job.id);
 
+    // Turning state saving on resumes, so it isn't marked either way.
+    await page.getByRole('tab', { name: 'Checkpoints', exact: true }).click();
+    const saveState = page.getByRole('checkbox', {
+      name: /^Save optimizer\/training state/,
+    });
+    await expect(saveState).not.toBeChecked();
+    for (const checked of [true, false]) {
+      await expect(saveState.locator('xpath=..')).not.toContainText(
+        'Needs a new Run',
+      );
+      await saveState.setChecked(checked);
+    }
     await page.getByRole('tab', { name: 'Training', exact: true }).click();
     await page.getByLabel('LoRA rank', { exact: true }).fill('16');
     await reviewAndStart(page);

@@ -28,7 +28,8 @@ target for a completed Run's final state) until Inspect saved states records it;
 states show it only after inspection. Reading it never hashes or probes states.
 
 Every field a resumed training can't take is marked **Needs a new Run: changing this starts a
-fresh training.** It stays editable. The fields and tiers are listed in
+fresh training.** It stays editable. Save optimizer/training state is marked only while it is off
+for a training that kept state: turning it on always resumes. The fields and tiers are listed in
 [Resuming with an edited Job revision](runs-saved-state.md#resuming-with-an-edited-job-revision).
 
 **Prepare and start** on the reviewed revision then decides:
@@ -54,7 +55,9 @@ started from. An older training of the same Job is never resumed instead.
 
 `GET /api/jobs/{id}/training` returns the current training's latest segment `run_id`, its
 `chain_id` and `status`, `resume` (`run_id`, `run_status`, `saved_step`, or null when Start
-would not resume) and `resumable_fields`, the fields a resumed segment takes. Job review's
+would not resume), `resumable_fields`, the fields a resumed segment takes at any value, and
+`resumable_values`, the values at which it takes the others that depend on the value, such as
+`{"save_state": [true]}` for a training that kept state. Job review's
 Resume compatibility compares against the same Run.
 
 ## Manual check

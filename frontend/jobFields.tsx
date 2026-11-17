@@ -5,6 +5,7 @@ import {
   fieldId,
   fieldProblems,
 } from './jobRules';
+import type { Resumable } from './currentTraining';
 import type { Job, JobConfig, Review, SetConfig } from './jobTypes';
 
 export type JobFields = ReturnType<typeof jobFields>;
@@ -18,7 +19,7 @@ export function jobFields(
   hasVideos = true,
   // While the Job has a resumable training: the fields a resumed segment takes. Any other field
   // is marked, but stays editable: changing it makes Start offer a fresh training instead.
-  resumableFields: string[] | null = null,
+  resumable: Resumable | null = null,
 ) {
   const liveProblems: Record<string, string> = job
     ? fieldProblems(job.family, job.config, hasVideos)
@@ -75,7 +76,12 @@ export function jobFields(
     ) : null;
   }
   function resumeHint(key: string) {
-    return resumableFields && !resumableFields.includes(key) ? (
+    const values = resumable?.resumable_values[key];
+    const taken =
+      !resumable ||
+      resumable.resumable_fields.includes(key) ||
+      values?.includes(job?.config[key as keyof JobConfig]);
+    return !taken ? (
       <small className="resume-hint">
         Needs a new Run: changing this starts a fresh training.
       </small>

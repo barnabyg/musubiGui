@@ -16,9 +16,16 @@ export type JobTrainingInfo = {
     run_status: string;
     saved_step: number | null;
   } | null;
-  // Fields a resumed segment takes; editing any other field needs a new Run.
+  // Fields a resumed segment takes at any value, and those it takes only at the listed values;
+  // editing any other field needs a new Run.
   resumable_fields: string[];
+  resumable_values: Record<string, unknown[]>;
 };
+
+export type Resumable = Pick<
+  JobTrainingInfo,
+  'resumable_fields' | 'resumable_values'
+>;
 
 const request = apiClient('The Job’s training could not be read.');
 

@@ -291,7 +291,7 @@ export function useJobEditor({
     review,
     config,
     !media.imageOnly,
-    current.resume ? (current.info?.resumable_fields ?? null) : null,
+    current.resume ? (current.info ?? null) : null,
   );
   async function create(family: 'wan' | 'h3') {
     if (dirty && !(await confirmDiscard('create a new draft'))) return;

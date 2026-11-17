@@ -117,6 +117,10 @@ class Change:
         return {"field": self.field, "label": self.label, "tier": self.tier, "before": self.before, "after": self.after}
 
 
+# Fields whose tier depends on the value they change to, with the values they can take.
+_BY_VALUE: dict[str, tuple[Any, ...]] = {"save_state": (False, True)}
+
+
 def tier(field: str, before: Any, after: Any) -> Tier:
     if field == "save_state":
         # Turning state saving on is safe: Save and stop saved this state even when the Job kept none.
@@ -327,9 +331,32 @@ def job_training(runs: list[dict[str, Any]], job_id: str) -> dict[str, Any]:
         "chain_id": chain.id if chain else None,
         "status": chain.latest["status"] if chain else None,
         "resume": resume,
-        # Fields a resumed segment takes; editing any other field needs a new Run.
-        "resumable_fields": sorted({*EDITABLE, *WARNED, *REPREPARE}),
+        **resumable(source[0]["job"] if source else None),
     }
+
+
+def resumable(frozen_job: dict[str, Any] | None) -> dict[str, Any]:
+    """The fields a segment resuming `frozen_job`'s training takes at any value, and those it takes only at some.
+
+    Editing any other field, or one of the latter to another value, needs a new Run.
+    """
+    try:
+        frozen = flatten(frozen_job) if frozen_job else {}
+    except ValueError:
+        frozen = {}
+    fields = {*EDITABLE, *WARNED, *REPREPARE}
+    values: dict[str, list[Any]] = {}
+    for field, options in _BY_VALUE.items():
+        taken = [
+            value
+            for value in options
+            if value == frozen.get(field) or tier(field, frozen.get(field), value) != "new_run"
+        ]
+        if len(taken) == len(options):
+            fields.add(field)
+        else:
+            values[field] = taken
+    return {"resumable_fields": sorted(fields), "resumable_values": values}
 
 
 def resume_review(
