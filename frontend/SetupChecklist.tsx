@@ -34,7 +34,13 @@ export function focusSetupControl(id: string) {
 }
 
 function StartRun({ jobs, runs }: { jobs: Job[]; runs: RunSummary[] }) {
-  const startable: { href: string; name: string }[] = [];
+  // A prepared Run keeps its frozen inputs even after another revision runs or the job is archived.
+  const startable = runs
+    .filter((run) => run.status === 'prepared')
+    .map((run) => ({
+      href: formatRoute({ screen: 'Runs', id: run.id }),
+      name: `${run.job.name} · revision ${run.job.revision} · prepared Run ${run.id.slice(0, 8)}`,
+    }));
   const existing: { href: string; name: string }[] = [];
   for (const job of jobs) {
     const latest = currentTraining(runs, job.id)?.latest;
@@ -51,13 +57,7 @@ function StartRun({ jobs, runs }: { jobs: Job[]; runs: RunSummary[] }) {
         });
         continue;
       }
-      if (latest.status === 'prepared') {
-        startable.push({
-          href,
-          name: `${latest.job.name} · revision ${latest.job.revision} · prepared Run ${latest.id.slice(0, 8)}`,
-        });
-        if (sameRevision) continue;
-      }
+      if (latest.status === 'prepared' && sameRevision) continue;
     }
     startable.push({
       href: formatRoute({ screen: 'Jobs', id: job.id }),

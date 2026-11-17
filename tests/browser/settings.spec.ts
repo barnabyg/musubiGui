@@ -264,6 +264,52 @@ test('setup offers diagnostics and a direct choice of training job or prepared R
   }
 });
 
+test('a prepared Run remains available after a newer revision completes and its job is archived', async ({
+  page,
+}) => {
+  const app = await runWorkspace();
+  try {
+    const { job, run } = await preparedRun(app);
+    await page.goto(`${app.url}/#/jobs/${job.id}`);
+    await page.getByLabel('Job name', { exact: true }).fill('New revision');
+    await page.getByRole('button', { name: 'Save draft', exact: true }).click();
+    await expect(page.getByRole('status')).toContainText('revision 2');
+    const next = (await app.post('/api/runs/prepare', {
+      job_id: job.id,
+      start: true,
+      reviewed_revision: 2,
+    })) as { id: string };
+    await expect
+      .poll(
+        async () =>
+          (await app.records()).find((record) => record.id === next.id)?.status,
+        { timeout: 240_000 },
+      )
+      .toBe('completed');
+    const setup = page.getByRole('region', { name: 'Setup checklist' });
+    const showChoices = async () => {
+      await setup.getByText(/^Completed steps/).click();
+      await setup.getByText('Start a Run', { exact: true }).click();
+    };
+    await page.goto(`${app.url}/#/settings`);
+    await showChoices();
+    const frozen = setup.getByRole('link', {
+      name: new RegExp(job.name + '.*revision 1.*prepared Run'),
+    });
+    await expect(frozen).toHaveAttribute('href', `#/runs/${run.id}`);
+    await app.post(`/api/jobs/${job.id}/archive`);
+    await page.reload();
+    await showChoices();
+    await frozen.click();
+    await expect(page).toHaveURL(new RegExp(`#/runs/${run.id}$`));
+    await expect(
+      page.getByRole('button', { name: 'Start training', exact: true }),
+    ).toBeVisible();
+  } finally {
+    await app.close();
+  }
+});
+
 test('Start a Run lists runnable jobs and offers existing Runs when all jobs are busy or complete', async ({
   page,
 }) => {
