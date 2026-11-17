@@ -321,3 +321,39 @@ def test_a_changed_learning_rate_resumes_with_a_warning_and_reaches_the_trainer(
     assert "Resume learning rate: applied 0.0002; the saved state had 0.0001." in train_log(segment)
     progress = segment["segment"]
     assert (progress["step_offset"], progress["target_steps"]) == (3, 5)
+
+
+@pytest.mark.parametrize("failing", ["stages", "store"])
+@pytest.mark.parametrize("paired", [False, True])
+def test_a_resume_that_fails_before_its_segment_is_stored_leaves_no_run_folder(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, paired: bool, failing: str
+) -> None:
+    root, job_id = (
+        paired_job(tmp_path, steps=20, expert_interval=10, save_every=10, sample_enabled=False)
+        if paired
+        else job_with(tmp_path, steps=40, save_every=40, save_state=True, sample_enabled=False, preview_every=0)
+    )
+    service = RunService(root, fixture_mode=True, device_path=tmp_path / "device.sqlite")
+    try:
+        run = service.prepare(job_id, start=True)
+        training(service, run["id"])
+        service.control(run["id"], "save_and_stop")
+        handled(service, run["id"], 1)
+        stopped = wait_for(service, run["id"], "stopped", device_released=True)
+        revision = edit(root, job_id, steps=60)
+
+        def refused(*args: object, **kwargs: object) -> object:
+            raise OSError("Disk is full.")
+
+        if failing == "stages":
+            monkeypatch.setattr("musubi_gui.run_restore.revision_stages", refused)
+            monkeypatch.setattr("musubi_gui.wan_pair_restore.revision_stages", refused)
+        else:
+            monkeypatch.setattr(service.store, "create", refused)
+        with pytest.raises(OSError, match="Disk is full"):
+            service.resume(run["id"], revision)
+        # No Run refers to a segment folder, so none is left behind.
+        assert [path.name for path in Path(stopped["directory"]).parent.iterdir()] == [Path(stopped["directory"]).name]
+        assert [item["id"] for item in service.list()] == [run["id"]]
+    finally:
+        service.close()

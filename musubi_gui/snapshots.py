@@ -21,6 +21,9 @@ from musubi_gui.settings import Settings, atomic_json, training_settings, within
 from musubi_gui.training_sections import dataset_toml, layout_identity, plan_sections, section_folders
 from musubi_gui.video_sampling import WAN_FPS, source_rates
 
+# Left in an incomplete Run folder, saying the snapshot failed and the folder can be removed after inspection.
+SNAPSHOT_ERROR = "snapshot-error.json"
+
 
 def digest_file(path: Path, *, cancelled: Event | None = None) -> str:
     hasher = hashlib.sha256()
@@ -339,7 +342,7 @@ def materialize_snapshot(
         snapshot_record.update(status="incomplete")
         atomic_json(directory / "snapshot.json", snapshot_record)
         atomic_json(
-            directory / "snapshot-error.json",
+            directory / SNAPSHOT_ERROR,
             {
                 "status": "incomplete",
                 "message": "Snapshot creation failed; sources were preserved. Remove this incomplete run directory after inspecting it.",

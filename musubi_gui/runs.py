@@ -5,7 +5,7 @@ import threading
 import time
 import uuid
 from collections.abc import Callable
-from contextlib import nullcontext, suppress
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -410,14 +410,8 @@ class RunService:
         """Snapshot `revision`'s datasets into a segment folder, as preparing a Run does."""
 
         def snapshot(directory: Path) -> Refresh:
-            try:
-                with nullcontext() if self.fixture_mode else checkout_gate(), preparation_transaction(self.root):
-                    return refreshed_snapshot(self.root, original, revision, directory, fixture_mode=self.fixture_mode)
-            except BaseException:
-                # A folder left empty by a refused snapshot isn't worth keeping; a partial one says what failed.
-                with suppress(OSError):
-                    directory.rmdir()
-                raise
+            with nullcontext() if self.fixture_mode else checkout_gate(), preparation_transaction(self.root):
+                return refreshed_snapshot(self.root, original, revision, directory, fixture_mode=self.fixture_mode)
 
         return snapshot
 

@@ -1,9 +1,11 @@
 """Restoring a single saved optimizer state as a new Run segment, with the Run's own or a newer Job revision."""
 
 import copy
+import shutil
 import time
 import uuid
 from collections.abc import Callable
+from contextlib import suppress
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -12,7 +14,7 @@ from musubi_gui.run_estimate import freeze_training_timing
 from musubi_gui.run_paths import create_run_directory
 from musubi_gui.run_store import RunStore, utc_now
 from musubi_gui.settings import Settings, atomic_json
-from musubi_gui.snapshots import digest_file
+from musubi_gui.snapshots import SNAPSHOT_ERROR, digest_file
 
 if TYPE_CHECKING:
     from musubi_gui.job_models import Job
@@ -31,6 +33,36 @@ _ENDED_FIELDS = [
     "control_request",
     "controls",
 ]
+
+
+class SegmentFolder:
+    """A new segment's Run folder, and the cache folder a refreshed snapshot adds, removed if building it fails."""
+
+    def __init__(self, original: dict[str, Any], revision: "Job | None") -> None:
+        name = revision.name if revision else original["job"]["name"]
+        kind = "resume" if revision else "restore"
+        self.path = create_run_directory(Path(original["directory"]).parent, name, kind)
+        self.cache: Path | None = None
+
+    def __enter__(self) -> "SegmentFolder":
+        return self
+
+    def __exit__(self, kind: type[BaseException] | None, *details: object) -> None:
+        if kind is not None:
+            discard_segment(self.path, self.cache)
+
+
+def discard_segment(directory: Path, cache: Path | None) -> None:
+    """Remove the folders of a segment that was never stored; no Run refers to them.
+
+    A refused dataset snapshot's folder stays with its error to inspect, as a failed preparation's does.
+    """
+    if cache:
+        # Preparation hasn't cached into it yet.
+        with suppress(OSError):
+            cache.rmdir()
+    if not (directory / SNAPSHOT_ERROR).is_file():
+        shutil.rmtree(directory, ignore_errors=True)
 
 
 def resume_step(run: dict[str, Any], state: dict[str, Any]) -> int:
@@ -128,70 +160,77 @@ def restored_segment(
     """
     saved = resume_step(original, state)
     additional_steps = segment_steps(original, state, target_steps)
-    name = revision.name if revision else original["job"]["name"]
-    directory = create_run_directory(Path(original["directory"]).parent, name, "resume" if revision else "restore")
-    snapshot = refresh(directory) if refresh and revision else None
-    record = copy.deepcopy(original)
-    record.update(
-        id=uuid.uuid4().hex,
-        directory=str(directory),
-        status="prepared",
-        phase="train",
-        fingerprint=original["fingerprint"] + ":restore:" + uuid.uuid4().hex,
-        created=utc_now(),
-        execution_started=None,
-        processes=[],
-        error=None,
-        resume_of=original["id"],
-        saved_states=[],
-        segment={**continuous_segment(saved, target_steps), "optimizer_step_before": state["optimizer_step"]},
-        state_source={"path": state["path"], "files": state["files"]},
-    )
-    for key in _ENDED_FIELDS:
-        record.pop(key, None)
-    if revision:
-        record["job"] = revision.model_dump()
-        record["segment"].update(source_revision=original["job"]["revision"], changes=changes or [])
-        prepared = [stage for stage in record["stages"] if stage["name"] not in {"train", "generate"}]
-        if snapshot:
-            # Its own snapshot carries its inputs, including the preview prompt.
-            record.update(snapshot.fields(), order=time.time_ns())
-            record["segment"].update(dataset_changes=snapshot.dataset)
-            prepared = []
-        else:
-            record["input_files"] = revision_inputs(original, revision, directory)
-        built = [
-            {**stage.record(), "status": "pending"}
-            for stage in revision_stages(original, revision, directory, snapshot)
-        ]
-        record["stages"] = prepared + built
-        for stage in built:
+    with SegmentFolder(original, revision) as folder:
+        directory = folder.path
+        snapshot = refresh(directory) if refresh and revision else None
+        folder.cache = snapshot.cache if snapshot else None
+        record = copy.deepcopy(original)
+        record.update(
+            id=uuid.uuid4().hex,
+            directory=str(directory),
+            status="prepared",
+            phase="train",
+            fingerprint=original["fingerprint"] + ":restore:" + uuid.uuid4().hex,
+            created=utc_now(),
+            execution_started=None,
+            processes=[],
+            error=None,
+            resume_of=original["id"],
+            saved_states=[],
+            segment={**continuous_segment(saved, target_steps), "optimizer_step_before": state["optimizer_step"]},
+            state_source={"path": state["path"], "files": state["files"]},
+        )
+        for key in _ENDED_FIELDS:
+            record.pop(key, None)
+        if revision:
+            record["job"] = revision.model_dump()
+            record["segment"].update(source_revision=original["job"]["revision"], changes=changes or [])
+            prepared = [stage for stage in record["stages"] if stage["name"] not in {"train", "generate"}]
+            if snapshot:
+                # Its own snapshot carries its inputs, including the preview prompt.
+                record.update(snapshot.fields(), order=time.time_ns())
+                record["segment"].update(dataset_changes=snapshot.dataset)
+                prepared = []
+            else:
+                record["input_files"] = revision_inputs(original, revision, directory)
+            built = [
+                {**stage.record(), "status": "pending"}
+                for stage in revision_stages(original, revision, directory, snapshot)
+            ]
+            record["stages"] = prepared + built
+            for stage in built:
+                if stage["name"] == "train":
+                    stage["args"][stage["args"].index("--max_train_steps") + 1] = str(additional_steps)
+                    stage["args"].extend(["--resume", state["path"]])
+            return record
+        for stage in record["stages"]:
+            if stage["name"] not in {"train", "generate"}:
+                continue
+            stage.update(status="pending")
+            stage.pop("started", None)
+            stage.pop("finished", None)
+            args = stage["args"]
+            for flag in ["--output_dir"] if stage["name"] == "train" else ["--save_path", "--lora_weight"]:
+                if flag in args:
+                    index = args.index(flag) + 1
+                    args[index] = args[index].replace(original["directory"], str(directory))
             if stage["name"] == "train":
-                stage["args"][stage["args"].index("--max_train_steps") + 1] = str(additional_steps)
-                stage["args"].extend(["--resume", state["path"]])
+                args[args.index("--max_train_steps") + 1] = str(additional_steps)
+                args.extend(["--resume", state["path"]])
         return record
-    for stage in record["stages"]:
-        if stage["name"] not in {"train", "generate"}:
-            continue
-        stage.update(status="pending")
-        stage.pop("started", None)
-        stage.pop("finished", None)
-        args = stage["args"]
-        for flag in ["--output_dir"] if stage["name"] == "train" else ["--save_path", "--lora_weight"]:
-            if flag in args:
-                index = args.index(flag) + 1
-                args[index] = args[index].replace(original["directory"], str(directory))
-        if stage["name"] == "train":
-            args[args.index("--max_train_steps") + 1] = str(additional_steps)
-            args.extend(["--resume", state["path"]])
-    return record
 
 
 def create_segment(store: RunStore, record: dict[str, Any], resume_of: str) -> None:
     """Freeze the segment's training timing, store it and write its inputs beside it."""
     directory = Path(record["directory"])
-    record["stages"] = [freeze_training_timing(stage, record["job"]["family"], directory) for stage in record["stages"]]
-    store.create(record)
+    try:
+        record["stages"] = [
+            freeze_training_timing(stage, record["job"]["family"], directory) for stage in record["stages"]
+        ]
+        store.create(record)
+    except BaseException:
+        discard_segment(directory, Path(record["cache"]) if record.get("refresh") else None)
+        raise
     atomic_json(
         directory / "inputs.json",
         {"job": record["job"], "manifest": record["manifest"], "resume_of": resume_of, "segment": record["segment"]},
