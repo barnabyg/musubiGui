@@ -43,8 +43,8 @@ export function JobSamples({
       {job.config.preview_every > 0 && job.family === 'wan' && (
         <p className="hint">
           {job.config.recipe === 'alternating'
-            ? 'Paired previews unload training, sample both experts, then reload training state. Extra boundaries restart the shuffled dataset pass. An expert without updates uses base weights.'
-            : 'In-run Wan previews use the low-noise expert only. The final sample uses both experts.'}
+            ? "Training pauses for each preview, which starts a fresh shuffled pass through the dataset. An expert that hasn't trained yet previews with its untrained base model."
+            : 'In-run Wan previews use only the low-noise expert, so they are a rough guide. The final sample uses both experts.'}
         </p>
       )}
       {enabled && (

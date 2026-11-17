@@ -70,10 +70,13 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
     errors = ReviewMessages([])
     warnings = ReviewMessages(
         [
-            "Wan has short-run execution evidence on the 96 GB host using the documented native and converted weights; other artifacts and larger workloads need qualification."
+            "Wan has only been tested on short runs on the reference PC (RTX 3090, 96 GB RAM), using the model "
+            "files listed in the docs. Other model files and longer or larger runs haven't been tested."
             if job.family == "wan"
-            else "H3 has short-run execution evidence on the 96 GB host; training quality and larger workloads remain unqualified.",
-            "Changes to geometry, duration or memory controls need their own capacity validation.",
+            else "H3 has only been tested on short runs on the reference PC (RTX 3090, 96 GB RAM). Whether it "
+            "learns well, and longer or larger runs, haven't been tested.",
+            "Resolution, clip length and memory-saving settings other than the tested ones may run out of memory. "
+            "Watch the first few steps.",
         ]
     )
     if 0 < job.config.steps < LOW_STEPS_WARNING:
@@ -83,19 +86,25 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
         )
     if job.config.preview_every and job.config.recipe != PAIRED_RECIPE:
         warnings.append(
-            "In-run previews pause training for inference and decoding, retain the optimizer and dataset position, and need separate GPU capacity qualification. Text encoding happens before the training model loads; VAEs are kept on CPU between previews."
+            "Training pauses while each preview renders, then carries on where it left off. Previews use extra "
+            "GPU memory that hasn't been tested at every size, so watch the first preview."
         )
         if job.family == "wan":
             warnings.append(
-                "Wan in-run previews use only the trained low-noise expert across all sampling timesteps; they are diagnostic previews and differ from the final two-expert sample."
+                "Wan in-run previews use only the trained low-noise expert, so they are a rough guide. The final "
+                "sample uses both experts and will look different."
             )
     if job.family == "wan" and job.config.recipe == PAIRED_RECIPE:
         if job.config.preview_every:
             warnings.append(
-                "Paired previews end a training phase, release its GPU process, sample both experts, then reload optimizer state. Extra boundaries restart the shuffled dataset pass. Experts without updates use their base weights, labelled with zero trained steps."
+                "To make a preview, training pauses: the current expert saves and closes, both experts generate the "
+                "preview, then training reloads and carries on. Each pause starts a fresh shuffled pass through the "
+                "dataset, so some clips may come round again before others. An expert that hasn't trained yet "
+                "previews with its untrained base model and shows 0 steps."
             )
         warnings.append(
-            "Alternating experts: native GPU qualification covers 256×256, 17 frames, rank 8 and N=1. Useful learning and production-size paired capacity remain unqualified."
+            "Alternating experts has only been tested at small size (256×256, 17 frames, rank 8). Whether it "
+            "learns anything useful, and whether full-size runs fit in memory, haven't been tested."
         )
     if job.family == "h3" and job.config.width * job.config.height > 640 * 352:
         warnings.append(

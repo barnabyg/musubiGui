@@ -32,7 +32,7 @@ test('paired Wan previews show matching per-expert steps', async ({ page }) => {
     await page.goto(`${app.url}/#/jobs/${job.id}`);
     await page.getByRole('tab', { name: 'Samples', exact: true }).click();
     await expect(
-      page.getByText(/Extra boundaries restart the shuffled dataset pass/),
+      page.getByText(/starts a fresh shuffled pass through the dataset/),
     ).toBeVisible();
     await page
       .getByRole('button', { name: 'Review configuration', exact: true })
