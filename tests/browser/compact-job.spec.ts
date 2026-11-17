@@ -77,7 +77,7 @@ for (const family of ['wan', 'h3'] as const) {
       await page.getByRole('tab', { name: 'Training', exact: true }).click();
       await expect(
         page.getByLabel('Training steps', { exact: true }),
-      ).toHaveValue('600');
+      ).toHaveValue('2000');
       expect(
         await page
           .locator(

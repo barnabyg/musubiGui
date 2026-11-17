@@ -99,16 +99,18 @@ New Wan job and New H3 job start from a recipe that can produce a useful LoRA:
 | Size                              | 832×480              | 640×352       |
 | Frames                            | 33                   | 124           |
 | Rank/alpha                        | 16/16                | 8/8           |
-| Training steps                    | 600                  | 600           |
+| Training steps                    | 2000                 | 2000          |
 | Save every N steps, state         | 100, on              | 100, on       |
 | Sample inference steps            | 20                   | 10            |
 
 Size, frames, rank and sample steps are the largest configurations measured in the
 production trial (see [measured presets](#duplicates-and-presets)). 600 steps is the
-owner's experience of where samples first change visibly, and is not a measured
-learning result: the trial's human review of learning is still open. At the measured
-step times 600 total optimizer updates takes about 12–16 hours. The sample prompt starts empty, so
-review asks for one.
+owner's experience of where samples first change visibly; the 2000-step default leaves
+room to train past that point. Neither is a measured learning result: the trial's human
+review of learning is still open. At the measured step times 600 total optimizer updates
+takes about 12–16 hours, so 2000 takes roughly 40–53 hours. Checkpoints every 100 steps
+let a Run stop early once samples look right. The sample prompt starts empty, so review
+asks for one.
 
 Review warns when steps are below 600, because a shorter Run can check that training
 works but is not expected to change samples. It also warns when H3 is larger than

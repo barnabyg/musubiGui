@@ -1,11 +1,13 @@
 import base64
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from helpers import PNG, fixture
 
+from musubi_gui.datasets import DatasetStore
 from musubi_gui.datasets_api import dataset_router
 
 
@@ -83,3 +85,49 @@ def test_failed_disk_flush_resumes_after_restart_and_verifies_the_existing_prefi
     )
     assert client.post(f"{url}/{session['id']}/complete", json={}).status_code == 200
     assert (folder / "resumed.png").read_bytes() == PNG
+
+
+def test_a_completed_upload_joins_the_gallery_without_rescanning_the_dataset(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client, media, state = fixture(tmp_path)
+    dataset = client.post("/api/datasets/managed", json={"name": "Quick uploads", "root": str(media)}).json()
+    url = f"/api/datasets/{dataset['id']}/uploads"
+    probes: list[Path] = []
+    probe = DatasetStore.probe
+
+    def counted(self: DatasetStore, path: Path, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        probes.append(path)
+        return probe(self, path, *args, **kwargs)
+
+    def rescanned(*_: Any) -> None:
+        raise AssertionError("An upload must not rescan the dataset.")
+
+    monkeypatch.setattr(DatasetStore, "probe", counted)
+    monkeypatch.setattr(DatasetStore, "scan", rescanned)
+
+    def upload(name: str, data: bytes) -> Any:
+        session = client.post(url, json={"filename": name, "size": len(data)}).json()
+        client.put(f"{url}/{session['id']}", json={"offset": 0, "data": base64.b64encode(data).decode()})
+        assert client.get(url).json() == [{**session, "received": len(data)}]
+        return client.post(f"{url}/{session['id']}/complete", json={})
+
+    assert upload("first.png", PNG).status_code == 200
+    assert len(probes) == 1, "An image's validation probe also makes its thumbnail."
+    assert upload("first.txt", b"A caption").status_code == 200
+    assert len(probes) == 1, "A caption needs no media probe."
+    assert client.get(url).json() == [], "Only incomplete uploads are listed."
+    [item] = client.get(f"/api/datasets/{dataset['id']}/items").json()
+    assert (item["valid"], item["caption"]["text"]) == (True, "A caption")
+    assert client.get(f"/api/datasets/{dataset['id']}/items/{item['id']}/thumbnail").status_code == 200
+    counts = client.get(f"/api/datasets/{dataset['id']}").json()
+    assert (counts["counts"]["captioned"], counts["scan"]) == (1, {"state": "complete", "completed": 1, "total": 1})
+    assert not list((state / "thumbnails").glob("upload-*")), "No staged thumbnail is left behind."
+
+    thumbnail = (state / "thumbnails" / f"{item['id']}.jpg").read_bytes()
+    session = client.post(url, json={"filename": "second.png", "size": len(PNG)}).json()
+    client.put(f"{url}/{session['id']}", json={"offset": 0, "data": base64.b64encode(PNG).decode()})
+    (Path(dataset["path"]) / "second.png").write_bytes(b"appeared during upload")
+    assert client.post(f"{url}/{session['id']}/complete", json={}).status_code == 409
+    assert (state / "thumbnails" / f"{item['id']}.jpg").read_bytes() == thumbnail
+    assert not list((state / "thumbnails").glob("upload-*")), "A refused upload leaves no staged thumbnail."

@@ -333,11 +333,70 @@ class DatasetStore:
             "error": "The application media decoder failed. Repair the locked application environment and re-scan this item.",
         }
 
+    @staticmethod
+    def item_id(dataset_id: str, relative: str) -> str:
+        return hashlib.sha256((dataset_id + "/" + relative).encode()).hexdigest()[:32]
+
+    def thumbnail(self, item_id: str) -> Path:
+        return self.root / "thumbnails" / f"{item_id}.jpg"
+
+    def _save_item(
+        self,
+        db: sqlite3.Connection,
+        dataset_id: str,
+        item_id: str,
+        relative: str,
+        stamp: str,
+        inspected: dict[str, Any],
+    ) -> None:
+        db.execute(
+            "INSERT INTO items(id,dataset,relative,stamp,metadata,valid,error) VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET stamp=excluded.stamp,metadata=excluded.metadata,valid=excluded.valid,error=excluded.error",
+            (
+                item_id,
+                dataset_id,
+                relative,
+                stamp,
+                json.dumps(inspected.get("metadata", {})),
+                int(inspected["valid"]),
+                inspected.get("error", ""),
+            ),
+        )
+
+    def add_item(self, dataset_id: str, path: Path, inspected: dict[str, Any] | None = None) -> None:
+        """Record one new media file without rescanning the dataset.
+
+        `inspected` is a probe of this file whose thumbnail is already in place; without it the file is probed here.
+        """
+        folder = self.folder(dataset_id)
+        relative = path.relative_to(folder).as_posix()
+        item_id = self.item_id(dataset_id, relative)
+        resolved = regular_path(path, folder)
+        info = resolved.stat()
+        if inspected is None:
+            inspected = self.probe(resolved, self.thumbnail(item_id))
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            known = db.execute("SELECT 1 FROM items WHERE id=?", (item_id,)).fetchone()
+            self._save_item(db, dataset_id, item_id, relative, f"{info.st_mtime_ns}:{info.st_size}", inspected)
+            row = db.execute("SELECT scan FROM datasets WHERE id=?", (dataset_id,)).fetchone()
+            scan = json.loads(row["scan"])
+            # A finished scan's count stays true; a running scan reports its own progress.
+            if not known and scan["state"] == "complete":
+                scan.update(completed=scan["completed"] + 1, total=scan["total"] + 1)
+                db.execute("UPDATE datasets SET scan=? WHERE id=?", (json.dumps(scan), dataset_id))
+
+    def managed(self, dataset_id: str) -> bool:
+        with self._db() as db:
+            row = db.execute("SELECT managed FROM datasets WHERE id=?", (dataset_id,)).fetchone()
+        if row is None:
+            raise KeyError("Dataset was not found.")
+        return bool(row["managed"])
+
     def _inspect(self, dataset_id: str, folder: Path, path: Path) -> tuple[str, str, str, dict[str, Any]] | None:
         """Probe one media file for a scan, or return None when its stored inspection is current."""
         relative = path.relative_to(folder).as_posix()
-        item_id = hashlib.sha256((dataset_id + "/" + relative).encode()).hexdigest()[:32]
-        thumbnail = self.root / "thumbnails" / f"{item_id}.jpg"
+        item_id = self.item_id(dataset_id, relative)
+        thumbnail = self.thumbnail(item_id)
         try:
             resolved = regular_path(path, folder)
             info = resolved.stat()
@@ -383,18 +442,7 @@ class DatasetStore:
                 if result:
                     item_id, relative, stamp, inspected = result
                     with self._db() as db:
-                        db.execute(
-                            "INSERT INTO items(id,dataset,relative,stamp,metadata,valid,error) VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET stamp=excluded.stamp,metadata=excluded.metadata,valid=excluded.valid,error=excluded.error",
-                            (
-                                item_id,
-                                dataset_id,
-                                relative,
-                                stamp,
-                                json.dumps(inspected.get("metadata", {})),
-                                int(inspected["valid"]),
-                                inspected.get("error", ""),
-                            ),
-                        )
+                        self._save_item(db, dataset_id, item_id, relative, stamp, inspected)
                 self._progress(dataset_id, {"state": "scanning", "completed": completed, "total": len(paths)})
         with self._db() as db:
             for row in db.execute("SELECT id,relative FROM items WHERE dataset=?", (dataset_id,)).fetchall():

@@ -261,7 +261,7 @@ def test_new_draft_defaults_are_realistic_and_leave_the_prompt_empty(tmp_path: P
     assert (wan["recipe"], wan["expert_interval"]) == ("alternating", 30)
     assert (h3["width"], h3["height"], h3["frames"], h3["rank"], h3["alpha"]) == (640, 352, 124, 8, 8)
     for config in [wan, h3]:
-        assert (config["steps"], config["save_every"], config["save_state"]) == (600, 100, True)
+        assert (config["steps"], config["save_every"], config["save_state"]) == (2000, 100, True)
         assert config["sample_prompt"] == ""
     assert (h3["recipe"], h3["block_swap_h2d_only"], h3["fp8_scaled"]) == ("guidance-loss", True, False)
     job = client.post("/api/jobs", json={"name": "New", "family": "h3", "config": h3}).json()

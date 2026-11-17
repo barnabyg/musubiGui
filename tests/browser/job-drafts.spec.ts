@@ -151,7 +151,7 @@ test('a new draft starts realistic, warns about low steps and offers the smoke-t
     await page.getByRole('tab', { name: 'Training', exact: true }).click();
     await expect(
       page.getByLabel('Training steps', { exact: true }),
-    ).toHaveValue('600');
+    ).toHaveValue('2000');
     await page.getByRole('tab', { name: 'Samples', exact: true }).click();
     await expect(
       page.getByRole('textbox', { name: 'Sample prompt' }),
