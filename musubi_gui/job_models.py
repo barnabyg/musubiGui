@@ -8,7 +8,7 @@ from musubi_gui.recipe import CAPTION
 from musubi_gui.redaction import redact
 from musubi_gui.wan_pair import PAIRED_RECIPE
 
-NEW_DRAFT_STEPS = 600
+NEW_DRAFT_STEPS = 2000
 
 
 class JobConfig(BaseModel):
