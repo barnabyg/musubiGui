@@ -27,9 +27,8 @@ export function RunSegments({
       <h2>Segments</h2>
       <p>
         This training was resumed {segments.length - 1} time
-        {segments.length > 2 ? 's' : ''}. Steps count across all its segments,
-        and its Samples and Checkpoints list every segment’s files in step
-        order.
+        {segments.length > 2 ? 's' : ''}. Steps count across all segments. The
+        Samples tab shows their generated media in step order.
       </p>
       <div className="run-progress" aria-label="Progress across segments">
         <p>

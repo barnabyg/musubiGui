@@ -175,7 +175,8 @@ export function useRunOutputs(
   const [result, setResult] = useState<OutputList | null>(null);
   const [selection, setSelection] = useState<{
     runId: string;
-    sample?: string;
+    sample: string;
+    tryNext?: boolean;
   }>();
   const history = useRunHistory();
   const [failure, setFailure] = useState<{ runId?: string; message: string }>();
@@ -220,14 +221,33 @@ export function useRunOutputs(
   }, [runId, runState, chain, refresh]);
   const previews = useOutputPreviews();
   const chosen = selection?.runId === runId ? selection : undefined;
+  const current = result?.run_id === runId ? result : null;
+  const segmentOutputs =
+    current?.outputs.filter((item) => item.run_id === runId) ?? [];
+  const latest = previews.latest(segmentOutputs);
   return {
-    previews,
+    previews: {
+      ...previews,
+      failed(item: Output) {
+        previews.failed(item);
+        if (!chosen?.tryNext || chosen.sample !== item.id || !runId) return;
+        const next = previews.latest(
+          segmentOutputs.filter((candidate) => candidate.id !== item.id),
+        );
+        if (next) setSelection({ runId, sample: next.id, tryNext: true });
+      },
+    },
+    latest,
+    selectLatest() {
+      if (runId && latest)
+        setSelection({ runId, sample: latest.id, tryNext: true });
+    },
     selected: chosen?.sample,
     select(item: Output) {
       if (!runId) return;
       setSelection({ runId, sample: item.id });
     },
-    result: result?.run_id === runId ? result : null,
+    result: current,
     runs: history.runs ?? [],
     error: failure?.runId === runId ? failure?.message : '',
     busy,
@@ -348,10 +368,7 @@ export function RunOutputActions({
   openSamples: () => void;
 }) {
   const [copy, setCopy] = useState<'idle' | 'copied' | 'manual'>('idle');
-  const { result } = outputs;
-  const latest = outputs.previews.latest(
-    result?.outputs.filter((item) => item.run_id === result.run_id) ?? [],
-  );
+  const { latest } = outputs;
   async function copyFolder() {
     try {
       await navigator.clipboard.writeText(directory);
@@ -369,7 +386,7 @@ export function RunOutputActions({
         {latest && (
           <button
             onClick={() => {
-              outputs.select(latest);
+              outputs.selectLatest();
               openSamples();
             }}
           >
@@ -437,7 +454,13 @@ export function RunSamples({ outputs }: { outputs: RunOutputs }) {
           ))}
         </div>
       )}
-      {output && <OutputDetail output={output} previews={outputs.previews} />}
+      {output && (
+        <OutputDetail
+          key={output.id}
+          output={output}
+          previews={outputs.previews}
+        />
+      )}
     </section>
   );
 }

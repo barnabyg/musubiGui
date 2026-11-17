@@ -251,7 +251,7 @@ test('View sample skips unsupported formats and handles browser decoding failure
             name: 'newest.tiff',
             kind: 'image',
             status: 'available',
-            modified_ms: 3,
+            modified_ms: 30,
           },
           {
             id: 'video',
@@ -259,8 +259,18 @@ test('View sample skips unsupported formats and handles browser decoding failure
             name: 'preview.mp4',
             kind: 'video',
             status: 'available',
-            modified_ms: 2,
+            modified_ms: 20,
             file_url: '/broken-preview.mp4',
+          },
+          {
+            id: 'other-segment',
+            run_id: 'previous-segment',
+            path: 'samples/earlier-segment.png',
+            name: 'earlier-segment.png',
+            kind: 'image',
+            status: 'available',
+            modified_ms: 15,
+            file_url: '/still.png',
           },
           {
             id: 'png',
@@ -283,17 +293,19 @@ test('View sample skips unsupported formats and handles browser decoding failure
     );
     await page.goto(`${app.url}/#/runs/${run.id}`);
     const view = page.getByRole('button', { name: 'View sample' });
-    await view.click();
+    await Promise.all([
+      page.waitForRequest('**/broken-preview.mp4'),
+      view.click(),
+    ]);
     const selected = page.getByLabel('Selected sample', { exact: true });
-    expect(await selected.innerText()).toContain('preview.mp4');
-    await expect(selected).toContainText(
-      'This browser cannot preview this sample.',
-    );
-    await openRunTab(page, 'overview');
-    await view.click();
     await expect(
       selected.getByRole('img', { name: 'Sample still.png' }),
     ).toBeVisible();
+    await page.getByRole('button', { name: 'preview.mp4 · available' }).click();
+    await expect(selected).toContainText('preview.mp4');
+    await expect(selected).toContainText(
+      'This browser cannot preview this sample.',
+    );
     await page.getByRole('button', { name: 'newest.tiff · available' }).click();
     await expect(selected).toContainText(
       'This browser cannot preview this sample.',
