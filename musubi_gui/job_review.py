@@ -68,17 +68,7 @@ def review_job(root: Path, job: Job, settings: Settings, *, fixture_mode: bool =
     from musubi_gui.training_options import timestep_range_policy
 
     errors = ReviewMessages([])
-    warnings = ReviewMessages(
-        [
-            "Wan has only been tested on short runs on the reference PC (RTX 3090, 96 GB RAM), using the model "
-            "files listed in the docs. Other model files and longer or larger runs haven't been tested."
-            if job.family == "wan"
-            else "H3 has only been tested on short runs on the reference PC (RTX 3090, 96 GB RAM). Whether it "
-            "learns well, and longer or larger runs, haven't been tested.",
-            "Resolution, clip length and memory-saving settings other than the tested ones may run out of memory. "
-            "Watch the first few steps.",
-        ]
-    )
+    warnings = ReviewMessages([])
     if 0 < job.config.steps < LOW_STEPS_WARNING:
         warnings.append(
             f"Training steps: {job.config.steps} steps can check that training runs, but expect no visible change "
