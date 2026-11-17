@@ -106,9 +106,13 @@ test('a finished Run offers its folder and latest sample in the initial viewport
     await expect(page.getByText(/^LoRA checkpoints/)).toHaveCount(0);
     const states = runPanel(page, 'resume');
     await expect(states).toHaveCount(1);
-    await states.getByText(/^Optimizer state files/).click();
-    await expect(states.locator('.state-files')).toContainText(
-      'model.safetensors',
+    expect(await states.getByText(/^Optimizer state files/).count()).toBe(0);
+    await states.getByRole('button', { name: 'Inspect saved states' }).click();
+    await expect(
+      states.getByRole('button', { name: 'Restore as new segment' }).first(),
+    ).toBeVisible();
+    await expect(states.getByRole('link', { includeHidden: true })).toHaveCount(
+      0,
     );
     await openRunTab(page, 'overview');
     await sample.click();

@@ -6,7 +6,6 @@ import {
   RunComparison,
   RunSamples,
   RunWarnings,
-  stateFiles,
   useRunOutputs,
 } from './Outputs';
 import { formatRoute } from './route';
@@ -347,7 +346,6 @@ export function Runs({
                   <SavedStates
                     key={`states-${run.id}`}
                     runId={run.id}
-                    files={stateFiles(outputs, run.id)}
                     config={run.job.config}
                     onRestore={(stateId, steps) =>
                       action('restore-state', {

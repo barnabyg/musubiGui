@@ -50,14 +50,6 @@
 .run-history small {
   margin-left: var(--space-2);
 }
-.state-files {
-  margin: var(--space-4) 0 0;
-  padding: 0;
-  list-style: none;
-}
-.state-files li {
-  overflow-wrap: anywhere;
-}
 .run-stepper {
   display: grid;
   grid-auto-flow: column;

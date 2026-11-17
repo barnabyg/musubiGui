@@ -270,13 +270,6 @@ export function useRunOutputs(
   };
 }
 
-// The saved-state files of one segment, whose states it inspects and resumes.
-export function stateFiles(outputs: RunOutputs, runId: string) {
-  return (outputs.result?.outputs ?? []).filter(
-    (item) => item.run_id === runId && /-state\//.test(item.path),
-  );
-}
-
 export type RunOutputs = ReturnType<typeof useRunOutputs>;
 
 // Artifact warnings, and sample errors once nothing is still writing the files.
