@@ -373,7 +373,10 @@ export function RunOutputActions({
   openSamples: () => void;
 }) {
   const [copy, setCopy] = useState<'idle' | 'copied' | 'manual'>('idle');
-  const latest = latestSample(outputs.result?.outputs ?? []);
+  const { result } = outputs;
+  const latest = latestSample(
+    result?.outputs.filter((item) => item.run_id === result.run_id) ?? [],
+  );
   async function copyFolder() {
     try {
       await navigator.clipboard.writeText(directory);
