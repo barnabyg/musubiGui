@@ -9,7 +9,7 @@ Existing Runs keep their recorded paths and filenames.
 
 Choose **View sample** to open this Run’s latest available image, video or audio preview
 in one action. Use the Samples tab to select earlier media, inspect metadata or
-download a sample. Files the browser cannot preview remain available in the folder or through the sample download. **View sample** skips unsupported formats and files that failed playback. **Refresh outputs** allows another playback attempt. For resumed training the Samples tab includes other segments
+download a sample. Files the browser cannot preview remain available in the folder or through the sample download. **View sample** skips unsupported formats. If playback fails, it automatically tries the next most recent sample from the selected Run. Choosing a file on the Samples tab keeps that file selected so you can inspect it or download it. **Refresh outputs** allows another playback attempt. For resumed training the Samples tab includes other segments
 while the folder action always identifies the selected Run. Completed Runs show
 actual elapsed time. A Run with sampling disabled or no playable sample shows
 its state. Output warnings, including incomplete Wan pairs, appear in Overview.
