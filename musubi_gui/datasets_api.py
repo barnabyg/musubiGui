@@ -136,7 +136,13 @@ def dataset_router(root: Path) -> APIRouter:
 
     @router.put("/{dataset_id}")
     def rename_dataset(dataset_id: str, request: RenameDataset) -> dict[str, Any]:
-        return result(lambda: store.rename(dataset_id, request.name))
+        def rename() -> dict[str, Any]:
+            # Only a managed dataset's folder moves with its name.
+            if store.get(dataset_id)["managed"] and preparation.busy(dataset_id):
+                raise ValueError("Wait for the H3 preparation batch to finish before renaming this dataset.")
+            return store.rename(dataset_id, request.name)
+
+        return result(rename)
 
     @router.delete("/{dataset_id}")
     def remove_dataset(dataset_id: str) -> dict[str, str]:

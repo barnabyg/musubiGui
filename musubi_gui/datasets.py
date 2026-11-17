@@ -26,6 +26,44 @@ AUDIO = {".aac", ".flac", ".m4a", ".mp3", ".ogg", ".opus", ".wav"}
 CAPTION_REPLACE_SECONDS = 2.0
 # Each probe is a short subprocess; a few at once cut scan time without flooding a busy PC.
 PROBE_WORKERS = 4
+# A managed dataset's folder is named after it; this leaves room for media paths under Windows' 260-character limit.
+FOLDER_NAME_LIMIT = 100
+RESERVED_NAMES = {
+    "CON",
+    "PRN",
+    "AUX",
+    "NUL",
+    "CONIN$",
+    "CONOUT$",
+    *(f"COM{index}" for index in "¹²³"),
+    *(f"LPT{index}" for index in "¹²³"),
+    *(f"COM{index}" for index in range(1, 10)),
+    *(f"LPT{index}" for index in range(1, 10)),
+}
+
+
+def plain_name(name: str, limit: int) -> bool:
+    """Whether Windows keeps this exact name for a file or folder: no paths, reserved names or special characters."""
+    return not (
+        not name
+        or len(name) > limit
+        or name.startswith(".")
+        or name.endswith((".", " "))
+        or any(character in name for character in '\\/:\x00<>"|?*')
+        or any(ord(character) < 32 for character in name)
+        or name.split(".")[0].rstrip(" .").upper() in RESERVED_NAMES
+    )
+
+
+def folder_name(name: str) -> str:
+    """The folder a managed dataset with this name lives in, which is the name itself."""
+    name = name.strip()
+    if not plain_name(name, FOLDER_NAME_LIMIT):
+        raise ValueError(
+            f"The dataset name is also its folder name, so use up to {FOLDER_NAME_LIMIT} characters without "
+            '\\ / : * ? " < > |, a leading dot, a trailing dot or space, or a reserved Windows name such as CON.'
+        )
+    return name
 
 
 def content_hash(path: Path) -> str:
@@ -122,6 +160,8 @@ class DatasetStore:
             raise ValueError("Dataset folder does not exist or is unreadable.")
         with self._db() as db:
             old = db.execute("SELECT id FROM datasets WHERE path=?", (str(folder),)).fetchone()
+            if old and managed:
+                raise ValueError("Another dataset is already registered at this folder. Choose another dataset name.")
             if old:
                 return self.get(str(old["id"]))
             dataset_id = uuid.uuid4().hex
@@ -186,12 +226,66 @@ class DatasetStore:
         return [self.get(identifier) for identifier in identifiers]
 
     def rename(self, dataset_id: str, name: str) -> dict[str, Any]:
-        if not name.strip() or len(name) > 200:
+        """Rename a dataset. A managed dataset's folder is renamed with it; a registered folder is the user's own."""
+        name = name.strip()
+        if not name or len(name) > 200:
             raise ValueError("Give the dataset a name of 1–200 characters.")
         with self._db() as db:
-            if not db.execute("UPDATE datasets SET name=? WHERE id=?", (name.strip(), dataset_id)).rowcount:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT path,managed,scan FROM datasets WHERE id=?", (dataset_id,)).fetchone()
+            if row is None:
                 raise KeyError("Dataset was not found.")
+            old = Path(row["path"])
+            new = old.with_name(folder_name(name)) if row["managed"] else old
+            moved = new.name != old.name
+            if moved:
+                self._move_folder(db, dataset_id, old, new, json.loads(row["scan"])["state"])
+            try:
+                if moved:
+                    self._move_paths(db, dataset_id, old, new)
+                db.execute("UPDATE datasets SET name=? WHERE id=?", (name, dataset_id))
+                db.commit()
+            except BaseException:
+                # The library still names the old folder, so put the folder back.
+                if moved:
+                    new.rename(old)
+                raise
         return self.get(dataset_id)
+
+    def _move_folder(self, db: sqlite3.Connection, dataset_id: str, old: Path, new: Path, scan: str) -> None:
+        """Rename a managed dataset's folder on disk, or explain why it stays where it is."""
+        if scan in {"pending", "scanning"}:
+            raise ValueError("Wait for the dataset scan to finish before renaming it.")
+        self._folder(str(new))
+        if not old.is_dir():
+            raise ValueError("The dataset folder is missing. Restore it before renaming the dataset.")
+        # A change of letter case only is the same folder to Windows.
+        same = new.name.casefold() == old.name.casefold()
+        taken = db.execute("SELECT 1 FROM datasets WHERE path=? AND id<>?", (str(new), dataset_id)).fetchone()
+        if taken or (new.exists() and not same):
+            raise ValueError(
+                f'A folder named "{new.name}" already exists in {new.parent}. Choose another dataset name.'
+            )
+        try:
+            old.rename(new)
+        except OSError as error:
+            raise ValueError(
+                "Windows could not rename the dataset folder. Close anything using its files, such as Explorer or a "
+                "media player, and try again. The dataset keeps its old name."
+            ) from error
+
+    def _move_paths(self, db: sqlite3.Connection, dataset_id: str, old: Path, new: Path) -> None:
+        """Point the library's stored paths at the renamed folder. Items and jobs refer to it by ID."""
+        db.execute("UPDATE datasets SET path=? WHERE id=?", (str(new), dataset_id))
+        rows = db.execute(
+            "SELECT id,explicit_audio FROM items WHERE dataset=? AND explicit_audio<>''", (dataset_id,)
+        ).fetchall()
+        for item in rows:
+            audio = Path(item["explicit_audio"])
+            if audio.is_relative_to(old):
+                db.execute(
+                    "UPDATE items SET explicit_audio=? WHERE id=?", (str(new / audio.relative_to(old)), item["id"])
+                )
 
     def remove(self, dataset_id: str) -> dict[str, str]:
         """Remove the library index only; media, sidecars and recovery evidence stay intact."""
@@ -493,10 +587,16 @@ class DatasetStore:
         return self.get(dataset_id)
 
     def create_managed(self, name: str, root: str) -> dict[str, Any]:
+        """Create a dataset in a new folder named after it; an existing folder is never taken over."""
         folder = self._folder(root)
+        destination = within_root(folder / folder_name(name), [folder])
         folder.mkdir(parents=True, exist_ok=True)
-        destination = within_root(folder / ("managed-" + uuid.uuid4().hex), [folder])
-        destination.mkdir()
+        try:
+            destination.mkdir()
+        except FileExistsError as error:
+            raise ValueError(
+                f'A folder named "{destination.name}" already exists in {folder}. Choose another dataset name.'
+            ) from error
         try:
             return self.register(name, str(destination), managed=True)
         except Exception:

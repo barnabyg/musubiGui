@@ -96,8 +96,25 @@ counts, storage locations and edit/remove actions. Choose **New dataset** to ope
 the creation screen. Choose **Upload files** or **Use existing folder** before
 entering a path. Uploads use the first configured root as their **Upload parent
 folder**, so a name is enough; inspect or change the parent before choosing
-**Create a new folder for uploads**. This creates a separate `managed-…` subfolder
-and shows its final path in the dataset editor. The parent is created if needed.
+**Create dataset**. This creates a new folder named after the dataset inside the
+parent, so a dataset called `frogs` is stored in `<parent>\frogs`, and shows its
+final path in the dataset editor. The parent is created if needed.
+
+Because the name is also the folder name, it must be one Windows accepts: up to
+100 characters, without `\ / : * ? " < > |`, a leading dot, a trailing dot or
+space, or a reserved name such as `CON`. If a folder with that name already
+exists in the parent, creation is refused with an error and the existing folder
+is left alone.
+
+Renaming an upload dataset in **Dataset settings** renames its folder too, with
+the same checks. Jobs refer to datasets by identity and Runs train from their
+own frozen copies, so neither needs updating. The rename is refused while the
+dataset is scanning or part of a running H3 preparation batch. If Windows can't
+rename the folder because something has its files open, such as Explorer or a
+media player, the dataset keeps its old name; close that program and try again.
+Renaming a dataset made with **Use existing folder** changes only its name,
+never your folder. Upload datasets created by earlier versions keep their
+`managed-…` folders until renamed.
 
 **Use existing folder** starts with an empty **Dataset folder**. Enter or Browse
 to the exact folder to index, including its subfolders. Selecting an entire
@@ -258,7 +275,7 @@ caption revision and reports saved/conflict/failed outcomes independently. Previ
 a failed/conflicting item. **Restore successful captions** restores only that operation's successful
 items and refuses any item edited afterward. Sidecar history remains available for individual recovery.
 
-For uploads, use the same fixture command and choose **Create a new folder for uploads** with the printed folder
+For uploads, use the same fixture command and choose **Create dataset** with the printed folder
 as its storage root. Upload the fixture's `red.png`/`red.txt` and `invalid.mp4`; expect the media/caption
 to appear immediately and the invalid file to fail independently. Upload the same filename again to
 see an explicit collision. Restart and reopen the managed dataset to confirm persistence.
@@ -301,8 +318,10 @@ From the repository root in PowerShell 7, start an isolated CPU fixture:
 ```
 
 Choose **New dataset**, enter a name and create an upload dataset using the
-default parent. Expect a separate managed subfolder, with its final path visible
-in **Dataset settings**. Start another dataset and select **Use existing folder**
+default parent. Expect a new folder named after the dataset, with its final
+path visible in **Dataset settings**. Rename it there and expect the folder to be
+renamed too. Create another upload dataset with that new name and expect an
+error that the folder already exists. Start another dataset and select **Use existing folder**
 with the keyboard. Browse to a configured root; expect a warning and an explicit
 acknowledgement before registration. Try an already registered folder and expect
 an **Open existing dataset** link. Try a child folder and check that only its

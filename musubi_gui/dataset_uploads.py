@@ -10,7 +10,7 @@ from contextlib import closing, contextmanager
 from pathlib import Path
 from typing import Any, Iterator
 
-from musubi_gui.datasets import AUDIO, IMAGES, VIDEOS, CaptionConflict, DatasetStore
+from musubi_gui.datasets import AUDIO, IMAGES, VIDEOS, CaptionConflict, DatasetStore, plain_name
 from musubi_gui.settings import atomic_json, within_root
 
 CHUNK_BYTES = 512 * 1024
@@ -78,27 +78,7 @@ class DatasetUploads:
     def begin(self, dataset_id: str, filename: str, size: int) -> dict[str, Any]:
         folder = self._folder(dataset_id)
         suffix = Path(filename).suffix.lower()
-        reserved = {
-            "CON",
-            "PRN",
-            "AUX",
-            "NUL",
-            "CONIN$",
-            "CONOUT$",
-            *(f"COM{index}" for index in "¹²³"),
-            *(f"LPT{index}" for index in "¹²³"),
-            *(f"COM{index}" for index in range(1, 10)),
-            *(f"LPT{index}" for index in range(1, 10)),
-        }
-        if (
-            not filename
-            or len(filename) > 180
-            or filename.startswith(".")
-            or filename.endswith((".", " "))
-            or any(character in filename for character in '\\/:\x00<>"|?*')
-            or any(ord(character) < 32 for character in filename)
-            or filename.split(".")[0].rstrip(" .").upper() in reserved
-        ):
+        if not plain_name(filename, 180):
             raise ValueError(
                 "Use a plain local filename without traversal, reserved Windows names, or special path characters."
             )

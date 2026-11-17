@@ -24,9 +24,7 @@ async function createDataset(page: Page, url: string, media: string) {
   await page.getByRole('button', { name: 'New dataset' }).click();
   await page.getByLabel('Dataset name', { exact: true }).fill('Dropped media');
   await page.getByLabel('Upload parent folder', { exact: true }).fill(media);
-  await page
-    .getByRole('button', { name: 'Create a new folder for uploads' })
-    .click();
+  await page.getByRole('button', { name: 'Create dataset' }).click();
   // Creation scans the new folder before responding, so it gets the scan deadline.
   // Stopping at an alert reports a creation error instead of a missing drop area.
   const dropArea = page.getByLabel('Dataset file drop area');

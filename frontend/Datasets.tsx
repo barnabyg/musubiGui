@@ -390,7 +390,7 @@ export function Datasets({
       setPanel(managed ? 'uploads' : null);
       setStatus(
         managed
-          ? 'Upload folder created. Add media and matching captions to get started.'
+          ? 'Dataset created. Add media and matching captions to get started.'
           : 'Dataset registered. Source media stays in its original folder.',
       );
     } catch (reason) {

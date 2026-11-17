@@ -230,9 +230,7 @@ test('separate library and editor create, populate, rename, reopen and remove en
     await page
       .getByLabel('Upload parent folder', { exact: true })
       .fill(app.media);
-    await page
-      .getByRole('button', { name: 'Create a new folder for uploads' })
-      .click();
+    await page.getByRole('button', { name: 'Create dataset' }).click();
     await expect(page.getByText('Ready for your media')).toBeVisible();
     await expect(page.getByRole('button', { name: 'New dataset' })).toHaveCount(
       0,

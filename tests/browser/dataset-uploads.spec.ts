@@ -17,9 +17,7 @@ test('picked files publish media and captions, and a rejected upload can be canc
     await page
       .getByLabel('Upload parent folder', { exact: true })
       .fill(app.media);
-    await page
-      .getByRole('button', { name: 'Create a new folder for uploads' })
-      .click();
+    await page.getByRole('button', { name: 'Create dataset' }).click();
     await expect(
       page.getByRole('heading', { name: 'Upload media and captions' }),
     ).toBeVisible();
