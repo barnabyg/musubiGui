@@ -30,6 +30,7 @@ test('generation memory is saved and frozen independently from training', async 
     await page
       .getByRole('button', { name: 'Review configuration', exact: true })
       .click();
+    await page.getByText('Configuration details', { exact: true }).click();
     await expect(page.getByLabel('Preview memory settings')).toContainText(
       'Conservative family preset selected',
     );

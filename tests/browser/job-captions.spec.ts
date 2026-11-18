@@ -41,7 +41,7 @@ test('preparation waits for selected dataset captions and freezes the resolved d
     };
     await chooseJob(wan);
     const prepare = page.getByRole('button', {
-      name: 'Prepare run',
+      name: 'Prepare only',
       exact: true,
     });
     const start = page.getByRole('button', {
@@ -148,7 +148,7 @@ test('repairing another dataset retains both caption conflicts for a job that us
     const passed = page.getByText('Review passed for revision 2');
     await expect(passed).toBeVisible({ timeout: 240_000 });
     const prepare = page.getByRole('button', {
-      name: 'Prepare run',
+      name: 'Prepare only',
       exact: true,
     });
     const start = page.getByRole('button', {

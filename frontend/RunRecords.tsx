@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { Run } from './runTypes';
 
 // The Inputs and output folder panel and the Stage logs of one Run.
@@ -5,10 +6,12 @@ export function RunRecords({
   run,
   logText,
   performanceAvailable,
+  refreshOutputs,
 }: {
   run: Run;
   logText?: string;
   performanceAvailable?: boolean;
+  refreshOutputs: ReactNode;
 }) {
   return (
     <>
@@ -22,6 +25,7 @@ export function RunRecords({
           <pre>{JSON.stringify(run.manifest, null, 2)}</pre>
         </details>
         <p>Output: {run.directory}</p>
+        {refreshOutputs}
         {run.job.family === 'h3' && performanceAvailable && (
           <p>
             <a href={`/api/runs/${run.id}/performance`} download>

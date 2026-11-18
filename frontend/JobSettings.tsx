@@ -1,3 +1,4 @@
+import { HelpLink } from './Help';
 import { JobSection } from './JobSection';
 import type { RefObject } from 'react';
 import { JobDatasets } from './JobDatasets';
@@ -158,8 +159,7 @@ export function JobIdentity({
       <details>
         <summary>Model components</summary>
         <p>
-          Paths inherit Settings unless overridden here. Overrides must remain
-          inside configured model roots.
+          <HelpLink topic="Model paths" />
         </p>
         {(job.family === 'wan'
           ? ['wan_low', 'wan_high', 'wan_vae', 'wan_t5']
@@ -169,14 +169,22 @@ export function JobIdentity({
             key={key}
             label={componentLabels[key]}
             inputId={fieldId(key)}
+            help={
+              job.config.components[key]
+                ? 'Job override'
+                : models[key]
+                  ? 'Inherited from Settings'
+                  : 'Choose a file here or set the default in Settings.'
+            }
             kind="file"
             roots={modelRoots}
             disabled={busy}
-            value={job.config.components[key] ?? models[key] ?? ''}
+            inheritedValue={models[key]}
+            value={job.config.components[key] ?? ''}
             onChange={(value) =>
               config('components', {
                 ...job.config.components,
-                [key]: value,
+                [key]: value.trim() ? value : '',
               })
             }
           />
@@ -302,9 +310,7 @@ export function JobControls({
         {toggle('Do not upscale buckets', 'bucket_no_upscale')}
         <h3>Caching</h3>
         <p className="hint">
-          Latents and text embeddings are required. Compatible caches are copied
-          into each Run’s private storage. Rebuilding leaves other Runs
-          unchanged.
+          <HelpLink topic="Cache reuse" />
         </p>
         <div className="columns">
           {(
@@ -358,7 +364,7 @@ export function JobControls({
           </label>
         )}
       </JobSection>
-      <JobSection className="panel" id="job-section-memory">
+      <JobSection className="panel" id="job-section-advanced">
         <h2>Memory</h2>
         {number(
           'Blocks to swap',
@@ -396,8 +402,6 @@ export function JobControls({
               toggle('Offload inactive DiT', 'offload_inactive_dit')}
           </>
         )}
-      </JobSection>
-      <JobSection className="panel" id="job-section-checkpoints">
         <h2>Checkpoints</h2>
         <div className="number-row">
           {number('Save every N steps', 'save_every')}

@@ -336,6 +336,16 @@ test('separate library and editor create, populate, rename, reopen and remove en
       'A red portrait, soft light',
     );
     await page.getByRole('button', { name: 'Back to datasets' }).click();
+    const details = page.getByLabel('Dataset details for Portrait collection', {
+      exact: true,
+    });
+    await expect(
+      page.getByRole('button', {
+        name: 'Remove Portrait collection from library',
+      }),
+    ).toBeHidden();
+    await details.press('Enter');
+    await expect(page.getByText(stored.path, { exact: true })).toBeVisible();
     await page
       .getByRole('button', { name: 'Remove Portrait collection from library' })
       .click();

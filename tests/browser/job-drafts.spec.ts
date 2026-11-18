@@ -18,14 +18,14 @@ test('checkpoint retention persists and review explains protected saves', async 
     const retention = page.getByLabel('Maximum checkpoint saves to keep', {
       exact: true,
     });
-    await page.getByRole('tab', { name: 'Checkpoints', exact: true }).click();
+    await page.getByRole('tab', { name: 'Advanced', exact: true }).click();
     await expect(retention).toHaveValue('0');
     await retention.fill('2');
     await page.getByRole('button', { name: 'Save draft', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('Draft saved');
     await page.reload();
 
-    await page.getByRole('tab', { name: 'Checkpoints', exact: true }).click();
+    await page.getByRole('tab', { name: 'Advanced', exact: true }).click();
     await expect(retention).toHaveValue('2');
     await page
       .getByRole('button', { name: 'Review configuration', exact: true })
@@ -67,7 +67,7 @@ test('Wan draft controls, validation and reviewed native configuration survive s
       page.getByText('Frames: Wan requires 4*n+1 frames.', { exact: true }),
     ).toBeVisible();
     await expect(
-      page.getByRole('button', { name: 'Prepare run', exact: true }),
+      page.getByRole('button', { name: 'Prepare only', exact: true }),
     ).toBeDisabled();
     await page
       .getByRole('tab', { name: 'Dataset preparation', exact: true })
@@ -87,7 +87,7 @@ test('Wan draft controls, validation and reviewed native configuration survive s
     await expect(page.getByTestId('dataset-toml')).toContainText(
       'target_frames = [33]',
     );
-    await page.getByText('Advanced', { exact: true }).click();
+    await page.getByText('Configuration details', { exact: true }).click();
     await page.getByText('train arguments', { exact: true }).first().click();
     await expect(
       page
@@ -299,7 +299,7 @@ test('H3 editor keeps T2VA guidance stages and identifies invalid geometry', asy
     await expect(
       page.getByRole('spinbutton', { name: /^Frames\b/ }),
     ).toHaveValue('124');
-    await page.getByRole('tab', { name: 'Memory', exact: true }).click();
+    await page.getByRole('tab', { name: 'Advanced', exact: true }).click();
     await expect(
       page.getByLabel('H2D-only block swapping', { exact: false }),
     ).toBeChecked();
@@ -324,7 +324,7 @@ test('H3 editor keeps T2VA guidance stages and identifies invalid geometry', asy
         { exact: true },
       ),
     ).toBeVisible();
-    await page.getByText('Advanced', { exact: true }).click();
+    await page.getByText('Configuration details', { exact: true }).click();
     await page.getByText('text_cache arguments', { exact: true }).click();
     const args = page
       .locator('details details')

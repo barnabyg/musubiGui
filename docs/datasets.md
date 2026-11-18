@@ -91,8 +91,12 @@ Dataset roots default to the `datasets` folder under the application project roo
 explicitly empty list, are preserved; change them in Settings to use a different
 location.
 
-The Datasets library lists registered and managed datasets, their media/caption
-counts, storage locations and edit/remove actions. Choose **New dataset** to open
+The Datasets library lists registered and managed datasets. A scan in progress
+is marked until its counts are ready. Select an invalid-file or missing-caption
+count to open the filtered gallery, then choose **All media** to clear it.
+Invalid files are skipped for training. Missing captions are counted across all
+scanned files, so the same file can appear in both filters. Expand **Details**
+on a library row to see its folder path and removal action. Choose **New dataset** to open
 the creation screen. Choose **Upload files** or **Use existing folder** before
 entering a path. Uploads use the first configured root as their **Upload parent
 folder**, so a name is enough; inspect or change the parent before choosing
@@ -138,7 +142,7 @@ including a single command that launches testable jobs without model downloads,
 see [Preparing images, videos, or both](jobs-datasets.md#preparing-images-videos-or-both).
 
 The individual editor fills the available window with thumbnails and editable captions.
-A compact top bar contains back navigation, the dataset name/scan status, **Add media**,
+A compact top bar contains back navigation, the dataset name/scan status, **Create training job**, **Add media**,
 **Bulk actions** and **Dataset settings**. Thumbnails start directly below this bar; the
 workspace banner and large page heading are omitted on this screen.
 Type directly in the caption field beneath any thumbnail. Each field autosaves after
@@ -193,10 +197,25 @@ To verify the shared scope, run this from `C:/docs/git/musubiGui` in PowerShell 
 Prepare WAN acceptance 1, then open WAN acceptance's **Bulk actions**. Both WAN
 acceptance jobs should be linked. Select motion.mp4, exclude it and review both
 drafts: neither has usable included media. Include it again to restore their
-input. Open **Remove from library**, inspect the named jobs and cancel. Removing
+input. In the library row, expand **Details**, choose **Remove from library**, inspect the named jobs and cancel. Removing
 the entry preserves motion.mp4 and its caption on disk, and the prepared Run can
 still start and provide its LoRA from the saved snapshot. This is a CPU fixture;
 it does not establish GPU model quality.
+
+### Check dataset readiness and create a training job
+
+From the repository root in PowerShell 7, with the Windows launch prerequisites installed, run:
+
+```powershell
+.\acceptance.cmd --workspace ".cache/ux-220-$([guid]::NewGuid())"
+```
+
+In **Datasets**, choose **1 invalid media file** on the mixed dataset. Expect
+only `invalid.mp4`. Select **All media** to see all four files. Return to the
+library and choose **2 missing captions** to see `blue.png` and `invalid.mp4`.
+From the toolbar choose **Create training job** and **Create Wan job**. The draft
+should contain the mixed dataset and use all its included media regardless of
+the gallery filter.
 
 After `npm.cmd run build`, run `.venv\Scripts\python.exe -m musubi_gui.dataset_fixture .cache\dataset-demo --launch`.
 Use a new destination each time; existing fixture directories are preserved. Open the printed loopback URL

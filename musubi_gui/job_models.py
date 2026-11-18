@@ -2,7 +2,7 @@
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from musubi_gui.recipe import CAPTION
 from musubi_gui.redaction import redact
@@ -60,6 +60,12 @@ class JobConfig(BaseModel):
     sample_height: int | None = Field(default=None, exclude_if=lambda value: value is None)
     sample_frames: int | None = Field(default=None, exclude_if=lambda value: value is None)
     seed: int = 42
+
+    @field_validator("components")
+    @classmethod
+    def component_overrides(cls, components: dict[str, str]) -> dict[str, str]:
+        """A cleared override inherits Settings, including in previously saved drafts and exports."""
+        return {name: path for name, path in components.items() if path.strip()}
 
 
 def smoke_config(family: str) -> JobConfig:

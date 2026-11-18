@@ -137,9 +137,7 @@ on a revision that already has an unfinished Run, it asks that Run to continue i
 of creating another.
 
 While the app is open on any screen, the tab title announces when a Run is ready,
-finished, stopped or failed, until you return to the tab or change screen. The Runs
-screen also offers an opt-in browser notification for the same events; the choice is
-kept in that browser only.
+finished, stopped or failed, until you return to the tab or change screen. Enable browser notifications for these events in Settings. The preference is local to each browser. Use Help or the Background training link on Runs for details about closing the browser.
 
 ## Queueing
 
@@ -265,8 +263,7 @@ treated as uncertain when their ownership cannot be established safely.
 Delete run permanently removes a Run you no longer need and gives back its disk space.
 The confirmation dialog names the Run, shows how much space is freed and says the delete
 can't be undone; Cancel has focus and Escape cancels. It removes the Run record, its folder under the output root, its folder under
-the cache root and its output index. There is no partial delete: to keep a LoRA, download
-it first. Source datasets, other Runs, presets, model files, the Job and the shared
+the cache root and its output index. There is no partial delete: to keep a LoRA, copy it out of the Run folder first. Source datasets, other Runs, presets, model files, the Job and the shared
 tokenizer under `<cache root>/shared` are left alone.
 
 A delete is refused, with the reason, in these cases. Nothing is removed.

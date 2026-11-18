@@ -48,6 +48,29 @@ export function currentTraining(
   );
 }
 
+export function hasEndedTraining(status: string | null | undefined) {
+  return [
+    'completed',
+    'stopped',
+    'failed',
+    'cancelled',
+    'interrupted',
+  ].includes(status ?? '');
+}
+
+export function hasActiveWork(status: string | null | undefined) {
+  return [
+    'pending_preparation',
+    'preparing',
+    'pending_training',
+    'training',
+    'generating',
+    'stopping',
+    'orphaned',
+    'uncertain',
+  ].includes(status ?? '');
+}
+
 export function useCurrentTraining(jobId: string | undefined) {
   const history = useRunHistory();
   const training = currentTraining(history.runs ?? [], jobId);

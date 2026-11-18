@@ -66,6 +66,7 @@
 }
 .dataset-library-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-9);
   border: 1px solid var(--color-border);
@@ -74,7 +75,7 @@
   padding: var(--space-4) var(--space-9) var(--space-4) var(--space-4);
 }
 .dataset-open {
-  flex: 1;
+  flex: 1 1 12rem;
   min-width: 0;
   text-align: left;
   background: transparent;
@@ -91,7 +92,7 @@
 }
 .dataset-open small,
 .dataset-path,
-.dataset-edit-label {
+.dataset-row-details small {
   display: block;
   margin-top: var(--space-4);
 }
@@ -100,8 +101,9 @@
   color: var(--color-text-muted);
   font-size: var(--text-base);
 }
-.dataset-edit-label {
+.dataset-open svg {
   color: var(--color-accent);
+  margin-inline-start: var(--space-3);
 }
 .dataset-row-actions {
   display: flex;
@@ -109,16 +111,26 @@
   gap: var(--space-7);
   flex-wrap: wrap;
 }
-.dataset-kind {
-  font-size: var(--text-small);
-  border-radius: var(--radius-pill);
-  background: var(--color-accent-surface-soft);
-  color: var(--color-accent-text);
-  padding: var(--space-2) var(--space-5);
+.dataset-row-details {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
 }
-.dataset-kind.missing {
+.dataset-row-details[open] {
+  flex-basis: 100%;
+  border-top: 1px solid var(--color-border);
+  padding: var(--space-5) var(--space-7);
+}
+.dataset-row-details summary {
+  width: fit-content;
+  color: var(--color-accent-text);
+}
+.dataset-row-details button {
+  margin-top: var(--space-5);
+}
+.dataset-problem {
   color: var(--color-danger-text);
-  background: var(--color-danger-surface);
 }
 .dataset-empty {
   padding: var(--space-12) var(--space-9);
@@ -175,7 +187,7 @@ main.dataset-editor-shell {
   padding: var(--space-2) var(--space-3);
 }
 .dataset-identity {
-  min-width: 160px;
+  min-width: 8rem;
   flex: 1;
 }
 .dataset-filters {
@@ -195,7 +207,7 @@ main.dataset-editor-shell {
   color: var(--color-text);
 }
 .dataset-filters input {
-  width: 230px;
+  width: clamp(125px, 13vw, 230px);
 }
 .dataset-filters button {
   padding: var(--space-3) var(--space-4);
@@ -224,29 +236,35 @@ main.dataset-editor-shell {
   white-space: nowrap;
 }
 .dataset-topbar-actions {
+  position: relative;
   display: flex;
-  flex-shrink: 0;
+  max-width: 100%;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-3);
 }
-.dataset-topbar-actions button {
+.dataset-topbar-actions button,
+.dataset-training-job > summary {
   padding: var(--space-3) var(--space-5);
 }
 .dataset-training-job {
-  position: relative;
   border: 0;
   margin: 0;
   padding: 0;
 }
 .dataset-training-job > summary {
   cursor: pointer;
-  font-size: var(--text-small);
+  font-size: var(--text-base);
+  color: var(--color-accent-text);
+  background: var(--color-accent-surface-soft);
+  border: 1px solid var(--color-border-control);
+  border-radius: var(--radius-sm);
 }
 .dataset-training-job > div {
   position: absolute;
-  left: 0;
-  top: 100%;
-  width: min(340px, 85vw);
+  right: 0;
+  top: calc(100% + 4px);
+  width: min(340px, 100%);
   padding: var(--space-6);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
@@ -613,6 +631,13 @@ main.dataset-editor-shell {
   }
   .dataset-library-row {
     padding: var(--space-4);
+  }
+  .dataset-open,
+  .dataset-row-details[open] {
+    flex-basis: auto;
+  }
+  .dataset-row-details {
+    margin: 0 var(--space-7) var(--space-4);
   }
   .dataset-row-actions {
     padding: 0 var(--space-7) var(--space-7);

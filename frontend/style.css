@@ -371,28 +371,19 @@ small {
   display: block;
   max-width: 60ch;
 }
-.setup-checklist ol {
-  margin: 0;
-  padding: 0;
-  list-style: none;
+.setup-checklist ol,
+.setup-checklist ul {
+  padding-left: var(--space-8);
 }
 .setup-checklist li {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
   padding: var(--space-2) 0;
 }
-.setup-checklist li.done .lucide {
-  color: var(--color-success);
+.setup-checklist .setup-run-choices {
+  margin: 0;
+  padding: 0;
+  border: 0;
 }
-.setup-checklist li.noted .lucide,
-.setup-checklist li.noted small {
-  color: var(--color-warning);
-}
-.setup-checklist li small {
-  margin-left: auto;
-}
-.setup-checklist button {
+.setup-checklist > button:last-child {
   margin-top: var(--space-4);
 }
 .columns {
@@ -513,6 +504,17 @@ summary:focus-visible,
 .status-badge.failure {
   color: var(--color-danger);
 }
+.help-entry {
+  align-self: flex-start;
+}
+.help-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-accent-text);
+  text-decoration: underline;
+}
+.help-dialog,
 .confirm-dialog {
   width: min(520px, calc(100vw - 32px));
   padding: var(--space-9);
@@ -521,6 +523,7 @@ summary:focus-visible,
   border: 1px solid var(--color-border-control);
   border-radius: var(--radius-lg);
 }
+.help-dialog::backdrop,
 .confirm-dialog::backdrop {
   background: var(--color-overlay);
 }

@@ -13,7 +13,7 @@ export function confirmDelete(
 ) {
   const segments = preview.segments ?? [];
   const lines = [
-    `This frees ${sizeLabel(preview.bytes ?? 0)} and can't be undone. ${segments.length ? 'Every segment’s' : 'Its'} checkpoints, samples, saved states, logs and saved inputs are removed, so download any LoRA you want to keep first.`,
+    `This frees ${sizeLabel(preview.bytes ?? 0)} and can't be undone. ${segments.length ? 'Every segment’s' : 'Its'} checkpoints, samples, saved states, logs and saved inputs are removed, so copy any LoRA you want to keep first.`,
   ];
   if (preview.shared_cache)
     lines.push(

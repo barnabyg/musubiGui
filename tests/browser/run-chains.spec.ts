@@ -256,8 +256,8 @@ test('a training stopped and resumed twice is one row with every preview in step
       current.getByLabel('Sample', { exact: true }).getByRole('option'),
     ).toHaveCount(expected.length);
     await expect(
-      compared.getByRole('link', { name: 'Download final LoRA', exact: true }),
-    ).toHaveAttribute('href', new RegExp(`/api/runs/${otherLatest.id}/`));
+      comparison.getByRole('link', { name: /download.*LoRA/i }),
+    ).toHaveCount(0);
     // A single segment can still be one side.
     await compare
       .getByLabel('Compare from', { exact: true })
@@ -299,6 +299,49 @@ test('a training stopped and resumed twice is one row with every preview in step
     expect(remaining).toHaveLength(3);
     for (const folder of [other.directory, otherLatest.directory])
       await expect(access(folder)).rejects.toThrow();
+  } finally {
+    await app.close();
+  }
+});
+
+test('a completed segment with no sample offers earlier previews only on Samples', async ({
+  page,
+}) => {
+  const app = await runWorkspace({ previewImages: true });
+  try {
+    const job = app.manifest.jobs.find((item) => item.family === 'h3')!;
+    await configure(app, job.id, {
+      steps: 2,
+      preview_every: 2,
+      sample_enabled: false,
+      save_every: 2,
+      save_state: true,
+    });
+    const root = (await app.post('/api/runs/prepare', {
+      job_id: job.id,
+      start: true,
+    })) as RunRecord;
+    await waitFor(app, root.id, 'completed');
+    const next = await resume(app, root.id, 3);
+    await waitFor(app, next.id, 'completed');
+    await page.goto(`${app.url}/#/runs/${next.id}`);
+    // Wait for the merged inventory before asserting which actions belong to Overview.
+    await openRunTab(page, 'samples');
+    await expect(
+      page.getByRole('button', { name: /^Step 2 preview/ }),
+    ).toBeVisible();
+    await openRunTab(page, 'overview');
+    expect(
+      await page.getByRole('button', { name: 'View sample' }).count(),
+    ).toBe(0);
+    await expect(
+      page.getByText('No playable sample is available.'),
+    ).toBeVisible();
+    await page.goto(`${app.url}/#/runs/${root.id}`);
+    await page.getByRole('button', { name: 'View sample' }).click();
+    await expect(
+      page.getByLabel('Selected sample', { exact: true }),
+    ).toContainText(root.id.slice(0, 8));
   } finally {
     await app.close();
   }

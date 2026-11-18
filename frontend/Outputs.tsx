@@ -1,5 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Download } from 'lucide-react';
+import {
+  MediaPreview,
+  useOutputPreviews,
+  type OutputPreviews,
+} from './OutputPreview';
 import { apiClient } from './api';
 import { trainingOf, trainings } from './runChains';
 import { useRunHistory } from './runHistory';
@@ -14,6 +18,7 @@ export type Output = {
   kind?: 'checkpoint' | 'image' | 'video' | 'audio';
   status: string;
   bytes?: number;
+  modified_ms?: number;
   file_url?: string;
   error?: string | null;
   metadata?: Record<string, unknown>;
@@ -55,34 +60,10 @@ type Comparison = {
 
 const read = apiClient('Output records could not be read. Refresh and retry.');
 
-// What a Run's files are for. Weights inside a saved state's folder are not a LoRA. In a
-// training's merged list, the final LoRA is the latest segment's.
-function grouped(outputs: Output[], latest?: string) {
-  const samples = outputs.filter((item) =>
+function mediaFiles(outputs: Output[]) {
+  return outputs.filter((item) =>
     ['image', 'video', 'audio'].includes(item.kind ?? ''),
   );
-  const stateFiles = outputs.filter((item) => /-state\//.test(item.path));
-  const checkpoints = outputs
-    .filter((item) => item.kind === 'checkpoint' && !stateFiles.includes(item))
-    .map((item) => ({ item, step: checkpointStep(item.name) }));
-  const final = checkpoints.find(
-    ({ item, step }) =>
-      step === null &&
-      !/-(low|high)-(phase\d+|source)/.test(item.name) &&
-      (!latest || item.run_id === latest),
-  )?.item;
-  const preview =
-    samples.find(
-      (item) => item.path.startsWith('samples/') && item.status === 'available',
-    ) ??
-    samples.find(
-      (item) => item.kind === 'video' && item.status === 'available',
-    ) ??
-    samples.find(
-      (item) => item.kind === 'image' && item.status === 'available',
-    ) ??
-    samples.find((item) => item.status === 'available');
-  return { samples, stateFiles, checkpoints, final, preview };
 }
 
 // Whether a list merges more than one segment of a training.
@@ -97,57 +78,8 @@ function outputLabel(item: Output, result: OutputList | null | undefined) {
   return `${item.name} · ${item.status}${segment}`;
 }
 
-function checkpointStep(name: string) {
-  const match = /-step(\d+)\.[^.]+$/.exec(name);
-  return match ? Number(match[1]) : null;
-}
-
-function checkpointLabel(item: Output, step: number | null, final?: Output) {
-  const phase = /-(low|high)-phase(\d+)/.exec(item.name);
-  if (phase)
-    return `${phase[1]}-noise · phase from ${Number(phase[2])} · ${step === null ? 'phase end' : `local step ${step}`}`;
-  const source = /-(low|high)-source/.exec(item.name);
-  if (source) return `${source[1]}-noise · source checkpoint`;
-  // An earlier segment's own final save sits at that segment's step in a merged list.
-  if (step === null && final && item !== final && item.step !== undefined)
-    return `Step ${item.step}`;
-  return step ?? 'Final';
-}
-
 function byteLabel(item: Output) {
   return item.bytes === undefined ? 'Size unknown' : sizeLabel(item.bytes);
-}
-
-function MediaPreview({ output }: { output: Output }) {
-  if (output.status !== 'available' || !output.file_url) return null;
-  if (output.kind === 'image')
-    return (
-      <img
-        className="output-media"
-        src={output.file_url}
-        alt={`Sample ${output.name}`}
-      />
-    );
-  if (output.kind === 'video')
-    return (
-      <video
-        className="output-media"
-        controls
-        preload="metadata"
-        src={output.file_url}
-        aria-label="Output video"
-      />
-    );
-  if (output.kind === 'audio')
-    return (
-      <audio
-        controls
-        preload="metadata"
-        src={output.file_url}
-        aria-label="Output audio"
-      />
-    );
-  return null;
 }
 
 function ComparisonSamples({
@@ -157,7 +89,13 @@ function ComparisonSamples({
   result: OutputList;
   label: string;
 }) {
-  const { samples, preview, final } = grouped(result.outputs, result.latest);
+  const samples = mediaFiles(result.outputs);
+  const previews = useOutputPreviews();
+  const available = samples.filter(previews.playable);
+  const preview =
+    available.find((item) => item.path.startsWith('samples/')) ??
+    available.find((item) => item.kind === 'video') ??
+    available[0];
   const [selected, setSelected] = useState('');
   const sample =
     samples.find((item) => item.id === selected) ?? preview ?? samples[0];
@@ -205,21 +143,16 @@ function ComparisonSamples({
             <>
               <p>{outputLabel(sample, result)}</p>
               {sample.error && <p className="error">{sample.error}</p>}
-              <MediaPreview key={sample.id} output={sample} />
+              <MediaPreview
+                key={sample.id}
+                output={sample}
+                previews={previews}
+              />
             </>
           )}
         </>
       ) : (
         <p>No generated samples recorded for this Run.</p>
-      )}
-      {final?.status === 'available' && final.file_url && (
-        <a
-          className="button-link"
-          href={`${final.file_url}?download=true`}
-          download
-        >
-          <Download /> Download final LoRA
-        </a>
       )}
     </section>
   );
@@ -233,8 +166,7 @@ const settledStates = [
   'interrupted',
 ];
 
-// Keeps one list of a Run's files for the Overview and Samples tabs. A selection is kept per
-// kind, so choosing a checkpoint on Overview leaves the selected sample on Samples alone.
+// Both tabs share the output inventory and the selection for this Run.
 export function useRunOutputs(
   runId: string | undefined,
   runState: string,
@@ -243,8 +175,8 @@ export function useRunOutputs(
   const [result, setResult] = useState<OutputList | null>(null);
   const [selection, setSelection] = useState<{
     runId: string;
-    sample?: string;
-    checkpoint?: string;
+    sample: string;
+    tryNext?: boolean;
   }>();
   const history = useRunHistory();
   const [failure, setFailure] = useState<{ runId?: string; message: string }>();
@@ -287,30 +219,44 @@ export function useRunOutputs(
       controller.abort();
     };
   }, [runId, runState, chain, refresh]);
+  const previews = useOutputPreviews();
   const chosen = selection?.runId === runId ? selection : undefined;
+  const current = result?.run_id === runId ? result : null;
+  const segmentOutputs =
+    current?.outputs.filter((item) => item.run_id === runId) ?? [];
+  const latest = previews.latest(segmentOutputs);
   return {
-    selected: { sample: chosen?.sample, checkpoint: chosen?.checkpoint },
+    previews: {
+      ...previews,
+      failed(item: Output) {
+        previews.failed(item);
+        if (!chosen?.tryNext || chosen.sample !== item.id || !runId) return;
+        const next = previews.latest(
+          segmentOutputs.filter((candidate) => candidate.id !== item.id),
+        );
+        if (next) setSelection({ runId, sample: next.id, tryNext: true });
+      },
+    },
+    latest,
+    selectLatest() {
+      if (runId && latest)
+        setSelection({ runId, sample: latest.id, tryNext: true });
+    },
+    selected: chosen?.sample,
     select(item: Output) {
       if (!runId) return;
-      const kind = item.kind === 'checkpoint' ? 'checkpoint' : 'sample';
-      setSelection({ ...chosen, runId, [kind]: item.id });
+      setSelection({ runId, sample: item.id });
     },
-    result: result?.run_id === runId ? result : null,
+    result: current,
     runs: history.runs ?? [],
     error: failure?.runId === runId ? failure?.message : '',
     busy,
     reload() {
+      previews.retry();
       setBusy(true);
       setRefresh((value) => value + 1);
     },
   };
-}
-
-// The saved-state files of one segment, whose states it inspects and resumes.
-export function stateFiles(outputs: RunOutputs, runId: string) {
-  return grouped(outputs.result?.outputs ?? []).stateFiles.filter(
-    (item) => item.run_id === runId,
-  );
 }
 
 export type RunOutputs = ReturnType<typeof useRunOutputs>;
@@ -320,7 +266,7 @@ export function RunWarnings({ outputs }: { outputs: RunOutputs }) {
   const { result } = outputs;
   if (!result) return null;
   const problems = settledStates.includes(result.status)
-    ? grouped(result.outputs).samples.filter((item) => item.error)
+    ? result.outputs.filter((item) => item.error)
     : [];
   return (
     <>
@@ -339,10 +285,9 @@ export function RunWarnings({ outputs }: { outputs: RunOutputs }) {
 }
 
 function Chooser({ item, outputs }: { item: Output; outputs: RunOutputs }) {
-  const kind = item.kind === 'checkpoint' ? 'checkpoint' : 'sample';
   return (
     <button
-      aria-pressed={item.id === outputs.selected[kind]}
+      aria-pressed={item.id === outputs.selected}
       onClick={() => outputs.select(item)}
     >
       {item.name} · {item.status}
@@ -350,9 +295,15 @@ function Chooser({ item, outputs }: { item: Output; outputs: RunOutputs }) {
   );
 }
 
-function OutputDetail({ output, label }: { output: Output; label: string }) {
+function OutputDetail({
+  output,
+  previews,
+}: {
+  output: Output;
+  previews: OutputPreviews;
+}) {
   return (
-    <div className="output-detail" aria-label={label}>
+    <div className="output-detail" aria-label="Selected sample">
       <p>
         <strong>{output.name}</strong>
       </p>
@@ -367,11 +318,11 @@ function OutputDetail({ output, label }: { output: Output; label: string }) {
         )}
       </p>
       {output.error && <p className="error">{output.error}</p>}
-      <MediaPreview output={output} />
+      <MediaPreview output={output} previews={previews} />
       {output.file_url &&
         !['missing', 'blocked', 'unreadable'].includes(output.status) && (
           <p>
-            {output.status === 'available' && output.kind !== 'checkpoint' && (
+            {previews.playable(output) && (
               <>
                 <a href={output.file_url} target="_blank" rel="noreferrer">
                   Open output in browser
@@ -402,81 +353,79 @@ function LoadError({ outputs }: { outputs: RunOutputs }) {
   ) : null;
 }
 
-// The Overview's view of a Run's files: its LoRA checkpoints, and the way to re-read them all.
-export function RunCheckpoints({ outputs }: { outputs: RunOutputs }) {
-  const { result } = outputs;
-  const { checkpoints, final } = grouped(result?.outputs ?? [], result?.latest);
-  const many = merged(result);
-  const output = checkpoints.find(
-    ({ item }) => item.id === outputs.selected.checkpoint,
-  )?.item;
+// A folder handoff lets the user collect multiple files together in Explorer.
+export function RunOutputActions({
+  directory,
+  outputs,
+  completed,
+  samplingDisabled,
+  openSamples,
+}: {
+  directory: string;
+  outputs: RunOutputs;
+  completed: boolean;
+  samplingDisabled: boolean;
+  openSamples: () => void;
+}) {
+  const [copy, setCopy] = useState<'idle' | 'copied' | 'manual'>('idle');
+  const { latest } = outputs;
+  async function copyFolder() {
+    try {
+      await navigator.clipboard.writeText(directory);
+      setCopy('copied');
+    } catch {
+      setCopy('manual');
+    }
+  }
   return (
-    <section className="panel" aria-label="Checkpoints">
-      <h2>Checkpoints</h2>
-      <p>
-        {many
-          ? `Checkpoints from all ${result?.segments?.length} segments of this training, by step.`
-          : 'Checkpoints from this Run.'}{' '}
-        Open the Samples tab for generated media.
-      </p>
-      <button disabled={outputs.busy} onClick={outputs.reload}>
-        Refresh outputs
-      </button>
-      <LoadError outputs={outputs} />
-      {result && (
-        <>
-          <p>
-            {result.job.name} · {result.job.family.toUpperCase()} · revision{' '}
-            {result.job.revision}
-          </p>
-          {result.outputs.length === 0 && (
-            <p>
-              No supported outputs found yet. They appear here when a training
-              or sample stage finishes.
-            </p>
-          )}
-          {checkpoints.length > 0 && (
-            <details className="output-checkpoints">
-              <summary>LoRA checkpoints ({checkpoints.length})</summary>
-              <table>
-                <thead>
-                  <tr>
-                    <th scope="col">Step</th>
-                    {many && <th scope="col">Segment</th>}
-                    <th scope="col">Size</th>
-                    <th scope="col">File</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {checkpoints.map(({ item, step }) => (
-                    <tr key={item.id}>
-                      <td>{checkpointLabel(item, step, final)}</td>
-                      {many && <td>{item.segment?.position}</td>}
-                      <td>{byteLabel(item)}</td>
-                      <td>
-                        <Chooser item={item} outputs={outputs} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </details>
-          )}
-          {output && (
-            <OutputDetail output={output} label="Selected checkpoint" />
-          )}
-          <p>{result.note}</p>
-        </>
+    <>
+      <div className="actions">
+        <button title={directory} onClick={() => void copyFolder()}>
+          Copy output folder
+        </button>
+        {latest && (
+          <button
+            onClick={() => {
+              outputs.selectLatest();
+              openSamples();
+            }}
+          >
+            View sample
+          </button>
+        )}
+        {copy === 'copied' && (
+          <span role="status">
+            Folder path copied. Open its checkpoints subfolder in File Explorer.
+          </span>
+        )}
+      </div>
+      {copy === 'manual' && (
+        <label className="field">
+          Copy this folder path for File Explorer
+          <input
+            readOnly
+            value={directory}
+            onFocus={(event) => event.target.select()}
+          />
+        </label>
       )}
-    </section>
+      {completed && outputs.result && !latest && (
+        <p>
+          {samplingDisabled
+            ? 'Sampling was disabled for this Run.'
+            : 'No playable sample is available.'}
+        </p>
+      )}
+      <LoadError outputs={outputs} />
+    </>
   );
 }
 
 // The Samples tab: generated media and nothing else.
 export function RunSamples({ outputs }: { outputs: RunOutputs }) {
   const { result } = outputs;
-  const { samples } = grouped(result?.outputs ?? []);
-  const output = samples.find((item) => item.id === outputs.selected.sample);
+  const samples = mediaFiles(result?.outputs ?? []);
+  const output = samples.find((item) => item.id === outputs.selected);
   return (
     <section className="panel" aria-label="Samples">
       <h2>Samples</h2>
@@ -505,7 +454,13 @@ export function RunSamples({ outputs }: { outputs: RunOutputs }) {
           ))}
         </div>
       )}
-      {output && <OutputDetail output={output} label="Selected sample" />}
+      {output && (
+        <OutputDetail
+          key={output.id}
+          output={output}
+          previews={outputs.previews}
+        />
+      )}
     </section>
   );
 }
@@ -678,52 +633,21 @@ export function RunComparison({
   );
 }
 
-// The Job page's glance at its current training: the newest available sample and LoRA
-// checkpoint, from the training's merged list in step order. Run details lists them all.
+// The latest playable sample across this Job's training segments.
 export function LatestOutputs({ outputs }: { outputs: RunOutputs }) {
-  const { result } = outputs;
-  const { samples, checkpoints } = grouped(
-    result?.outputs ?? [],
-    result?.latest,
-  );
-  const sample = samples.filter((item) => item.status === 'available').at(-1);
-  const checkpoint = checkpoints
-    .filter(
-      ({ item }) =>
-        item.status === 'available' &&
-        !/-(low|high)-(phase\d+|source)/.test(item.name),
-    )
-    .at(-1)?.item;
-  const step = (item: Output) =>
-    item.step === undefined ? '' : ` · step ${item.step}`;
+  const sample = outputs.previews.latest(outputs.result?.outputs ?? []);
   return (
     <div role="group" aria-label="Latest outputs" className="latest-outputs">
       <LoadError outputs={outputs} />
-      {result && !sample && !checkpoint && (
-        <p>No previews or checkpoints yet.</p>
-      )}
+      {outputs.result && !sample && <p>No previews yet.</p>}
       {sample && (
         <figure>
-          <MediaPreview output={sample} />
+          <MediaPreview output={sample} previews={outputs.previews} />
           <figcaption>
             Latest preview: {sample.name}
-            {step(sample)}
+            {sample.step === undefined ? '' : ` · step ${sample.step}`}
           </figcaption>
         </figure>
-      )}
-      {checkpoint && (
-        <p>
-          Latest checkpoint: {checkpoint.name}
-          {step(checkpoint)} · {byteLabel(checkpoint)}
-          {checkpoint.file_url && (
-            <>
-              {' · '}
-              <a href={`${checkpoint.file_url}?download=true`} download>
-                Download checkpoint
-              </a>
-            </>
-          )}
-        </p>
       )}
     </div>
   );

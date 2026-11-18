@@ -23,7 +23,7 @@ test('Wan and H3 prepare and train through the GUI with frozen captions cache re
         .getByRole('button', { name: 'Review configuration', exact: true })
         .click();
       await page
-        .getByRole('button', { name: 'Prepare run', exact: true })
+        .getByRole('button', { name: 'Prepare only', exact: true })
         .click();
       await expect(
         page.getByText('State: Ready to start', { exact: true }),
@@ -48,7 +48,7 @@ test('Wan and H3 prepare and train through the GUI with frozen captions cache re
         .getByRole('button', { name: 'Review configuration', exact: true })
         .click();
       await page
-        .getByRole('button', { name: 'Prepare run', exact: true })
+        .getByRole('button', { name: 'Prepare only', exact: true })
         .click();
       // The Job page's Current training shows the first Run until Run details opens.
       await expect(page).toHaveURL(/#\/runs\//);
@@ -174,7 +174,7 @@ test('low disk space warns in review and preparation still goes ahead', async ({
     await expect(review.getByText(/^Low disk space on /)).toContainText(volume);
 
     await page
-      .getByRole('button', { name: 'Prepare run', exact: true })
+      .getByRole('button', { name: 'Prepare only', exact: true })
       .click();
     await expect(
       page.getByText('State: Ready to start', { exact: true }),

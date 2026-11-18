@@ -162,7 +162,7 @@ test('dataset resolutions survive saving and preparation while sample geometry s
     ).toContainText('256 × 320');
     await expect(review).toContainText('Sample output: 256 × 256');
     await page
-      .getByRole('button', { name: 'Prepare run', exact: true })
+      .getByRole('button', { name: 'Prepare only', exact: true })
       .click();
     await expect
       .poll(

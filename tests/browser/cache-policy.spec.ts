@@ -7,6 +7,7 @@ test('cache policies persist from the job form and review explains preparation',
 }) => {
   const app = await runWorkspace();
   try {
+    await page.setViewportSize({ width: 1280, height: 720 });
     const fixtureJob = app.manifest.jobs.find((job) => job.family === 'wan')!;
     await page.goto(`${app.url}/#/jobs/${fixtureJob.id}`);
     const latent = page.getByRole('combobox', {
@@ -38,14 +39,23 @@ test('cache policies persist from the job form and review explains preparation',
     await page
       .getByRole('button', { name: 'Review configuration', exact: true })
       .click();
+    const warnings = page.getByRole('list', { name: 'Review warnings' });
+    await expect(warnings).toBeInViewport();
+    await expect(
+      page.getByRole('region', { name: 'Cache preparation policy' }),
+    ).toBeHidden();
+    await page.getByText('Configuration details', { exact: true }).click();
     const review = page.getByRole('region', {
       name: 'Cache preparation policy',
     });
     await expect(review).toContainText('Latents: Reuse compatible cache');
     await expect(review).toContainText('Text embeddings: Rebuild cache');
-    await expect(review).toContainText(
-      'Preparation verifies compatible artifacts',
+    await review.getByRole('button', { name: 'Cache reuse' }).click();
+    const help = page.getByRole('dialog', { name: 'Help' });
+    await expect(help).toContainText(
+      'Missing or incompatible items are rebuilt',
     );
+    await help.getByRole('button', { name: 'Close help' }).click();
     const prepared = (await app.post('/api/runs/prepare', {
       job_id: fixtureJob.id,
       reviewed_revision: saved.revision,

@@ -124,7 +124,7 @@ test('compact saved and imported jobs retain every advanced value and reveal hid
     await page.getByLabel('LoRA rank', { exact: true }).fill('16');
     await page.getByRole('tab', { name: 'Samples', exact: true }).click();
     await page.getByLabel('Seed', { exact: true }).fill('123');
-    await page.getByRole('tab', { name: 'Memory', exact: true }).click();
+    await page.getByRole('tab', { name: 'Advanced', exact: true }).click();
     await page.getByRole('spinbutton', { name: /^Blocks to swap/ }).fill('12');
 
     await page.getByRole('button', { name: 'Save draft', exact: true }).click();
@@ -145,7 +145,7 @@ test('compact saved and imported jobs retain every advanced value and reveal hid
     );
     await page.getByRole('tab', { name: 'Samples', exact: true }).click();
     await expect(page.getByLabel('Seed', { exact: true })).toHaveValue('123');
-    await page.getByRole('tab', { name: 'Memory', exact: true }).click();
+    await page.getByRole('tab', { name: 'Advanced', exact: true }).click();
     await expect(
       page.getByRole('spinbutton', { name: /^Blocks to swap/ }),
     ).toHaveValue('12');

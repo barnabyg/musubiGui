@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { helper, python } from './backend';
-import { exists, runPanelLabelled, runWorkspace } from './runHarness';
+import { exists, runWorkspace } from './runHarness';
 
 test('deleting a Run and its Job goes from the UI to the disk and survives a backend restart', async ({
   page,
@@ -50,7 +50,7 @@ test('deleting a Run and its Job goes from the UI to the disk and survives a bac
     await expect(question).toContainText(run.id.slice(0, 8));
     await expect(question).toContainText(/This frees \d+ (KB|MB|GB)/);
     await expect(question).toContainText("can't be undone");
-    await expect(question).toContainText('download any LoRA');
+    await expect(question).toContainText('copy any LoRA');
     await question.getByRole('button', { name: 'Delete run' }).click();
     await expect(page.getByLabel('Unfinished delete')).toContainText(
       'inputs.json',
@@ -62,7 +62,9 @@ test('deleting a Run and its Job goes from the UI to the disk and survives a bac
     await expect(
       page.getByText('State: Deleting', { exact: true }),
     ).toBeVisible();
-    await expect(runPanelLabelled(page, 'checkpoints')).toHaveCount(0);
+    await expect(
+      page.getByRole('button', { name: 'Copy output folder' }),
+    ).toHaveCount(0);
 
     // It is still there, and still deletable, after a restart.
     const closed = new Promise((resolve) => lock.once('exit', resolve));
@@ -219,7 +221,7 @@ test('a queued Run refuses delete and archive; archiving hides a job, keeps its 
       .getByRole('button', { name: 'Review configuration', exact: true })
       .click();
     await page
-      .getByRole('button', { name: 'Prepare run', exact: true })
+      .getByRole('button', { name: 'Prepare only', exact: true })
       .click();
     await expect
       .poll(async () => (await app.records())[0]?.status, { timeout: 240_000 })

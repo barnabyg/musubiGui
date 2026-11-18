@@ -1,3 +1,4 @@
+import { HelpLink } from './Help';
 import { useEffect, useState } from 'react';
 import type { CompletionEstimate, Progress, Run } from './runTypes';
 
@@ -55,7 +56,7 @@ export function RunCompletion({
         </p>
       )}
       <small>
-        Based on measured step and sampling wall time.{' '}
+        <HelpLink topic="Time estimates" />{' '}
         {estimate?.unknown_components.length
           ? `Unestimated or assumed: ${estimate.unknown_components.join('; ')}.`
           : 'Timings vary between executions.'}
@@ -176,9 +177,17 @@ export function TrainingProgress({
         value={progress.step}
       />
       <p>
-        Training elapsed {elapsed} ·{' '}
-        {progress.eta_scope === 'phase' ? 'Phase ETA' : 'Training ETA'}{' '}
-        {progress.eta ?? 'unknown'} · Loss {progress.loss ?? 'unknown'}
+        Training elapsed {elapsed}
+        {run.status !== 'completed' && (
+          <>
+            {' '}
+            · {progress.eta_scope === 'phase'
+              ? 'Phase ETA'
+              : 'Training ETA'}{' '}
+            {progress.eta ?? 'unknown'}
+          </>
+        )}
+        {' · '}Loss {progress.loss ?? 'unknown'}
       </p>
       <p>
         Seconds per step:{' '}
@@ -186,14 +195,17 @@ export function TrainingProgress({
           ? 'unknown'
           : `${progress.seconds_per_step.toFixed(2)} s/step (trainer reported)`}
       </p>
-      <p>
-        Estimated training remaining to max steps:{' '}
-        {remainingDuration(progress.estimated_remaining_seconds)}
-      </p>
-      <small>
-        Assumes the current observed step speed for all remaining steps.
-        Excludes future model loading, previews and final sampling.
-      </small>
+      {run.status !== 'completed' && (
+        <>
+          <p>
+            Estimated training remaining to max steps:{' '}
+            {remainingDuration(progress.estimated_remaining_seconds)}
+          </p>
+          <small>
+            <HelpLink topic="Time estimates" />
+          </small>
+        </>
+      )}
     </div>
   );
 }

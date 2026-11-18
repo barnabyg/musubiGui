@@ -1,8 +1,8 @@
 import { expect, test } from '@playwright/test';
 import type { Job } from '../../frontend/jobTypes';
-import { checkpointDownload, runWorkspace } from './runHarness';
+import { runWorkspace } from './runHarness';
 
-test('job and Run links preserve identity, frozen revisions and downloads through history and archiving', async ({
+test('job and Run links preserve identity, frozen revisions and the output folder through history and archiving', async ({
   page,
 }) => {
   const app = await runWorkspace();
@@ -90,14 +90,11 @@ test('job and Run links preserve identity, frozen revisions and downloads throug
     await expect(
       origin.getByRole('link', { name: /Open current job/ }),
     ).toContainText('WAN acceptance revised · WAN · r2');
-    // A reload resets the checkpoint table, so each check opens it and selects the LoRA again.
-    const download = () =>
-      checkpointDownload(page, /-r1\.safetensors · available$/);
-    const downloadFile = page.waitForEvent('download');
-    await (await download()).click();
-    const file = await downloadFile;
-    expect(file.suggestedFilename()).toMatch(/\.safetensors$/);
-    expect(await file.failure()).toBeNull();
+    const folder = page.getByRole('button', { name: 'Copy output folder' });
+    const record = (await app.records()).find(
+      (record) => record.id === firstRun.id,
+    )!;
+    await expect(folder).toHaveAttribute('title', record.directory);
 
     await app.post(`/api/jobs/${first.id}/archive`);
     await page.reload();
@@ -116,7 +113,7 @@ test('job and Run links preserve identity, frozen revisions and downloads throug
       }),
     ).toBeVisible();
     await page.goBack();
-    await expect(await download()).toBeVisible();
+    await expect(folder).toHaveAttribute('title', record.directory);
 
     // Older or externally changed state can leave a Run without an available job.
     // Exercise these HTTP boundary failures without deleting the job's saved history.
@@ -127,9 +124,7 @@ test('job and Run links preserve identity, frozen revisions and downloads throug
     await page.reload();
     await expect(origin).toContainText('This job is no longer available.');
     await expect(origin).toContainText(`${first.name} · WAN · r1`);
-    const unavailableDownload = page.waitForEvent('download');
-    await (await download()).click();
-    expect(await (await unavailableDownload).failure()).toBeNull();
+    await expect(folder).toHaveAttribute('title', record.directory);
 
     await page.unroute('**/api/jobs');
     await page.unroute('**/api/jobs/archived');
@@ -141,7 +136,7 @@ test('job and Run links preserve identity, frozen revisions and downloads throug
     );
     await page.reload();
     await expect(origin).toContainText('Job storage temporarily unavailable.');
-    await expect(await download()).toBeVisible();
+    await expect(folder).toHaveAttribute('title', record.directory);
     await page.unroute('**/api/jobs/archived');
     await origin.getByRole('button', { name: 'Retry job lookup' }).click();
     await expect(origin).toContainText('Archived job');

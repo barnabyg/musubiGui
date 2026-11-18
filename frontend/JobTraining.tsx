@@ -38,9 +38,9 @@ export function ResumeBanner({
           : `Its last state was saved at step ${resume.saved_step}${segment ? `, in an earlier segment (Run ${resume.run_id.slice(0, 8)})` : ''}.`}
       </p>
       <p>
-        Prepare and start resumes from that save with this Job’s reviewed
-        revision, after any edits to the sample prompt, steps and other fields a
-        resumed training can take. Fields marked “needs a new Run” start a fresh
+        Resume continues from that save with this Job’s reviewed revision, after
+        any edits to the sample prompt, steps and other fields a resumed
+        training can take. Fields marked “needs a new Run” start a fresh
         training instead, after you confirm.
       </p>
     </div>

@@ -6,11 +6,11 @@
 
 Run details has two tabs: **Samples**, for generated media and periodic previews, and
 **Overview**, for everything else: state, progress, actions, saved state, caching,
-checkpoints, comparison with another Run, inputs and logs.
+output folder, comparison with another Run, inputs and logs.
 `tests/browser/run-details-layout.spec.ts` pins the panels on each tab. Use the tabs or
 arrow keys to switch views. Switching views keeps the selected sample and its player
 mounted, so returning preserves playback. New previews do not replace a selected sample.
-Take a LoRA from the Checkpoints panel or straight from the Run's output folder.
+Choose **Copy output folder**, paste the path into File Explorer and collect the files you need from its `checkpoints` subfolder.
 
 ## Trainings resumed in segments
 
@@ -26,8 +26,8 @@ not changed, so Runs saved before this version group the same way.
   latest segment's **Train until step** total, and each segment's step range, status and Job
   revision. Live progress and the remaining-time estimate of the training segment already
   count global steps, so they cover what is left of the whole training.
-- **Samples** and **Checkpoints** list every segment's files together in global step order,
-  each marked with its segment. Saved states stay per segment, since you inspect and resume
+- **Samples** lists every segment's previews together in global step order,
+  each marked with its segment. Checkpoints and saved states stay per segment, since you inspect and resume
   them from the segment that saved them.
 - **Compare** treats the training as one side; see [outputs](outputs.md).
 
@@ -73,10 +73,9 @@ Alternating Wan adds the expert and its cumulative completed optimizer updates:
 `My-Job-r2-low-step00000100.safetensors` and
 `My-Job-r2-high-step00000100.safetensors` each contain 100 updates for that expert.
 Interval saves and restored segments use the same count, including updates made before
-restoration. Saved-state folders use the matching stem with `-state`. Download names
-retain the expert and step (without zero padding). Existing Runs keep their frozen names,
+restoration. Saved-state folders use the matching stem with `-state`. Existing Runs keep their frozen names,
 including older `phase00000000` identifiers that record the phase's schedule start;
-they remain downloadable and restorable. Newly prepared Runs and restored segments use
+they remain available in their recorded folder. Newly prepared Runs and restored segments use
 completed expert steps.
 
 To check Wan checkpoint naming, run this command from `C:/docs/git/musubiGui` in PowerShell 7:
@@ -89,8 +88,7 @@ This isolated CPU fixture needs Windows, Node.js/npm, uv and Edge; no GPU or mod
 Open **WAN acceptance 1**, set Training steps to 4, steps per expert before switching
 to 2, and Save every N steps to 1. Save, review, then **Prepare and start**. In the
 Run's output folder, expect each expert's checkpoints and state folders at steps 1,
-2, 3 and 4; the paired downloads should end in `-low-step4.safetensors` and
-`-high-step4.safetensors`. Inspect saved states and restore the pair at step 2 with
+2, 3 and 4. Inspect saved states and restore the pair at step 2 with
 **Train until step** 4: the new segment's final files should both end in `-step00000004`.
 GPU training quality is outside this naming check.
 
@@ -98,10 +96,9 @@ To check folder naming, from the repository root run
 `.\acceptance.cmd --workspace ".cache/folder-check-$([guid]::NewGuid().ToString('N'))"`.
 Prepare a fixture Job and inspect the Output path on its Run. It should contain
 the Job name and timestamp, without a random suffix. The fixture needs no models
-or GPU; preparation creates synthetic training inputs. Start training, download the final
-LoRA from Checkpoints and inspect the Run's `checkpoints` folder. Checkpoint files and state folders should
+or GPU; preparation creates synthetic training inputs. Start training, copy the output folder path and inspect its `checkpoints` folder. Checkpoint files and state folders should
 use the frozen Job name and revision, with no random job ID. Rename the Job and confirm
-the original Run still downloads and offers its saved states.
+the original Run still offers the same folder and its saved states.
 
 ## Links and browser history
 
@@ -115,7 +112,7 @@ the frozen job name, model and revision alongside a separate link to the current
 draft. The current draft can have a different name or a later revision; opening it does
 not change the Run or start work. Archived jobs are identified and link to the Jobs list,
 where Archived jobs offers Restore. An unavailable job or a failed job lookup leaves the
-Run and its downloads accessible.
+Run and its folder accessible.
 
 To check this navigation manually, run the following from the repository root in PowerShell 7:
 
@@ -124,10 +121,10 @@ To check this navigation manually, run the following from the repository root in
 ```
 
 Complete WAN acceptance 1, then follow its Last Run link in Jobs using Tab and Enter.
-Its Checkpoints panel should list the final LoRA, and the Run should identify the frozen job revision. Follow the
+Its folder should contain the final LoRA, and the Run should identify the frozen job revision. Follow the
 current draft link, save a changed job name or step count, and use browser Back to return
 to the Run. The frozen revision should stay the same and the current draft link should
 show the new revision. Copy the Run address into another tab and verify the same details.
 Archive the job, reopen the Run, and verify that it explains where to restore the archived
-job while keeping its checkpoints downloadable. Repeat with WAN acceptance 2 to check that
+job while keeping the folder action available. Repeat with WAN acceptance 2 to check that
 similarly named jobs lead to their own Runs.

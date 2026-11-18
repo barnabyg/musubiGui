@@ -26,7 +26,9 @@ export async function setNotificationsWanted(wanted: boolean) {
   const granted =
     wanted &&
     'Notification' in window &&
-    (await Notification.requestPermission()) === 'granted';
+    (Notification.permission === 'granted' ||
+      (Notification.permission === 'default' &&
+        (await Notification.requestPermission()) === 'granted'));
   try {
     window.localStorage.setItem(NOTIFY_KEY, granted ? 'yes' : 'no');
   } catch {

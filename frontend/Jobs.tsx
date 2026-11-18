@@ -1,3 +1,4 @@
+import { HelpLink } from './Help';
 import { ArrowLeft } from 'lucide-react';
 import { JobSection, JobSectionContext } from './JobSection';
 import { JobActionBar } from './JobActionBar';
@@ -80,8 +81,7 @@ export function Jobs(props: JobsProps) {
       <section className="title">
         <h1>{job ? job.name : 'Jobs'}</h1>
         <p>
-          Set up a LoRA training job, review it, then prepare a Run. A Run keeps
-          the settings it was prepared with, so later edits don't change it.
+          <HelpLink topic="Frozen revisions" />
         </p>
         {!job && (
           <>
@@ -152,6 +152,8 @@ export function Jobs(props: JobsProps) {
         <JobActionBar
           actionBar={actionBar}
           status={status}
+          current={current}
+          openRun={(id) => onRun?.(id)}
           job={job}
           dirty={dirty}
           busy={busy}
@@ -186,6 +188,16 @@ export function Jobs(props: JobsProps) {
           deleteJob={deleteJob}
           setTransferOpen={setTransferOpen}
         />
+      )}
+      {job && review && (
+        <JobSectionContext value={section}>
+          <JobReview
+            prepareReason={prepareReason}
+            job={job}
+            review={review}
+            reviewField={fields.reviewField}
+          />
+        </JobSectionContext>
       )}
       {job && <JobTraining key={job.id} current={current} />}
       {transferOpen && (
@@ -262,14 +274,6 @@ export function Jobs(props: JobsProps) {
                 preparing a Run.
               </p>
             </JobSection>
-          )}
-          {review && (
-            <JobReview
-              prepareReason={prepareReason}
-              job={job}
-              review={review}
-              reviewField={fields.reviewField}
-            />
           )}
         </JobSectionContext>
       )}

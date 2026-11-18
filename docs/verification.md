@@ -184,3 +184,18 @@ From the repository root in PowerShell 7, run:
    training to complete without the ConvRot transient-dequantization fallback warning.
 
 Training quality and speed require separate GPU measurements.
+
+### Settings next step
+
+With the prerequisites above, run this command from the repository root in PowerShell 7:
+
+```powershell
+.\acceptance.cmd --workspace ".cache/setup-next-$([guid]::NewGuid())"
+```
+
+Open Settings at 1280 by 720. **Check setup now** should be in the first view. Expand
+**Completed steps**, edit a storage path, and check that installation stays complete
+while Settings offers to save the edit. Save and run diagnostics. Open **Installation
+details** to inspect paths and revisions. Under **Start a Run**, choose a fixture job.
+Preparing it creates a Run. Return to Settings and choose that prepared Run to open its
+start control. It should remain prepared until you start it.

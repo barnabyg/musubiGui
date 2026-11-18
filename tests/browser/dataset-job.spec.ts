@@ -64,12 +64,27 @@ test('empty and missing dataset folders explain why a job cannot start', async (
     await expect(
       page.getByRole('button', { name: 'Create Wan job', exact: true }),
     ).toBeDisabled();
-    const wan = app.manifest.jobs.find((job) => job.family === 'wan')!;
     await rename(
       path.join(app.fixture, 'datasets/wan'),
       path.join(app.fixture, 'datasets/wan-moved'),
     );
-    await page.goto(`${app.url}/#/datasets/${wan.dataset_id}`);
+    await page.getByRole('button', { name: 'Back to datasets' }).click();
+    const missing = page.getByRole('article').filter({
+      has: page.getByRole('button', { name: 'WAN acceptance', exact: true }),
+    });
+    await expect(missing).toContainText('Folder missing');
+    await expect(missing.getByText(/missing caption/i)).toHaveCount(0);
+    const pending = page.getByRole('article').filter({
+      has: page.getByRole('button', {
+        name: 'Mixed media and invalid item',
+        exact: true,
+      }),
+    });
+    await expect(pending).toContainText('Scan in progress');
+    await expect(pending.getByText(/No included media/)).toHaveCount(0);
+    await missing
+      .getByRole('button', { name: 'WAN acceptance', exact: true })
+      .click();
     await expect(
       page.getByRole('heading', { name: 'WAN acceptance', exact: true }),
     ).toBeVisible();
@@ -153,7 +168,9 @@ test('a dataset hands saved captions to one independent Wan draft and keeps orde
     await page
       .getByLabel('Caption for motion.mp4', { exact: true })
       .fill('Caption saved before starting a new job.');
-    const handoff = page.getByText('Create training job', { exact: true });
+    const handoff = page
+      .getByRole('group', { name: 'Dataset actions' })
+      .getByText('Create training job', { exact: true });
     await expect(handoff).toBeVisible();
     await handoff.focus();
     await page.keyboard.press('Enter');

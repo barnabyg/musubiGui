@@ -37,7 +37,7 @@ test('backend interruption retains GPU ownership and offers explicit recovery wi
       .getByRole('button', { name: 'Review configuration', exact: true })
       .click();
     await page
-      .getByRole('button', { name: 'Prepare run', exact: true })
+      .getByRole('button', { name: 'Prepare only', exact: true })
       .click();
     await expect(
       page.getByText('State: Ready to start', { exact: true }),
@@ -290,7 +290,7 @@ test('a gracefully stopped revision can be prepared and started again', async ({
         .getByRole('button', { name: 'Review configuration', exact: true })
         .click();
       await page
-        .getByRole('button', { name: 'Prepare run', exact: true })
+        .getByRole('button', { name: 'Prepare only', exact: true })
         .click();
     };
     await page.goto(app.url);

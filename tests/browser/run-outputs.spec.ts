@@ -1,10 +1,8 @@
 import { test, expect } from '@playwright/test';
 import {
-  checkpointDownload,
-  finalCheckpointButton,
-  openCheckpointPanel,
   openRunTab,
   preparedRun,
+  PNG,
   runPanel,
   runSummary,
   runTab,
@@ -26,9 +24,9 @@ test('outputs appear when a Run completes and a playing preview survives a refre
     await expect(
       page.getByText('State: Ready to start', { exact: true }),
     ).toBeVisible({ timeout: 240_000 });
-    await expect(
-      page.getByText(/^No supported outputs found yet/),
-    ).toBeVisible();
+    await expect(page.getByRole('button', { name: 'View sample' })).toHaveCount(
+      0,
+    );
     await page
       .getByRole('button', { name: 'Start training', exact: true })
       .click();
@@ -38,9 +36,6 @@ test('outputs appear when a Run completes and a playing preview survives a refre
     });
     await openRunTab(page, 'samples');
     await expect(sample).toBeVisible({ timeout: 240_000 });
-    await expect(page.getByText(/^No supported outputs found yet/)).toHaveCount(
-      0,
-    );
     await sample.click();
     const video = page.getByLabel('Output video', { exact: true });
     await video.evaluate(async (element) => {
@@ -73,12 +68,12 @@ test('outputs appear when a Run completes and a playing preview survives a refre
   }
 });
 
-test('a finished Run lists its final LoRA with its checkpoints and samples in a separate tab', async ({
+test('a finished Run offers its folder and latest sample in the initial viewport', async ({
   page,
 }) => {
   const app = await runWorkspace();
   try {
-    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.setViewportSize({ width: 1280, height: 720 });
     const job = app.manifest.jobs.find((item) => item.family === 'wan')!;
     await app.post('/api/runs/prepare', { job_id: job.id });
     await expect
@@ -98,25 +93,30 @@ test('a finished Run lists its final LoRA with its checkpoints and samples in a 
       0,
     );
 
-    const files = runPanel(page, 'checkpoints');
-    const checkpoints = files.locator('.output-checkpoints');
-    await expect(checkpoints.locator('table')).toBeHidden();
-    await checkpoints.locator('summary').click();
-    await expect(checkpoints.locator('tbody tr').last()).toContainText('Final');
-    await expect(checkpoints).toContainText(/\d+ (KB|MB|GB)/);
-    // Optimizer state weights are not offered as LoRA outputs.
-    await expect(checkpoints).not.toContainText('model.safetensors');
-    await expect(files).not.toContainText('-state/');
+    const folder = page.getByRole('button', { name: 'Copy output folder' });
+    const sample = page.getByRole('button', {
+      name: 'View sample',
+      exact: true,
+    });
+    await expect(folder).toBeInViewport();
+    await expect(sample).toBeInViewport();
+    await expect(runSummary(page).getByLabel('Run elapsed')).toBeInViewport();
+    await expect(runSummary(page)).not.toContainText(
+      /ETA|remaining to max steps/,
+    );
+    await expect(page.getByText(/^LoRA checkpoints/)).toHaveCount(0);
     const states = runPanel(page, 'resume');
     await expect(states).toHaveCount(1);
-    await states.getByText(/^Optimizer state files/).click();
-    await expect(states.locator('.state-files')).toContainText(
-      'model.safetensors',
+    expect(await states.getByText(/^Optimizer state files/).count()).toBe(0);
+    await states.getByRole('button', { name: 'Inspect saved states' }).click();
+    await expect(
+      states.getByRole('button', { name: 'Restore as new segment' }).first(),
+    ).toBeVisible();
+    await expect(states.getByRole('link', { includeHidden: true })).toHaveCount(
+      0,
     );
-    await openRunTab(page, 'samples');
-    await page
-      .getByRole('button', { name: 'sample.mp4 · available', exact: true })
-      .click();
+    await openRunTab(page, 'overview');
+    await sample.click();
     const video = page.getByLabel('Output video', { exact: true });
     await expect(video).toBeVisible();
     await video.evaluate((element) =>
@@ -159,7 +159,7 @@ function outputList(
   };
 }
 
-test('a damaged final LoRA is called out in the checkpoints', async ({
+test('a damaged final LoRA is called out in the Run summary', async ({
   page,
 }) => {
   const app = await runWorkspace();
@@ -180,12 +180,12 @@ test('a damaged final LoRA is called out in the checkpoints', async ({
       }),
     );
     await page.goto(`${app.url}/#/runs/${run.id}`);
-    const final = await finalCheckpointButton(page);
-    await expect(final).toHaveText('wan.safetensors · incomplete');
-    await final.click();
+    await expect(runSummary(page)).toContainText(
+      'wan.safetensors: Output is empty.',
+    );
     await expect(
-      page.getByLabel('Selected checkpoint', { exact: true }),
-    ).toContainText('Output is empty.');
+      page.getByRole('button', { name: /wan\.safetensors/ }),
+    ).toHaveCount(0);
   } finally {
     await app.close();
   }
@@ -228,13 +228,92 @@ test('a partial Run shows the outputs it has, with their problems', async ({
     await page.goto(`${app.url}/#/runs/${run.id}`);
     const summary = runSummary(page);
     await expect(summary).toContainText('sample.mp4: Sample has no audio.');
-    const checkpoints = await openCheckpointPanel(page);
-    await expect(checkpoints.locator('tbody tr')).toHaveText([
-      /^2.*wan-step00000002\.safetensors · available$/,
-      /^10.*wan-step00000010\.safetensors · available$/,
+    await expect(
+      page.getByRole('button', { name: 'Copy output folder' }),
+    ).toBeVisible();
+  } finally {
+    await app.close();
+  }
+});
+
+test('View sample skips unsupported formats and handles browser decoding failures', async ({
+  page,
+}) => {
+  const app = await runWorkspace();
+  try {
+    const { run } = await preparedRun(app);
+    await page.route('**/api/runs/*/outputs', (route) =>
+      route.fulfill({
+        json: outputList(run, 'completed', [
+          {
+            id: 'tiff',
+            path: 'samples/newest.tiff',
+            name: 'newest.tiff',
+            kind: 'image',
+            status: 'available',
+            modified_ms: 30,
+          },
+          {
+            id: 'video',
+            path: 'samples/preview.mp4',
+            name: 'preview.mp4',
+            kind: 'video',
+            status: 'available',
+            modified_ms: 20,
+            file_url: '/broken-preview.mp4',
+          },
+          {
+            id: 'other-segment',
+            run_id: 'previous-segment',
+            path: 'samples/earlier-segment.png',
+            name: 'earlier-segment.png',
+            kind: 'image',
+            status: 'available',
+            modified_ms: 15,
+            file_url: '/still.png',
+          },
+          {
+            id: 'png',
+            path: 'samples/still.png',
+            name: 'still.png',
+            kind: 'image',
+            status: 'available',
+            modified_ms: 1,
+            file_url: '/still.png',
+          },
+        ]),
+      }),
+    );
+    // The backend decoded this sample, but the client's media pipeline cannot.
+    await page.route('**/broken-preview.mp4', (route) =>
+      route.fulfill({ contentType: 'video/mp4', body: 'invalid media' }),
+    );
+    await page.route('**/still.png', (route) =>
+      route.fulfill({ contentType: 'image/png', body: PNG }),
+    );
+    await page.goto(`${app.url}/#/runs/${run.id}`);
+    const view = page.getByRole('button', { name: 'View sample' });
+    await Promise.all([
+      page.waitForRequest('**/broken-preview.mp4'),
+      view.click(),
     ]);
-    const download = await checkpointDownload(page, /step00000010/);
-    await expect(download).toHaveAttribute('href', '/nowhere?download=true');
+    const selected = page.getByLabel('Selected sample', { exact: true });
+    await expect(
+      selected.getByRole('img', { name: 'Sample still.png' }),
+    ).toBeVisible();
+    await page.getByRole('button', { name: 'preview.mp4 · available' }).click();
+    await expect(selected).toContainText('preview.mp4');
+    await expect(selected).toContainText(
+      'This browser cannot preview this sample.',
+    );
+    await page.getByRole('button', { name: 'newest.tiff · available' }).click();
+    await expect(selected).toContainText(
+      'This browser cannot preview this sample.',
+    );
+    await expect(selected.getByRole('img')).toHaveCount(0);
+    await expect(
+      selected.getByRole('link', { name: 'Download output' }),
+    ).toBeVisible();
   } finally {
     await app.close();
   }

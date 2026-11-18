@@ -16,7 +16,7 @@ test('the job form uses short fields for short values and shares rows between re
         .getByRole('tab', {
           name:
             label === 'Blocks to swap'
-              ? 'Memory'
+              ? 'Advanced'
               : label === 'Training steps'
                 ? 'Training'
                 : 'Dataset preparation',
@@ -71,8 +71,7 @@ for (const family of ['wan', 'h3'] as const) {
         'Training',
         'Samples',
         'Dataset preparation',
-        'Memory',
-        'Checkpoints',
+        'Advanced',
         'Presets',
         'Review',
       ];
@@ -112,11 +111,11 @@ for (const family of ['wan', 'h3'] as const) {
       await page.keyboard.press('Tab');
       await expect(page.getByRole('tabpanel')).toBeFocused();
 
-      await go('Memory');
+      await go('Advanced');
       const blocks = page.getByRole('spinbutton', { name: /^Blocks to swap/ });
       await blocks.fill('12');
       await go('Training');
-      await go('Memory');
+      await go('Advanced');
       await expect(blocks).toHaveValue('12');
       await expect(page.getByRole('status')).toHaveText('Unsaved draft');
 

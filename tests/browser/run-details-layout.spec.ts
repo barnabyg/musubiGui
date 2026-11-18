@@ -72,9 +72,7 @@ test('Run details keeps a tight header, flat Overview panels and a samples-only 
       0,
     );
     const line = page.locator('.run-status-line');
-    await expect(line).toHaveText(
-      'GPU available · Closing the browser leaves training running.',
-    );
+    await expect(line).toHaveText('GPU available · Background training');
     await expect(line.getByRole('status')).toHaveText('GPU available');
 
     // Overview: summary first, Originating job last within it, then one panel per section.
@@ -88,7 +86,6 @@ test('Run details keeps a tight header, flat Overview panels and a samples-only 
       'Actions',
       'Resume from an earlier save',
       'Caching',
-      'Checkpoints',
       'Compare with another Run',
       'Inputs and output folder',
       'Stage logs',

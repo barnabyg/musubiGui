@@ -26,6 +26,15 @@ Registry access is required on first launch. Musubi setup is a separate action i
 The Wan reference can use the separately qualified [offline conversion](docs/reference/wan-conversion.md)
 of existing scaled-FP8 files; originals remain untouched and lost precision is not recovered.
 
+Settings shows the next outstanding step and groups completed steps under **Completed steps**.
+Use **Go to installation** to reach the installer, **Configure folders** to reach the first missing
+location, or **Check setup now** to run diagnostics. A failed check links to the relevant
+installation or storage control. **Start a Run** opens a prepared Run or a saved job and offers
+a choice when several are available. Prepared Runs stay available after later revisions finish or the
+job is archived. When there are no prepared Runs and every job is active or has completed its saved
+revision, the checklist links to those Runs or their results. Training begins only after you choose
+its start action.
+
 In Settings, click **Install supported version**. The app clones the official repository into
 `musubi-tuner/` inside this project, checks out the revision supported by this GUI, and uses
 `uv` to create its separate Python 3.12 `.venv`, install the qualified CUDA 13.0
@@ -60,6 +69,7 @@ saving drops blank lines and surrounding spaces. Save, then Run diagnostics: it 
 configured root that is not an existing folder, such as two paths joined on one line. The probe
 records the selected environment's Python, packages, CUDA/GPU, upstream revision, host RAM,
 disk space and write checks. It does not log raw subprocess output or environment variables.
+Help in the sidebar explains background training, frozen revisions, cache reuse, timing estimates and inherited model paths. Browser notifications can be enabled in Settings.
 Settings live in `.state/settings.json`; dataset/run metadata uses versioned SQLite
 and job revisions remain versioned JSON. Set `MUSUBI_GUI_STATE` to an absolute path for a
 different application state directory. Unknown persisted versions are preserved and blocked.

@@ -5,7 +5,7 @@ How to edit, save, review and manage a job. [Jobs](jobs.md) lists the other job 
 ## Compact job setup
 
 Jobs opens on **Job & dataset**. Separate tabs contain Training, Samples, Dataset preparation,
-Memory, Checkpoints, Presets and Review. Training holds the required choices, step count,
+Advanced, Presets and Review. Advanced groups Memory and Checkpoints. Training holds the required choices, step count,
 optimizer, timestep strategy and LoRA settings. Use Left/Right arrows to switch tabs,
 or Home/End to select the first/last tab. This follows the separate-panel behaviour of Runs tabs.
 Samples holds final-sample enablement, preview cadence, prompt, inference steps,
@@ -29,7 +29,7 @@ a link that focuses that field.
 Open the relevant tab to change its fields. Reopening a saved job or importing a configuration
 preserves every value. Review configuration opens the Review tab when its result arrives.
 Review error links select the owning tab and open any collapsed details before focusing the
-field. Generated configuration remains under Advanced in Configuration review.
+field. Review starts with blocking issues, warnings, selected datasets and sample output. Expand Configuration details for optimizer values, timestep settings, cache policy, per-clip calculations and generated configuration.
 
 To verify manually, run this from the repository root in PowerShell 7:
 
@@ -56,11 +56,12 @@ follow. The disk breakdown is collapsed, and Advanced holds the resolved compone
 paths, model provenance, native dataset TOML and each upstream argument array. Errors
 block preparation while the draft remains editable. Review configuration saves unsaved
 edits as a new revision first; if the save fails, the review stops and the edits stay on
-screen. Prepare run and Prepare and start use the revision that passed review. If another
+screen. Prepare only and Prepare and start use the revision that passed review. If another
 tab saves a newer revision, preparation reports the old and new revision numbers and stops.
 Choose Review configuration to load the saved changes and review them before preparing.
-Component overrides must stay inside the configured
-model roots. The original Wan recipe trains the low-noise expert. A separate
+Component overrides must stay inside the configured model roots. Clear an
+override to inherit that component from Settings again. The field shows the
+inherited path, and Review uses the current default. The original Wan recipe trains the low-noise expert. A separate
 [native-weight CLI acceptance scenario](reference/wan.md#native-weight-qualification)
 also passed high-noise-only training; that recipe is not exposed by the GUI.
 The [alternating recipe](jobs-training.md#alternating-wan-highlow-loras) trains both
@@ -90,7 +91,7 @@ before the saved step are reported too. The saved step comes from the Run's last
 saved states**; before that, review reports state folders without a step and skips that
 check. Review never hashes states; it hashes the datasets' media to compare their contents,
 as preparing does. Prepare and start resumes that Run when the revision can take it, and
-otherwise offers a fresh training; Prepare run always prepares a new Run. Run details offers
+otherwise offers a fresh training; Prepare only always prepares a new Run. Run details offers
 the same check as [Resume](runs-saved-state.md#resuming-with-an-edited-job-revision), which
 also lists the tiers.
 
@@ -186,7 +187,7 @@ Focused checks: `npm.cmd run typecheck` and
 `.venv\Scripts\python.exe -m pytest tests/python/test_jobs_api.py -q`. Browser checks
 cover the editor through the API and persistent storage. For manual review, save an
 incomplete draft, restart, change frame count to 18 and enable inactive-DiT offload.
-Review must explain both errors and disable Prepare run. Correct the fields, compare
+Review must explain both errors and disable Prepare only. Correct the fields, compare
 the reviewed TOML and arguments with the controls, and verify reopening retains them.
 Real preparation/training requires the compatible model files and environment described
 in [reference workflows](reference/README.md); fake acceptance fixtures do not prove
@@ -200,7 +201,7 @@ To check two-tab review in an isolated CPU fixture, run this from the repository
 
 Open WAN acceptance 1 in two tabs. Review in A, rename and save in B, then choose
 Prepare and start in A. Expect the revision-change message and an empty Run history.
-In A, choose Review configuration, confirm the new name, then choose Prepare run.
+In A, choose Review configuration, confirm the new name, then choose Prepare only.
 The Run in history shows the new name and the revision that passed review.
 
 Browser checks: `npm.cmd run test:browser -- tests/browser/job-` runs every

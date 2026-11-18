@@ -64,9 +64,7 @@ test('live progress steps through stages, reports steps and loss, and shows a fa
     await expect(step(1)).toHaveClass('completed');
     await expect(step(2)).toHaveClass('completed');
     await expect(progress).toContainText('Step 6/6');
-    await expect(progress).toContainText(
-      'Estimated training remaining to max steps: 0h 0m 0s',
-    );
+    await expect(progress).not.toContainText(/ETA|remaining to max steps/);
 
     // A failed stage is obvious without opening the log, which then opens by itself.
     await writeFile(path.join(app.fixture, 'checkout', 'fail-train'), '');
@@ -124,7 +122,7 @@ test('Prepare and start keeps going with the tab closed, and the tab title signa
     // Prepare alone stops at prepared, and says so in the title from any screen.
     await openJob(first.name);
     await page
-      .getByRole('button', { name: 'Prepare run', exact: true })
+      .getByRole('button', { name: 'Prepare only', exact: true })
       .click();
     await expect(page).toHaveTitle(`Ready: ${first.name} — Musubi`, {
       timeout: 240_000,

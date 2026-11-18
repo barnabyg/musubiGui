@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { finalCheckpointButton, runWorkspace } from './runHarness';
+import { runWorkspace } from './runHarness';
 import { observeRunTraffic } from './runTraffic';
 
 test('the traffic window excludes an initial log request whose response arrives late', async ({
@@ -287,7 +287,9 @@ test('finished Runs transfer summaries without repeating frozen inputs or termin
     await expect(
       page.getByText('State: Completed', { exact: true }),
     ).toBeVisible({ timeout: 240_000 });
-    await expect(await finalCheckpointButton(page)).toHaveText(/· available$/);
+    await expect(
+      page.getByRole('button', { name: 'Copy output folder' }),
+    ).toBeVisible();
     await expect(page).toHaveTitle(`Finished: ${job.name} — Musubi`);
   } finally {
     await app.close();
