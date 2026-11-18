@@ -29,6 +29,24 @@ given `-n`.
 
 Browser specs are named in kebab-case, `tests/browser/<feature-name>.spec.ts`.
 
+## Browser pre-push check
+
+For UI or application default changes, choose the specs that exercise each affected user workflow,
+including specs that assert the old default or UI behavior. Update those assertions when the
+change is intentional. Run formatting, lint, type checks, and the selected browser specs before
+pushing. For example, from the repository root for a Wan default or paired preview change:
+
+```powershell
+npm.cmd run verify -- prepush tests/browser/wan-pair.spec.ts tests/browser/previews.spec.ts
+```
+
+Pass one or more spec paths from `tests/browser/`. Verification in GitHub Actions covers the full
+suite on the pushed commit.
+
+In browser tests, wait for the observable state that the next action needs. For example, wait for
+**Draft saved** before reloading a draft, and for the final sample to appear in the
+output list before testing **View sample**. Run status and output availability update independently.
+
 ## What verify runs
 
 The canonical command checks Python/TypeScript formatting, lint, strict types, Bandit static

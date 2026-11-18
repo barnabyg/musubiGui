@@ -73,6 +73,10 @@ test('paired Wan previews show matching per-expert steps', async ({ page }) => {
         name: /^Step 12 preview · paired Wan · low 12 \/ high 12 trained steps.*available$/,
       }),
     ).toBeVisible();
+    // Run status and the sample list refresh independently.
+    await expect(
+      page.getByRole('button', { name: 'sample.mp4 · available', exact: true }),
+    ).toBeVisible();
     await openRunTab(page, 'overview');
     await page.getByRole('button', { name: 'View sample' }).click();
     await expect(

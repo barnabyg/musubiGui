@@ -100,6 +100,7 @@ test('alternating Wan settings persist, train both experts and restore the paire
     await page.getByRole('tab', { name: 'Training', exact: true }).click();
     await page.getByLabel('Training steps', { exact: true }).fill('8');
     await page.getByRole('button', { name: 'Save draft', exact: true }).click();
+    await expect(page.getByRole('status')).toContainText('Draft saved');
     await page.reload();
     await page.getByRole('tab', { name: 'Job & dataset', exact: true }).click();
     await expect(page.getByRole('combobox', { name: /^Recipe/ })).toHaveValue(
