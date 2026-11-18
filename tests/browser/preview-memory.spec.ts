@@ -24,6 +24,7 @@ test('generation memory is saved and frozen independently from training', async 
     const policy = page.getByLabel('Generation memory policy', { exact: true });
     await policy.selectOption('conservative');
     await page.getByRole('button', { name: 'Save draft', exact: true }).click();
+    await expect(page.getByRole('status')).toContainText('Draft saved');
     await page.reload();
     await page.getByRole('tab', { name: 'Samples', exact: true }).click();
     await expect(policy).toHaveValue('conservative');
