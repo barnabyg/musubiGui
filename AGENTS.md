@@ -17,3 +17,5 @@ Before exploring the codebase, read [`docs/agents/domain.md`](docs/agents/domain
 ## Verification
 
 The canonical check is `npm.cmd run verify`. Before checking a change, read `docs/verification.md`, which also gives the focused commands for one file or one test case.
+
+Before pushing a UI change or an application default change, follow the [browser pre-push check](docs/verification.md#browser-pre-push-check).

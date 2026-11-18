@@ -3,11 +3,13 @@
 With no arguments every check runs. CI runs the parts on separate runners at once:
 `static` for everything except the test suites, and `python` or `browser` for one suite,
 optionally split with `--shard INDEX/TOTAL`.
+`prepush` runs formatting, lint, type checks and the browser specs named on the command line.
 """
 
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess  # nosec B404
 import sys
@@ -23,15 +25,26 @@ def run(*args: str) -> None:
     env.pop("NO_COLOR", None)
     env["PIP_CACHE_DIR"] = str(Path(".cache/pip").resolve())
     env["UV_CACHE_DIR"] = str(Path(".cache/uv").resolve())
-    # B603: callers below supply fixed verification commands; review if external arguments are added.
+    # B603: fixed verification commands and validated arguments from parse_args().
     subprocess.run(args, check=True, env=env)  # nosec B603
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("part", nargs="?", choices=["static", "python", "browser"], help="run only this part")
+    parser.add_argument(
+        "part", nargs="?", choices=["static", "python", "browser", "prepush"], help="run only this part"
+    )
+    parser.add_argument("specs", nargs="*", metavar="SPEC", help="browser spec paths for prepush")
     parser.add_argument("--shard", metavar="INDEX/TOTAL", help="run one share of the python or browser suite")
     args = parser.parse_args()
+    if args.part == "prepush":
+        if not args.specs:
+            parser.error("prepush needs at least one browser spec path")
+        for spec in args.specs:
+            if not re.fullmatch(r"tests/browser/[a-z0-9]+(?:-[a-z0-9]+)*\.spec\.ts", spec) or not Path(spec).is_file():
+                parser.error(f"expected an existing tests/browser/<feature-name>.spec.ts path, got {spec!r}")
+    elif args.specs:
+        parser.error("spec paths need the prepush part")
     if args.shard and args.part not in ("python", "browser"):
         parser.error("--shard needs the python or browser part")
     if args.shard:
@@ -81,8 +94,10 @@ def main() -> None:
     if not npm:
         raise SystemExit("Node.js/npm is required.")
     shard = [f"--shard={args.shard}"] if args.shard else []
+    if args.part in (None, "static", "prepush"):
+        format_lint_and_typecheck(python, npm)
     if args.part in (None, "static"):
-        code_checks(python, npm)
+        run(python, "-m", "bandit", "-r", "musubi_gui", "tools", "-c", "pyproject.toml", "-q")
     if args.part in (None, "python"):
         # CI stops at the first failure; local runs report every failure. Hosted runners get fewer workers.
         # CI also keeps each test's hosted duration for balancing shards.
@@ -94,6 +109,8 @@ def main() -> None:
         # Builds the UI first through pretest:browser; packaging below ships that same bundle.
         test_list = ["--", f"--test-list={browser_shard_list(args.shard)}"] if args.shard else []
         run(npm, "run", "test:browser", *test_list)
+    if args.part == "prepush":
+        run(npm, "run", "test:browser", "--", *args.specs)
     if args.part == "static":
         # Without the browser suite, nothing else builds the UI that packaging ships.
         run(npm, "run", "build")
@@ -102,14 +119,13 @@ def main() -> None:
     print("\nVerification passed.")
 
 
-def code_checks(python: str, npm: str) -> None:
+def format_lint_and_typecheck(python: str, npm: str) -> None:
     run(python, "-m", "ruff", "format", "--check", "musubi_gui", "tools", "tests/python", "tests/browser")
     run(npm, "run", "format:check")
     run(python, "-m", "ruff", "check", "musubi_gui", "tools", "tests/python", "tests/browser")
     run(npm, "run", "lint")
     run(python, "-m", "mypy")
     run(npm, "run", "typecheck")
-    run(python, "-m", "bandit", "-r", "musubi_gui", "tools", "-c", "pyproject.toml", "-q")
 
 
 def dependency_and_package_checks(python: str, npm: str) -> None:
