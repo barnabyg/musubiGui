@@ -2,6 +2,7 @@ import json
 import shutil
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -97,6 +98,37 @@ def test_dirty_source_is_never_overwritten(checkout: tuple[ManagedCheckout, Path
     assert script.read_text(encoding="utf-8") == "# local edit"
     assert git(manager.checkout, "rev-parse", "HEAD") == revision
     assert manager.device.owner() is None
+
+
+def test_failed_update_only_offers_retry_after_cleanup(
+    checkout: tuple[ManagedCheckout, Path, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manager, _, _ = checkout
+    releasing = threading.Event()
+    finish = threading.Event()
+    release = manager.device.release
+
+    def delayed_release(run_id: str) -> None:
+        releasing.set()
+        assert finish.wait(60)
+        release(run_id)
+
+    def fail_install() -> None:
+        raise ValueError("Local source changes")
+
+    monkeypatch.setattr(manager.device, "release", delayed_release)
+    monkeypatch.setattr(manager, "install", fail_install)
+    manager.start()
+    try:
+        assert releasing.wait(60)
+        assert manager.status()["operation"]["state"] == "running"
+    finally:
+        finish.set()
+        wait(manager)
+    assert manager.status()["operation"]["message"] == "Local source changes"
+    monkeypatch.setattr(manager, "install", lambda: None)
+    manager.start()
+    assert wait(manager)["operation"]["state"] == "complete"
 
 
 def test_foreign_directory_and_origin_are_preserved(checkout: tuple[ManagedCheckout, Path, str]) -> None:

@@ -133,6 +133,10 @@ class ManagedCheckout:
                 operation = self.last_operation.copy()
         if operation.get("state") == "running" and identity_status(operation.get("controller", {})) == "dead":
             operation = {"state": "failed", "message": "Setup was interrupted. Retry setup to finish."}
+        # The worker records its outcome before releasing the device and checkout gate. Keep retry
+        # disabled until start() can acquire the local operation lock again.
+        if operation["state"] != "running" and self.lock.locked():
+            operation = {"state": "running", "message": "Finishing Musubi setup…"}
         revision = ""
         if (self.checkout / ".git").is_dir():
             try:
