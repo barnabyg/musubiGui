@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { runWorkspace } from './runHarness';
+import { openRunDiagnostics, runWorkspace } from './runHarness';
 
 test('training elapsed spans expert switches and survives reload independently of phase ETA', async ({
   page,
@@ -262,6 +262,7 @@ test('H3 diagnostics download contains measurements from the completed fixture r
     await expect(
       page.getByText('State: Completed', { exact: true }),
     ).toBeVisible({ timeout: 240_000 });
+    await openRunDiagnostics(page);
     const link = page.getByRole('link', {
       name: 'Download performance diagnostics',
     });
@@ -286,6 +287,7 @@ test('H3 diagnostics download contains measurements from the completed fixture r
       ),
     ).toBe(true);
     await page.reload();
+    await openRunDiagnostics(page);
     await expect(link).toBeVisible();
   } finally {
     await app.close();

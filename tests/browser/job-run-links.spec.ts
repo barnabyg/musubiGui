@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import type { Job } from '../../frontend/jobTypes';
-import { runWorkspace } from './runHarness';
+import { openRunDiagnostics, runWorkspace } from './runHarness';
 
 test('job and Run links preserve identity, frozen revisions and the output folder through history and archiving', async ({
   page,
@@ -84,12 +84,14 @@ test('job and Run links preserve identity, frozen revisions and the output folde
       name: first.name,
       exact: true,
     });
-    const folder = page.getByText(/^Output: /);
+    const folder = page.getByLabel('Output folder', { exact: true });
     await expect(heading).toBeVisible();
-    await expect(folder).toHaveText(`Output: ${record.directory}`);
+    await openRunDiagnostics(page);
+    await expect(folder).toHaveText(record.directory);
     await page.reload();
     await expect(heading).toBeVisible();
-    await expect(folder).toHaveText(`Output: ${record.directory}`);
+    await openRunDiagnostics(page);
+    await expect(folder).toHaveText(record.directory);
     expect((await app.records()).map((run) => run.status).sort()).toEqual([
       'completed',
       'prepared',

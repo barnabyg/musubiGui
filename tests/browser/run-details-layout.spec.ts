@@ -37,7 +37,7 @@ async function expectFlatPanels(page: Page) {
         .map(name),
       dividers: [
         ...root.querySelectorAll<HTMLElement>(
-          '.panel :is(details, div, section, p)',
+          '.panel :is(details, div, section, p):not(.error)',
         ),
       ]
         .filter(shown)
@@ -62,6 +62,16 @@ test('Run details keeps a tight header, flat Overview panels and a samples-only 
   const app = await runWorkspace();
   try {
     const { job, run } = await preparedRun(app);
+    await page.route(`**/api/runs/${run.id}`, async (route) => {
+      const response = await route.fetch();
+      const record = await response.json();
+      await route.fulfill({
+        json: {
+          ...record,
+          retention: { errors: ['A checkpoint is locked.'] },
+        },
+      });
+    });
     await page.goto(`${app.url}/#/runs/${run.id}`);
     await expect(
       page.getByText('State: Ready to start', { exact: true }),
@@ -80,31 +90,35 @@ test('Run details keeps a tight header, flat Overview panels and a samples-only 
       overview.locator(
         ':scope > .panel > h2, :scope > details.panel > summary > h2',
       ),
-    ).toHaveText([
-      job.name,
-      'Actions',
-      'Caching',
-      'Inputs and output folder',
-      'Stage logs',
-    ]);
+    ).toHaveText([job.name, 'Actions', 'Stage logs and diagnostics']);
     for (const removed of [
       'Originating job',
       'Compare with another Run',
+      'Inputs and output folder',
+      'Full Run ID',
       'Copy output folder',
       'View sample',
     ])
       await expect(overview.getByText(removed, { exact: true })).toHaveCount(0);
-    await expect(page.getByRole('region', { name: 'Run result' })).toHaveCount(
-      0,
-    );
-    await expect(
-      page.getByRole('button', { name: 'Refresh outputs', exact: true }),
-    ).toBeVisible();
-    await expectFlatPanels(page);
-
     await expect(
       overview.getByRole('button', { name: 'Resume', exact: true }),
     ).toHaveCount(0);
+    await expect(
+      overview.getByRole('button', { name: 'Refresh outputs' }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByLabel('Output folder', { exact: true }),
+    ).toBeHidden();
+    await overview
+      .getByRole('heading', { name: 'Stage logs and diagnostics' })
+      .click();
+    await expect(page.getByLabel('Output folder', { exact: true })).toHaveText(
+      run.directory,
+    );
+    await expect(
+      page.getByText('Checkpoint retention: A checkpoint is locked.'),
+    ).toBeVisible();
+    await expectFlatPanels(page);
 
     // Samples holds samples and nothing else.
     await page.getByRole('tab', { name: 'Samples', exact: true }).click();
@@ -112,11 +126,13 @@ test('Run details keeps a tight header, flat Overview panels and a samples-only 
     await expect(samples.locator(':scope > *')).toHaveCount(1);
     await expect(samples.locator(':scope > .panel > h2')).toHaveText('Samples');
     await expect(samples).toContainText('No generated samples recorded');
-    for (const hidden of [job.name, 'Refresh outputs', 'Originating job'])
-      await expect(page.getByText(hidden, { exact: true })).toBeHidden();
+    await expect(
+      samples.getByRole('button', { name: 'Refresh outputs' }),
+    ).toBeVisible();
+    await expect(page.getByRole('heading', { name: job.name })).toBeHidden();
     await expectFlatPanels(page);
 
-    // Narrow screens wrap the status line instead of scrolling sideways.
+    // Narrow screens wrap the panels instead of scrolling sideways.
     await page.setViewportSize({ width: 360, height: 800 });
     expect(
       await page.evaluate(

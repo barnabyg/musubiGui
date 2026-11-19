@@ -97,16 +97,11 @@ browser. The job can be edited while the Run retains its original revision. Repe
 Start requests select the same Run. Nonzero exits and missing checkpoints are explicit
 failures. Checkpoint/sample locations stay associated with the originating Run.
 
-The top of a Run shows its stages as Caching, Training, Sample and Done, each marked
-done, in progress, not started, failed or stopped. Below them, Training shows the latest
-step count, elapsed time, ETA and loss from upstream's progress bar. Unreported
-values show as unknown. Training elapsed is explicitly scoped to the span of training
-stages; Run elapsed above it covers the full execution. A separately labelled estimate extrapolates the observed speed to
-maximum steps, as [remaining-time estimates](runs-timing.md#remaining-time-estimates)
-describes. A restored segment continues the original Run's step count up to its
-**Train until step** total, although upstream restarts its own counter; segments
-restored by earlier versions count their own steps. Stage logs are collapsed below that, and open by
-themselves when a Run has failed.
+The Actions panel shows **Prepare training data**, **Training**, **Sample** and **Done**
+as applicable. Overview groups timing together, with loss beside the current step or active
+expert. A restored segment continues the original Run's step count up to its
+**Train until step** total. Segments restored by earlier versions count their own steps.
+**Stage logs and diagnostics** opens automatically when a Run has failed.
 
 ## Alternating Wan runs
 
@@ -186,7 +181,7 @@ its next optimizer step:
 - **Save and stop** saves that step's checkpoint and state, even when the Job doesn't
   save state otherwise, then ends the trainer cleanly before the next step. The Run
   ends as Stopped with a state from that step, which Resume and Prepare and start on
-  the Job page continue, and Inspect saved states accepts.
+  the Job page continue, and the Run’s Resume flow accepts.
 
 One request waits at a time: the buttons stay disabled, and the Actions panel says
 which request is waiting, until the step applies it. Then it says the step it ran at.
@@ -215,7 +210,7 @@ To check them, open the acceptance workspace from [Queueing](#queueing), set a W
 Job to 200 steps with a preview interval, then prepare, start and use Save now,
 Sample now and Save and stop in turn. Each reports
 the step it ran at; the checkpoint and preview appear in the outputs, and the stopped
-Run's Inspect saved states lists a valid state at the stop step.
+Run’s Resume flow selects a valid state at the stop step.
 
 ## Stopping
 

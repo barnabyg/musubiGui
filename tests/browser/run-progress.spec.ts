@@ -40,7 +40,7 @@ test('live progress steps through stages, reports steps and loss, and shows a fa
     const steps = page.getByRole('list', { name: 'Run stages' });
     const step = (index: number) => steps.getByRole('listitem').nth(index);
     await expect(step(0)).toHaveClass('completed');
-    await expect(step(0)).toContainText('Caching');
+    await expect(step(0)).toContainText('Prepare training data');
     await expect(step(1)).toHaveClass('pending');
     await expect(step(3)).toContainText('Done');
     await expect(page.getByLabel('Training progress')).toHaveCount(0);
@@ -216,8 +216,7 @@ test('Runs read as labels and local times, and the GPU line links to the Run usi
       page.getByText(`Run ${run.id.slice(0, 8)}`, { exact: true }),
     ).toBeVisible();
     await expect(page.getByText(run.id, { exact: true })).toBeHidden();
-    await page.getByText('Full Run ID').click();
-    await expect(page.getByText(run.id, { exact: true })).toBeVisible();
+    await expect(page.getByText('Full Run ID')).toHaveCount(0);
     await expect(
       page.getByRole('status').filter({ hasText: /GPU/ }),
     ).toHaveCount(0);

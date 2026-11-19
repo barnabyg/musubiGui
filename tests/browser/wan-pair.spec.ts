@@ -1,7 +1,12 @@
 import { stat } from 'node:fs/promises';
 import path from 'node:path';
 import { test, expect } from '@playwright/test';
-import { openRunTab, runResume, runWorkspace } from './runHarness';
+import {
+  openRunDiagnostics,
+  openRunTab,
+  runResume,
+  runWorkspace,
+} from './runHarness';
 
 test('Wan offers only alternating training for new jobs and presets', async ({
   page,
@@ -144,8 +149,9 @@ test('alternating Wan settings persist, train both experts and restore the paire
       sample_pair: Record<string, { steps: number; path: string }>;
       stages: { name: string; args: string[]; training?: { expert: string } }[];
     };
-    await expect(page.getByText(/^Output: /)).toHaveText(
-      `Output: ${run.directory}`,
+    await openRunDiagnostics(page);
+    await expect(page.getByLabel('Output folder', { exact: true })).toHaveText(
+      run.directory,
     );
     for (const expert of ['low', 'high']) {
       const file = full.sample_pair[expert].path;
@@ -168,8 +174,9 @@ test('alternating Wan settings persist, train both experts and restore the paire
     await app.crash();
     await app.start();
     await page.reload();
-    await expect(page.getByText(/^Output: /)).toHaveText(
-      `Output: ${run.directory}`,
+    await openRunDiagnostics(page);
+    await expect(page.getByLabel('Output folder', { exact: true })).toHaveText(
+      run.directory,
     );
     const resume = runResume(page);
     await resume.getByRole('button', { name: 'Resume', exact: true }).click();
@@ -202,8 +209,9 @@ test('alternating Wan settings persist, train both experts and restore the paire
       page.getByText('State: Completed', { exact: true }),
     ).toBeVisible({ timeout: 240_000 });
     const segment = (await app.records()).find((item) => item.id !== run.id)!;
-    await expect(page.getByText(/^Output: /)).toHaveText(
-      `Output: ${segment.directory}`,
+    await openRunDiagnostics(page);
+    await expect(page.getByLabel('Output folder', { exact: true })).toHaveText(
+      segment.directory,
     );
     await openRunTab(page, 'samples');
     // The source Run's final sample comes first in the training's merged list.

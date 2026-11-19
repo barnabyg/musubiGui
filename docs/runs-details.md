@@ -6,12 +6,12 @@
 
 **Overview** shows the Run state, training progress, timing and actions. The short Run ID
 beside the Job name matches the first eight characters of the ID in the Run URL.
-Open **Inputs and output folder** to select the output folder path. Expand **Stage logs** to view the logs.
+Open **Stage logs and diagnostics** to read logs or select the output folder path.
 The `checkpoints` subfolder contains the Run's LoRAs and saved training states.
 
 **Samples** lists generated media and periodic previews. Use the tabs or arrow keys to switch
 views. The sample selection and playback stay in place when you switch views or new previews arrive.
-Use **Refresh outputs** on Overview to rescan the available files.
+Use **Refresh outputs** on Samples to rescan the available files.
 
 ## Trainings resumed in segments
 
@@ -94,7 +94,7 @@ GPU training quality is outside this naming check.
 
 To check folder naming, from the repository root run
 `.\acceptance.cmd --workspace ".cache/folder-check-$([guid]::NewGuid().ToString('N'))"`.
-Prepare a fixture Job and open **Inputs and output folder** to inspect the output path. It should contain
+Prepare a fixture Job and open **Stage logs and diagnostics** to inspect the output path. It should contain
 the Job name and timestamp, without a random suffix. The fixture needs no models
 or GPU; preparation creates synthetic training inputs. Start training, copy the output folder path and inspect its `checkpoints` folder. Checkpoint files and state folders should
 use the frozen Job name and revision, with no random job ID. Rename the Job and confirm
@@ -119,5 +119,5 @@ To check this navigation manually, run the following from the repository root in
 Complete **WAN acceptance 1**, then follow its Last Run link in Jobs using Tab and Enter.
 Check that the short Run ID matches the beginning of the ID in the address bar.
 Rename or archive the Job from the Jobs screen, then reopen the Run from its saved URL.
-Expect the original Job name and output path under **Inputs and output folder**.
+Expect the original Job name and output path under **Stage logs and diagnostics**.
 Repeat the Last Run link check with WAN acceptance 2 to verify that it opens a different Run.

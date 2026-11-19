@@ -85,10 +85,10 @@ test('Wan and H3 output playback and missing outputs retain run provenance', asy
       (output) => output.kind === 'checkpoint',
     )!.file_url;
     await unlink(path.join(h3.directory, 'checkpoints', 'fixture.safetensors'));
-    await openRunTab(page, 'overview');
     await page
       .getByRole('button', { name: 'Refresh outputs', exact: true })
       .click();
+    await openRunTab(page, 'overview');
     await expect(
       page.getByText(/fixture\.safetensors: Output is missing or moved/),
     ).toBeVisible();

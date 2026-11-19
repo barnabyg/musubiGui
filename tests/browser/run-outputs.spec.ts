@@ -44,17 +44,17 @@ test('outputs appear when a Run completes and a playing preview survives a refre
       media.loop = true;
       await media.play();
     });
+    await openRunTab(page, 'overview');
     await expect(
       page.getByRole('button', { name: 'Refresh outputs', exact: true }),
     ).toBeHidden();
-    await openRunTab(page, 'overview');
+    await openRunTab(page, 'samples');
     await page
       .getByRole('button', { name: 'Refresh outputs', exact: true })
       .click();
     await expect(
       page.getByRole('button', { name: 'Refresh outputs', exact: true }),
     ).toBeEnabled();
-    await openRunTab(page, 'samples');
     await expect(sample).toHaveAttribute('aria-pressed', 'true');
     await expect(video).toHaveAttribute('data-kept', 'yes');
     await expect

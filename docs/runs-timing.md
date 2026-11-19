@@ -65,11 +65,11 @@ Manual verification: in PowerShell 7, from `C:/docs/git/musubiGui`, run:
 
 Prerequisites: configured training installation, H3 models, prepared videos and an
 NVIDIA GPU. Start an H3 Run and open Overview. After training reports a speed, expect
-**Seconds per step** to match the latest `steps:` log bar. Download diagnostics during
+**Seconds per step** to match the latest `steps:` log bar. Open **Stage logs and diagnostics** and download diagnostics during
 training and after completion; each line should parse as JSON and include stage/sample
 records. Compare GPU utilization, power and available RAM with Task Manager or
 `nvidia-smi`, allowing for sampling delay and their different memory definitions.
-Reload Overview and expect the download and reported speed to remain available.
+Reload Overview and expect the reported speed and diagnostics download to remain available.
 
 ## Run elapsed
 

@@ -202,8 +202,6 @@ export async function openCurrentRun(page: Page) {
 const runTabNames = { overview: 'Overview', samples: 'Samples' } as const;
 const runPanelNames = {
   actions: 'Actions',
-  caching: 'Cache preparation results',
-  inputs: 'Inputs and output folder',
   samples: 'Samples',
   segments: 'Segments',
 } as const;
@@ -233,6 +231,15 @@ export function runResume(page: Page) {
   return runPanel(page, 'actions').getByRole('group', {
     name: 'Resume training',
   });
+}
+
+export async function openRunDiagnostics(page: Page) {
+  const heading = page.getByRole('heading', {
+    name: 'Stage logs and diagnostics',
+  });
+  await expect(heading).toBeVisible();
+  if (!(await page.getByLabel('Output folder', { exact: true }).isVisible()))
+    await heading.click();
 }
 
 // The first Overview panel: the Run's name, state, warnings and timing.

@@ -245,6 +245,9 @@ export function RunSamples({ outputs }: { outputs: RunOutputs }) {
   return (
     <section className="panel" aria-label="Samples">
       <h2>Samples</h2>
+      <button disabled={outputs.busy} onClick={outputs.reload}>
+        Refresh outputs
+      </button>
       {merged(result) && (
         <p>
           Samples from all {result?.segments?.length} segments of this training,

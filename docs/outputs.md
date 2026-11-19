@@ -1,6 +1,6 @@
 # Run outputs
 
-Open **Inputs and output folder** in Run Overview. Select the output folder path and
+Open **Stage logs and diagnostics** in Run Overview. Select the output folder path and
 paste it into File Explorer. Open `checkpoints` to collect LoRAs. A checkpoint and its
 saved-state folder use the frozen Job name and revision, for example
 `My-Job-r2.safetensors` and `My-Job-r2-state`. Alternating Wan filenames identify each
@@ -8,9 +8,9 @@ expert and its step or phase. Every Run has its own folder.
 
 On **Samples**, select a generated image, video or audio file to view it, inspect its
 metadata or download it. Files the browser cannot preview still offer a download.
-**Refresh outputs** on Overview rescans the inventory and lets you retry playback. A training resumed
+**Refresh outputs** rescans the inventory and lets you retry playback. A training resumed
 in segments lists samples from its segments in step order. The output path under
-**Inputs and output folder** belongs to the selected Run.
+**Stage logs and diagnostics** belongs to the selected Run.
 
 The inventory survives restart and keeps previously observed missing files. It refreshes
 as the Run or its stages change, preserving the selected output and playback.
@@ -41,8 +41,10 @@ From the repository root in PowerShell 7, launch the isolated CPU fixture.
 .\acceptance.cmd --workspace ".cache/paired-outputs-$([guid]::NewGuid())" --wan-paired
 ```
 
-Review and start a seeded Wan Job. Open its completed Run and expand **Inputs and output folder**. Paste the output path into File Explorer and verify the low- and high-noise
-checkpoints are present. Play the generated video on **Samples**, then use **Refresh outputs** on Overview. Return to Samples and expect the selected video to keep playing. Repeat at a narrow
+Review and start a seeded Wan Job. Open its completed Run and expand **Stage logs and
+diagnostics**. Paste the output path into File Explorer and verify the low- and high-noise
+checkpoints are present. Choose **Samples**, play the generated video and use **Refresh
+outputs**. Expect the selected video to stay selected and keep playing. Repeat at a narrow
 viewport.
 
 Focused verification:

@@ -7,7 +7,6 @@ import { confirmDelete, RunActions } from './RunActions';
 import { RunBadge } from './RunBadge';
 import { RunList } from './RunList';
 import { RunRecords } from './RunRecords';
-import { RunCaching } from './RunStages';
 import { RunTabs, type RunTab } from './RunTabs';
 import { RunTiming, TrainingProgress } from './RunTiming';
 import { trainingOf } from './runChains';
@@ -316,17 +315,9 @@ export function Runs({
                     )
                   }
                 />
-                <RunCaching run={run} chained={segments.length > 1} />
                 <RunRecords
                   run={run}
                   logText={current?.text}
-                  refreshOutputs={
-                    showFiles && (
-                      <button disabled={outputs.busy} onClick={outputs.reload}>
-                        Refresh outputs
-                      </button>
-                    )
-                  }
                   performanceAvailable={current?.performance_available}
                 />
               </div>

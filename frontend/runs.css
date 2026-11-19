@@ -115,6 +115,13 @@
   font-variant-numeric: tabular-nums;
   font-weight: 600;
 }
+.run-output-path {
+  overflow-wrap: anywhere;
+}
+.run-resume {
+  margin: var(--space-5) 0;
+  overflow-wrap: anywhere;
+}
 .run-tabs {
   display: flex;
   gap: 0.5rem;
@@ -144,8 +151,4 @@
 .run-controls {
   flex-wrap: wrap;
   margin-bottom: var(--space-6);
-}
-.run-resume {
-  margin: var(--space-5) 0;
-  overflow-wrap: anywhere;
 }

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { runPanel, runWorkspace } from './runHarness';
+import { runWorkspace } from './runHarness';
 import type { Job } from '../../frontend/jobTypes';
 
 test('cache policies persist from the job form and review explains preparation', async ({
@@ -68,9 +68,23 @@ test('cache policies persist from the job form and review explains preparation',
       )
       .toBe('prepared');
     await page.goto(`${app.url}/#/runs/${prepared.id}`);
-    const result = runPanel(page, 'caching');
-    await expect(result).toContainText('Text embeddings: Cache rebuilt');
-    await expect(result).toContainText('Rebuild requested by this Run.');
+    const stages = page.getByRole('list', { name: 'Run stages' });
+    const preparation = stages
+      .getByRole('listitem')
+      .filter({ hasText: 'Prepare training data' });
+    await expect(preparation).toHaveClass('completed');
+    const record = await (
+      await page.request.get(`${app.url}/api/runs/${prepared.id}`)
+    ).json();
+    expect(record.stages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'text_cache',
+          status: 'completed',
+          cache_reason: 'Rebuild requested by this Run.',
+        }),
+      ]),
+    );
   } finally {
     await app.close();
   }

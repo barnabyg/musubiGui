@@ -13,7 +13,7 @@ const stepLabels: Record<StepState, string> = {
 // when frozen inputs changed, so that failure lands on the first step that did not finish.
 function runSteps(run: Run) {
   const groups = [
-    { label: 'Caching', names: ['latent_cache', 'text_cache'] },
+    { label: 'Prepare training data', names: ['latent_cache', 'text_cache'] },
     { label: 'Training', names: ['train'] },
     { label: 'Sample', names: ['generate'] },
   ];
@@ -70,59 +70,5 @@ export function RunStages({ run }: { run: Run }) {
         </li>
       ))}
     </ol>
-  );
-}
-
-// Whether each cache was rebuilt or reused, and what checkpoint retention pruned.
-export function RunCaching({ run, chained }: { run: Run; chained: boolean }) {
-  return (
-    <section className="panel" aria-label="Cache preparation results">
-      <h2>Caching</h2>
-      <ul>
-        {run.stages
-          .filter((stage) =>
-            ['latent_cache', 'text_cache'].includes(stage.name),
-          )
-          .map((stage) => (
-            <li key={stage.name}>
-              {stage.name === 'latent_cache' ? 'Latents' : 'Text embeddings'}:{' '}
-              {stage.status === 'reused'
-                ? 'Verified compatible cache reused'
-                : stage.status === 'completed'
-                  ? 'Cache rebuilt'
-                  : stage.status}
-              {stage.cache_reason && <small> · {stage.cache_reason}</small>}
-            </li>
-          ))}
-      </ul>
-      {run.retention && (
-        <section aria-label="Checkpoint retention">
-          <p>
-            Checkpoint retention: {run.retention.removed?.length ?? 0} artifacts
-            pruned; {run.retention.protected?.length ?? 0} protected artifacts
-            retained beyond the limit.
-          </p>
-          {(run.resume_of || chained) && (
-            <p>
-              This Run is a segment of a resumed training: its saves count
-              toward the newest kept across all segments by step, and a saved
-              state a later segment resumed from is kept. Alternating Wan and
-              segments restored by older versions count each segment on its own.
-            </p>
-          )}
-          {run.retention.errors?.map((error) => (
-            <p className="error" key={error}>
-              {error}
-            </p>
-          ))}
-          {!!run.retention.pending?.length && (
-            <p>
-              Pruning will retry for {run.retention.pending.length} artifacts at
-              the next checkpoint check.
-            </p>
-          )}
-        </section>
-      )}
-    </section>
   );
 }
