@@ -112,7 +112,12 @@ test('updates the GUI, reconnects and diagnoses the newly supported trainer with
       await git(path.join(checkout, 'musubi-tuner'), 'rev-parse', 'HEAD'),
     ).toBe(originalPin);
 
-    const update = page.getByRole('button', { name: 'Update application' });
+    const application = page.getByRole('region', {
+      name: 'Application updates',
+    });
+    const update = application.getByRole('button', {
+      name: 'Update application',
+    });
     await writeFile(pin, 'local change');
     await update.click();
     await expect(
@@ -129,11 +134,23 @@ test('updates the GUI, reconnects and diagnoses the newly supported trainer with
       update.click(),
     ]);
     await expect(
-      page.getByText(/Update complete\. Diagnostics found problems/),
+      application.getByText('Update complete', { exact: true }),
     ).toBeVisible({ timeout: 240_000 });
+    await expect(application.getByText('Musubi GUI updated.')).toBeVisible();
     await expect(
-      page.getByRole('heading', { name: 'Installation diagnostics' }),
+      application.getByText('Diagnostics found problems.'),
     ).toBeVisible();
+    await expect(
+      application.getByText(nextGui.slice(0, 12), { exact: true }),
+    ).toHaveAttribute('title', nextGui);
+    await expect(
+      environment.getByText(nextPin.slice(0, 12), { exact: true }),
+    ).toHaveAttribute('title', nextPin);
+    const diagnostics = page.getByRole('heading', {
+      name: 'Installation diagnostics',
+    });
+    await application.getByRole('button', { name: 'View diagnostics' }).click();
+    await expect(diagnostics).toBeInViewport();
     await expect(page.getByText('Training entry points found.')).toBeVisible();
     const serverAfter = (
       await (await page.request.get(`${url}/api/app-update`)).json()
@@ -148,10 +165,32 @@ test('updates the GUI, reconnects and diagnoses the newly supported trainer with
         .trim()
         .split(/\r?\n/),
     ).toEqual([originalPin, nextPin]);
+    const completed = await application
+      .locator('time')
+      .getAttribute('datetime');
+    expect(completed).toBeTruthy();
     await page.reload();
+    await expect(diagnostics).toBeVisible();
+    await expect(application.locator('time')).toHaveAttribute(
+      'datetime',
+      completed!,
+    );
+    await expect(application.getByText('Musubi GUI updated.')).toBeVisible();
+
+    await Promise.all([
+      page.waitForEvent('load', { timeout: 240_000 }),
+      update.click(),
+    ]);
     await expect(
-      page.getByRole('heading', { name: 'Installation diagnostics' }),
+      application.getByText('Musubi GUI was already up to date.'),
+    ).toBeVisible({ timeout: 240_000 });
+    await expect(
+      application.getByText('Update complete', { exact: true }),
     ).toBeVisible();
+    await expect(application.locator('time')).not.toHaveAttribute(
+      'datetime',
+      completed!,
+    );
   } finally {
     await stop();
     await rm(root, {

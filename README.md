@@ -71,9 +71,11 @@ the supported Musubi Tuner revision from the restarted GUI, and saves fresh diag
 If the GUI is current, it restarts and still runs trainer setup and diagnostics.
 Finish or cancel queued and active Runs, save any Settings edits, and close other GUI
 instances using this checkout first. Keep the launcher window open while the browser
-reconnects. The update status and diagnostics report appear in Settings. If the GUI build
-fails after downloading an update, check the launcher output, fix the reported error, and
-relaunch. You can then retry the update to finish trainer setup and diagnostics.
+reconnects. The result in Settings shows the completion time, whether the GUI advanced,
+and how diagnostics went. The GUI and installed Tuner commits are visible in Settings.
+If the GUI build fails after downloading an update, check the launcher output, fix the
+reported error, and relaunch. You can then retry the update to finish trainer setup and
+diagnostics.
 
 Choose dedicated output/cache roots and model roots. Component paths must remain within those model roots; symlinks and
 Windows junctions resolve before containment checks. Enter one model or dataset root per line;
