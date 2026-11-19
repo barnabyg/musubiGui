@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { runPanel, runWorkspace, type RunRecord } from './runHarness';
+import { runResume, runWorkspace, type RunRecord } from './runHarness';
 
 test('Save now, Sample now and Save and stop act at the next training step', async ({
   page,
@@ -103,16 +103,15 @@ test('Save now, Sample now and Save and stop act at the next training step', asy
     expect(stop.step).toBeGreaterThan(sample.step);
     expect(stop.step).toBeLessThan(200);
 
-    const resume = runPanel(page, 'resume');
-    await resume
-      .getByRole('button', { name: 'Inspect saved states', exact: true })
-      .click();
+    const resume = runResume(page);
+    await resume.getByRole('button', { name: 'Resume', exact: true }).click();
+    await expect(resume.getByText(/^Selected save/)).toContainText(
+      `Optimizer step ${stop.step}`,
+      { timeout: 240_000 },
+    );
     await expect(
-      resume
-        .getByRole('button', { name: 'Restore as new segment', exact: true })
-        .first(),
-    ).toBeEnabled({ timeout: 240_000 });
-    await expect(resume).toContainText(`optimizer step ${stop.step}`);
+      resume.getByRole('button', { name: 'Review resume' }),
+    ).toBeEnabled();
   } finally {
     await app.close();
   }

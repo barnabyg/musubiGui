@@ -202,7 +202,6 @@ export async function openCurrentRun(page: Page) {
 const runTabNames = { overview: 'Overview', samples: 'Samples' } as const;
 const runPanelNames = {
   actions: 'Actions',
-  resume: 'Resume from an earlier save',
   caching: 'Cache preparation results',
   compare: 'Compare with another Run',
   inputs: 'Inputs and output folder',
@@ -229,6 +228,12 @@ export function runTabPanel(page: Page, tab: RunTabKey) {
 // The panel on the page, or within a scope such as one tab's panel.
 export function runPanel(scope: Page | Locator, panel: RunPanelKey) {
   return scope.getByRole('region', { name: runPanelNames[panel], exact: true });
+}
+
+export function runResume(page: Page) {
+  return runPanel(page, 'actions').getByRole('group', {
+    name: 'Resume training',
+  });
 }
 
 // For absence checks: anything labelled with the panel name, of any role, matched as a

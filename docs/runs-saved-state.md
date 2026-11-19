@@ -4,16 +4,14 @@
 
 ## Restoring a saved state
 
-**Resume** in the Actions panel, and **Prepare and start** on the Job page, continue the
-latest saved state; see [Resuming with an edited Job revision](#resuming-with-an-edited-job-revision).
-**Resume from an earlier save** on Run Overview uses the Run's own revision. Set
-**Train until step** to the desired total, then click **Resume** and confirm to continue
-from the latest valid save. To pick a different save, click **Inspect saved states**
-and choose **Restore as new segment** beside it. Both options work after restarting
-the application and queue training from the saved step to the chosen total.
-The total must be after the saved step: a state at or past it cannot be restored
-until the total is raised, and the panel says which step to exceed. The field starts
-at the Job's training steps. The original Run stays in history.
+On a stopped or completed Run, choose **Resume** in Actions. The app checks the saved
+optimizer states and selects the latest valid one. With **This Run’s revision**, set
+**Train until step**, choose **Review resume**, and confirm **Restore as new segment**.
+For a different state, open **Choose an earlier save** before reviewing. The target is a
+total step count and must exceed the chosen save's step. The original Run stays in history.
+
+Select **Latest Job revision** where offered to check the Job's current settings and
+use its training target. The confirmation shows the revision, saved step and target.
 
 ### Continuous step numbering
 
@@ -47,11 +45,12 @@ $resumeWorkspace = ".cache/resume-check-$([guid]::NewGuid().ToString('N'))"
 
 This isolated CPU fixture needs no models or GPU. In a fixture Job set 50 steps,
 save every step and enable Save optimizer/training state. Prepare and start,
-wait for an interval state in the outputs, then choose Stop now. Close and
+wait for interval states in the output folder's `checkpoints` subfolder, then
+choose **Stop now**. Close and
 relaunch the saved workspace with the command below, open the stopped Run and
-inspect saved states. Set **Train until step** to the saved step of a valid state
-(for example 3 for the state at optimizer step 3) and expect its Restore button to be
-disabled with a note to choose a later step. Set it to two more (5) and restore. Expect
+choose **Resume**. Open **Choose an earlier save** and select a valid state.
+Set **Train until step** to the saved step (for example 3) and expect **Review resume**
+to be disabled with a note to choose a later step. Set it to two more (5), review and confirm. Expect
 a separate completed Run linked to the original, which remains Stopped, showing
 Step 5/5, whose output folder holds the checkpoint and state `-step00000004` (not
 `-step00000001`) beside the final save. This checks orchestration, not GPU training quality or seamless
@@ -63,7 +62,7 @@ try { .\launch.cmd --acceptance-fixture --port 8767 } finally { Remove-Item Env:
 ```
 
 Enable saved optimizer state in the Job before training. After completion or a
-fully observed stop, Inspect saved states checks model/optimizer/scheduler/RNG
+fully observed stop, opening Resume checks model/optimizer/scheduler/RNG
 files and records hashes. Hashing large state folders takes seconds; the panel
 shows that it is checking and accepts no repeat request until it finishes.
 Missing, incomplete or changed files are rejected.
@@ -74,8 +73,8 @@ the final `<name>` checkpoint and `<name>-state`. After training succeeds, the
 interval copy is removed only when it is proven identical. Its checkpoint must
 have the same tensors and data. Its header metadata is ignored, since upstream
 writes a different save date, epoch and finish time into each copy. Every state file must have the same
-content hash. The final copies are always kept and are the ones Inspect saved
-states, Restore and sampling use. The training log names each removed copy; a
+content hash. The final copies are always kept and are the ones the resume flow
+and sampling use. The training log names each removed copy; a
 copy that differs, or a check that fails, is kept. A state removal that fails
 partway leaves a hidden `.<name>.duplicate` folder, which is never offered for
 restoration; the log names it so it can be deleted.
@@ -91,13 +90,11 @@ continuation is unsupported. Loading a LoRA checkpoint alone is not optimizer re
 Restoring a state reuses the Run's own commands, so its prompt and every other setting stay
 as they were. To change some of them, edit the Job, then choose **Prepare and start** on the Job page
 ([Training from the Job page](jobs-current-training.md)), or open the stopped or completed Run
-and choose **Resume** in its Actions panel. Resume inspects the saved states, picks the latest
-valid one and compares the Job's latest revision with the revision the Run trained, field by
-field. The result, shown under the button, lists the changed fields by tier and says whether
-the state can take them. When it can, a confirmation, **Resume with revision N**, queues a new
-segment from the saved step until the revision's **Training steps**, which is a total and must
-be after the saved step. When it can't, nothing is asked: choose a save in **Resume from an
-earlier save** to continue with the Run's own revision, or start fresh from the Job. The data order restarts, as for any restoration.
+and choose **Resume** in Actions. Select **Latest Job revision** and **Review resume**.
+The check lists changed fields by tier and reports compatibility. A compatible revision
+prompts for **Resume with revision N**, which queues a new segment from the selected save
+to the revision's **Training steps**. When the revision is incompatible, select **This Run’s
+revision** to continue with the frozen settings or start fresh from Jobs.
 When the revision has warned changes, the confirmation lists them with the warning and
 enables **Resume with revision N** only after **I understand these changes change what the
 LoRA learns** is ticked.
@@ -148,7 +145,7 @@ with its inputs, so previews from the saved step onwards use the new prompt; Sam
 follows the revision's preview setting. Training reads the source Run's frozen dataset
 configuration, media snapshot and caches, and nothing is prepared or rebuilt, unless the
 datasets changed (see [Resuming with a refreshed dataset](#resuming-with-a-refreshed-dataset)). The segment
-records the new revision as its own `job`, so Compare, outputs and provenance describe what
+records the new revision as its own `job`, so outputs and provenance describe what
 it trained, and `segment.source_revision` and `segment.changes` record the revision it
 continued from and what changed. Its checkpoints are named for its own revision. Like any
 restoration, `resume_of` links it to the source Run, which is left unchanged.
@@ -191,8 +188,7 @@ Review shows the work and disk use before resuming, under **Preparation before r
 Job review's Resume compatibility, the Run's Resume result and the resume confirmation: which cache stages run,
 the items each caches by name and how many reuse a cache, then the new media snapshot, the
 copied caches and an estimate of the new caches, with the free space on each volume as Run
-review checks it. Comparing the segment with its source in Compare lists the changed captions
-and media item by item, with a `Dataset differences` summary.
+review checks it. The segment's `dataset_changes` records the changed captions and media.
 
 When a dataset can't be read, for example because its folder moved, a resume without
 re-prepare fields keeps the source's frozen snapshot and says so in the notes; one with them
@@ -231,13 +227,13 @@ $resumeWorkspace = ".cache/resume-revision-$([guid]::NewGuid().ToString('N'))"
 
 In WAN acceptance 1, set 200 steps, save every 200 steps, enable Save optimizer/training
 state, turn off the final sample, then prepare and start. While it trains, choose **Save and
-stop**. In the Job, set LoRA rank 16 and save. On the stopped Run choose **Resume**: expect
+stop**. In the Job, set LoRA rank 16 and save. On the stopped Run choose **Resume**, **Latest Job revision** and **Review resume**. Expect
 LoRA rank under Needs a new Run and no confirmation. Set the
 rank back to 8, change the sample prompt, set previews every 70 steps and 210 training steps,
 and save. Review configuration should show Resume compatibility naming that Run, with the
 prompt, steps and preview interval under Applies on resume. Set the learning rate to 0.0002
 and save: review lists Learning rate: 0.0001 → 0.0002 under Applies on resume, but changes
-what the LoRA learns, with the warning. On the Run, choose Resume again: the confirmation
+what the LoRA learns, with the warning. On the Run, review the latest revision again. The confirmation
 keeps its resume button disabled until the acknowledgement is ticked. Expect a new completed
 segment at Step 210/210 whose Samples show the step 70, 140 and 210 previews with the new
 prompt and whose training log shows `Resume learning rate: applied 0.0002`, while the
@@ -248,13 +244,12 @@ Datasets open **WAN acceptance**, select motion.mp4 and change its caption. Revi
 configuration on the Job: Resume compatibility lists `Dataset contents: 1 caption changed`
 under Resume with re-prepare, and Preparation before resuming says text caching runs for
 motion.mp4 alone while latents reuse the Run's caches, with the extra disk use. On the Run,
-choose Resume and confirm. Expect the new segment to prepare, show its latent cache
-as reused and its text cache completed, then train to the total. Compare it with the source
-Run: the caption's old and new text appear, and the source keeps its caption.
+review the latest revision and confirm. Expect the new segment to prepare and then train to
+the total. The source keeps its caption.
 
 ## Alternating Wan saved states
 
-**Inspect saved states** lists paired schedule positions, including interval saves
+**Choose an earlier save** in Resume lists paired schedule positions, including interval saves
 partway through a phase. Restoration freezes both available expert states as a new
 segment and continues the schedule at that position. Expert checkpoints and states
 keep their per-expert names. For newly prepared per-expert Runs, **Train until step**
@@ -268,7 +263,7 @@ expert trains in the new segment.
 
 Stop now does not force a new save. Save and stop saves the active expert's
 checkpoint and state at the step it stops, with the usual per-expert name, and
-Inspect saved states pairs it with the other expert's latest state. Choose a complete saved
+Resume pairs it with the other expert's latest state. Choose a complete saved
 schedule position and expect any unsaved updates after that position to be lost. Restoration validates the
 state files and their counters; missing or changed state blocks it. Retry after paired
 training has started directs you to inspect/restore paired state rather than silently

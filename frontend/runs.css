@@ -135,3 +135,7 @@
   flex-wrap: wrap;
   margin-bottom: var(--space-6);
 }
+.run-resume {
+  margin: var(--space-5) 0;
+  overflow-wrap: anywhere;
+}

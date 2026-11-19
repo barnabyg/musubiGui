@@ -105,7 +105,7 @@ test('Wan and H3 prepare and train through the GUI with frozen captions cache re
         .toBeGreaterThan(0);
       await openRunTab(page, 'overview');
       const inspect = page.getByRole('button', {
-        name: 'Inspect saved states',
+        name: 'Resume',
         exact: true,
       });
       // Hold the hashing response to observe the busy state, then fail one request.
@@ -115,7 +115,7 @@ test('Wan and H3 prepare and train through the GUI with frozen captions cache re
       await page.route('**/api/runs/*/states', async (route) => {
         requests += 1;
         await held;
-        if (requests === 1) await route.continue();
+        if (requests !== 1) await route.continue();
         else
           await route.fulfill({
             status: 500,
@@ -130,10 +130,7 @@ test('Wan and H3 prepare and train through the GUI with frozen captions cache re
       ).toBeVisible();
       await inspect.click({ force: true });
       release();
-      await expect(page.getByText(/optimizer step 2/)).toBeVisible();
-      await expect(inspect).toBeEnabled();
       expect(requests).toBe(1);
-      await inspect.click();
       await expect(
         page.getByRole('alert').filter({ hasText: 'State inspection failed.' }),
       ).toBeVisible();
@@ -141,6 +138,11 @@ test('Wan and H3 prepare and train through the GUI with frozen captions cache re
       await expect(
         page.getByText('Checking saved states…', { exact: true }),
       ).toBeHidden();
+      await page
+        .getByRole('button', { name: 'Retry saved-state check' })
+        .click();
+      await expect(page.getByText(/^Selected save/)).toContainText(/step 2/i);
+      expect(requests).toBe(2);
       await page.unroute('**/api/runs/*/states');
     }
   } finally {

@@ -84,7 +84,6 @@ test('Run details keeps a tight header, flat Overview panels and a samples-only 
     ).toHaveText([
       job.name,
       'Actions',
-      'Resume from an earlier save',
       'Caching',
       'Compare with another Run',
       'Inputs and output folder',
@@ -103,20 +102,9 @@ test('Run details keeps a tight header, flat Overview panels and a samples-only 
     ).toBeVisible();
     await expectFlatPanels(page);
 
-    // The resume explanation is reference text, collapsed until asked for.
-    const resume = page.getByRole('region', {
-      name: 'Resume from an earlier save',
-    });
     await expect(
-      resume.getByText(/^Restoration starts a new segment/),
-    ).toBeHidden();
-    await expect(
-      resume.getByRole('button', { name: 'Inspect saved states' }),
-    ).toBeVisible();
-    await resume.getByText('How resuming works', { exact: true }).click();
-    await expect(
-      resume.getByText(/^Restoration starts a new segment/),
-    ).toBeVisible();
+      overview.getByRole('button', { name: 'Resume', exact: true }),
+    ).toHaveCount(0);
 
     // Samples holds samples and nothing else.
     await page.getByRole('tab', { name: 'Samples', exact: true }).click();

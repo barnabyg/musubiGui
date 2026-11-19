@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { readdir } from 'node:fs/promises';
 import path from 'node:path';
-import { exists, runPanel, runWorkspace, type RunRecord } from './runHarness';
+import { exists, runResume, runWorkspace, type RunRecord } from './runHarness';
 
 test('backend interruption retains GPU ownership and offers explicit recovery without duplicate training', async ({
   page,
@@ -95,21 +95,25 @@ test('Resume uses the most recent saved state without opening the list', async (
       page.getByText('State: Completed', { exact: true }),
     ).toBeVisible({ timeout: 240_000 });
 
-    const panel = runPanel(page, 'resume');
-    const resume = panel.getByRole('button', { name: 'Resume', exact: true });
+    const panel = runResume(page);
+    const resume = page.getByRole('button', { name: 'Resume', exact: true });
+    await expect(resume).toHaveCount(1);
+    await resume.click();
     const target = panel.getByLabel('Train until step');
     const savedStep = Number(await target.inputValue());
-    await resume.click();
-    await expect(panel.getByRole('alert')).toContainText(
-      `Choose a step after ${savedStep}`,
+    await expect(panel.getByText(/^Selected save/)).toContainText(
+      `Optimizer step ${savedStep}`,
     );
+    await expect(panel).toContainText(
+      `Choose a whole-number step after ${savedStep}`,
+    );
+    const review = panel.getByRole('button', { name: 'Review resume' });
+    await expect(review).toBeDisabled();
     expect(await app.records()).toHaveLength(1);
 
     await target.fill(String(savedStep + 1));
-    await resume.click();
-    await expect(
-      panel.getByRole('button', { name: 'Restore as new segment' }),
-    ).toHaveCount(0);
+    await review.click();
+    await expect(panel.getByLabel('Saved state')).toBeHidden();
     const dialog = page.getByRole('dialog');
     await expect(dialog).toContainText(`saved step ${savedStep}`);
     await dialog
@@ -134,13 +138,13 @@ test('Resume uses the most recent saved state without opening the list', async (
     });
 
     await page.goto(originalUrl);
-    await panel.getByRole('button', { name: 'Inspect saved states' }).click();
-    const earlier = panel.getByRole('paragraph').filter({
-      hasText: 'optimizer step 1',
-    });
+    await resume.click();
+    await panel.getByText('Choose an earlier save').click();
     await expect(
-      earlier.getByRole('button', { name: 'Restore as new segment' }),
-    ).toBeEnabled({ timeout: 240_000 });
+      panel
+        .getByLabel('Saved state')
+        .getByRole('option', { name: /^Optimizer step 1 ·/ }),
+    ).toBeAttached();
   } finally {
     await app.close();
   }
@@ -187,7 +191,7 @@ test('a stopped Run resumes saved optimizer state through the UI after a backend
                 exists(path.join(checkpoints, name, 'scheduler.bin')),
               ),
           );
-          return complete.some(Boolean);
+          return complete.filter(Boolean).length >= 2;
         },
         { timeout: 240_000 },
       )
@@ -207,31 +211,26 @@ test('a stopped Run resumes saved optimizer state through the UI after a backend
     await app.crash();
     await app.start();
     await page.reload();
-    const resume = runPanel(page, 'resume');
-    await resume.getByText('How resuming works', { exact: true }).click();
+    const resume = runResume(page);
     await expect(
-      resume.getByText(/Work since the chosen save must run again/),
-    ).toBeVisible();
-    await expect(
-      resume.getByText(/data order restarts from the beginning/),
-    ).toBeVisible();
-    await resume
-      .getByRole('button', { name: 'Inspect saved states', exact: true })
-      .click();
-    const restore = resume
-      .getByRole('button', { name: 'Restore as new segment', exact: true })
-      .first();
-    await expect(restore).toBeEnabled({ timeout: 240_000 });
-    // The first listed state is the save at step 1, so training continues to a total, not for extra steps.
-    await expect(resume).toContainText('optimizer step 1');
+      page.getByRole('button', { name: 'Resume', exact: true }),
+    ).toHaveCount(1);
+    await resume.getByRole('button', { name: 'Resume', exact: true }).click();
+    await resume.getByText('Choose an earlier save').click();
+    const picker = resume.getByLabel('Saved state');
+    const early = picker.getByRole('option', { name: /^Optimizer step 1 ·/ });
+    await picker.selectOption((await early.getAttribute('value'))!);
+    const review = resume.getByRole('button', { name: 'Review resume' });
     const target = resume.getByLabel('Train until step');
     await target.fill('1');
-    await expect(restore).toBeDisabled();
-    await expect(resume).toContainText('Choose a step after 1');
+    await expect(review).toBeDisabled();
+    await expect(resume).toContainText('Choose a whole-number step after 1');
     await target.fill('2');
-    await restore.click();
+    await review.click();
     const dialog = page.getByRole('dialog');
-    await expect(dialog).toContainText('Training continues until step 2');
+    await expect(dialog).toContainText(
+      'Training continues from saved step 1 until step 2',
+    );
     await expect(dialog).toContainText('The data order restarts.');
     await dialog
       .getByRole('button', { name: 'Restore as new segment', exact: true })
@@ -310,19 +309,14 @@ test('a stopped Run resumes saved optimizer state through the UI after a backend
     await expect(
       page.getByText('State: Completed', { exact: true }),
     ).toBeVisible({ timeout: 240_000 });
-    await resume.getByText('How resuming works', { exact: true }).click();
-    await expect(
-      resume.getByText(/^Saved optimizer state was not enabled/),
-    ).toBeVisible();
     await resume.getByRole('button', { name: 'Resume', exact: true }).click();
-    await expect(resume.getByRole('alert')).toContainText(
+    await expect(resume.getByRole('status')).toContainText(
       'No valid saved optimizer state found',
     );
+    await expect(
+      resume.getByRole('button', { name: 'Review resume' }),
+    ).toHaveCount(0);
     expect(await app.records()).toHaveLength(3);
-    await resume
-      .getByRole('button', { name: 'Inspect saved states', exact: true })
-      .click();
-    await expect(resume).toContainText('No saved optimizer states found');
   } finally {
     await app.close();
   }

@@ -50,7 +50,7 @@ export type ResumeCompatibility = {
   compatible: boolean;
   frozen_revision: number;
   revision: number;
-  // Unknown in Job review until Inspect saved states has recorded the Run's states.
+  // Unknown in Job review until the Run's saved states have been checked.
   saved_step: number | null;
   target_steps: number;
   changes: ResumeChange[];

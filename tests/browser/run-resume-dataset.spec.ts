@@ -1,7 +1,12 @@
 import { test, expect, type Page } from '@playwright/test';
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { runPanel, runWorkspace, type RunRecord } from './runHarness';
+import {
+  runPanel,
+  runResume,
+  runWorkspace,
+  type RunRecord,
+} from './runHarness';
 
 const NEW_CAPTION = 'A blue field slowly brightens, captioned again.';
 
@@ -108,10 +113,16 @@ test('a caption edited after Save and stop resumes with a refreshed snapshot, af
 
     // Run details shows the same before resuming.
     await page.goto(`${app.url}/#/runs/${original.id}`);
-    const latest = runPanel(page, 'actions').getByRole('group', {
-      name: 'Resume with the latest revision',
+    const latest = runResume(page);
+    const openResume = async () => {
+      await latest.getByRole('button', { name: 'Resume', exact: true }).click();
+      await latest.getByLabel('Job revision').selectOption('edited');
+    };
+    const resume = latest.getByRole('button', {
+      name: 'Review resume',
+      exact: true,
     });
-    const resume = latest.getByRole('button', { name: 'Resume', exact: true });
+    await openResume();
     const dialog = page.getByRole('dialog');
     await resume.click();
     // The confirmation shows the re-prepare work; cancelling leaves the check on the panel.

@@ -18,13 +18,17 @@ export type ResumeBody = {
   state_id?: string;
 };
 
-// Whether `revision` of the Run's Job (its latest when omitted) can resume the Run's latest
-// valid saved state, until the revision's steps. Inspects, so hashes, the saved states.
-export function checkResume(runId: string, revision?: number) {
+// Whether a Job revision can continue the selected save, defaulting to the latest of each.
+export function checkResume(
+  runId: string,
+  revision?: number,
+  { stateId, signal }: { stateId?: string; signal?: AbortSignal } = {},
+) {
   return request<ResumeCompatibility>(
     `/api/runs/${runId}/resume-check`,
     'POST',
-    revision === undefined ? {} : { job_revision: revision },
+    { job_revision: revision, state_id: stateId },
+    signal,
   );
 }
 

@@ -25,8 +25,7 @@ import { RunSegments } from './RunSegments';
 import { HelpLink } from './Help';
 import { sizeLabel } from './runStatus';
 import type { DeletePreview, DeleteResult, Run } from './runTypes';
-import { ResumeRevision } from './ResumeRevision';
-import { SavedStates } from './SavedStates';
+import { RunResume } from './RunResume';
 import './runs.css';
 
 const request = apiClient('Run request failed.');
@@ -330,34 +329,21 @@ export function Runs({
                   action={action}
                   deleteRun={(chain) => remove(run.id, chain)}
                   resume={
-                    ENDED.includes(run.status) &&
-                    !segments.find((segment) => segment.id === run.id)?.chain
-                      .later_segments && (
-                      <ResumeRevision
+                    showFiles &&
+                    ENDED.includes(run.status) && (
+                      <RunResume
                         key={run.id}
                         run={run}
+                        allowEditedRevision={
+                          !segments.find((segment) => segment.id === run.id)
+                            ?.chain.later_segments
+                        }
                         busy={busy}
-                        onResume={(body) => action('resume', body)}
+                        onAction={action}
                       />
                     )
                   }
                 />
-                {showFiles && (
-                  <SavedStates
-                    key={`states-${run.id}`}
-                    runId={run.id}
-                    config={run.job.config}
-                    canResume={ENDED.includes(run.status)}
-                    busy={busy}
-                    onRestore={(stateId, steps) =>
-                      action('restore-state', {
-                        state_id: stateId,
-                        target_steps: steps,
-                        confirmed: true,
-                      })
-                    }
-                  />
-                )}
                 <RunCaching run={run} chained={segments.length > 1} />
                 {showFiles && (
                   <RunComparison
