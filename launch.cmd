@@ -3,10 +3,7 @@ setlocal
 cd /d "%~dp0"
 set "UV_CACHE_DIR=%CD%\.cache\uv"
 set "UV_PYTHON_PREFERENCE=only-system"
-call uv sync --locked
-if errorlevel 1 exit /b 1
-call npm.cmd ci --cache .cache/npm
-if errorlevel 1 exit /b 1
-call npm.cmd run build
-if errorlevel 1 exit /b 1
-".venv\Scripts\python.exe" -m musubi_gui %*
+set "MUSUBI_LAUNCH_PYTHON="
+for /f "delims=" %%P in ('uv python find --system --no-python-downloads 3.12') do set "MUSUBI_LAUNCH_PYTHON=%%P"
+if not defined MUSUBI_LAUNCH_PYTHON exit /b 1
+"%MUSUBI_LAUNCH_PYTHON%" -m musubi_gui.launcher %*

@@ -64,6 +64,17 @@ must pass before testing H3 acceleration; it checks imports, while a real traini
 checks GPU execution. Preparing a new Run after updating refreshes its environment identity
 and may rebuild caches. Existing Run records remain readable.
 
+To update the GUI and trainer together, start with `launch.cmd` (or `run.bat`) and use
+**Settings → Application updates → Update application**. It fast-forwards a clean checkout
+of the official GUI's `main` branch, rebuilds and restarts the app on the same port, installs
+the supported Musubi Tuner revision from the restarted GUI, and saves fresh diagnostics.
+If the GUI is current, it restarts and still runs trainer setup and diagnostics.
+Finish or cancel queued and active Runs, save any Settings edits, and close other GUI
+instances using this checkout first. Keep the launcher window open while the browser
+reconnects. The update status and diagnostics report appear in Settings. If the GUI build
+fails after downloading an update, check the launcher output, fix the reported error, and
+relaunch. You can then retry the update to finish trainer setup and diagnostics.
+
 Choose dedicated output/cache roots and model roots. Component paths must remain within those model roots; symlinks and
 Windows junctions resolve before containment checks. Enter one model or dataset root per line;
 saving drops blank lines and surrounding spaces. Save, then Run diagnostics: it warns about each

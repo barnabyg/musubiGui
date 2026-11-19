@@ -15,6 +15,7 @@ import psutil
 from fastapi import APIRouter, HTTPException
 
 from musubi_gui.diagnostics import upstream_revision
+from musubi_gui.launcher import read_update
 from musubi_gui.processes import identity_status, observed_tree, process_identity
 from musubi_gui.recipe import UPSTREAM as UPSTREAM
 from musubi_gui.redaction import redact
@@ -32,6 +33,12 @@ def supported_environment() -> str:
     return f"{UPSTREAM}\ncu130\n{TORCH}\n{TORCHVISION}\ntriton-windows=={TRITON_WINDOWS}"
 
 
+def ensure_app_update_idle() -> None:
+    update = read_update()
+    if update.running and identity_status(update.controller) != "dead":
+        raise ValueError("Musubi GUI is updating. Wait for it to finish.")
+
+
 @contextmanager
 def checkout_gate() -> Iterator[None]:
     """Shared by update and snapshot creation, including backends with different state roots."""
@@ -45,6 +52,7 @@ def checkout_gate() -> Iterator[None]:
         except sqlite3.OperationalError as error:
             raise ValueError("Musubi setup or preparation is already running. Wait for it to finish.") from error
         try:
+            ensure_app_update_idle()
             yield
         finally:
             connection.rollback()
@@ -168,14 +176,7 @@ class ManagedCheckout:
             acquired = True
             if any(is_active(run) for run in RunStore(self.state).list()):
                 raise ValueError("Finish or cancel queued and active Runs before updating Musubi.")
-            owner = self.device.owner()
-            if (
-                owner
-                and owner["run_id"] == "managed-checkout"
-                and identity_status(owner["controller"]) == "dead"
-                and all(identity_status(p) == "dead" for p in owner.get("processes", []))
-            ):
-                DeviceLease(Path(owner["state"]), self.device.path).release("managed-checkout")
+            self.release_stale_lease()
             if not self.device.acquire("managed-checkout", process_identity()):
                 raise ValueError("Training or another setup operation owns the GPU. Wait before updating Musubi.")
             leased = True
@@ -196,8 +197,7 @@ class ManagedCheckout:
 
         def work() -> None:
             try:
-                (self.state / "diagnostics.json").unlink(missing_ok=True)
-                self.install()
+                self.configure()
                 self.write_status(
                     {
                         "state": "complete",
@@ -215,6 +215,20 @@ class ManagedCheckout:
         worker = threading.Thread(target=work, name="musubi-setup", daemon=True)
         worker.start()
         return self.status()
+
+    def release_stale_lease(self) -> None:
+        owner = self.device.owner()
+        if (
+            owner
+            and owner["run_id"] == "managed-checkout"
+            and identity_status(owner["controller"]) == "dead"
+            and all(identity_status(p) == "dead" for p in owner.get("processes", []))
+        ):
+            DeviceLease(Path(owner["state"]), self.device.path).release("managed-checkout", expected=owner)
+
+    def configure(self) -> None:
+        (self.state / "diagnostics.json").unlink(missing_ok=True)
+        self.install()
 
     def install(self) -> None:
         uv = shutil.which("uv")

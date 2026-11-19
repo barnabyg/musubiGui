@@ -73,6 +73,11 @@ acceleration appears in diagnostics. They do not validate GPU kernels or qualify
 dependencies or GPU/model support. Qualify the managed training environment separately with
 the [GPU reference workflows](reference/README.md) before claiming new GPU support.
 
+The application updater browser test fast-forwards a synthetic GUI repository, restarts
+the real backend through the launcher, installs the newly pinned trainer from a local
+Git repository, and checks the saved diagnostics report. It uses the test UI bundle and
+substitutes trainer dependency downloads as in the managed checkout test.
+
 GPU reference execution is separate from CI and ordinary verification. Fake processes and
 fixture checkout files prove orchestration and persistence, not model support.
 
@@ -202,6 +207,24 @@ From the repository root in PowerShell 7, run:
    training to complete without the ConvRot transient-dequantization fallback warning.
 
 Training quality and speed require separate GPU measurements.
+
+### One-click application update
+
+Use a clean clone of the official repository on `main`, with the updater already
+available in the checked-out version. The managed setup prerequisites apply. Run this
+from the repository root in PowerShell 7:
+
+```powershell
+.\launch.cmd
+```
+
+1. With no queued or active Runs, click **Settings → Application updates → Update application**.
+2. Keep the launcher open. Expect the same Settings tab to reconnect after the restart,
+   then show the update result and a fresh **Installation diagnostics** report. If
+   diagnostics find problems, expect the report to list them.
+3. Open **Installation details** and confirm the installed and supported revisions match.
+4. Queue a Run and try the update again. Expect the updater to ask you to finish or cancel
+   the Run before restarting.
 
 ### Settings next step
 

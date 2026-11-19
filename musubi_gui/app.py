@@ -1,6 +1,6 @@
 """Same-origin loopback API and bundled browser application."""
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -13,10 +13,11 @@ from starlette.middleware.base import RequestResponseEndpoint
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.responses import Response
 
+from musubi_gui.app_update import AppUpdate, app_update_router
 from musubi_gui.datasets_api import dataset_router
 from musubi_gui.diagnostics import diagnostics, latest_report, record_report
 from musubi_gui.jobs_api import jobs_router
-from musubi_gui.managed_checkout import ManagedCheckout, checkout_router
+from musubi_gui.managed_checkout import ManagedCheckout, checkout_router, ensure_app_update_idle
 from musubi_gui.outputs import output_router
 from musubi_gui.path_tools import paths_router
 from musubi_gui.runs import RunService
@@ -30,12 +31,17 @@ def create_app(
     *,
     fixture_mode: bool = False,
     device_path: Path | None = None,
+    restart: Callable[[], None] | None = None,
 ) -> FastAPI:
     root = state or state_root()
     service = RunService(root, fixture_mode=fixture_mode, device_path=device_path, autostart=False)
+    checkout = None if fixture_mode else ManagedCheckout(root, service.device)
+    update = AppUpdate(checkout, restart) if checkout else None
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        if update:
+            update.resume()
         service.start_worker()
         try:
             yield
@@ -98,12 +104,18 @@ def create_app(
 
     @app.post("/api/diagnostics")
     def post_diagnostics() -> dict[str, Any]:
+        if not fixture_mode:
+            try:
+                ensure_app_update_idle()
+            except ValueError as error:
+                raise HTTPException(409, str(error)) from error
         settings = current()
         return record_report(root, settings, diagnostics(settings))
 
     app.include_router(jobs_router(root, fixture_mode=fixture_mode))
-    if not fixture_mode:
-        app.include_router(checkout_router(ManagedCheckout(root, service.device)))
+    app.include_router(app_update_router(update))
+    if checkout:
+        app.include_router(checkout_router(checkout))
     else:
 
         @app.get("/api/checkout")
