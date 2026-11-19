@@ -74,6 +74,14 @@ export function ManagedCheckout({
     <section className="panel" id="settings-environment">
       <div className="section-heading">
         <h2>Training environment</h2>
+        {checkout && !checkout.fixture && checkout.installed_revision && (
+          <p>
+            Installed Musubi Tuner commit{' '}
+            <code title={checkout.installed_revision}>
+              {checkout.installed_revision.slice(0, 12)}
+            </code>
+          </p>
+        )}
       </div>
       {checkout && (
         <>
@@ -107,8 +115,7 @@ export function ManagedCheckout({
               <code>{checkout.installed_revision || 'Not installed'}</code>
             </p>
             <p>
-              Latest supported revision:{' '}
-              <code>{checkout.supported_revision}</code>
+              Supported revision: <code>{checkout.supported_revision}</code>
             </p>
             <p>
               Musubi Tuner lives inside this project. Install or update to the

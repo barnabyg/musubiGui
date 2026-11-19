@@ -511,6 +511,7 @@ function App() {
                 <AppUpdate
                   disabled={busy || dirty || setupRunning}
                   onRunning={setAppUpdating}
+                  onViewDiagnostics={() => void showReport()}
                   onComplete={() => {
                     void api<Report | null>('/api/diagnostics')
                       .then(setReport)

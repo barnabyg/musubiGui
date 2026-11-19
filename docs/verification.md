@@ -220,10 +220,14 @@ from the repository root in PowerShell 7:
 
 1. With no queued or active Runs, click **Settings → Application updates → Update application**.
 2. Keep the launcher open. Expect the same Settings tab to reconnect after the restart,
-   then show the update result and a fresh **Installation diagnostics** report. If
-   diagnostics find problems, expect the report to list them.
-3. Open **Installation details** and confirm the installed and supported revisions match.
-4. Queue a Run and try the update again. Expect the updater to ask you to finish or cancel
+   then show **Update complete**, the completion time, and whether the GUI advanced.
+   Choose **View diagnostics** to open the fresh report. If diagnostics found problems,
+   expect the report to list them.
+3. Compare the visible Musubi GUI and installed Tuner commits with the expected
+   revisions. Open **Installation details** to verify the full Tuner commit and supported pin.
+4. Run the updater again with no new GUI commit. Expect **Musubi GUI was already up to date**
+   and a new completion time.
+5. Queue a Run and try the update again. Expect the updater to ask you to finish or cancel
    the Run before restarting.
 
 ### Settings next step
