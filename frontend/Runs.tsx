@@ -347,6 +347,8 @@ export function Runs({
                     key={`states-${run.id}`}
                     runId={run.id}
                     config={run.job.config}
+                    canResume={ENDED.includes(run.status)}
+                    busy={busy}
                     onRestore={(stateId, steps) =>
                       action('restore-state', {
                         state_id: stateId,
