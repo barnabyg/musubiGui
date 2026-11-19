@@ -53,10 +53,12 @@ test('live progress steps through stages, reports steps and loss, and shows a fa
     await expect(progress).toContainText(/Step [1-5]\/6/);
     await expect(progress).toContainText('Loss 0.0');
     // The fixture reports no timing, so both reported and estimated ETA stay unknown.
-    await expect(progress).toContainText('ETA unknown');
-    await expect(progress).toContainText(
-      'Estimated training remaining to max steps: unknown',
-    );
+    await expect(
+      page.getByLabel('Training ETA', { exact: true }),
+    ).toContainText('Unknown');
+    await expect(
+      page.getByLabel('Estimated training remaining', { exact: true }),
+    ).toContainText('Unknown');
     await expect(page.getByLabel('Training steps')).toHaveAttribute('max', '6');
     await expect(page.getByLabel('Run logs')).toBeHidden();
 
@@ -88,7 +90,7 @@ test('live progress steps through stages, reports steps and loss, and shows a fa
     await expect(step(1)).toContainText('Exit code 3');
     await expect(step(3)).toHaveClass('pending');
     await expect(
-      page.getByText('Step progress unknown', { exact: false }),
+      page.getByText('Waiting for the first training step.'),
     ).toBeVisible();
     await expect(page.getByLabel('Run logs')).toContainText(
       'Deliberate fixture failure',

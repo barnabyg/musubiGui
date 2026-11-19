@@ -17,7 +17,7 @@ import { RunList } from './RunList';
 import { RunRecords } from './RunRecords';
 import { RunCaching } from './RunStages';
 import { RunTabs, type RunTab } from './RunTabs';
-import { RunCompletion, RunElapsed, TrainingProgress } from './RunTiming';
+import { RunTiming, TrainingProgress } from './RunTiming';
 import { trainingOf } from './runChains';
 import { refreshRunHistory, useRunHistory } from './runHistory';
 import { useRunDetail, useRunLogs } from './runLive';
@@ -286,7 +286,6 @@ export function Runs({
                   <p>
                     State: <RunBadge status={run.status} />
                   </p>
-                  <RunElapsed run={run} />
                   {showFiles && (
                     <RunOutputActions
                       key={`outputs-${run.id}`}
@@ -305,11 +304,15 @@ export function Runs({
                   )}
                   {run.error && <p className="error">{run.error}</p>}
                   {showFiles && <RunWarnings outputs={outputs} />}
-                  <RunCompletion run={run} estimate={current?.run_estimate} />
                   <PreviewMemory stages={run.stages} />
                   <TrainingProgress
                     run={run}
                     progress={current?.progress ?? null}
+                  />
+                  <RunTiming
+                    run={run}
+                    progress={current?.progress ?? null}
+                    estimate={current?.run_estimate}
                   />
                   <RunJobLink key={run.id} frozen={run.job} />
                 </section>
