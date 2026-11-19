@@ -242,10 +242,10 @@ class DeviceLease:
                     data.update(details)
                     connection.execute("UPDATE records SET data=? WHERE id='gpu-0'", (json.dumps(data),))
 
-    def release(self, run_id: str) -> None:
+    def release(self, run_id: str, *, expected: dict[str, Any] | None = None) -> None:
         with database(self.path) as connection:
             row = connection.execute("SELECT data FROM records WHERE id='gpu-0'").fetchone()
             if row:
                 data = json.loads(row[0])
-                if data["state"] == self.state and data["run_id"] == run_id:
+                if data["state"] == self.state and data["run_id"] == run_id and (expected is None or data == expected):
                     connection.execute("DELETE FROM records WHERE id='gpu-0'")

@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import subprocess
 import sys
 from fractions import Fraction
 from pathlib import Path
@@ -10,6 +11,8 @@ from unittest.mock import patch
 import psutil
 import uvicorn
 
+from musubi_gui import launcher
+from musubi_gui.__main__ import serve as serve_application
 from musubi_gui.acceptance import synthetic_video
 from musubi_gui.app import create_app
 from musubi_gui.managed_checkout import ManagedCheckout
@@ -23,7 +26,7 @@ def serve_setup(args: argparse.Namespace) -> None:
     import musubi_gui.managed_checkout as managed
 
     managed.REMOTE = str(args.remote)
-    managed.UPSTREAM = args.revision
+    managed.UPSTREAM = args.pin_file.read_text(encoding="ascii").strip() if args.pin_file else args.revision
     original = ManagedCheckout.command
 
     def command(self: ManagedCheckout, command: list[str], *, cwd: Path | None = None, timeout: int = 900) -> str:
@@ -32,8 +35,37 @@ def serve_setup(args: argparse.Namespace) -> None:
         return original(self, command, cwd=cwd, timeout=timeout)
 
     with patch.object(ManagedCheckout, "command", command):
+        if args.pin_file:
+            raise SystemExit(serve_application(args.port, device_path=args.device))
         app = create_app(device_path=args.device)
         uvicorn.run(app, host="127.0.0.1", port=args.port, access_log=False)
+
+
+def supervise_setup(args: argparse.Namespace) -> None:
+    def prepare() -> None:
+        # Build uses the real browser-test bundle. Record which GUI revision the launcher would build.
+        with Path(".cache/gui-builds.txt").open("a", encoding="ascii") as builds:
+            builds.write(args.pin_file.read_text(encoding="ascii").strip() + "\n")
+
+    def backend(options: list[str], env: dict[str, str]) -> int:
+        return subprocess.run(
+            [
+                sys.executable,
+                __file__,
+                "serve-setup",
+                "--remote",
+                str(args.remote),
+                "--device",
+                str(args.device),
+                "--pin-file",
+                str(args.pin_file),
+                *[option for option in options if option != "--no-browser"],
+            ],
+            env=env,
+        ).returncode
+
+    with patch.object(launcher, "prepare_gui", prepare), patch.object(launcher, "serve", backend):
+        raise SystemExit(launcher.launch(["--port", str(args.port), "--no-browser"]))
 
 
 def serve(args: argparse.Namespace) -> None:
@@ -78,10 +110,19 @@ def main() -> None:
 
     command = commands.add_parser("serve-setup")
     command.add_argument("--remote", type=Path, required=True)
-    command.add_argument("--revision", required=True)
+    pin = command.add_mutually_exclusive_group(required=True)
+    pin.add_argument("--revision")
+    pin.add_argument("--pin-file", type=Path)
     command.add_argument("--device", type=Path, required=True)
     command.add_argument("--port", type=int, required=True)
     command.set_defaults(run=serve_setup)
+
+    command = commands.add_parser("supervise-setup")
+    command.add_argument("--remote", type=Path, required=True)
+    command.add_argument("--pin-file", type=Path, required=True)
+    command.add_argument("--device", type=Path, required=True)
+    command.add_argument("--port", type=int, required=True)
+    command.set_defaults(run=supervise_setup)
 
     command = commands.add_parser("serve")
     command.add_argument("--identity", type=Path, required=True)

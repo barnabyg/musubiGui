@@ -35,6 +35,7 @@ import {
 import { useRunSignals } from './runSignals';
 import { SetupChecklist, focusSetupControl } from './SetupChecklist';
 import { ManagedCheckout } from './ManagedCheckout';
+import { AppUpdate } from './AppUpdate';
 import { StatusBadge, type Tone } from './StatusBadge';
 
 type Settings = {
@@ -144,6 +145,7 @@ function App() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [setupRunning, setSetupRunning] = useState(false);
+  const [appUpdating, setAppUpdating] = useState(false);
   const [checkoutReady, setCheckoutReady] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [report, setReport] = useState<Report | null>(null);
@@ -371,7 +373,7 @@ function App() {
         inputId={`settings-${key}`}
         kind={kind}
         value={settings?.[key] ?? ''}
-        disabled={busy}
+        disabled={busy || appUpdating}
         placeholder="C:\…"
         help={help}
         onChange={(value) => settings && update({ ...settings, [key]: value })}
@@ -390,7 +392,7 @@ function App() {
         label={label}
         inputId={`settings-${key}`}
         browseLabel={browseLabel}
-        disabled={busy}
+        disabled={busy || appUpdating}
         value={rootText[key]}
         placeholder={placeholder}
         help={help}
@@ -487,7 +489,7 @@ function App() {
                   }
                   dirty={dirty}
                   busy={busy}
-                  setupRunning={setupRunning}
+                  setupRunning={setupRunning || appUpdating}
                   diagnostics={
                     !report
                       ? 'unchecked'
@@ -501,10 +503,19 @@ function App() {
                   diagnose={diagnose}
                 />
                 <ManagedCheckout
-                  disabled={busy || dirty}
+                  disabled={busy || dirty || appUpdating}
                   onRunning={setSetupRunning}
                   onReady={setCheckoutReady}
                   onChange={() => setReport(null)}
+                />
+                <AppUpdate
+                  disabled={busy || dirty || setupRunning}
+                  onRunning={setAppUpdating}
+                  onComplete={() => {
+                    void api<Report | null>('/api/diagnostics')
+                      .then(setReport)
+                      .catch((reason: Error) => setError(reason.message));
+                  }}
                 />
                 <section className="panel">
                   <div className="section-heading">
@@ -552,7 +563,7 @@ function App() {
                           label={label}
                           kind="file"
                           roots={rootLines(rootText.model_roots)}
-                          disabled={busy}
+                          disabled={busy || appUpdating}
                           value={settings.models[key] ?? ''}
                           onChange={(value) =>
                             update({
@@ -568,7 +579,7 @@ function App() {
                 <div className="actions" id="settings-actions">
                   <span role="status">{status}</span>
                   <button
-                    disabled={busy || dirty || setupRunning}
+                    disabled={busy || dirty || setupRunning || appUpdating}
                     onClick={() => void diagnose()}
                   >
                     {busy ? 'Working…' : 'Run diagnostics'}
@@ -576,7 +587,7 @@ function App() {
                   <button
                     className="primary"
                     id="settings-save"
-                    disabled={busy}
+                    disabled={busy || appUpdating}
                     onClick={() => void save()}
                   >
                     Save settings

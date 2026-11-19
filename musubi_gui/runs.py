@@ -14,7 +14,7 @@ from musubi_gui.checkpoint_retention import retained_states
 from musubi_gui.job_models import Job
 from musubi_gui.job_store import JobStore
 from musubi_gui.job_validation import configuration_errors
-from musubi_gui.managed_checkout import checkout_gate
+from musubi_gui.managed_checkout import checkout_gate, ensure_app_update_idle
 from musubi_gui.processes import process_identity
 from musubi_gui.recipe import Stage
 from musubi_gui.redaction import redact
@@ -151,6 +151,8 @@ class RunService:
         verify_inputs(run)
 
     def _request_training(self, run_id: str, *, allow_wait: bool) -> dict[str, Any]:
+        if not self.fixture_mode:
+            ensure_app_update_idle()
         run = self.get(run_id)
         if run["status"] in {"pending_training", "training", "generating", "completed"}:
             return run
