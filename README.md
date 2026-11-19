@@ -21,6 +21,7 @@ From a clean checkout, run this command in PowerShell, or double-click `run.bat`
 
 It installs only the application's locked dependencies into `.venv` and `node_modules`,
 builds the UI, starts the backend on **127.0.0.1:8765** and opens the browser.
+The app opens on **Jobs** when setup is complete and no Run is active or queued.
 Use `.\launch.cmd --port 8766 --no-browser` for a second local instance. Stop with Ctrl+C.
 Registry access is required on first launch. Musubi setup is a separate action in Settings; model weights are never downloaded by setup.
 The Wan reference can use the separately qualified [offline conversion](docs/reference/wan-conversion.md)
