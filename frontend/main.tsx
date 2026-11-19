@@ -285,7 +285,7 @@ function App() {
         if (!checkout.ready || firstMissingFolder(value))
           go('Settings', undefined, true);
         else if (active) go('Runs', active.id, true);
-        else go('Datasets', undefined, true);
+        else go('Jobs', undefined, true);
       })
       .catch((reason: Error) => {
         setError(reason.message);

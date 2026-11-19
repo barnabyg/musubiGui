@@ -79,6 +79,73 @@ test('backend interruption retains GPU ownership and offers explicit recovery wi
   }
 });
 
+test('Resume uses the most recent saved state without opening the list', async ({
+  page,
+}) => {
+  const app = await runWorkspace();
+  try {
+    const job = app.manifest.jobs[0];
+    const original = (await app.post('/api/runs/prepare', {
+      job_id: job.id,
+      start: true,
+    })) as RunRecord;
+    const originalUrl = `${app.url}/#/runs/${original.id}`;
+    await page.goto(originalUrl);
+    await expect(
+      page.getByText('State: Completed', { exact: true }),
+    ).toBeVisible({ timeout: 240_000 });
+
+    const panel = runPanel(page, 'resume');
+    const resume = panel.getByRole('button', { name: 'Resume', exact: true });
+    const target = panel.getByLabel('Train until step');
+    const savedStep = Number(await target.inputValue());
+    await resume.click();
+    await expect(panel.getByRole('alert')).toContainText(
+      `Choose a step after ${savedStep}`,
+    );
+    expect(await app.records()).toHaveLength(1);
+
+    await target.fill(String(savedStep + 1));
+    await resume.click();
+    await expect(
+      panel.getByRole('button', { name: 'Restore as new segment' }),
+    ).toHaveCount(0);
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toContainText(`saved step ${savedStep}`);
+    await dialog
+      .getByRole('button', { name: 'Restore as new segment' })
+      .click();
+    await expect(page).not.toHaveURL(originalUrl);
+    await expect(
+      page.getByText('State: Completed', { exact: true }),
+    ).toBeVisible({ timeout: 240_000 });
+    const segment = (await app.records()).find(
+      (run) => run.id !== original.id,
+    )!;
+    const detail = await (
+      await fetch(`${app.url}/api/runs/${segment.id}`)
+    ).json();
+    expect(detail.resume_of).toBe(original.id);
+    expect(detail.job.revision).toBe(original.job.revision);
+    expect(detail.segment).toMatchObject({
+      step_offset: savedStep,
+      target_steps: savedStep + 1,
+      additional_steps: 1,
+    });
+
+    await page.goto(originalUrl);
+    await panel.getByRole('button', { name: 'Inspect saved states' }).click();
+    const earlier = panel.getByRole('paragraph').filter({
+      hasText: 'optimizer step 1',
+    });
+    await expect(
+      earlier.getByRole('button', { name: 'Restore as new segment' }),
+    ).toBeEnabled({ timeout: 240_000 });
+  } finally {
+    await app.close();
+  }
+});
+
 test('a stopped Run resumes saved optimizer state through the UI after a backend restart', async ({
   page,
 }) => {
@@ -247,6 +314,11 @@ test('a stopped Run resumes saved optimizer state through the UI after a backend
     await expect(
       resume.getByText(/^Saved optimizer state was not enabled/),
     ).toBeVisible();
+    await resume.getByRole('button', { name: 'Resume', exact: true }).click();
+    await expect(resume.getByRole('alert')).toContainText(
+      'No valid saved optimizer state found',
+    );
+    expect(await app.records()).toHaveLength(3);
     await resume
       .getByRole('button', { name: 'Inspect saved states', exact: true })
       .click();

@@ -6,12 +6,11 @@
 
 **Resume** in the Actions panel, and **Prepare and start** on the Job page, continue the
 latest saved state; see [Resuming with an edited Job revision](#resuming-with-an-edited-job-revision).
-**Resume from an earlier save** on Run Overview restores any saved state with the Run's own
-revision; **How resuming works** expands its explanation. It also
-works after restarting the application: open the stopped or interrupted Run,
-choose **Inspect saved states**, enter **Train until step** (a total, such as 1000),
-then choose **Restore as new segment** for a valid state and confirm. This immediately
-queues training from the saved step to that total; the trainer runs the difference.
+**Resume from an earlier save** on Run Overview uses the Run's own revision. Set
+**Train until step** to the desired total, then click **Resume** and confirm to continue
+from the latest valid save. To pick a different save, click **Inspect saved states**
+and choose **Restore as new segment** beside it. Both options work after restarting
+the application and queue training from the saved step to the chosen total.
 The total must be after the saved step: a state at or past it cannot be restored
 until the total is raised, and the panel says which step to exceed. The field starts
 at the Job's training steps. The original Run stays in history.

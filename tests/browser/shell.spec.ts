@@ -133,18 +133,18 @@ test('each view has one primary action, destructive actions look dangerous and f
   }
 });
 
-test('a configured app opens on Datasets, or on a Run in progress', async ({
+test('a configured app opens on Jobs, or on a Run in progress', async ({
   page,
 }) => {
   const app = await runWorkspace();
   try {
     await page.goto(app.url);
     await expect(
-      page.getByRole('heading', { name: 'Datasets', exact: true }),
+      page.getByRole('heading', { name: 'Jobs', exact: true }),
     ).toBeVisible();
-    await expect(page).toHaveURL(/#\/datasets$/);
+    await expect(page).toHaveURL(/#\/jobs$/);
     await expect(
-      page.getByRole('button', { name: 'Datasets', exact: true }),
+      page.getByRole('button', { name: 'Jobs', exact: true }),
     ).toHaveClass('active');
 
     // Choosing a screen before the opening one is decided leaves no blank entry to go back to.
@@ -157,8 +157,8 @@ test('a configured app opens on Datasets, or on a Run in progress', async ({
     });
     await page.goto(app.url);
     const entries = await page.evaluate(() => window.history.length);
-    await page.getByRole('button', { name: 'Jobs', exact: true }).click();
-    await expect(page).toHaveURL(/#\/jobs$/);
+    await page.getByRole('button', { name: 'Datasets', exact: true }).click();
+    await expect(page).toHaveURL(/#\/datasets$/);
     expect(await page.evaluate(() => window.history.length)).toBe(entries);
     release();
     await page.unroute('**/api/settings');
@@ -166,7 +166,7 @@ test('a configured app opens on Datasets, or on a Run in progress', async ({
     // A link that names nothing opens the same place.
     await page.goto('about:blank');
     await page.goto(`${app.url}/#/jobs/not.a.job`);
-    await expect(page).toHaveURL(/#\/datasets$/);
+    await expect(page).toHaveURL(/#\/jobs$/);
 
     // A link still opens what it names.
     await page.goto(`${app.url}/#/settings`);
