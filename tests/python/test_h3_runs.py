@@ -23,9 +23,9 @@ def test_h3_preparation_freezes_audio_and_keeps_guidance_stages(tmp_path: Path) 
         args = next(stage["args"] for stage in prepared["stages"] if stage["name"] == "text_cache")
         assert "--uncond_output" in args
         assert Path(prepared["cache"], "uncond.safetensors").is_file()
-        frozen = json.loads(Path(prepared["directory"], "inputs.json").read_text(encoding="utf-8"))
+        frozen = json.loads(Path(prepared["directory"], "config", "inputs.json").read_text(encoding="utf-8"))
         assert frozen["manifest"]["items"][0]["caption"]["text"].endswith("tone plays.")
-        native = Path(prepared["directory"], "dataset.toml").read_text(encoding="utf-8")
+        native = Path(prepared["directory"], "config", "dataset.toml").read_text(encoding="utf-8")
         assert "video_jsonl_file = " in native and "source_fps" not in native
     finally:
         service.close()
@@ -47,7 +47,7 @@ def test_explicit_audio_in_a_video_container_cannot_replace_the_frozen_target_vi
         frozen = prepared["manifest"]["items"][0]
         assert Path(frozen["snapshot_path"]).read_bytes() == Path(item["absolute_path"]).read_bytes()
         assert frozen["snapshot_path"] != frozen["audio"]["snapshot_path"]
-        metadata = json.loads(Path(prepared["directory"], "dataset.jsonl").read_text(encoding="utf-8"))
+        metadata = json.loads(Path(prepared["directory"], "config", "dataset.jsonl").read_text(encoding="utf-8"))
         assert metadata["audio_path"] == frozen["audio"]["snapshot_path"]
     finally:
         service.close()
@@ -70,7 +70,9 @@ def test_h3_training_outputs_a_checkpoint_and_decodable_video_with_audio(tmp_pat
         assert completed["samples"][0]["status"] == "playable"
         diagnostics = [
             json.loads(line)
-            for line in Path(completed["directory"], "performance.jsonl").read_text(encoding="utf-8").splitlines()
+            for line in Path(completed["directory"], "logs", "performance.jsonl")
+            .read_text(encoding="utf-8")
+            .splitlines()
         ]
         assert {row["stage"] for row in diagnostics} == {"latent_cache", "text_cache", "train", "generate"}
         assert sum(row["event"] == "monitor_stop" for row in diagnostics) == 4

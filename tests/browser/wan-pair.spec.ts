@@ -156,9 +156,7 @@ test('alternating Wan settings persist, train both experts and restore the paire
     for (const expert of ['low', 'high']) {
       const file = full.sample_pair[expert].path;
       expect(path.relative(run.directory, file)).toMatch(
-        new RegExp(
-          '^checkpoints[/\\\\].*-' + expert + '-step0*8\\.safetensors$',
-        ),
+        new RegExp('^.*-' + expert + '-step0*8\\.safetensors$'),
       );
       expect((await stat(file)).size).toBeGreaterThan(0);
     }

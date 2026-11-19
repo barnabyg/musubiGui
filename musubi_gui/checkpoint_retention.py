@@ -9,6 +9,7 @@ from threading import Event
 from typing import Any
 
 from musubi_gui.checkpoint_names import training_saves
+from musubi_gui.run_paths import RunPaths
 from musubi_gui.run_store import references_folder
 from musubi_gui.safetensors_file import complete_safetensors
 from musubi_gui.saved_state import inspect_state
@@ -31,7 +32,8 @@ class Save:
 def _saves(run: dict[str, Any], validated: dict[str, tuple[object, Save]], cancelled: Event | None) -> list[Save]:
     """Only complete, named recipe saves enter retention; unknown files are preserved."""
     saves = []
-    root = Path(run["directory"]) / "checkpoints"
+    paths = RunPaths.from_record(run)
+    root = paths.directory
     for stage in run["stages"]:
         args = stage.get("args", [])
         if stage["name"] != "train" or "--output_name" not in args:
@@ -46,7 +48,7 @@ def _saves(run: dict[str, Any], validated: dict[str, tuple[object, Save]], cance
                 within_root(checkpoint, [root])
                 if checkpoint.is_symlink():
                     continue
-                state_path = checkpoint.with_name(checkpoint.stem + "-state")
+                state_path = paths.state / (checkpoint.stem + "-state")
                 if state_path.is_symlink() or state_path.is_junction():
                     continue
                 files = [checkpoint, *sorted(state_path.rglob("*"))] if state_path.is_dir() else [checkpoint]
@@ -168,11 +170,13 @@ def apply_retention(
     A durable journal precedes renaming; hidden quarantined saves cannot be offered for restore.
     Failed removal is retried at the next boundary and is visible in the Run's retention status.
     """
-    root = Path(run["directory"]) / "checkpoints"
-    if root.is_symlink() or root.is_junction():
-        raise ValueError("Checkpoint retention refuses a linked checkpoint folder.")
-    root = within_root(root, [Path(run["directory"])])
-    journal_file = Path(run["directory"]) / "retention.json"
+    paths = RunPaths.from_record(run)
+    for root in (paths.directory, paths.state, paths.logs):
+        if root.is_symlink() or root.is_junction():
+            raise ValueError("Checkpoint retention refuses linked storage folders.")
+        within_root(root, [paths.directory])
+    paths.logs.mkdir(exist_ok=True)
+    journal_file = paths.logs / "retention.json"
     journal: dict[str, Any] = (
         json.loads(journal_file.read_text(encoding="utf-8"))
         if journal_file.exists()
@@ -205,11 +209,11 @@ def apply_retention(
 
     blocked: list[str] = []
     for save in candidates:
-        paths = [save.checkpoint, *([save.state] if save.state else [])]
-        if any(is_protected(path) for path in paths):
-            blocked.extend(path.name for path in paths)
+        artifacts = [save.checkpoint, *([save.state] if save.state else [])]
+        if any(is_protected(path) for path in artifacts):
+            blocked.extend(path.name for path in artifacts)
             continue
-        for path in paths:
+        for path in artifacts:
             if path.name not in journal["pending"] and path.name not in journal["removed"]:
                 journal["pending"].append(path.name)
     journal.update(
@@ -218,7 +222,7 @@ def apply_retention(
         counterpart_states=[save.state.name for save in candidates if save.state and str(save.state) in protected],
     )
     atomic_json(journal_file, journal)
-    quarantine = root / ".retention"
+    quarantine = paths.quarantine
     if quarantine.is_symlink() or quarantine.is_junction():
         raise ValueError("Checkpoint retention refuses linked quarantine storage.")
     # Retention also runs before the trainer has created its first checkpoint folder.
@@ -226,6 +230,12 @@ def apply_retention(
     for name in list(journal["pending"]):
         if not isinstance(name, str) or Path(name).name != name or name.startswith("."):
             raise ValueError("Invalid retention journal path; nothing outside checkpoints may be removed.")
+        if name.endswith("-state"):
+            root = paths.state
+        elif name.endswith(".safetensors"):
+            root = paths.directory
+        else:
+            raise ValueError("Invalid retention journal entry; expected a checkpoint or saved state.")
         source = root / name
         target = quarantine / name
         try:
@@ -260,7 +270,7 @@ def apply_retention(
 
 def retained_states(run: dict[str, Any], states: list[dict[str, Any]]) -> list[dict[str, Any]]:
     removed = set(run.get("retention", {}).get("removed", [])) | set(run.get("retention", {}).get("pending", []))
-    root = Path(run["directory"]) / "checkpoints"
+    root = RunPaths.from_record(run).state
     identities = {
         hashlib.sha256((str(root / name) if is_paired(run) else name).encode()).hexdigest()[:24]
         for name in removed

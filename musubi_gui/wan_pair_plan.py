@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from musubi_gui.recipe import Stage
+from musubi_gui.run_paths import RunPaths
 from musubi_gui.wan_pair import alternating_phases, paired_phases, phase_counts
 
 
@@ -34,6 +35,7 @@ def paired_stages(
     """Each phase has its own output name; no later phase can overwrite an earlier state."""
     template = next(stage for stage in stages if stage.name == "train")
     output = Path(argument(template.args, "--output_dir"))
+    paths = RunPaths(output)
     stem = argument(template.args, "--output_name")
     states = copy.deepcopy(sources or {})
     result = [copy.deepcopy(stage) for stage in stages if stage.name not in {"train", "generate"}]
@@ -56,7 +58,7 @@ def paired_stages(
             else:
                 set_argument(generated.args, flag, selected["path"])
         if preview_every:
-            destination = output.parent / "samples" / (f"step{step:08d}" if step is not None else "final")
+            destination = paths.samples / (f"step{step:08d}" if step is not None else "final")
             set_argument(generated.args, "--save_path", str(destination))
         result.append(generated)
 
@@ -96,7 +98,7 @@ def paired_stages(
                 del args[index : index + 2]
         checkpoint = str(output / f"{name}.safetensors")
         checkpoints[phase.expert] = {"path": checkpoint, "steps": before + phase.steps}
-        states[phase.expert] = {"path": str(output / f"{name}-state")}
+        states[phase.expert] = {"path": str(paths.state / f"{name}-state")}
         result.append(
             Stage(
                 "train",

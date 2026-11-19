@@ -191,7 +191,7 @@ test('a Wan job combines an image dataset and a video dataset through review, re
       )
       .toBe('prepared');
     const toml = await readFile(
-      path.join(prepared!.directory, 'dataset.toml'),
+      path.join(prepared!.directory, 'config', 'dataset.toml'),
       'utf8',
     );
     expect(toml).toContain('media/set-1"');

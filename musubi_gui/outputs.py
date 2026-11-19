@@ -18,6 +18,7 @@ from musubi_gui.redaction import redact
 from musubi_gui.resume_dataset import dataset_changes
 from musubi_gui.run_chains import StepRange, chain_of, step_range
 from musubi_gui.run_deletion import output_index_file
+from musubi_gui.run_paths import RunPaths
 from musubi_gui.runs import RunService
 from musubi_gui.safetensors_file import complete_safetensors
 from musubi_gui.settings import atomic_json, load_settings, within_root
@@ -39,9 +40,7 @@ def download_name(job: dict[str, Any], file: Path) -> str:
     name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", str(job.get("name", ""))).strip(" .")[:120].strip(" .") or "job"
     if name.split(".")[0].strip().upper() in WINDOWS_RESERVED:
         name = "_" + name
-    # A saved state's weights sit in `<name>[-stepN]-state/`, and must not pass for the final LoRA.
-    state = file.parent.name.endswith("-state")
-    source = file.parent.name.removesuffix("-state") if state else file.stem
+    source = file.stem
     step = re.search(r"-step(\d+)$", source)
     tag = f"-step{int(step[1])}" if step else ""
     phase = re.search(r"-(low|high)-phase(\d+)(?:-step\d+)?$", source)
@@ -51,7 +50,7 @@ def download_name(job: dict[str, Any], file: Path) -> str:
         tag = f"-{expert[1]}{tag}"
     elif source.endswith(("-low-source", "-high-source")):
         tag = "-" + source.rsplit("-", 2)[1] + "-source"
-    return f"{name}-r{job.get('revision', 0)}{tag}{f'-state-{file.stem}' if state else ''}{file.suffix}"
+    return f"{name}-r{job.get('revision', 0)}{tag}{file.suffix}"
 
 
 def output_step(entry: dict[str, Any], run: dict[str, Any], steps: StepRange) -> int:
@@ -67,16 +66,26 @@ def output_step(entry: dict[str, Any], run: dict[str, Any], steps: StepRange) ->
         return int(preview["step"]) + shift
     if path.parent.name == "sample" and (step := preview_step(path)) is not None:
         return step + shift
-    source = path.parent.name.removesuffix("-state") if path.parent.name.endswith("-state") else path.stem
+    source = path.stem
     if source.endswith(("-low-source", "-high-source")):
         return steps.start
-    if path.parts[0] == "checkpoints" and (match := re.search(r"-step(\d+)$", source)):
+    if path.suffix.lower() in CHECKPOINTS and (match := re.search(r"-step(\d+)$", source)):
         return int(match[1]) + shift
     return steps.target
 
 
 def output_id(run_id: str, relative: str) -> str:
     return hashlib.sha256((run_id + "\0" + relative).encode()).hexdigest()[:32]
+
+
+def supported_output(relative: Path) -> bool:
+    if relative.is_absolute() or not relative.parts or {"..", ".retention"}.intersection(relative.parts):
+        return False
+    folder = relative.parts[0]
+    suffix = relative.suffix.lower()
+    if len(relative.parts) == 1:
+        return suffix in CHECKPOINTS
+    return folder == "samples" and suffix in IMAGES | VIDEOS | AUDIO
 
 
 def _scrub(value: Any) -> Any:
@@ -151,12 +160,9 @@ class OutputBrowser:
     def _file(self, run: dict[str, Any], relative: str) -> Path:
         directory = self._directory(run)
         try:
-            file = within_root(directory / relative, [directory])
-            if (
-                Path(relative).is_absolute()
-                or Path(relative).parts[0] not in {"checkpoints", "samples"}
-                or file.suffix.lower() not in IMAGES | VIDEOS | AUDIO | CHECKPOINTS
-            ):
+            path = Path(relative)
+            file = within_root(directory / path, [directory])
+            if not all(supported_output(candidate) for candidate in (path, file.relative_to(directory))):
                 raise ValueError("Unsupported output location.")
             return file
         except (ValueError, IndexError) as error:
@@ -189,13 +195,13 @@ class OutputBrowser:
                     entry.update(status="blocked", error=str(error.detail))
                 return self._result(run, entries, [str(error.detail)])
             candidates: set[str] = set(entries)
+            paths = RunPaths(directory)
             try:
-                for subdirectory in ["checkpoints", "samples"]:
-                    for file in (directory / subdirectory).rglob("*"):
-                        if ".retention" in file.relative_to(directory).parts:
-                            continue
-                        if file.is_file() and file.suffix.lower() in IMAGES | VIDEOS | AUDIO | CHECKPOINTS:
-                            relative = file.relative_to(directory).as_posix()
+                for files in (directory.glob("*"), paths.samples.rglob("*")):
+                    for file in files:
+                        path = file.relative_to(directory)
+                        if file.is_file() and supported_output(path):
+                            relative = path.as_posix()
                             identity = output_id(run_id, relative)
                             candidates.add(identity)
                             entries.setdefault(
@@ -237,7 +243,7 @@ class OutputBrowser:
                         raise ValueError("Output is empty; its producer may still be writing it.")
                     if entry.get("stamp") != stamp or entry.get("status") != "available":
                         metadata = checkpoint_metadata(file) if kind == "checkpoint" else inspect(file)
-                        if file.parent == directory / "checkpoints" / "sample" and kind != "checkpoint":
+                        if file.parent == paths.previews and kind != "checkpoint":
                             step = preview_step(file)
                             if step is not None:
                                 metadata["preview"] = {

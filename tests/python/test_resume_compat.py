@@ -271,7 +271,7 @@ def test_an_unreadable_frozen_revision_is_refused() -> None:
 
 def run_record(tmp_path: Path, name: str, created: str, **fields: Any) -> dict[str, Any]:
     directory = tmp_path / name
-    (directory / "checkpoints").mkdir(parents=True)
+    (directory / "state").mkdir(parents=True)
     return {"id": name, "created": created, "status": "stopped", "directory": str(directory), "job": frozen(), **fields}
 
 
@@ -328,7 +328,7 @@ def test_a_segment_that_failed_before_saving_resumes_from_the_state_it_started_f
 
 def test_the_job_training_names_the_latest_save_from_uninspected_state_folders(tmp_path: Path) -> None:
     run = run_record(tmp_path, "stopped", "2026-01-01")
-    checkpoints = Path(run["directory"]) / "checkpoints"
+    state_folder = Path(run["directory"]) / "state"
     assert job_training([], "job") == {
         "run_id": None,
         "chain_id": None,
@@ -339,13 +339,13 @@ def test_the_job_training_names_the_latest_save_from_uninspected_state_folders(t
     }
     assert job_training([run], "job")["resume"] is None
     for step in (100, 300):
-        (checkpoints / f"Job-r2-step{step:08d}-state").mkdir()
-    (checkpoints / ".Job-r2-step00000400-state").mkdir()
+        (state_folder / f"Job-r2-step{step:08d}-state").mkdir()
+    (state_folder / ".Job-r2-step00000400-state").mkdir()
     assert job_training([run], "job")["resume"] == {"run_id": "stopped", "run_status": "stopped", "saved_step": 300}
     # A completed Run's final state is at its target; inspection, once recorded, is what counts.
     target = {**frozen(), "config": {**frozen()["config"], "steps": 500}}
     completed = run_record(tmp_path, "completed", "2026-01-02", status="completed", job=target)
-    (Path(completed["directory"]) / "checkpoints" / "Job-r2-state").mkdir()
+    (Path(completed["directory"]) / "state" / "Job-r2-state").mkdir()
     assert named_save_step(completed) == 500
     assert named_save_step({**run, "saved_states": [{"valid": True, "resume_step": 120}]}) == 120
     # Paired Wan folders name each expert's local steps.
@@ -360,7 +360,7 @@ def test_job_review_uses_uninspected_state_folders_without_a_saved_step(tmp_path
     job = edited(frozen(), steps=10)
     run = run_record(tmp_path, "uninspected", "2026-01-01")
     assert resume_review([run], job) is None
-    (Path(run["directory"]) / "checkpoints" / "Job-r2-step00000005-state").mkdir()
+    (Path(run["directory"]) / "state" / "Job-r2-step00000005-state").mkdir()
     section = resume_review([run], job)
     assert section is not None and section["compatible"] and section["saved_step"] is None
 

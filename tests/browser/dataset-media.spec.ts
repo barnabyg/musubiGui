@@ -166,7 +166,7 @@ for (const family of ['wan', 'h3'] as const) {
           (item) => item.job.id === saved.id,
         )!;
         const toml = await readFile(
-          path.join(run.directory, 'dataset.toml'),
+          path.join(run.directory, 'config', 'dataset.toml'),
           'utf8',
         );
         expect(toml.includes('image_directory')).toBe(media !== 'videos');
@@ -306,7 +306,10 @@ test('mixed folders and matching filenames keep separate captions and caches acr
       (item) => item.job.id === videos.id,
     )!;
     const snapshot = JSON.parse(
-      await readFile(path.join(run.directory, 'snapshot.json'), 'utf8'),
+      await readFile(
+        path.join(run.directory, 'config', 'snapshot.json'),
+        'utf8',
+      ),
     ) as {
       cache: string;
       manifest: {

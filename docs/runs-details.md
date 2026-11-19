@@ -7,7 +7,8 @@
 **Overview** shows the Run state, training progress, timing and actions. The short Run ID
 beside the Job name matches the first eight characters of the ID in the Run URL.
 Open **Stage logs and diagnostics** to read logs or select the output folder path.
-The `checkpoints` subfolder contains the Run's LoRAs and saved training states.
+The Run folder contains its LoRAs directly and keeps saved training states under
+`state/`. See [Run outputs](outputs.md) for the full layout.
 
 **Samples** lists generated media and periodic previews. Use the tabs or arrow keys to switch
 views. The sample selection and playback stay in place when you switch views or new previews arrive.
@@ -87,8 +88,8 @@ To check Wan checkpoint naming, run this command from `C:/docs/git/musubiGui` in
 This isolated CPU fixture needs Windows, Node.js/npm, uv and Edge; no GPU or models.
 Open **WAN acceptance 1**, set Training steps to 4, steps per expert before switching
 to 2, and Save every N steps to 1. Save, review, then **Prepare and start**. In the
-Run's output folder, expect each expert's checkpoints and state folders at steps 1,
-2, 3 and 4. In **Resume**, open **Choose an earlier save** and select the pair at step 2.
+Run's output folder, expect each expert's checkpoints at steps 1, 2, 3 and 4 and the
+matching folders under `state/`. In **Resume**, open **Choose an earlier save** and select the pair at step 2.
 Set **Train until step** to 4, review and confirm. The new segment's final files should both end in `-step00000004`.
 GPU training quality is outside this naming check.
 
@@ -96,7 +97,8 @@ To check folder naming, from the repository root run
 `.\acceptance.cmd --workspace ".cache/folder-check-$([guid]::NewGuid().ToString('N'))"`.
 Prepare a fixture Job and open **Stage logs and diagnostics** to inspect the output path. It should contain
 the Job name and timestamp, without a random suffix. The fixture needs no models
-or GPU; preparation creates synthetic training inputs. Start training, copy the output folder path and inspect its `checkpoints` folder. Checkpoint files and state folders should
+or GPU. Preparation creates synthetic training inputs. Start training, copy the output folder path
+and inspect the checkpoints at the top level and saved states under `state/`. Both should
 use the frozen Job name and revision, with no random job ID. Rename the Job and confirm
 the original Run still offers the same folder and its saved states.
 

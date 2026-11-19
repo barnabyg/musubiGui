@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from musubi_gui.run_paths import RunPaths
 from musubi_gui.step_offset import due_steps, segment_step_offset
 from musubi_gui.wan_pair_runtime import stage_log
 
@@ -126,7 +127,7 @@ def completion_estimate(run: dict[str, Any], progress: dict[str, Any] | None, no
                 sampling_remaining_seconds=0,
             )
         return result
-    directory = Path(run["directory"])
+    directory = RunPaths.from_record(run).logs
     stages = run["stages"]
     observations = [read_timing(directory, stage) for stage in stages]
     gaps: set[str] = set()

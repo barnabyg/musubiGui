@@ -95,7 +95,7 @@ def test_start_runs_training_once_and_keeps_the_prepared_job_revision(tmp_path: 
         execution = plan(tmp_path)
         train = execution.directory / "train.py"
         train.write_text(
-            "import pathlib,time\ntime.sleep(.2)\nprint('step 1/2',flush=True)\npathlib.Path('checkpoints').mkdir(exist_ok=True)\npathlib.Path('checkpoints/test.safetensors').write_bytes(b'checkpoint')\n",
+            "import pathlib,time\ntime.sleep(.2)\nprint('step 1/2',flush=True)\npathlib.Path('test.safetensors').write_bytes(b'checkpoint')\n",
             encoding="utf-8",
         )
         execution.stages.append(Stage("train", [sys.executable, str(train)]))
@@ -115,8 +115,7 @@ def training_plan(root: Path, name: str = "one", *, fail_cache: bool = False) ->
     execution = plan(root, name)
     train = execution.directory / "train.py"
     train.write_text(
-        "import pathlib\npathlib.Path('checkpoints').mkdir(exist_ok=True)\n"
-        "pathlib.Path('checkpoints/test.safetensors').write_bytes(b'checkpoint')\n",
+        "import pathlib\npathlib.Path('test.safetensors').write_bytes(b'checkpoint')\n",
         encoding="utf-8",
     )
     execution.stages.append(Stage("train", [sys.executable, str(train)]))
@@ -262,7 +261,7 @@ def test_queue_order_and_cancellation_survive_restart(tmp_path: Path) -> None:
             execution = plan(tmp_path, name)
             script = execution.directory / "train.py"
             script.write_text(
-                "import pathlib\npathlib.Path('checkpoints').mkdir()\npathlib.Path('checkpoints/final.safetensors').write_bytes(b'checkpoint')\n",
+                "import pathlib\npathlib.Path('final.safetensors').write_bytes(b'checkpoint')\n",
                 encoding="utf-8",
             )
             execution.stages.append(Stage("train", [sys.executable, str(script)]))
@@ -283,7 +282,7 @@ def test_queue_order_and_cancellation_survive_restart(tmp_path: Path) -> None:
         # Terminal status is published before the worker finishes releasing its GPU lease.
         wait_for(restarted, ids[0], "completed", device_released=True)
         assert restarted.get(ids[1])["status"] == "cancelled"
-        assert not (tmp_path / "second/checkpoints").exists()
+        assert not (tmp_path / "second/final.safetensors").exists()
         assert restarted.device.owner() is None
     finally:
         restarted.close()
@@ -318,7 +317,7 @@ def test_changed_training_source_blocks_execution_of_prepared_inputs(tmp_path: P
     try:
         failed = wait_for(service, run["id"], "failed")
         assert "checkout changed" in failed["error"]
-        assert not (execution.directory / "latent_cache.log").exists()
+        assert not (execution.directory / "logs" / "latent_cache.log").exists()
     finally:
         service.close()
 
@@ -405,12 +404,14 @@ def test_final_save_at_a_checkpoint_interval_is_stored_once(tmp_path: Path, fami
         assert name == f"{job_folder(job['name'])}-r1"
         assert job["id"] not in name
         assert Path(completed["cache"]).name.startswith(job_folder(job["name"]) + "-")
-        checkpoints = Path(completed["directory"]) / "checkpoints"
-        assert sorted(path.name for path in checkpoints.iterdir()) == [
-            f"{name}-state",
-            f"{name}-step00000001-state",
+        directory = Path(completed["directory"])
+        assert sorted(path.name for path in directory.iterdir() if path.is_file()) == [
             f"{name}-step00000001.safetensors",
             f"{name}.safetensors",
+        ]
+        assert sorted(path.name for path in (directory / "state").iterdir()) == [
+            f"{name}-state",
+            f"{name}-step00000001-state",
         ]
         assert completed["removed_duplicates"] == [f"{name}-step00000002.safetensors", f"{name}-step00000002-state"]
         assert sorted(Path(file).name for file in completed["checkpoints"]) == [

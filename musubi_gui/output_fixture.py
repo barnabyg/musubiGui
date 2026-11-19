@@ -108,8 +108,6 @@ def prepare(root: Path) -> dict[str, Any]:
                 )
             )
             directory = Path(run["directory"])
-            checkpoints = directory / "checkpoints"
-            checkpoints.mkdir()
             header = json.dumps(
                 {
                     "__metadata__": {"fixture": "synthetic; not trained", "ss_steps": str(revision)},
@@ -117,7 +115,7 @@ def prepare(root: Path) -> dict[str, Any]:
                 }
             ).encode()
             header += b" " * (-len(header) % 8)
-            (checkpoints / "fixture.safetensors").write_bytes(
+            (directory / "fixture.safetensors").write_bytes(
                 len(header).to_bytes(8, "little") + header + struct.pack("<f", float(revision))
             )
             sample_files(directory / "samples", audio=family == "h3")

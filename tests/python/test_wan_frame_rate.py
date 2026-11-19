@@ -37,7 +37,9 @@ def test_mixed_wan_frame_rates_prepare_one_resampled_section_per_rate(tmp_path: 
     service = RunService(state, fixture_mode=True, device_path=tmp_path / "device.sqlite")
     try:
         run = wait_for(service, service.prepare(job_id)["id"], "prepared")
-        sections = tomllib.loads((Path(run["directory"]) / "dataset.toml").read_text(encoding="utf-8"))["datasets"]
+        sections = tomllib.loads((Path(run["directory"]) / "config" / "dataset.toml").read_text(encoding="utf-8"))[
+            "datasets"
+        ]
         assert len(sections) == 2
         for section in sections:
             [video] = list(Path(section["video_directory"]).glob("*.mp4"))

@@ -17,6 +17,7 @@ import psutil
 
 from musubi_gui.processes import matching_process, process_identity
 from musubi_gui.redaction import redact
+from musubi_gui.run_paths import RunPaths
 from musubi_gui.run_progress import parse_progress
 
 GPU_FIELDS = {
@@ -72,7 +73,7 @@ class RunPerformance:
     """One bounded, cancellable collector per stage. Failures only disable diagnostics."""
 
     def __init__(self, run: dict[str, Any], stage: dict[str, Any], pid: int, log: Path, *, fixture: bool):
-        self.path = Path(run["directory"]) / "performance.jsonl"
+        self.path = RunPaths.from_record(run).logs / "performance.jsonl"
         self.log = log
         self.stage = stage["name"]
         self.start = time.monotonic()

@@ -27,6 +27,7 @@ from musubi_gui.run_control import unsaved_steps
 from musubi_gui.run_deletion import failure_message, folder_bytes, output_index_file, plan_deletion, remove_folder
 from musubi_gui.run_estimate import freeze_training_timing
 from musubi_gui.run_execution import ExecutionContext, RunExecution
+from musubi_gui.run_paths import RunPaths
 from musubi_gui.run_progress import estimated_remaining, parse_progress
 from musubi_gui.run_recovery import RECONCILED_STATUSES, reconcile, terminate_orphan
 from musubi_gui.run_restore import create_segment, restored_segment, resume_step
@@ -171,6 +172,7 @@ class RunService:
 
     def submit(self, plan: ExecutionPlan, *, start_after_prepare: bool = False) -> dict[str, Any]:
         """Trusted local adapter seam; API requests never supply command arrays."""
+        paths = RunPaths(plan.directory)
         data: dict[str, Any] = {
             "version": 1,
             "id": uuid.uuid4().hex,
@@ -186,7 +188,7 @@ class RunService:
             "phase": "prepare",
             "order": time.time_ns(),
             "stages": [
-                freeze_training_timing({**stage.record(), "status": "pending"}, plan.job["family"], plan.directory)
+                freeze_training_timing({**stage.record(), "status": "pending"}, plan.job["family"], paths.logs)
                 for stage in plan.stages
             ],
             "processes": [],
@@ -198,16 +200,17 @@ class RunService:
             # Stored with the Run, so training still follows if the browser closes or the backend restarts.
             "start_after_prepare": start_after_prepare,
         }
-        plan.directory.mkdir(parents=True, exist_ok=True)
+        paths.config.mkdir(parents=True, exist_ok=True)
+        paths.logs.mkdir(exist_ok=True)
         plan.cache.mkdir(parents=True, exist_ok=True)
         atomic_json(
-            plan.directory / "inputs.json", {"job": plan.job, "settings": data["settings"], "manifest": plan.manifest}
+            paths.config / "inputs.json", {"job": plan.job, "settings": data["settings"], "manifest": plan.manifest}
         )
         return self.store.create(data)
 
     def logs(self, run_id: str) -> str:
         run = self.get(run_id)
-        directory = Path(run["directory"])
+        directory = RunPaths.from_record(run).logs
         parts = []
         for stage in run["stages"]:
             file = directory / stage_log(stage)
@@ -222,7 +225,7 @@ class RunService:
         run = self.get(run_id)
         training = [stage for stage in run["stages"] if stage["name"] == "train" and stage["status"] != "pending"]
         stage: dict[str, Any] = training[-1] if training else {"name": "train"}
-        file = Path(run["directory"]) / stage_log(stage)
+        file = RunPaths.from_record(run).logs / stage_log(stage)
         if not file.is_file():
             return None
         with file.open("rb") as stream:

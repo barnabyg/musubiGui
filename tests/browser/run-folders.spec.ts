@@ -48,10 +48,40 @@ test('Run and output folders keep readable frozen Job names without collisions',
     await expect(page.getByLabel('Output folder', { exact: true })).toHaveText(
       records[0].directory,
     );
-    const files = await readdir(path.join(records[0].directory, 'checkpoints'));
-    expect(files).toContain('Summer---test-r2.safetensors');
-    expect(files).toContain('Summer---test-r2-state');
-    expect(files.every((name) => !name.includes(jobs[0].id))).toBe(true);
+    const directory = records[0].directory;
+    const entries = await readdir(directory, { withFileTypes: true });
+    expect(
+      entries
+        .filter((entry) => entry.isFile())
+        .map((entry) => entry.name)
+        .sort(),
+    ).toEqual([
+      'Summer---test-r2-step00000001.safetensors',
+      'Summer---test-r2.safetensors',
+    ]);
+    expect(
+      entries
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => entry.name)
+        .sort(),
+    ).toEqual(['config', 'logs', 'media', 'samples', 'state']);
+    await access(
+      path.join(directory, 'state', 'Summer---test-r2-state', 'scheduler.bin'),
+    );
+    await access(path.join(directory, 'config', 'dataset.toml'));
+    await access(path.join(directory, 'logs', 'train.log'));
+    const response = await page.request.get(
+      `${app.url}/api/runs/${records[0].id}/outputs`,
+    );
+    expect(response.ok()).toBe(true);
+    const { outputs } = await response.json();
+    expect(
+      outputs.map((output: { path: string }) => output.path).sort(),
+    ).toEqual([
+      'Summer---test-r2-step00000001.safetensors',
+      'Summer---test-r2.safetensors',
+      'samples/sample.mp4',
+    ]);
     await page.goto(`${app.url}/#/jobs/${jobs[0].id}`);
     await page.getByLabel('Job name', { exact: true }).fill('Renamed Job');
     await page.getByRole('button', { name: 'Save draft', exact: true }).click();

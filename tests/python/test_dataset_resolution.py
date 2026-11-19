@@ -146,7 +146,7 @@ def test_single_dataset_override_changes_prepared_cache_identity_and_disk_only_f
         assert first["stage_keys"]["text_cache"] != second["stage_keys"]["text_cache"]
         assert second_review["disk"]["estimate"]["caches"] > first_review["disk"]["estimate"]["caches"]
         assert second_review["disk"]["estimate"]["samples"] == first_review["disk"]["estimate"]["samples"]
-        native = tomllib.loads((Path(second["directory"]) / "dataset.toml").read_text(encoding="utf-8"))
+        native = tomllib.loads((Path(second["directory"]) / "config" / "dataset.toml").read_text(encoding="utf-8"))
         assert native["datasets"][0]["resolution"] == [512, 256]
         assert native["general"]["resolution"] == [256, 256]
     finally:
@@ -217,7 +217,7 @@ def test_two_dataset_resolutions_reuse_compatible_caches_and_rebuild_after_one_s
             "completed",
             "completed",
         ]
-        native = tomllib.loads((Path(third["directory"]) / "dataset.toml").read_text(encoding="utf-8"))
+        native = tomllib.loads((Path(third["directory"]) / "config" / "dataset.toml").read_text(encoding="utf-8"))
         assert [section["resolution"] for section in native["datasets"]] == [[512, 256], [256, 320]]
         assert native["general"]["resolution"] == [256, 256]
         assert any(Path(first["cache"]).glob("dataset*/*.safetensors"))

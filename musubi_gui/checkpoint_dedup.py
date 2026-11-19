@@ -11,6 +11,7 @@ import json
 import shutil
 from pathlib import Path
 
+from musubi_gui.run_paths import RunPaths
 from musubi_gui.snapshots import digest_file
 
 
@@ -34,7 +35,7 @@ def state_digests(directory: Path) -> dict[str, str]:
     }
 
 
-def remove_final_duplicates(directory: Path, output_name: str, steps: int) -> tuple[list[str], list[str]]:
+def remove_final_duplicates(paths: RunPaths, output_name: str, steps: int) -> tuple[list[str], list[str]]:
     """Remove the step-`steps` checkpoint and state when they match the final save.
 
     Returns the removed names and a message for each copy whose check or removal failed.
@@ -42,14 +43,14 @@ def remove_final_duplicates(directory: Path, output_name: str, steps: int) -> tu
     removed: list[str] = []
     problems: list[str] = []
     step_name = f"{output_name}-step{steps:08d}"
-    copy, final = directory / f"{step_name}.safetensors", directory / f"{output_name}.safetensors"
+    copy, final = paths.directory / f"{step_name}.safetensors", paths.directory / f"{output_name}.safetensors"
     try:
         if copy.is_file() and final.is_file() and tensor_digest(copy) == tensor_digest(final):
             copy.unlink()
             removed.append(copy.name)
     except (OSError, ValueError) as error:
         problems.append(f"Kept {copy.name}; duplicate check failed: {error}")
-    copy, final = directory / f"{step_name}-state", directory / f"{output_name}-state"
+    copy, final = paths.state / f"{step_name}-state", paths.state / f"{output_name}-state"
     hidden = copy.with_name(f".{copy.name}.duplicate")
     renamed = False
     try:

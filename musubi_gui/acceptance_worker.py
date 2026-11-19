@@ -11,6 +11,7 @@ from typing import Any
 
 from musubi_gui.checkpoint_names import expert_step_name
 from musubi_gui.resume_learning_rate import LearningRateOverride
+from musubi_gui.run_paths import RunPaths
 from musubi_gui.step_offset import ENVIRONMENT, StepSchedule
 from musubi_gui.trainer_control import ENVIRONMENT as CONTROL_ENVIRONMENT
 from musubi_gui.trainer_control import TrainerControl, post_optimizer_step
@@ -166,6 +167,7 @@ def main(stage: str | None = None) -> None:
             if os.environ.get("MUSUBI_RUN_TIMING_FILE")
             else None
         )
+        paths = RunPaths(args.output_dir)
         expert_offset = os.environ.get("MUSUBI_EXPERT_STEP_OFFSET")
         # As the app's trainer entry point does: a restored segment names saves and previews by global step,
         # at interval multiples after the offset, while its progress bar counts this segment's updates.
@@ -200,9 +202,7 @@ def main(stage: str | None = None) -> None:
                     parser.error("--sample_prompts is required for previews")
                 prompt = json.loads(args.sample_prompts.read_text(encoding="utf-8"))[0]
                 stem = f"{args.output_name}_{current:06d}_00_20261110000000_{prompt['seed']}"
-                destination = (
-                    args.output_dir / "sample" / (f"{stem}_000.png" if prompt["frame_count"] == 1 else f"{stem}.mp4")
-                )
+                destination = paths.previews / (f"{stem}_000.png" if prompt["frame_count"] == 1 else f"{stem}.mp4")
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 if prompt["frame_count"] == 1:
                     from PIL import Image
@@ -232,10 +232,10 @@ def main(stage: str | None = None) -> None:
                 )
                 tensor(args.output_dir / f"{name}.safetensors", saved=f"step {current}")
                 if args.save_state:
-                    save_state(args.output_dir / f"{name}-state", step)
+                    save_state(paths.state / f"{name}-state", step)
         tensor(args.output_dir / f"{args.output_name}.safetensors", saved="train end")
         if args.save_state or args.save_state_on_train_end:
-            save_state(args.output_dir / f"{args.output_name}-state", args.max_train_steps)
+            save_state(paths.state / f"{args.output_name}-state", args.max_train_steps)
     elif stage == "generate":
         if args.save_path is None:
             parser.error("--save_path is required for sample fixtures")

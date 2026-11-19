@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
+from musubi_gui.run_paths import RunPaths
 from musubi_gui.video_sampling import source_rate, source_rates, video_sections
 
 if TYPE_CHECKING:
@@ -38,6 +39,7 @@ def plan_sections(job: "Job", items: list[dict[str, Any]], run: Path, cache: Pat
     One dataset keeps its folders at the top of the Run; several use `media/set-N` and `dataset-N` caches.
     Sections never share a cache directory: the pinned cachers delete files their own section did not produce.
     """
+    config = RunPaths(run).config
     several = len(job.datasets) > 1
     sections: list[Section] = []
     for number, entry in enumerate(job.datasets, 1):
@@ -64,7 +66,7 @@ def plan_sections(job: "Job", items: list[dict[str, Any]], run: Path, cache: Pat
             rates = source_rates(videos) if job.family == "wan" else []
             for rate, video_directory, video_cache in video_sections(directory, cache, rates, prefix):
                 clips = [clip for clip in videos if not rates or source_rate(clip) == rate]
-                jsonl = run / f"{prefix}.jsonl" if job.family == "h3" else None
+                jsonl = config / f"{prefix}.jsonl" if job.family == "h3" else None
                 sections.append(
                     Section(
                         entry.dataset_id,
@@ -80,7 +82,7 @@ def plan_sections(job: "Job", items: list[dict[str, Any]], run: Path, cache: Pat
                 )
     if not sections:
         # Nothing to train yet, so review previews the form a video section takes.
-        jsonl = run / "dataset.jsonl" if job.family == "h3" else None
+        jsonl = config / "dataset.jsonl" if job.family == "h3" else None
         sections.append(Section("", "video", None, None, run / "media", cache / "dataset", jsonl))
     return sections
 

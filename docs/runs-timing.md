@@ -12,7 +12,7 @@ It also works for existing Runs whose retained training log contains a rate.
 
 ## H3 performance diagnostics
 
-New H3 stages automatically append `performance.jsonl` in the Run's output folder.
+New H3 stages automatically append `logs/performance.jsonl` in the Run's output folder.
 On Overview, **Download performance diagnostics** downloads a snapshot of its
 complete JSON lines. Existing Runs without a report remain readable; diagnostics
 cannot reconstruct past hardware measurements. Restart the application to use the
@@ -124,7 +124,7 @@ Runs observe native Wan/H3 previews from before the trainer's sampling setup hoo
 through its return-to-training cleanup hook, including inference, decoding and
 saving. Standalone paired-Wan previews use the whole generation-stage wall time,
 including process/model loading and expert transitions. Sampling measurements are
-retained in each Run's `timing-*.json` observations and stage timestamps, so reloads,
+retained in each Run's `logs/timing-*.json` observations and stage timestamps, so reloads,
 reopening, backend restart and expert switches keep them. Existing frozen commands
 are unchanged; missing historical native timings cannot be reconstructed.
 

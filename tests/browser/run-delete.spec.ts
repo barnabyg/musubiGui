@@ -39,7 +39,7 @@ test('deleting a Run and its Job goes from the UI to the disk and survives a bac
     ).toBeVisible({ timeout: 240_000 });
     const [run] = await app.records();
 
-    const locked = path.join(run.directory, 'inputs.json');
+    const locked = path.join(run.directory, 'config', 'inputs.json');
     const lock = spawn(python, [helper, 'hold-file', locked]);
     releaseLock = () => lock.kill();
     await new Promise((resolve) => lock.stdout.once('data', resolve));

@@ -16,14 +16,14 @@ def test_retry_seals_its_executed_native_inputs_and_rejects_edits_before_launch(
     try:
         job = next(job for job in fixture["jobs"] if job["family"] == family)
         original = service.prepare(job["id"])
-        original_toml = Path(original["directory"], "dataset.toml")
+        original_toml = Path(original["directory"], "config", "dataset.toml")
         original_bytes = original_toml.read_bytes()
         service.cancel(original["id"])
         retried = service.retry(original["id"])
-        executed_toml = Path(retried["directory"], "dataset.toml")
+        executed_toml = Path(retried["directory"], "config", "dataset.toml")
         assert str(executed_toml) in retried["input_files"]
         if family == "h3":
-            metadata = Path(retried["directory"], "dataset.jsonl")
+            metadata = Path(retried["directory"], "config", "dataset.jsonl")
             assert metadata.is_file()
             assert str(metadata) in retried["input_files"]
             assert metadata.as_posix() in executed_toml.read_text(encoding="utf-8")

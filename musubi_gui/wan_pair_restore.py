@@ -66,7 +66,7 @@ def restored_pair(
         for expert, source in sources.items():
             checkpoint = source["checkpoint"]
             stem = f"{job_folder(original['job']['name'])}-r{original['job']['revision']}"
-            target = directory / "checkpoints" / f"{stem}-{expert}-step{checkpoint['steps']:08d}.safetensors"
+            target = directory / f"{stem}-{expert}-step{checkpoint['steps']:08d}.safetensors"
             copies.append((checkpoint["path"], target, checkpoint["sha256"]))
             source["checkpoint"] = {**checkpoint, "path": str(target)}
             files[str(target)] = checkpoint["sha256"]
@@ -77,7 +77,7 @@ def restored_pair(
             if old:
                 args = list(old["args"])
                 if stage_name == "train":
-                    set_argument(args, "--output_dir", str(directory / "checkpoints"))
+                    set_argument(args, "--output_dir", str(directory))
                     stem = argument(args, "--output_name").rsplit("-", 2)[0]
                     set_argument(args, "--output_name", stem)
                 else:
@@ -97,7 +97,6 @@ def restored_pair(
             final_sample=config.get("sample_enabled", True),
             per_expert=any(stage.get("training", {}).get("per_expert") for stage in original["stages"]),
         )
-        (directory / "checkpoints").mkdir()
         for source_path, target, expected_hash in copies:
             shutil.copyfile(source_path, target)
             if digest_file(target) != expected_hash:

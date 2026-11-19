@@ -42,7 +42,7 @@ class Trainer:
         if not should_sample_images(args, steps, epoch):
             return
         sample = Path(args.output_dir) / "sample"
-        sample.mkdir(exist_ok=True)
+        sample.mkdir(parents=True, exist_ok=True)
         (sample / f"{args.output_name}_{steps:06d}_00_20261110000000_42_000.png").write_bytes(b"png")
         self.samples.append((steps, args.sample_every_n_steps))
 
@@ -105,7 +105,11 @@ def test_offset_not_a_multiple_of_the_interval_saves_and_previews_at_global_mult
     ]
     # Upstream's own recheck inside sample_images passes for the global step it names the file with.
     assert [step for step, _ in trainer.samples] == [300, 375, 450]
-    assert sorted(file.name.split("_")[1] for file in (tmp_path / "sample").iterdir()) == ["000300", "000375", "000450"]
+    assert sorted(file.name.split("_")[1] for file in (tmp_path / "samples" / "sample").iterdir()) == [
+        "000300",
+        "000375",
+        "000450",
+    ]
     assert timing["training"]["step"] == 500
     assert (timing["previews"]["completed"], timing["previews"]["failed"]) == (3, 0)
 

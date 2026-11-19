@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any
 
 from musubi_gui.recipe import Stage
 from musubi_gui.run_estimate import freeze_training_timing
-from musubi_gui.run_paths import create_run_directory
+from musubi_gui.run_paths import RunPaths, create_run_directory
 from musubi_gui.run_store import RunStore, utc_now
 from musubi_gui.settings import Settings, atomic_json
 from musubi_gui.snapshots import SNAPSHOT_ERROR, digest_file
@@ -66,7 +66,7 @@ def discard_segment(directory: Path, cache: Path | None) -> None:
         # Preparation hasn't cached into it yet.
         with suppress(OSError):
             cache.rmdir()
-    if not (directory / SNAPSHOT_ERROR).is_file():
+    if not (RunPaths(directory).config / SNAPSHOT_ERROR).is_file():
         shutil.rmtree(directory, ignore_errors=True)
 
 
@@ -139,10 +139,12 @@ def revision_inputs(original: dict[str, Any], revision: "Job", directory: Path) 
     """The sealed inputs of a segment training `revision`: `original`'s, with this revision's preview prompt."""
     from musubi_gui.preview import preview_prompt
 
-    previews = Path(original["directory"]) / "previews.json"
+    previews = RunPaths.from_record(original).config / "previews.json"
     files = {path: value for path, value in original["input_files"].items() if Path(path) != previews}
     if revision.config.preview_every:
-        prompts = directory / "previews.json"
+        config = RunPaths(directory).config
+        config.mkdir(exist_ok=True)
+        prompts = config / "previews.json"
         atomic_json(prompts, preview_prompt(revision))
         files[str(prompts)] = digest_file(prompts)
     return files
@@ -208,6 +210,8 @@ def restored_segment(
                     stage["args"][stage["args"].index("--max_train_steps") + 1] = str(additional_steps)
                     stage["args"].extend(["--resume", state["path"]])
             return record
+        source_paths = RunPaths.from_record(original)
+        target_paths = RunPaths(directory)
         for stage in record["stages"]:
             if stage["name"] not in {"train", "generate"}:
                 continue
@@ -215,28 +219,38 @@ def restored_segment(
             stage.pop("started", None)
             stage.pop("finished", None)
             args = stage["args"]
-            for flag in ["--output_dir"] if stage["name"] == "train" else ["--save_path", "--lora_weight"]:
-                if flag in args:
-                    index = args.index(flag) + 1
-                    args[index] = args[index].replace(original["directory"], str(directory))
             if stage["name"] == "train":
+                args[args.index("--output_dir") + 1] = str(directory)
                 args[args.index("--max_train_steps") + 1] = str(additional_steps)
                 args.extend(["--resume", state["path"]])
+            else:
+                for flag, source, target in (
+                    ("--save_path", source_paths.samples, target_paths.samples),
+                    ("--lora_weight", source_paths.directory, target_paths.directory),
+                ):
+                    if flag in args:
+                        index = args.index(flag) + 1
+                        path = Path(args[index])
+                        if path.is_relative_to(source):
+                            args[index] = str(target / path.relative_to(source))
         return record
 
 
 def create_segment(store: RunStore, record: dict[str, Any], resume_of: str) -> None:
     """Freeze the segment's training timing, store it and write its inputs beside it."""
     directory = Path(record["directory"])
+    paths = RunPaths.from_record(record)
     try:
+        paths.config.mkdir(exist_ok=True)
+        paths.logs.mkdir(exist_ok=True)
         record["stages"] = [
-            freeze_training_timing(stage, record["job"]["family"], directory) for stage in record["stages"]
+            freeze_training_timing(stage, record["job"]["family"], paths.logs) for stage in record["stages"]
         ]
         store.create(record)
     except BaseException:
         discard_segment(directory, Path(record["cache"]) if record.get("refresh") else None)
         raise
     atomic_json(
-        directory / "inputs.json",
+        paths.config / "inputs.json",
         {"job": record["job"], "manifest": record["manifest"], "resume_of": resume_of, "segment": record["segment"]},
     )

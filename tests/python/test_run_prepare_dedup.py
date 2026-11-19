@@ -79,7 +79,9 @@ def test_failed_materialization_keeps_its_source_manifest_and_releases_preparati
         with monkeypatch.context() as patch:
             # Filesystem boundary failure happens after the immutable source identity is known.
             def fail_copy(source: Path, target: Path) -> None:
-                before_copy = json.loads((target.parent.parent / "snapshot.json").read_text(encoding="utf-8"))
+                before_copy = json.loads(
+                    (target.parent.parent / "config" / "snapshot.json").read_text(encoding="utf-8")
+                )
                 assert before_copy["status"] == "materializing"
                 assert before_copy["manifest"]["items"][0]["sha256"]
                 assert before_copy["provenance"]["checkout"]["source_digest"]
@@ -90,12 +92,12 @@ def test_failed_materialization_keeps_its_source_manifest_and_releases_preparati
                 service.prepare(fixture["jobs"][0]["id"])
         output_root = tmp_path / "acceptance" / "outputs" / "runs"
         incomplete = next(output_root.iterdir())
-        record = json.loads((incomplete / "snapshot.json").read_text(encoding="utf-8"))
+        record = json.loads((incomplete / "config" / "snapshot.json").read_text(encoding="utf-8"))
         assert record["status"] == "incomplete"
         assert record["manifest"]["items"][0]["sha256"]
         assert record["provenance"]["checkout"]["source_digest"]
         assert service.prepare(fixture["jobs"][0]["id"])["status"] == "pending_preparation"
-        assert (incomplete / "snapshot.json").is_file()
+        assert (incomplete / "config" / "snapshot.json").is_file()
     finally:
         service.close()
 

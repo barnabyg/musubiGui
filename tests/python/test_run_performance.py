@@ -17,7 +17,9 @@ from musubi_gui.settings import Settings
 def monitor(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> RunPerformance:
     # Drive samples deterministically without racing the production collector thread.
     monkeypatch.setattr(RunPerformance, "_collect", lambda self: None)
-    log = tmp_path / "train.log"
+    logs = tmp_path / "logs"
+    logs.mkdir(exist_ok=True)
+    log = logs / "train.log"
     log.write_text("steps: 0/10\r", encoding="utf-8")
     return RunPerformance(
         {"id": "run", "directory": str(tmp_path), "job": {"config": {"rank": 32}}},
@@ -114,7 +116,7 @@ def test_report_redacts_credentials_and_download_snapshots_complete_lines(
 
 
 def test_unwritable_report_does_not_raise_or_leave_a_collector(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    (tmp_path / "performance.jsonl").mkdir()
+    (tmp_path / "logs" / "performance.jsonl").mkdir(parents=True)
     collector = monitor(tmp_path, monkeypatch)
     collector.close()
     assert not collector.enabled

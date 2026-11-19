@@ -1,6 +1,6 @@
 """Save now, Sample now and Save and stop, honoured by a training process at its next optimizer step.
 
-The backend writes one request at a time to `control-request.json` in the Run folder and passes its path to
+The backend writes one request at a time to `control-request.json` beside the Run logs and passes its path to
 training stages in `MUSUBI_CONTROL_REQUEST`. The trainer reads it at the post-optimizer hook, which runs just before
 upstream's sample and save checks, so it can make that step sample or save. It then records the outcome in
 `control-handled.json` and removes the request. Imported by the app-owned trainer entry point in the managed

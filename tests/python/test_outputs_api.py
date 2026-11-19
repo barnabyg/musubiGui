@@ -83,7 +83,7 @@ def test_paired_outputs_warn_about_missing_experts_only_after_the_run_finishes(
     stored["job"]["config"]["recipe"] = "alternating"
     stored["status"] = status
     if has_low_checkpoint:
-        file = tmp_path / "output" / "new-pair" / "checkpoints" / "low.safetensors"
+        file = tmp_path / "output" / "new-pair" / "low.safetensors"
         checkpoint(file)
         stored["expert_states"] = {"low": {"checkpoint": {"path": str(file), "steps": 2}}}
     service.store.update(str(run["id"]), lambda record: record.update(stored))
@@ -95,7 +95,7 @@ def test_paired_outputs_warn_about_missing_experts_only_after_the_run_finishes(
 def test_outputs_keep_run_association_checkpoint_metadata_and_missing_history_after_restart(tmp_path: Path) -> None:
     client, service = output_client(tmp_path)
     run = submit_run(service, tmp_path, "first")
-    file = tmp_path / "output" / "first" / "checkpoints" / "trained.safetensors"
+    file = tmp_path / "output" / "first" / "trained.safetensors"
     checkpoint(file)
     response = client.get(f"/api/runs/{run['id']}/outputs")
     assert response.status_code == 200
@@ -116,7 +116,7 @@ def test_outputs_keep_run_association_checkpoint_metadata_and_missing_history_af
 def test_downloaded_checkpoints_are_named_after_the_job_and_files_stay_unchanged(tmp_path: Path) -> None:
     client, service = output_client(tmp_path)
     run = submit_run(service, tmp_path, "WAN acceptance 1")
-    checkpoints = tmp_path / "output" / "WAN acceptance 1" / "checkpoints"
+    checkpoints = tmp_path / "output" / "WAN acceptance 1"
     checkpoint(checkpoints / "wan-abc.safetensors")
     checkpoint(checkpoints / "wan-abc-step00000100.safetensors")
     outputs = {item["name"]: item for item in client.get(f"/api/runs/{run['id']}/outputs").json()["outputs"]}
@@ -129,7 +129,7 @@ def test_downloaded_checkpoints_are_named_after_the_job_and_files_stay_unchanged
     assert "filename*=utf-8''WAN%20acceptance%201-r1.safetensors" in disposition("wan-abc.safetensors")
     assert "WAN%20acceptance%201-r1-step100.safetensors" in disposition("wan-abc-step00000100.safetensors")
     assert (checkpoints / "wan-abc.safetensors").is_file()
-    assert outputs["wan-abc.safetensors"]["path"] == "checkpoints/wan-abc.safetensors"
+    assert outputs["wan-abc.safetensors"]["path"] == "wan-abc.safetensors"
 
 
 @pytest.mark.parametrize(
@@ -172,19 +172,17 @@ def test_job_names_do_not_pass_for_paired_checkpoint_suffixes(suffix: str) -> No
     )
 
 
-def test_saved_state_weights_do_not_download_under_the_final_lora_name() -> None:
-    job = {"name": "Job", "revision": 2}
-    assert download_name(job, Path("wan-id-state/model.safetensors")) == "Job-r2-state-model.safetensors"
-    assert (
-        download_name(job, Path("wan-id-step00000100-state/model.safetensors"))
-        == "Job-r2-step100-state-model.safetensors"
-    )
+def test_saved_state_weights_are_excluded_from_the_run_outputs(tmp_path: Path) -> None:
+    client, service = output_client(tmp_path)
+    run = submit_run(service, tmp_path, "first")
+    checkpoint(Path(run["directory"]) / "state" / "lora-state" / "model.safetensors")
+    assert client.get(f"/api/runs/{run['id']}/outputs").json()["outputs"] == []
 
 
 def test_non_ascii_job_names_download_with_an_encoded_filename(tmp_path: Path) -> None:
     client, service = output_client(tmp_path)
     run = submit_run(service, tmp_path, "雪と音")
-    checkpoint(tmp_path / "output" / "雪と音" / "checkpoints" / "wan-abc.safetensors")
+    checkpoint(tmp_path / "output" / "雪と音" / "wan-abc.safetensors")
     output = client.get(f"/api/runs/{run['id']}/outputs").json()["outputs"][0]
     disposition = client.get(output["file_url"] + "?download=true").headers["content-disposition"]
     assert disposition == "attachment; filename*=utf-8''%E9%9B%AA%E3%81%A8%E9%9F%B3-r1.safetensors"
@@ -203,7 +201,7 @@ def test_samples_keep_their_own_download_names(tmp_path: Path) -> None:
 def test_output_delivery_rechecks_current_root_before_serving_a_known_output(tmp_path: Path) -> None:
     client, service = output_client(tmp_path)
     run = submit_run(service, tmp_path, "first")
-    file = tmp_path / "output" / "first" / "checkpoints" / "trained.safetensors"
+    file = tmp_path / "output" / "first" / "trained.safetensors"
     checkpoint(file)
     output = client.get(f"/api/runs/{run['id']}/outputs").json()["outputs"][0]
     save_settings(tmp_path, Settings(output_root=str(tmp_path / "other-output")))
@@ -228,8 +226,7 @@ def test_comparison_reports_changed_controls_captions_models_and_upstream(tmp_pa
 def test_empty_and_truncated_checkpoints_are_visible_without_claiming_complete_state(tmp_path: Path) -> None:
     client, service = output_client(tmp_path)
     run = submit_run(service, tmp_path, "first")
-    directory = tmp_path / "output" / "first" / "checkpoints"
-    directory.mkdir()
+    directory = tmp_path / "output" / "first"
     (directory / "empty.safetensors").touch()
     checkpoint(directory / "short.safetensors")
     data = (directory / "short.safetensors").read_bytes()
@@ -288,7 +285,7 @@ def test_file_endpoint_rejects_arbitrary_paths_and_another_runs_output_identity(
     client, service = output_client(tmp_path)
     first = submit_run(service, tmp_path, "first")
     second = submit_run(service, tmp_path, "second")
-    checkpoint(tmp_path / "output" / "first" / "checkpoints" / "trained.safetensors")
+    checkpoint(tmp_path / "output" / "first" / "trained.safetensors")
     output = client.get(f"/api/runs/{first['id']}/outputs").json()["outputs"][0]
     assert client.get(f"/api/runs/{second['id']}/outputs/{output['id']}/file").status_code == 404
     assert client.get(f"/api/runs/{first['id']}/outputs/..%2F..%2Fsettings.json/file").status_code in {404, 403}
@@ -302,7 +299,8 @@ def test_output_folder_junction_cannot_deliver_files_outside_the_run(tmp_path: P
     client, service = output_client(tmp_path)
     run = submit_run(service, tmp_path, "first")
     outside = tmp_path / "outside"
-    checkpoint(outside / "private.safetensors")
+    outside.mkdir()
+    Image.new("RGB", (8, 8), "red").save(outside / "private.png")
     link = tmp_path / "output" / "first" / "samples"
 
     def quote(value: Path) -> str:
@@ -322,11 +320,11 @@ def test_output_folder_junction_cannot_deliver_files_outside_the_run(tmp_path: P
     assert len(outputs) == 1
     assert outputs[0]["status"] == "blocked"
     assert client.get(f"/api/runs/{run['id']}/outputs/{outputs[0]['id']}/file").status_code == 403
-    assert (outside / "private.safetensors").is_file()
+    assert (outside / "private.png").is_file()
 
 
 def preview_image(directory: Path, step: int) -> None:
-    folder = directory / "checkpoints" / "sample"
+    folder = directory / "samples" / "sample"
     folder.mkdir(parents=True, exist_ok=True)
     Image.new("RGB", (8, 8), "red").save(folder / f"lora_{step:06d}_00_20261116120000.png")
 
@@ -347,13 +345,13 @@ def chain_of_three(client: TestClient, service: RunService, root: Path) -> list[
     first_dir, second_dir, third_dir = (Path(run["directory"]) for run in runs)
     for step in (50, 100):
         preview_image(first_dir, step)
-    checkpoint(first_dir / "checkpoints" / "lora-step00000120.safetensors")
+    checkpoint(first_dir / "lora-step00000120.safetensors")
     for step in (150, 200, 250):
         preview_image(second_dir, step)
-    checkpoint(second_dir / "checkpoints" / "lora-step00000200.safetensors")
+    checkpoint(second_dir / "lora-step00000200.safetensors")
     for step in (300, 350, 400):
         preview_image(third_dir, step)
-    checkpoint(third_dir / "checkpoints" / "lora.safetensors")
+    checkpoint(third_dir / "lora.safetensors")
     return runs
 
 
@@ -389,7 +387,7 @@ def test_a_chain_merges_its_segments_outputs_in_global_step_order(tmp_path: Path
 def test_a_single_run_lists_the_same_outputs_with_or_without_chain(tmp_path: Path) -> None:
     client, service = output_client(tmp_path)
     run = submit_run(service, tmp_path, "only")
-    checkpoint(Path(str(run["directory"])) / "checkpoints" / "lora.safetensors")
+    checkpoint(Path(str(run["directory"])) / "lora.safetensors")
     plain = client.get(f"/api/runs/{run['id']}/outputs").json()
     chained = client.get(f"/api/runs/{run['id']}/outputs", params={"chain": True}).json()
     assert [entry["path"] for entry in chained["outputs"]] == [entry["path"] for entry in plain["outputs"]]

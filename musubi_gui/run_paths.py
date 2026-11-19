@@ -2,8 +2,44 @@
 
 import re
 import unicodedata
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
+
+
+@dataclass(frozen=True)
+class RunPaths:
+    directory: Path
+
+    @classmethod
+    def from_record(cls, run: dict[str, Any]) -> "RunPaths":
+        return cls(Path(run["directory"]))
+
+    @property
+    def state(self) -> Path:
+        return self.directory / "state"
+
+    @property
+    def samples(self) -> Path:
+        return self.directory / "samples"
+
+    @property
+    def previews(self) -> Path:
+        # The pinned trainer appends `sample` to the directory passed to its sampling hook.
+        return self.samples / "sample"
+
+    @property
+    def config(self) -> Path:
+        return self.directory / "config"
+
+    @property
+    def logs(self) -> Path:
+        return self.directory / "logs"
+
+    @property
+    def quarantine(self) -> Path:
+        return self.logs / ".retention"
 
 
 def job_folder(name: str) -> str:

@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from musubi_gui.checkpoint_names import training_saves
+from musubi_gui.run_paths import RunPaths
 from musubi_gui.run_store import RunStore, utc_now
 from musubi_gui.step_offset import segment_step_offset
 from musubi_gui.trainer_control import ACTIONS, HANDLED_FILE, REQUEST_FILE, read_json, write_json
@@ -23,7 +24,7 @@ TRAINING_FINISHED = "training finished before the next step; its final save is t
 
 
 def request_file(run: dict[str, Any]) -> Path:
-    return Path(run["directory"]) / REQUEST_FILE
+    return RunPaths.from_record(run).logs / REQUEST_FILE
 
 
 def unavailable(run: dict[str, Any], action: str) -> str | None:
@@ -58,7 +59,7 @@ def request(store: RunStore, run_id: str, action: str) -> dict[str, Any]:
 
 def collect(store: RunStore, run: dict[str, Any]) -> dict[str, Any] | None:
     """Record what the training process did with the waiting request; returns that history entry."""
-    file = Path(run["directory"]) / HANDLED_FILE
+    file = RunPaths.from_record(run).logs / HANDLED_FILE
     # Checked several times a second while training, so a missing file costs no record read.
     handled = read_json(file) if file.is_file() else None
     if handled is None:
@@ -117,9 +118,7 @@ def unsaved_steps(run: dict[str, Any], stage: dict[str, Any], local_step: int) -
     """
     if "--output_name" not in stage.get("args", []):
         return None
-    saves = training_saves(
-        stage, Path(run["directory"]) / "checkpoints", ".safetensors", segment_step_offset(run, stage)
-    )
+    saves = training_saves(stage, RunPaths.from_record(run).directory, ".safetensors", segment_step_offset(run, stage))
     return local_step - max((step for step, _ in saves if step <= local_step), default=0)
 
 

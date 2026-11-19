@@ -51,9 +51,9 @@ def test_fake_worker_produces_an_explicit_synthetic_checkpoint_and_resume_metada
     assert result.returncode == 0, result.stdout + result.stderr
     assert "SYNTHETIC" in result.stdout
     assert (output / "fixture.safetensors").is_file()
-    state = json.loads((output / "fixture-state" / "trainer_state.json").read_text(encoding="utf-8"))
+    state = json.loads((output / "state" / "fixture-state" / "trainer_state.json").read_text(encoding="utf-8"))
     assert state == {"version": 1, "synthetic": True, "global_step": 2, "optimizer_step": 2, "segment_steps": 2}
-    assert sorted(path.name for path in (output / "fixture-state").iterdir()) == [
+    assert sorted(path.name for path in (output / "state" / "fixture-state").iterdir()) == [
         "model.safetensors",
         "optimizer.bin",
         "random_states_0.pkl",
@@ -108,15 +108,18 @@ def test_fake_worker_numbers_a_restored_segment_by_global_step(tmp_path: Path, f
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert sorted(path.name for path in output.iterdir()) == [
-        "fixture-state",
-        "fixture-step00000004-state",
         "fixture-step00000004.safetensors",
-        "fixture-step00000006-state",
         "fixture-step00000006.safetensors",
         "fixture.safetensors",
-        "sample",
+        "samples",
+        "state",
     ]
-    assert sorted(path.name.split("_")[1] for path in (output / "sample").iterdir()) == ["000004", "000006"]
+    assert sorted(path.name for path in (output / "state").iterdir()) == [
+        "fixture-state",
+        "fixture-step00000004-state",
+        "fixture-step00000006-state",
+    ]
+    assert sorted(path.name.split("_")[1] for path in (output / "samples" / "sample").iterdir()) == ["000004", "000006"]
     # The progress bar counts this segment's updates, as upstream's does.
     assert "steps: 4/4" in result.stdout
     timing = json.loads((tmp_path / "timing.json").read_text(encoding="utf-8"))
@@ -156,14 +159,14 @@ def test_fake_worker_resumes_with_the_configured_learning_rate(tmp_path: Path) -
         return result.stdout
 
     def saved_rate(name: str) -> float:
-        state = tmp_path / name / "fixture-state" / "trainer_state.json"
+        state = tmp_path / name / "state" / "fixture-state" / "trainer_state.json"
         return float(json.loads(state.read_text(encoding="utf-8"))["learning_rate"])
 
     assert "Resume learning rate" not in train("first", "1e-4")
     assert saved_rate("first") == 1e-4
     # As the trainer entry point does after the state loads: the configured rate replaces the saved one.
-    changed = train("changed", "2e-4", tmp_path / "first" / "fixture-state")
+    changed = train("changed", "2e-4", tmp_path / "first" / "state" / "fixture-state")
     assert "Resume learning rate: applied 0.0002; the saved state had 0.0001." in changed
     assert saved_rate("changed") == 2e-4
-    unchanged = train("unchanged", "2e-4", tmp_path / "changed" / "fixture-state")
+    unchanged = train("unchanged", "2e-4", tmp_path / "changed" / "state" / "fixture-state")
     assert "Resume learning rate: 0.0002, unchanged from the saved state." in unchanged
