@@ -5,8 +5,7 @@ Use **Runs** in the sidebar to browse Run history and manage the pending queue. 
 The Runs collection lists the queue and history. A training resumed in segments is one
 row that expands to its segments. Opening a Run shows only its details. Statuses read as labels such as
 Preparing or Ready to start, and the stored values are unchanged. The GPU line names the job
-using the GPU and links to its Run. On Run details it shares one line with the reminder that
-closing the browser leaves training running.
+using the GPU and links to its Run from the Runs list.
 
 Each topic has its own page:
 

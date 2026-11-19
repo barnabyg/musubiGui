@@ -67,15 +67,14 @@ test('Run details keeps a tight header, flat Overview panels and a samples-only 
       page.getByText('State: Ready to start', { exact: true }),
     ).toBeVisible({ timeout: 240_000 });
 
-    // The browser note shares one line with the GPU status, which is still announced on its own.
-    await expect(page.getByText(/Each Run keeps the job settings/)).toHaveCount(
-      0,
-    );
-    const line = page.locator('.run-status-line');
-    await expect(line).toHaveText('GPU available · Background training');
-    await expect(line.getByRole('status')).toHaveText('GPU available');
+    await expect(
+      page.getByRole('heading', { name: 'Run details' }),
+    ).toBeVisible();
+    await expect(page.getByText(/GPU (available|in use)/)).toHaveCount(0);
+    await expect(
+      page.getByRole('button', { name: 'Background training' }),
+    ).toHaveCount(0);
 
-    // Overview: summary first, Originating job last within it, then one panel per section.
     const overview = page.locator('#run-panel-overview');
     await expect(
       overview.locator(
@@ -85,15 +84,16 @@ test('Run details keeps a tight header, flat Overview panels and a samples-only 
       job.name,
       'Actions',
       'Caching',
-      'Compare with another Run',
       'Inputs and output folder',
       'Stage logs',
     ]);
-    const summary = overview.locator('.panel').first();
-    await expect(summary.locator(':scope > *').last()).toHaveAttribute(
-      'aria-label',
+    for (const removed of [
       'Originating job',
-    );
+      'Compare with another Run',
+      'Copy output folder',
+      'View sample',
+    ])
+      await expect(overview.getByText(removed, { exact: true })).toHaveCount(0);
     await expect(page.getByRole('region', { name: 'Run result' })).toHaveCount(
       0,
     );
@@ -112,12 +112,7 @@ test('Run details keeps a tight header, flat Overview panels and a samples-only 
     await expect(samples.locator(':scope > *')).toHaveCount(1);
     await expect(samples.locator(':scope > .panel > h2')).toHaveText('Samples');
     await expect(samples).toContainText('No generated samples recorded');
-    for (const hidden of [
-      job.name,
-      'Refresh outputs',
-      'Compare inputs',
-      'Originating job',
-    ])
+    for (const hidden of [job.name, 'Refresh outputs', 'Originating job'])
       await expect(page.getByText(hidden, { exact: true })).toBeHidden();
     await expectFlatPanels(page);
 
@@ -133,7 +128,7 @@ test('Run details keeps a tight header, flat Overview panels and a samples-only 
   }
 });
 
-test('Result warnings and settled sample errors appear in the Run summary', async ({
+test('Run warnings stay in Overview while sample errors appear in Samples', async ({
   page,
 }) => {
   const app = await runWorkspace();
@@ -168,7 +163,12 @@ test('Result warnings and settled sample errors appear in the Run summary', asyn
     await expect(summary).toContainText(
       'The paired LoRA outputs are incomplete.',
     );
-    await expect(summary).toContainText('sample.mp4: Sample has no audio.');
+    await expect(summary).not.toContainText('Sample has no audio.');
+    await page.getByRole('tab', { name: 'Samples', exact: true }).click();
+    await page.getByRole('button', { name: 'sample.mp4 · incomplete' }).click();
+    await expect(page.getByLabel('Selected sample')).toContainText(
+      'Sample has no audio.',
+    );
     await expect(page.getByRole('region', { name: 'Run result' })).toHaveCount(
       0,
     );

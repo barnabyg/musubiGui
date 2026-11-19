@@ -262,9 +262,6 @@ test('H3 diagnostics download contains measurements from the completed fixture r
     await expect(
       page.getByText('State: Completed', { exact: true }),
     ).toBeVisible({ timeout: 240_000 });
-    await expect(
-      page.getByRole('button', { name: 'Copy output folder' }),
-    ).toBeVisible();
     const link = page.getByRole('link', {
       name: 'Download performance diagnostics',
     });

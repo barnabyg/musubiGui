@@ -144,9 +144,9 @@ test('alternating Wan settings persist, train both experts and restore the paire
       sample_pair: Record<string, { steps: number; path: string }>;
       stages: { name: string; args: string[]; training?: { expert: string } }[];
     };
-    await expect(
-      page.getByRole('button', { name: 'Copy output folder' }),
-    ).toHaveAttribute('title', run.directory);
+    await expect(page.getByText(/^Output: /)).toHaveText(
+      `Output: ${run.directory}`,
+    );
     for (const expert of ['low', 'high']) {
       const file = full.sample_pair[expert].path;
       expect(path.relative(run.directory, file)).toMatch(
@@ -168,9 +168,9 @@ test('alternating Wan settings persist, train both experts and restore the paire
     await app.crash();
     await app.start();
     await page.reload();
-    await expect(
-      page.getByRole('button', { name: 'Copy output folder' }),
-    ).toHaveAttribute('title', run.directory);
+    await expect(page.getByText(/^Output: /)).toHaveText(
+      `Output: ${run.directory}`,
+    );
     const resume = runResume(page);
     await resume.getByRole('button', { name: 'Resume', exact: true }).click();
     await resume.getByText('Choose an earlier save', { exact: true }).click();
@@ -202,9 +202,9 @@ test('alternating Wan settings persist, train both experts and restore the paire
       page.getByText('State: Completed', { exact: true }),
     ).toBeVisible({ timeout: 240_000 });
     const segment = (await app.records()).find((item) => item.id !== run.id)!;
-    await expect(
-      page.getByRole('button', { name: 'Copy output folder' }),
-    ).toHaveAttribute('title', segment.directory);
+    await expect(page.getByText(/^Output: /)).toHaveText(
+      `Output: ${segment.directory}`,
+    );
     await openRunTab(page, 'samples');
     // The source Run's final sample comes first in the training's merged list.
     await page

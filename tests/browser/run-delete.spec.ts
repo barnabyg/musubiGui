@@ -63,7 +63,7 @@ test('deleting a Run and its Job goes from the UI to the disk and survives a bac
       page.getByText('State: Deleting', { exact: true }),
     ).toBeVisible();
     await expect(
-      page.getByRole('button', { name: 'Copy output folder' }),
+      page.getByRole('button', { name: 'Refresh outputs' }),
     ).toHaveCount(0);
 
     // It is still there, and still deletable, after a restart.

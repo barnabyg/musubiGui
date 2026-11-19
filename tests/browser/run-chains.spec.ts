@@ -76,7 +76,7 @@ const noHorizontalScroll = (page: Page) =>
     () => document.documentElement.scrollWidth <= window.innerWidth,
   );
 
-test('a training stopped and resumed twice is one row with every preview in step order, and compares and deletes as one', async ({
+test('a training stopped and resumed twice is one row with every preview in step order, and deletes as one', async ({
   page,
 }) => {
   test.setTimeout(30 * 60_000);
@@ -204,75 +204,6 @@ test('a training stopped and resumed twice is one row with every preview in step
     const otherLatest = await resume(app, other.id, 6);
     await waitFor(app, otherLatest.id, 'completed');
 
-    // Compare the two trainings: the inputs of their latest revisions, samples from any segment.
-    await openRunTab(page, 'overview');
-    const compare = runPanel(page, 'compare');
-    await expect(
-      compare.getByLabel('Compare from', { exact: true }),
-    ).toHaveValue('training');
-    const picker = compare.getByLabel('Compare with run', { exact: true });
-    await expect(
-      picker.getByRole('option', {
-        name: `Training: ${second.name} · WAN · r2 · 2 segments`,
-      }),
-    ).toBeAttached();
-    await picker.selectOption({
-      label: `Training: ${second.name} · WAN · r2 · 2 segments`,
-    });
-    await compare
-      .getByRole('button', { name: 'Compare inputs', exact: true })
-      .click();
-    const comparison = page.getByLabel('Run comparison', { exact: true });
-    await expect(comparison).toContainText('job.name');
-    await expect(comparison).toContainText('job.config.steps');
-    const current = comparison.getByRole('region', {
-      name: 'Current Run samples',
-    });
-    const compared = comparison.getByRole('region', {
-      name: 'Compared Run samples',
-    });
-    await expect(current).toContainText(
-      `Training of 3 segments · latest Run ${latest.id}`,
-    );
-    await expect(compared).toContainText(
-      `Training of 2 segments · latest Run ${otherLatest.id}`,
-    );
-    const choices = compared
-      .getByLabel('Sample', { exact: true })
-      .getByRole('option');
-    await expect(choices).toHaveText([
-      /^Step 2 preview .* · available · segment 1$/,
-      /^Step 4 preview .* · available · segment 1$/,
-      /^Step 6 preview .* · available · segment 2$/,
-    ]);
-    await compared
-      .getByLabel('Sample', { exact: true })
-      .selectOption({ index: 0 });
-    await expect(compared.locator('.output-media')).toHaveAttribute(
-      'src',
-      new RegExp(`/api/runs/${other.id}/`),
-    );
-    await expect(
-      current.getByLabel('Sample', { exact: true }).getByRole('option'),
-    ).toHaveCount(expected.length);
-    await expect(
-      comparison.getByRole('link', { name: /download.*LoRA/i }),
-    ).toHaveCount(0);
-    // A single segment can still be one side.
-    await compare
-      .getByLabel('Compare from', { exact: true })
-      .selectOption('segment');
-    await picker.selectOption(other.id);
-    await compare
-      .getByRole('button', { name: 'Compare inputs', exact: true })
-      .click();
-    await expect(
-      comparison.getByRole('region', { name: 'Current Run samples' }),
-    ).toContainText(`Run ${root.id}`);
-    await page.setViewportSize({ width: 375, height: 812 });
-    expect(await noHorizontalScroll(page)).toBe(true);
-    await page.setViewportSize({ width: 1366, height: 768 });
-
     // Delete the second training as a whole from its row.
     await page.goto(`${app.url}/#/runs`);
     const otherRow = page.getByLabel(`Training ${second.name}`, {
@@ -325,20 +256,8 @@ test('a completed segment with no sample offers earlier previews only on Samples
     const next = await resume(app, root.id, 3);
     await waitFor(app, next.id, 'completed');
     await page.goto(`${app.url}/#/runs/${next.id}`);
-    // Wait for the merged inventory before asserting which actions belong to Overview.
     await openRunTab(page, 'samples');
-    await expect(
-      page.getByRole('button', { name: /^Step 2 preview/ }),
-    ).toBeVisible();
-    await openRunTab(page, 'overview');
-    expect(
-      await page.getByRole('button', { name: 'View sample' }).count(),
-    ).toBe(0);
-    await expect(
-      page.getByText('No playable sample is available.'),
-    ).toBeVisible();
-    await page.goto(`${app.url}/#/runs/${root.id}`);
-    await page.getByRole('button', { name: 'View sample' }).click();
+    await page.getByRole('button', { name: /^Step 2 preview/ }).click();
     await expect(
       page.getByLabel('Selected sample', { exact: true }),
     ).toContainText(root.id.slice(0, 8));

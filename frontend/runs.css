@@ -132,10 +132,6 @@
 .run-details-title h1 {
   margin: var(--space-2) 0 var(--space-1);
 }
-.run-status-line {
-  margin: 0;
-  overflow-wrap: anywhere;
-}
 .run-details details:not(.panel) {
   border-top: 0;
   padding-top: 0;

@@ -4,13 +4,14 @@
 
 ## Run details
 
-Run details has two tabs: **Samples**, for generated media and periodic previews, and
-**Overview**, for everything else: state, progress, actions, saved state, caching,
-output folder, comparison with another Run, inputs and logs.
-`tests/browser/run-details-layout.spec.ts` pins the panels on each tab. Use the tabs or
-arrow keys to switch views. Switching views keeps the selected sample and its player
-mounted, so returning preserves playback. New previews do not replace a selected sample.
-Choose **Copy output folder**, paste the path into File Explorer and collect the files you need from its `checkpoints` subfolder.
+**Overview** shows the Run state, training progress, timing and actions. The short Run ID
+beside the Job name matches the first eight characters of the ID in the Run URL.
+Open **Inputs and output folder** to select the output folder path. Expand **Stage logs** to view the logs.
+The `checkpoints` subfolder contains the Run's LoRAs and saved training states.
+
+**Samples** lists generated media and periodic previews. Use the tabs or arrow keys to switch
+views. The sample selection and playback stay in place when you switch views or new previews arrive.
+Use **Refresh outputs** on Overview to rescan the available files.
 
 ## Trainings resumed in segments
 
@@ -29,7 +30,6 @@ not changed, so Runs saved before this version group the same way.
 - **Samples** lists every segment's previews together in global step order,
   each marked with its segment. Checkpoints and saved states stay per segment, since you inspect and resume
   them from the segment that saved them.
-- **Compare** treats the training as one side; see [outputs](outputs.md).
 
 A step range reads `steps 120–250`: from the saved step the segment resumed to the step the
 next segment resumed from, or to its total once it completed. A segment still running, or
@@ -55,8 +55,8 @@ and retention in [checkpoint retention](jobs-checkpoints.md#across-a-training-re
 To check this by hand, open the acceptance workspace from
 [Queueing](runs-lifecycle.md#queueing). In WAN acceptance 1 set 200 steps, previews every 2
 steps and turn off the final sample, then prepare and start. After a preview, choose **Save and
-stop**; inspect saved states and restore the latest with **Train until step** 200; after a
-preview, Save and stop again and restore with a total four steps later. Runs should show one
+stop**. In **Resume**, set **Train until step** to 200, choose **Review resume** and confirm.
+After a preview, save and stop again and resume with a total four steps later. Runs should show one
 row with 3 segments and Completed. **Show 3 segments** lists their step ranges. The row opens
 the latest segment, whose Segments panel lists all three and whose Samples list every preview
 in step order. At 375 px nothing scrolls sideways.
@@ -88,13 +88,13 @@ This isolated CPU fixture needs Windows, Node.js/npm, uv and Edge; no GPU or mod
 Open **WAN acceptance 1**, set Training steps to 4, steps per expert before switching
 to 2, and Save every N steps to 1. Save, review, then **Prepare and start**. In the
 Run's output folder, expect each expert's checkpoints and state folders at steps 1,
-2, 3 and 4. Inspect saved states and restore the pair at step 2 with
-**Train until step** 4: the new segment's final files should both end in `-step00000004`.
+2, 3 and 4. In **Resume**, open **Choose an earlier save** and select the pair at step 2.
+Set **Train until step** to 4, review and confirm. The new segment's final files should both end in `-step00000004`.
 GPU training quality is outside this naming check.
 
 To check folder naming, from the repository root run
 `.\acceptance.cmd --workspace ".cache/folder-check-$([guid]::NewGuid().ToString('N'))"`.
-Prepare a fixture Job and inspect the Output path on its Run. It should contain
+Prepare a fixture Job and open **Inputs and output folder** to inspect the output path. It should contain
 the Job name and timestamp, without a random suffix. The fixture needs no models
 or GPU; preparation creates synthetic training inputs. Start training, copy the output folder path and inspect its `checkpoints` folder. Checkpoint files and state folders should
 use the frozen Job name and revision, with no random job ID. Rename the Job and confirm
@@ -107,12 +107,8 @@ The address bar names the screen and its selection, such as `#/runs/<id>` or
 place. The sidebar opens the collection for Datasets, Jobs or Runs. Leaving a job with unsaved edits
 asks first, whichever way you leave.
 
-The Last Run status in each saved job row links directly to that Run. Run details show
-the frozen job name, model and revision alongside a separate link to the current editable
-draft. The current draft can have a different name or a later revision; opening it does
-not change the Run or start work. Archived jobs are identified and link to the Jobs list,
-where Archived jobs offers Restore. An unavailable job or a failed job lookup leaves the
-Run and its folder accessible.
+The Last Run status in each saved Job row links directly to that Run. The Run shows its
+recorded Job name even after the Job is renamed or archived.
 
 To check this navigation manually, run the following from the repository root in PowerShell 7:
 
@@ -120,11 +116,8 @@ To check this navigation manually, run the following from the repository root in
 .\acceptance.cmd --workspace ".cache/ux-check-$([guid]::NewGuid().ToString('N'))"
 ```
 
-Complete WAN acceptance 1, then follow its Last Run link in Jobs using Tab and Enter.
-Its folder should contain the final LoRA, and the Run should identify the frozen job revision. Follow the
-current draft link, save a changed job name or step count, and use browser Back to return
-to the Run. The frozen revision should stay the same and the current draft link should
-show the new revision. Copy the Run address into another tab and verify the same details.
-Archive the job, reopen the Run, and verify that it explains where to restore the archived
-job while keeping the folder action available. Repeat with WAN acceptance 2 to check that
-similarly named jobs lead to their own Runs.
+Complete **WAN acceptance 1**, then follow its Last Run link in Jobs using Tab and Enter.
+Check that the short Run ID matches the beginning of the ID in the address bar.
+Rename or archive the Job from the Jobs screen, then reopen the Run from its saved URL.
+Expect the original Job name and output path under **Inputs and output folder**.
+Repeat the Last Run link check with WAN acceptance 2 to verify that it opens a different Run.

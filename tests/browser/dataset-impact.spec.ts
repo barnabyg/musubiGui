@@ -214,9 +214,6 @@ test('dataset inclusion and removal name dependent drafts while prepared Runs ke
     await expect(
       page.getByText('State: Completed', { exact: true }),
     ).toBeVisible({ timeout: 240_000 });
-    await expect(
-      page.getByRole('button', { name: 'Copy output folder' }),
-    ).toBeVisible();
   } finally {
     await app.close();
   }

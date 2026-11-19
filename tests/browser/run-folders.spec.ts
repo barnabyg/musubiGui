@@ -44,18 +44,9 @@ test('Run and output folders keep readable frozen Job names without collisions',
     await expect(
       page.getByText('State: Completed', { exact: true }),
     ).toBeVisible({ timeout: 240_000 });
-    // Capture the public clipboard write without changing the user's system clipboard.
-    const copiedPath = page.evaluate(
-      () =>
-        new Promise<string>((resolve) => {
-          Object.defineProperty(navigator, 'clipboard', {
-            configurable: true,
-            value: { writeText: async (path: string) => resolve(path) },
-          });
-        }),
+    await expect(page.getByText(/^Output: /)).toHaveText(
+      `Output: ${records[0].directory}`,
     );
-    await page.getByRole('button', { name: 'Copy output folder' }).click();
-    expect(await copiedPath).toBe(records[0].directory);
     const files = await readdir(path.join(records[0].directory, 'checkpoints'));
     expect(files).toContain('Summer---test-r2.safetensors');
     expect(files).toContain('Summer---test-r2-state');
@@ -70,9 +61,9 @@ test('Run and output folders keep readable frozen Job names without collisions',
     await expect(
       page.getByRole('heading', { name: 'Summer / test', exact: true }),
     ).toBeVisible();
-    await expect(
-      page.getByText(`Output: ${records[0].directory}`, { exact: true }),
-    ).toBeVisible();
+    await expect(page.getByText(/^Output: /)).toHaveText(
+      `Output: ${records[0].directory}`,
+    );
     await access(records[0].directory);
   } finally {
     await app.close();

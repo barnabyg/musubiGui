@@ -61,7 +61,6 @@ test('backend interruption retains GPU ownership and offers explicit recovery wi
     await expect(
       page.getByText('State: Needs recovery', { exact: true }),
     ).toBeVisible();
-    await expect(page.getByRole('status')).toContainText(job.name);
     expect(await app.records()).toHaveLength(1);
     await page
       .getByRole('button', { name: 'Terminate recovered work', exact: true })
@@ -73,6 +72,7 @@ test('backend interruption retains GPU ownership and offers explicit recovery wi
     await expect(
       page.getByText('State: Interrupted', { exact: true }),
     ).toBeVisible();
+    await page.getByRole('button', { name: 'Back to runs' }).click();
     await expect(page.getByRole('status')).toHaveText('GPU available');
   } finally {
     await app.close();
@@ -431,6 +431,7 @@ test('a gracefully stopped revision can be prepared and started again', async ({
         .getByRole('listitem')
         .nth(1),
     ).toContainText('TrainingStopped');
+    await page.getByRole('button', { name: 'Back to runs' }).click();
     await expect(page.getByRole('status')).toHaveText('GPU available');
   } finally {
     await app.close();

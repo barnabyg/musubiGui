@@ -5,8 +5,6 @@ import {
   type OutputPreviews,
 } from './OutputPreview';
 import { apiClient } from './api';
-import { trainingOf, trainings } from './runChains';
-import { useRunHistory } from './runHistory';
 import { sizeLabel } from './runStatus';
 import './outputs.css';
 
@@ -48,21 +46,11 @@ type OutputList = {
   segments?: Segment[];
   latest?: string;
 };
-type Comparison = {
-  // The picker choices compared, so a changed choice hides a stale result.
-  key: string;
-  changes: { path: string; before: unknown; after: unknown }[];
-  // Caption and media differences between the two dataset snapshots, counted.
-  dataset: string[];
-  note: string;
-  samples: [OutputList, OutputList];
-};
-
 const read = apiClient('Output records could not be read. Refresh and retry.');
 
-function mediaFiles(outputs: Output[]) {
-  return outputs.filter((item) =>
-    ['image', 'video', 'audio'].includes(item.kind ?? ''),
+function isSample(item: Output) {
+  return (
+    item.kind === 'image' || item.kind === 'video' || item.kind === 'audio'
   );
 }
 
@@ -71,91 +59,8 @@ function merged(result: OutputList | null | undefined) {
   return (result?.segments?.length ?? 1) > 1;
 }
 
-// How a file reads in the comparison's sample list: in a merged list, with the segment it came from.
-function outputLabel(item: Output, result: OutputList | null | undefined) {
-  const segment =
-    merged(result) && item.segment ? ` · segment ${item.segment.position}` : '';
-  return `${item.name} · ${item.status}${segment}`;
-}
-
 function byteLabel(item: Output) {
   return item.bytes === undefined ? 'Size unknown' : sizeLabel(item.bytes);
-}
-
-function ComparisonSamples({
-  result,
-  label,
-}: {
-  result: OutputList;
-  label: string;
-}) {
-  const samples = mediaFiles(result.outputs);
-  const previews = useOutputPreviews();
-  const available = samples.filter(previews.playable);
-  const preview =
-    available.find((item) => item.path.startsWith('samples/')) ??
-    available.find((item) => item.kind === 'video') ??
-    available[0];
-  const [selected, setSelected] = useState('');
-  const sample =
-    samples.find((item) => item.id === selected) ?? preview ?? samples[0];
-  return (
-    <section className="comparison-samples" aria-label={label}>
-      <p>
-        <strong>{label}</strong>
-      </p>
-      <p>
-        <strong>{result.job.name}</strong> · {result.job.family.toUpperCase()} ·
-        revision {result.job.revision}
-      </p>
-      <p className="comparison-run-id">
-        {merged(result)
-          ? `Training of ${result.segments?.length} segments · latest Run ${result.latest}`
-          : `Run ${result.run_id}`}
-      </p>
-      <p>
-        Recorded sample prompt (Run settings):{' '}
-        {result.job.config?.sample_prompt ?? 'Not recorded'}
-      </p>
-      <p>Recorded seed: {result.job.config?.seed ?? 'Not recorded'}</p>
-      {result.warnings.map((warning) => (
-        <p className="error" key={warning}>
-          {warning}
-        </p>
-      ))}
-      {samples.length ? (
-        <>
-          <label className="field">
-            Sample
-            <select
-              aria-label="Sample"
-              value={sample?.id ?? ''}
-              onChange={(event) => setSelected(event.target.value)}
-            >
-              {samples.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {outputLabel(item, result)}
-                </option>
-              ))}
-            </select>
-          </label>
-          {sample && (
-            <>
-              <p>{outputLabel(sample, result)}</p>
-              {sample.error && <p className="error">{sample.error}</p>}
-              <MediaPreview
-                key={sample.id}
-                output={sample}
-                previews={previews}
-              />
-            </>
-          )}
-        </>
-      ) : (
-        <p>No generated samples recorded for this Run.</p>
-      )}
-    </section>
-  );
 }
 
 const settledStates = [
@@ -176,9 +81,7 @@ export function useRunOutputs(
   const [selection, setSelection] = useState<{
     runId: string;
     sample: string;
-    tryNext?: boolean;
   }>();
-  const history = useRunHistory();
   const [failure, setFailure] = useState<{ runId?: string; message: string }>();
   const [busy, setBusy] = useState(false);
   const [refresh, setRefresh] = useState(0);
@@ -222,33 +125,14 @@ export function useRunOutputs(
   const previews = useOutputPreviews();
   const chosen = selection?.runId === runId ? selection : undefined;
   const current = result?.run_id === runId ? result : null;
-  const segmentOutputs =
-    current?.outputs.filter((item) => item.run_id === runId) ?? [];
-  const latest = previews.latest(segmentOutputs);
   return {
-    previews: {
-      ...previews,
-      failed(item: Output) {
-        previews.failed(item);
-        if (!chosen?.tryNext || chosen.sample !== item.id || !runId) return;
-        const next = previews.latest(
-          segmentOutputs.filter((candidate) => candidate.id !== item.id),
-        );
-        if (next) setSelection({ runId, sample: next.id, tryNext: true });
-      },
-    },
-    latest,
-    selectLatest() {
-      if (runId && latest)
-        setSelection({ runId, sample: latest.id, tryNext: true });
-    },
+    previews,
     selected: chosen?.sample,
     select(item: Output) {
       if (!runId) return;
       setSelection({ runId, sample: item.id });
     },
     result: current,
-    runs: history.runs ?? [],
     error: failure?.runId === runId ? failure?.message : '',
     busy,
     reload() {
@@ -261,12 +145,12 @@ export function useRunOutputs(
 
 export type RunOutputs = ReturnType<typeof useRunOutputs>;
 
-// Artifact warnings, and sample errors once nothing is still writing the files.
+// Run-wide output warnings and settled checkpoint errors.
 export function RunWarnings({ outputs }: { outputs: RunOutputs }) {
   const { result } = outputs;
   if (!result) return null;
   const problems = settledStates.includes(result.status)
-    ? result.outputs.filter((item) => item.error)
+    ? result.outputs.filter((item) => item.error && !isSample(item))
     : [];
   return (
     <>
@@ -353,78 +237,10 @@ function LoadError({ outputs }: { outputs: RunOutputs }) {
   ) : null;
 }
 
-// A folder handoff lets the user collect multiple files together in Explorer.
-export function RunOutputActions({
-  directory,
-  outputs,
-  completed,
-  samplingDisabled,
-  openSamples,
-}: {
-  directory: string;
-  outputs: RunOutputs;
-  completed: boolean;
-  samplingDisabled: boolean;
-  openSamples: () => void;
-}) {
-  const [copy, setCopy] = useState<'idle' | 'copied' | 'manual'>('idle');
-  const { latest } = outputs;
-  async function copyFolder() {
-    try {
-      await navigator.clipboard.writeText(directory);
-      setCopy('copied');
-    } catch {
-      setCopy('manual');
-    }
-  }
-  return (
-    <>
-      <div className="actions">
-        <button title={directory} onClick={() => void copyFolder()}>
-          Copy output folder
-        </button>
-        {latest && (
-          <button
-            onClick={() => {
-              outputs.selectLatest();
-              openSamples();
-            }}
-          >
-            View sample
-          </button>
-        )}
-        {copy === 'copied' && (
-          <span role="status">
-            Folder path copied. Open its checkpoints subfolder in File Explorer.
-          </span>
-        )}
-      </div>
-      {copy === 'manual' && (
-        <label className="field">
-          Copy this folder path for File Explorer
-          <input
-            readOnly
-            value={directory}
-            onFocus={(event) => event.target.select()}
-          />
-        </label>
-      )}
-      {completed && outputs.result && !latest && (
-        <p>
-          {samplingDisabled
-            ? 'Sampling was disabled for this Run.'
-            : 'No playable sample is available.'}
-        </p>
-      )}
-      <LoadError outputs={outputs} />
-    </>
-  );
-}
-
 // The Samples tab: generated media and nothing else.
 export function RunSamples({ outputs }: { outputs: RunOutputs }) {
   const { result } = outputs;
-  const samples = mediaFiles(result?.outputs ?? []);
+  const samples = (result?.outputs ?? []).filter(isSample);
   const output = samples.find((item) => item.id === outputs.selected);
   return (
     <section className="panel" aria-label="Samples">
@@ -460,174 +276,6 @@ export function RunSamples({ outputs }: { outputs: RunOutputs }) {
           output={output}
           previews={outputs.previews}
         />
-      )}
-    </section>
-  );
-}
-
-export function RunComparison({
-  runId,
-  outputs,
-}: {
-  runId: string;
-  outputs: RunOutputs;
-}) {
-  const [other, setOther] = useState('');
-  const [side, setSide] = useState<'training' | 'segment'>('training');
-  const [comparison, setComparison] = useState<Comparison | null>(null);
-  const [error, setError] = useState('');
-  const [comparing, setComparing] = useState(false);
-  const busy = outputs.busy || comparing;
-  const own = trainingOf(outputs.runs, runId);
-  const ownTraining = own && own.segments.length > 1 ? own : undefined;
-  const fromTraining = Boolean(ownTraining) && side === 'training';
-  // A training compares as its latest segment's inputs, with samples from every segment.
-  const others = trainings(outputs.runs).filter(
-    (training) =>
-      training.segments.length > 1 &&
-      training.id !== own?.id &&
-      training.latest.status !== 'deleting',
-  );
-  const key = `${runId}|${fromTraining}|${other}`;
-  function resolve(choice: string) {
-    const training = others.find((item) => `chain:${item.id}` === choice);
-    return training
-      ? { id: training.latest.id, chain: true }
-      : { id: choice, chain: false };
-  }
-  async function compare() {
-    if (!other) return;
-    setComparing(true);
-    setError('');
-    const before = fromTraining
-      ? { id: ownTraining!.latest.id, chain: true }
-      : { id: runId, chain: false };
-    const after = resolve(other);
-    const list = (side: { id: string; chain: boolean }) =>
-      read<OutputList>(
-        `/api/runs/${side.id}/outputs${side.chain ? '?chain=true' : ''}`,
-      );
-    try {
-      const [changes, first, second] = await Promise.all([
-        read<Omit<Comparison, 'samples' | 'key'>>(
-          `/api/runs/${before.id}/compare/${after.id}`,
-        ),
-        list(before),
-        list(after),
-      ]);
-      setComparison({ ...changes, key, samples: [first, second] });
-    } catch (reason) {
-      setError((reason as Error).message);
-    } finally {
-      setComparing(false);
-    }
-  }
-  return (
-    <section className="panel" aria-label="Compare with another Run">
-      <h2>Compare with another Run</h2>
-      {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      )}
-      {ownTraining && (
-        <label className="field">
-          Compare from
-          <select
-            aria-label="Compare from"
-            value={side}
-            disabled={busy}
-            onChange={(event) => {
-              setSide(event.target.value as 'training' | 'segment');
-              setComparison(null);
-            }}
-          >
-            <option value="training">
-              This training ({ownTraining.segments.length} segments)
-            </option>
-            <option value="segment">This segment only</option>
-          </select>
-        </label>
-      )}
-      <div className="run-compare-picker">
-        <label className="field">
-          Compare with run
-          <select
-            aria-label="Compare with run"
-            value={other}
-            disabled={busy}
-            onChange={(event) => {
-              setOther(event.target.value);
-              setComparison(null);
-            }}
-          >
-            <option value="">Select another run</option>
-            {others.map((training) => (
-              <option key={training.id} value={`chain:${training.id}`}>
-                Training: {training.latest.job.name} ·{' '}
-                {training.latest.job.family.toUpperCase()} · r
-                {training.latest.job.revision} · {training.segments.length}{' '}
-                segments
-              </option>
-            ))}
-            {outputs.runs
-              .filter((run) => run.id !== runId && run.status !== 'deleting')
-              .map((run) => (
-                <option key={run.id} value={run.id}>
-                  {run.job.name} · {run.job.family.toUpperCase()} · r
-                  {run.job.revision} · {run.id.slice(0, 8)}
-                </option>
-              ))}
-          </select>
-        </label>
-        <button disabled={busy || !other} onClick={() => void compare()}>
-          Compare inputs
-        </button>
-      </div>
-      {comparison && comparison.key === key && (
-        <div className="output-comparison" aria-label="Run comparison">
-          <p>{comparison.note}</p>
-          {comparison.dataset.length > 0 && (
-            <p>Dataset differences: {comparison.dataset.join(', ')}.</p>
-          )}
-          <div className="comparison-media">
-            {comparison.samples.map((result, index) => (
-              <ComparisonSamples
-                key={`${index}-${result.run_id}`}
-                result={result}
-                label={
-                  index === 0 ? 'Current Run samples' : 'Compared Run samples'
-                }
-              />
-            ))}
-          </div>
-          {comparison.changes.length === 0 ? (
-            <p>No differences in the recorded inputs.</p>
-          ) : (
-            <table>
-              <thead>
-                <tr>
-                  <th>Recorded field</th>
-                  <th>Current run</th>
-                  <th>Compared run</th>
-                </tr>
-              </thead>
-              <tbody>
-                {comparison.changes.map((change) => (
-                  <tr key={change.path}>
-                    <th>{change.path}</th>
-                    <td>
-                      <pre>{JSON.stringify(change.before, null, 2)}</pre>
-                    </td>
-                    <td>
-                      <pre>{JSON.stringify(change.after, null, 2)}</pre>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
       )}
     </section>
   );

@@ -11,7 +11,7 @@ recently. It shows the state, the segment and revision, a link to **Open Run det
 step progress (Step X/N, elapsed, ETA and estimated time remaining) and, while it trains,
 **Save now**, **Sample now**, **Save and stop**, **Stop now** and **Force terminate**. These
 are the same controls, progress and requests as the Actions panel in Run details, read from the
-same Run, so both pages show the same step. Below them is the latest playable sample. Open Run details and use **Copy output folder** to collect checkpoints in File Explorer.
+same Run, so both pages show the same step. Below them is the latest playable sample. Open **Inputs and output folder** in Run details to find the output folder and collect checkpoints in File Explorer.
 
 **Prepare and start** stays on the Job page, which then follows the new training.
 **Prepare only** still opens Run details, where the prepared Run is started.
@@ -22,7 +22,7 @@ When the current training has ended (stopped, completed, failed, cancelled or in
 one of its segments has a saved state, the panel says where training stopped and where its last
 state was saved, and **Training steps** reads as a total: `Training steps (total; training is
 at step 300)`. The saved step comes from the state folder's name (`-step00000300-state`, or the
-target for a completed Run's final state) until Inspect saved states records it; paired Wan
+target for a completed Run's final state) until opening Resume on the Run records it; paired Wan
 states show it only after inspection. Reading it never hashes or probes states.
 
 Every field a resumed training can't take is marked **Needs a new Run: changing this starts a

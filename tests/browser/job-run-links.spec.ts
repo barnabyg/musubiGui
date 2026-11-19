@@ -48,17 +48,12 @@ test('job and Run links preserve identity, frozen revisions and the output folde
       await link.focus();
       await page.keyboard.press('Enter');
       await expect(page).toHaveURL(`${app.url}/#/runs/${run.id}`);
-      const origin = page.getByRole('region', { name: 'Originating job' });
-      await expect(origin).toContainText(`Frozen for this Run: ${job.name}`);
-      await expect(origin).toContainText('WAN · r1');
-      const current = origin.getByRole('link', { name: /Open current job/ });
-      await expect(current).toHaveAttribute('href', `#/jobs/${job.id}`);
-      await current.press('Enter');
-      await expect(page.getByLabel('Job name', { exact: true })).toHaveValue(
-        job.name,
-      );
-      await page.goBack();
-      await expect(page).toHaveURL(`${app.url}/#/runs/${run.id}`);
+      await expect(
+        page.getByRole('heading', { name: job.name, exact: true }),
+      ).toBeVisible();
+      await expect(
+        page.getByText(`Run ${run.id.slice(0, 8)}`, { exact: true }),
+      ).toBeVisible();
       await page.goBack();
       await expect(page).toHaveURL(`${app.url}/#/jobs`);
     }
@@ -75,71 +70,26 @@ test('job and Run links preserve identity, frozen revisions and the output folde
       'prepared',
     ]);
 
-    await page.goto(`${app.url}/#/runs/${firstRun.id}`);
-    const origin = page.getByRole('region', { name: 'Originating job' });
-    await origin.getByRole('link', { name: /Open current job/ }).click();
+    await page.goto(`${app.url}/#/jobs/${first.id}`);
     await page
       .getByLabel('Job name', { exact: true })
       .fill('WAN acceptance revised');
     await page.getByRole('button', { name: 'Save draft', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('revision 2');
-    await page.goBack();
-    await expect(origin).toContainText(
-      `Frozen for this Run: ${first.name} · WAN · r1`,
-    );
-    await expect(
-      origin.getByRole('link', { name: /Open current job/ }),
-    ).toContainText('WAN acceptance revised · WAN · r2');
-    const folder = page.getByRole('button', { name: 'Copy output folder' });
-    const record = (await app.records()).find(
-      (record) => record.id === firstRun.id,
-    )!;
-    await expect(folder).toHaveAttribute('title', record.directory);
 
+    const record = (await app.records()).find((run) => run.id === firstRun.id)!;
     await app.post(`/api/jobs/${first.id}/archive`);
-    await page.reload();
-    await expect(origin).toContainText('Archived job');
-    await expect(origin).toContainText('WAN acceptance revised · WAN · r2');
-    const archived = origin.getByRole('link', {
-      name: /Restore in Archived jobs/,
+    await page.goto(`${app.url}/#/runs/${firstRun.id}`);
+    const heading = page.getByRole('heading', {
+      name: first.name,
+      exact: true,
     });
-    await archived.press('Enter');
-    await expect(page).toHaveURL(`${app.url}/#/jobs`);
-    await page.getByText(/^Archived jobs \(/).click();
-    await expect(
-      page.getByRole('button', {
-        name: 'Restore WAN acceptance revised',
-        exact: true,
-      }),
-    ).toBeVisible();
-    await page.goBack();
-    await expect(folder).toHaveAttribute('title', record.directory);
-
-    // Older or externally changed state can leave a Run without an available job.
-    // Exercise these HTTP boundary failures without deleting the job's saved history.
-    await page.route('**/api/jobs', (route) => route.fulfill({ json: [] }));
-    await page.route('**/api/jobs/archived', (route) =>
-      route.fulfill({ json: [] }),
-    );
+    const folder = page.getByText(/^Output: /);
+    await expect(heading).toBeVisible();
+    await expect(folder).toHaveText(`Output: ${record.directory}`);
     await page.reload();
-    await expect(origin).toContainText('This job is no longer available.');
-    await expect(origin).toContainText(`${first.name} · WAN · r1`);
-    await expect(folder).toHaveAttribute('title', record.directory);
-
-    await page.unroute('**/api/jobs');
-    await page.unroute('**/api/jobs/archived');
-    await page.route('**/api/jobs/archived', (route) =>
-      route.fulfill({
-        status: 503,
-        json: { detail: 'Job storage temporarily unavailable.' },
-      }),
-    );
-    await page.reload();
-    await expect(origin).toContainText('Job storage temporarily unavailable.');
-    await expect(folder).toHaveAttribute('title', record.directory);
-    await page.unroute('**/api/jobs/archived');
-    await origin.getByRole('button', { name: 'Retry job lookup' }).click();
-    await expect(origin).toContainText('Archived job');
+    await expect(heading).toBeVisible();
+    await expect(folder).toHaveText(`Output: ${record.directory}`);
     expect((await app.records()).map((run) => run.status).sort()).toEqual([
       'completed',
       'prepared',

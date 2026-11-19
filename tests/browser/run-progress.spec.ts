@@ -218,6 +218,10 @@ test('Runs read as labels and local times, and the GPU line links to the Run usi
     await expect(page.getByText(run.id, { exact: true })).toBeHidden();
     await page.getByText('Full Run ID').click();
     await expect(page.getByText(run.id, { exact: true })).toBeVisible();
+    await expect(
+      page.getByRole('status').filter({ hasText: /GPU/ }),
+    ).toHaveCount(0);
+    await page.getByRole('button', { name: 'Back to runs' }).click();
 
     // Work outside this instance has no Run to name.
     await page.unroute('**/api/runs/capabilities');

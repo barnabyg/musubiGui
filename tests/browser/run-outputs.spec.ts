@@ -67,7 +67,7 @@ test('outputs appear when a Run completes and a playing preview survives a refre
   }
 });
 
-test('a finished Run offers its folder and latest sample in the initial viewport', async ({
+test('a finished Run shows elapsed time in Overview and preserves playback across tabs', async ({
   page,
 }) => {
   const app = await runWorkspace();
@@ -92,19 +92,16 @@ test('a finished Run offers its folder and latest sample in the initial viewport
       0,
     );
 
-    const folder = page.getByRole('button', { name: 'Copy output folder' });
-    const sample = page.getByRole('button', {
-      name: 'View sample',
-      exact: true,
-    });
-    await expect(folder).toBeInViewport();
-    await expect(sample).toBeInViewport();
     await expect(runSummary(page).getByLabel('Run elapsed')).toBeInViewport();
     await expect(runSummary(page)).not.toContainText(
-      /ETA|remaining to max steps/,
+      /ETA|Estimated Run remaining/,
     );
-    await expect(page.getByText(/^LoRA checkpoints/)).toHaveCount(0);
-    await openRunTab(page, 'overview');
+    await expect(runTab(page, 'samples')).toBeInViewport();
+    await openRunTab(page, 'samples');
+    const sample = page.getByRole('button', {
+      name: 'sample.mp4 · available',
+      exact: true,
+    });
     await sample.click();
     const video = page.getByLabel('Output video', { exact: true });
     await expect(video).toBeVisible();
@@ -215,17 +212,17 @@ test('a partial Run shows the outputs it has, with their problems', async ({
       }),
     );
     await page.goto(`${app.url}/#/runs/${run.id}`);
-    const summary = runSummary(page);
-    await expect(summary).toContainText('sample.mp4: Sample has no audio.');
-    await expect(
-      page.getByRole('button', { name: 'Copy output folder' }),
-    ).toBeVisible();
+    await openRunTab(page, 'samples');
+    await page.getByRole('button', { name: 'sample.mp4 · incomplete' }).click();
+    await expect(page.getByLabel('Selected sample')).toContainText(
+      'Sample has no audio.',
+    );
   } finally {
     await app.close();
   }
 });
 
-test('View sample skips unsupported formats and handles browser decoding failures', async ({
+test('Samples keeps unsupported or undecodable files available for download', async ({
   page,
 }) => {
   const app = await runWorkspace();
@@ -281,12 +278,9 @@ test('View sample skips unsupported formats and handles browser decoding failure
       route.fulfill({ contentType: 'image/png', body: PNG }),
     );
     await page.goto(`${app.url}/#/runs/${run.id}`);
-    const view = page.getByRole('button', { name: 'View sample' });
-    await Promise.all([
-      page.waitForRequest('**/broken-preview.mp4'),
-      view.click(),
-    ]);
+    await openRunTab(page, 'samples');
     const selected = page.getByLabel('Selected sample', { exact: true });
+    await page.getByRole('button', { name: 'still.png · available' }).click();
     await expect(
       selected.getByRole('img', { name: 'Sample still.png' }),
     ).toBeVisible();

@@ -45,7 +45,7 @@ suite on the pushed commit.
 
 In browser tests, wait for the observable state that the next action needs. For example, wait for
 **Draft saved** before reloading a draft, and for the final sample to appear in the
-output list before testing **View sample**. Run status and output availability update independently.
+output list before selecting it on **Samples**. Run status and output availability update independently.
 
 ## What verify runs
 

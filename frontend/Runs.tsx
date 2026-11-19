@@ -1,18 +1,10 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { apiClient } from './api';
-import {
-  RunOutputActions,
-  RunComparison,
-  RunSamples,
-  RunWarnings,
-  useRunOutputs,
-} from './Outputs';
+import { RunSamples, RunWarnings, useRunOutputs } from './Outputs';
 import { formatRoute } from './route';
-import { PreviewMemory } from './PreviewMemory';
 import { confirmDelete, RunActions } from './RunActions';
 import { RunBadge } from './RunBadge';
-import { RunJobLink } from './RunJobLink';
 import { RunList } from './RunList';
 import { RunRecords } from './RunRecords';
 import { RunCaching } from './RunStages';
@@ -225,11 +217,6 @@ export function Runs({
       {selected ? (
         <section className="title run-details-title">
           <h1>Run details</h1>
-          {/* Joined only visually: the status stays its own live region. */}
-          <p className="run-status-line">
-            <span role="status">{gpuStatus}</span> ·{' '}
-            <HelpLink topic="Background training" />
-          </p>
         </section>
       ) : (
         <section className="title">
@@ -286,25 +273,8 @@ export function Runs({
                   <p>
                     State: <RunBadge status={run.status} />
                   </p>
-                  {showFiles && (
-                    <RunOutputActions
-                      key={`outputs-${run.id}`}
-                      directory={run.directory}
-                      outputs={outputs}
-                      completed={run.status === 'completed'}
-                      samplingDisabled={
-                        run.job.config?.sample_enabled === false &&
-                        !run.job.config?.preview_every
-                      }
-                      openSamples={() => {
-                        setView({ runId: selected, tab: 'samples' });
-                        document.getElementById('run-tab-samples')?.focus();
-                      }}
-                    />
-                  )}
                   {run.error && <p className="error">{run.error}</p>}
                   {showFiles && <RunWarnings outputs={outputs} />}
-                  <PreviewMemory stages={run.stages} />
                   <TrainingProgress
                     run={run}
                     progress={current?.progress ?? null}
@@ -314,7 +284,6 @@ export function Runs({
                     progress={current?.progress ?? null}
                     estimate={current?.run_estimate}
                   />
-                  <RunJobLink key={run.id} frozen={run.job} />
                 </section>
                 {segments.length > 1 && (
                   <RunSegments
@@ -348,13 +317,6 @@ export function Runs({
                   }
                 />
                 <RunCaching run={run} chained={segments.length > 1} />
-                {showFiles && (
-                  <RunComparison
-                    key={`compare-${run.id}`}
-                    runId={run.id}
-                    outputs={outputs}
-                  />
-                )}
                 <RunRecords
                   run={run}
                   logText={current?.text}
