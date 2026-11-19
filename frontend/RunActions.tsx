@@ -70,7 +70,7 @@ export function RunActions({
   segments: RunSummary[];
   action: (name: string, body?: object) => Promise<void>;
   deleteRun: (chain: boolean) => Promise<void>;
-  // Resume, for an ended Run that no later segment continues.
+  // Resume options for an ended Run.
   resume?: ReactNode;
 }) {
   const place = segments.find((segment) => segment.id === run.id)?.chain;
@@ -91,10 +91,9 @@ export function RunActions({
       {pairedStarted &&
         ['failed', 'stopped', 'interrupted'].includes(run.status) && (
           <p>
-            Resume, or choose a paired save in Resume from an earlier save, to
-            continue both experts and the schedule as a new segment. Updates
-            after the selected save are lost. Prepare from Jobs to restart both
-            experts.
+            Use Resume to continue both experts and the schedule as a new
+            segment. Updates after the selected save are lost. Prepare from Jobs
+            to restart both experts.
             {run.resume_of && (
               <>
                 {' '}
@@ -125,8 +124,8 @@ export function RunActions({
             </p>
             <p>
               To change the build, edit the job, save and review it, then
-              prepare from Jobs. For saved optimizer state, use Resume, or
-              choose a save in Resume from an earlier save.
+              prepare from Jobs. Use Resume to continue from saved optimizer
+              state.
             </p>
           </div>
         )}

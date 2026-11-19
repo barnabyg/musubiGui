@@ -42,12 +42,7 @@ test('generation memory is saved and frozen independently from training', async 
     await expect(
       page.getByText('State: Completed', { exact: true }),
     ).toBeVisible({ timeout: 240_000 });
-    await expect(page.getByLabel('Preview memory settings')).toContainText(
-      'Generation memory: conservative family preset.',
-    );
-    await expect(page.getByLabel('Preview memory settings')).toContainText(
-      'In-run preview memory: training residency retained.',
-    );
+    await expect(page.getByLabel('Preview memory settings')).toHaveCount(0);
     const records = (await (
       await page.request.get(`${app.url}/api/runs`)
     ).json()) as { id: string }[];

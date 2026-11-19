@@ -1,7 +1,12 @@
 import { stat } from 'node:fs/promises';
 import path from 'node:path';
 import { test, expect } from '@playwright/test';
-import { openRunTab, runWorkspace } from './runHarness';
+import {
+  openRunDiagnostics,
+  openRunTab,
+  runResume,
+  runWorkspace,
+} from './runHarness';
 
 test('Wan offers only alternating training for new jobs and presets', async ({
   page,
@@ -144,9 +149,10 @@ test('alternating Wan settings persist, train both experts and restore the paire
       sample_pair: Record<string, { steps: number; path: string }>;
       stages: { name: string; args: string[]; training?: { expert: string } }[];
     };
-    await expect(
-      page.getByRole('button', { name: 'Copy output folder' }),
-    ).toHaveAttribute('title', run.directory);
+    await openRunDiagnostics(page);
+    await expect(page.getByLabel('Output folder', { exact: true })).toHaveText(
+      run.directory,
+    );
     for (const expert of ['low', 'high']) {
       const file = full.sample_pair[expert].path;
       expect(path.relative(run.directory, file)).toMatch(
@@ -168,27 +174,29 @@ test('alternating Wan settings persist, train both experts and restore the paire
     await app.crash();
     await app.start();
     await page.reload();
-    await expect(
-      page.getByRole('button', { name: 'Copy output folder' }),
-    ).toHaveAttribute('title', run.directory);
-    await page
-      .getByRole('button', { name: 'Inspect saved states', exact: true })
-      .click();
-    const partial = page
-      .locator('p')
-      .filter({ hasText: /^Paired recovery: low 2 \/ high 1 ·/ });
-    await expect(partial).toContainText(
+    await openRunDiagnostics(page);
+    await expect(page.getByLabel('Output folder', { exact: true })).toHaveText(
+      run.directory,
+    );
+    const resume = runResume(page);
+    await resume.getByRole('button', { name: 'Resume', exact: true }).click();
+    await resume.getByText('Choose an earlier save', { exact: true }).click();
+    const savedState = resume.getByLabel('Saved state');
+    const partial = savedState.getByRole('option', {
+      name: /Paired recovery: low 2 \/ high 1$/,
+    });
+    await savedState.selectOption((await partial.getAttribute('value'))!);
+    await expect(resume.getByText(/^Selected save/)).toContainText(
       'low-noise 2 steps · high-noise 1 steps',
-      { timeout: 240_000 },
     );
     // Both experts train until step 7: low continues from 2 and high catches up from 1.
-    await page.getByLabel('Train until step', { exact: true }).fill('7');
-    await partial
-      .getByRole('button', { name: 'Restore as new segment', exact: true })
+    await resume.getByLabel('Train until step', { exact: true }).fill('7');
+    await resume
+      .getByRole('button', { name: 'Review resume', exact: true })
       .click();
     const dialog = page.getByRole('dialog');
     await expect(dialog).toContainText(
-      'Both expert states and the alternating schedule continue',
+      'Both experts continue from the selected save.',
     );
     await dialog
       .getByRole('button', { name: 'Restore as new segment', exact: true })
@@ -201,9 +209,10 @@ test('alternating Wan settings persist, train both experts and restore the paire
       page.getByText('State: Completed', { exact: true }),
     ).toBeVisible({ timeout: 240_000 });
     const segment = (await app.records()).find((item) => item.id !== run.id)!;
-    await expect(
-      page.getByRole('button', { name: 'Copy output folder' }),
-    ).toHaveAttribute('title', segment.directory);
+    await openRunDiagnostics(page);
+    await expect(page.getByLabel('Output folder', { exact: true })).toHaveText(
+      segment.directory,
+    );
     await openRunTab(page, 'samples');
     // The source Run's final sample comes first in the training's merged list.
     await page

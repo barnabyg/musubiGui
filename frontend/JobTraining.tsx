@@ -8,7 +8,7 @@ import { RunControls } from './RunControls';
 import { refreshRunHistory } from './runHistory';
 import { useRunDetail, useRunLogs } from './runLive';
 import { runStatus } from './runStatus';
-import { TrainingProgress } from './RunTiming';
+import { TrainingProgress, TrainingTiming } from './RunTiming';
 import type { Run } from './runTypes';
 
 const request = apiClient('Run request failed.');
@@ -111,7 +111,12 @@ export function JobTraining({ current }: { current: CurrentTraining }) {
         </p>
       )}
       <ResumeBanner current={current} reached={reached} />
-      {run && <TrainingProgress run={run} progress={progress} />}
+      {run && (
+        <>
+          <TrainingProgress run={run} progress={progress} />
+          <TrainingTiming run={run} progress={progress} />
+        </>
+      )}
       {run && CONTROLLED.includes(run.status) && (
         <RunControls
           run={run}

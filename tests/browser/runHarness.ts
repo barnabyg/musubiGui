@@ -202,10 +202,6 @@ export async function openCurrentRun(page: Page) {
 const runTabNames = { overview: 'Overview', samples: 'Samples' } as const;
 const runPanelNames = {
   actions: 'Actions',
-  resume: 'Resume from an earlier save',
-  caching: 'Cache preparation results',
-  compare: 'Compare with another Run',
-  inputs: 'Inputs and output folder',
   samples: 'Samples',
   segments: 'Segments',
 } as const;
@@ -231,13 +227,22 @@ export function runPanel(scope: Page | Locator, panel: RunPanelKey) {
   return scope.getByRole('region', { name: runPanelNames[panel], exact: true });
 }
 
-// For absence checks: anything labelled with the panel name, of any role, matched as a
-// case-insensitive substring, so a renamed or re-roled copy of the panel still counts.
-export function runPanelLabelled(page: Page, panel: RunPanelKey) {
-  return page.getByLabel(runPanelNames[panel]);
+export function runResume(page: Page) {
+  return runPanel(page, 'actions').getByRole('group', {
+    name: 'Resume training',
+  });
 }
 
-// The first Overview panel: the Run's name, state, warnings, timing and originating job.
+export async function openRunDiagnostics(page: Page) {
+  const heading = page.getByRole('heading', {
+    name: 'Stage logs and diagnostics',
+  });
+  await expect(heading).toBeVisible();
+  if (!(await page.getByLabel('Output folder', { exact: true }).isVisible()))
+    await heading.click();
+}
+
+// The first Overview panel: the Run's name, state, warnings and timing.
 export function runSummary(page: Page) {
   return page.locator('#run-panel-overview > .panel').first();
 }

@@ -1,7 +1,12 @@
 import { test, expect, type Page } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { runPanel, runWorkspace, type RunRecord } from './runHarness';
+import {
+  runPanel,
+  runResume,
+  runWorkspace,
+  type RunRecord,
+} from './runHarness';
 
 const NEW_PROMPT = 'A green circle drifts over a white field.';
 
@@ -68,10 +73,16 @@ test('a stopped Run resumes with an edited revision of its Job, after review sho
 
     // A changed LoRA rank can't resume: Resume names it and asks nothing.
     const rejected = await save({ rank: 16 });
-    const latest = runPanel(page, 'actions').getByRole('group', {
-      name: 'Resume with the latest revision',
+    const latest = runResume(page);
+    const openResume = async () => {
+      await latest.getByRole('button', { name: 'Resume', exact: true }).click();
+      await latest.getByLabel('Job revision').selectOption('edited');
+    };
+    const resume = latest.getByRole('button', {
+      name: 'Review resume',
+      exact: true,
     });
-    const resume = latest.getByRole('button', { name: 'Resume', exact: true });
+    await openResume();
     await resume.click();
     await expect(
       latest.getByRole('list', { name: 'Needs a new Run' }),
@@ -127,6 +138,7 @@ test('a stopped Run resumes with an edited revision of its Job, after review sho
     await noHorizontalScroll(page);
 
     await page.goto(`${app.url}/#/runs/${original.id}`);
+    await openResume();
     // Resume checks the latest revision and asks before resuming; cancelling leaves the check shown.
     const dialog = page.getByRole('dialog');
     await resume.click();

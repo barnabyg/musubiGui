@@ -77,8 +77,9 @@ test('paired Wan previews show matching per-expert steps', async ({ page }) => {
     await expect(
       page.getByRole('button', { name: 'sample.mp4 · available', exact: true }),
     ).toBeVisible();
-    await openRunTab(page, 'overview');
-    await page.getByRole('button', { name: 'View sample' }).click();
+    await page
+      .getByRole('button', { name: 'sample.mp4 · available', exact: true })
+      .click();
     await expect(
       page.getByLabel('Selected sample', { exact: true }),
     ).toContainText(/sample\.mp4/);

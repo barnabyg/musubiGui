@@ -4,7 +4,7 @@
 
 ## Seconds per step
 
-The progress area shows **Seconds per step**, using the latest training progress
+The timing group shows **Seconds per step**, using the latest training progress
 bar's reported rate. Rates reported as iterations per second are converted to
 seconds per step. This is the trainer's smoothed rate, not a measured individual
 GPU operation. It stays unknown when no rate was reported, including CPU fixtures.
@@ -65,11 +65,11 @@ Manual verification: in PowerShell 7, from `C:/docs/git/musubiGui`, run:
 
 Prerequisites: configured training installation, H3 models, prepared videos and an
 NVIDIA GPU. Start an H3 Run and open Overview. After training reports a speed, expect
-**Seconds per step** to match the latest `steps:` log bar. Download diagnostics during
+**Seconds per step** to match the latest `steps:` log bar. Open **Stage logs and diagnostics** and download diagnostics during
 training and after completion; each line should parse as JSON and include stage/sample
 records. Compare GPU utilization, power and available RAM with Task Manager or
 `nvidia-smi`, allowing for sampling delay and their different memory definitions.
-Reload Overview and expect the download and reported speed to remain available.
+Reload Overview and expect the reported speed and diagnostics download to remain available.
 
 ## Run elapsed
 
@@ -92,7 +92,7 @@ their `finished` value records reconciliation, because the actual process exit
 was not observed, so their elapsed value also stays unknown. Restored segments
 clear that marker. Cancelled-before-start Runs show not started. Existing
 records remain readable: when the execution-start field is absent, the UI labels
-its fallback to the first recorded training start as legacy. It cannot reconstruct
+its fallback to the first recorded training start. It cannot reconstruct
 earlier preparation. Missing or invalid timestamps stay unknown.
 
 Manual timing check, from `C:/docs/git/musubiGui` in PowerShell 7:
@@ -111,13 +111,13 @@ exclude the wait and its earlier caching. CPU fixtures do not measure GPU speed.
 
 ## Remaining-time estimates
 
-Training progress includes **Estimated training remaining to max steps**. It
+The timing group includes **Estimated training remaining**. It
 extrapolates the trainer's observed step speed over all remaining steps, including
 later alternating Wan phases and the requested steps of a restored segment.
 It stays unknown until timing is available. This is a training estimate, not a
 finish-time promise: future model loading, previews and final sampling are excluded,
-and expert speeds may differ. The trainer's own Training ETA or Phase ETA remains
-visible separately during training. Completed Runs show recorded elapsed time and omit both estimates. The logs API adds nullable `estimated_remaining_seconds`.
+and expert speeds may differ. The trainer's own **Training ETA** or **Phase ETA** has its own row during training.
+Completed and stopped Runs show recorded elapsed time without live forecasts. The logs API adds nullable `estimated_remaining_seconds`.
 
 **Estimated Run remaining** and **Estimated finish** are separate forecasts. New
 Runs observe native Wan/H3 previews from before the trainer's sampling setup hook
@@ -144,17 +144,12 @@ reset its timing; it is never used as a preview-free rate for this whole-Run for
 Observed inter-step saves remain in the step rate. Completed phases can supply
 startup and final-save overhead for later comparable phases, without adding their
 first update twice. A phase that is still loading retains its measured startup
-budget, less time already spent loading, until its first update. An unmeasured expert uses the observed expert's rate with an
-explicit assumption until it reports its own measurements. Forecasts identify
-unestimated components such as future loading/switching and final state saves;
-they are partial estimates, not finish-time promises. Before step or preview
-measurements exist, the affected budget and whole-Run finish remain unknown.
-When only part of the work is measured, Overview shows the outstanding preview
-budget and a **Partial remaining estimate**, with a conditional finish for those
-estimated components. Unmeasured work, including a separate final generator, is
-listed as excluded/assumed. This is a partial prediction, not a guaranteed lower
-bound. The full remaining/finish values stay unknown until their components have
-measurements. Native
+budget, less time already spent loading, until its first update. An unmeasured expert
+uses the observed expert's rate until it reports its own measurements. The logs API
+records assumptions and unestimated components, such as future loading and final state saves.
+Before measurements exist, the corresponding timing values show **Unknown**. When only
+some components have estimates, Overview marks the available remaining time and finish
+as **partial**. It also shows the outstanding preview budget when available. Native
 and standalone samples use separate timing pools because their residency costs
 differ; a native preview cannot qualify a separate final generator's budget.
 
@@ -172,8 +167,7 @@ For manual forecast verification use the isolated launch command under
 [Run elapsed](#run-elapsed). Set a
 fixture Job to at least 20 steps and preview every 2, disable final sampling, then
 Prepare and start. Expect the Run forecast to appear after step and first-preview
-measurements; its outstanding count should fall after each preview. Reload during
-training and confirm the count/estimate survive. The fixed 10-minute/nine-preview
+measurements. Reload during training and confirm the estimate still appears. The fixed 10-minute/nine-preview
 case is covered deterministically through the API rather than making a fixture
 sleep for ten minutes. For a real-GPU stopwatch check, use `.\launch.cmd` with
 configured models and a dataset, and allow for unestimated overhead and variable

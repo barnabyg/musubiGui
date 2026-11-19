@@ -448,7 +448,7 @@ class RunService:
             found = next((item for item in states if item["id"] == state_id), None)
             if found is None:
                 raise ValueError(
-                    "Saved state is incomplete, changed or missing. Inspect saved states and choose again."
+                    "Saved state is incomplete, changed or missing. Reopen Resume to check the available saves."
                 )
             state = found
         target = target_steps if target_steps is not None else revision.config.steps

@@ -1,23 +1,14 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { apiClient } from './api';
-import {
-  RunOutputActions,
-  RunComparison,
-  RunSamples,
-  RunWarnings,
-  useRunOutputs,
-} from './Outputs';
+import { RunSamples, RunWarnings, useRunOutputs } from './Outputs';
 import { formatRoute } from './route';
-import { PreviewMemory } from './PreviewMemory';
 import { confirmDelete, RunActions } from './RunActions';
 import { RunBadge } from './RunBadge';
-import { RunJobLink } from './RunJobLink';
 import { RunList } from './RunList';
 import { RunRecords } from './RunRecords';
-import { RunCaching } from './RunStages';
 import { RunTabs, type RunTab } from './RunTabs';
-import { RunCompletion, RunElapsed, TrainingProgress } from './RunTiming';
+import { RunTiming, TrainingProgress } from './RunTiming';
 import { trainingOf } from './runChains';
 import { refreshRunHistory, useRunHistory } from './runHistory';
 import { useRunDetail, useRunLogs } from './runLive';
@@ -25,8 +16,7 @@ import { RunSegments } from './RunSegments';
 import { HelpLink } from './Help';
 import { sizeLabel } from './runStatus';
 import type { DeletePreview, DeleteResult, Run } from './runTypes';
-import { ResumeRevision } from './ResumeRevision';
-import { SavedStates } from './SavedStates';
+import { RunResume } from './RunResume';
 import './runs.css';
 
 const request = apiClient('Run request failed.');
@@ -226,11 +216,6 @@ export function Runs({
       {selected ? (
         <section className="title run-details-title">
           <h1>Run details</h1>
-          {/* Joined only visually: the status stays its own live region. */}
-          <p className="run-status-line">
-            <span role="status">{gpuStatus}</span> ·{' '}
-            <HelpLink topic="Background training" />
-          </p>
         </section>
       ) : (
         <section className="title">
@@ -287,32 +272,17 @@ export function Runs({
                   <p>
                     State: <RunBadge status={run.status} />
                   </p>
-                  <RunElapsed run={run} />
-                  {showFiles && (
-                    <RunOutputActions
-                      key={`outputs-${run.id}`}
-                      directory={run.directory}
-                      outputs={outputs}
-                      completed={run.status === 'completed'}
-                      samplingDisabled={
-                        run.job.config?.sample_enabled === false &&
-                        !run.job.config?.preview_every
-                      }
-                      openSamples={() => {
-                        setView({ runId: selected, tab: 'samples' });
-                        document.getElementById('run-tab-samples')?.focus();
-                      }}
-                    />
-                  )}
                   {run.error && <p className="error">{run.error}</p>}
                   {showFiles && <RunWarnings outputs={outputs} />}
-                  <RunCompletion run={run} estimate={current?.run_estimate} />
-                  <PreviewMemory stages={run.stages} />
                   <TrainingProgress
                     run={run}
                     progress={current?.progress ?? null}
                   />
-                  <RunJobLink key={run.id} frozen={run.job} />
+                  <RunTiming
+                    run={run}
+                    progress={current?.progress ?? null}
+                    estimate={current?.run_estimate}
+                  />
                 </section>
                 {segments.length > 1 && (
                   <RunSegments
@@ -330,52 +300,24 @@ export function Runs({
                   action={action}
                   deleteRun={(chain) => remove(run.id, chain)}
                   resume={
-                    ENDED.includes(run.status) &&
-                    !segments.find((segment) => segment.id === run.id)?.chain
-                      .later_segments && (
-                      <ResumeRevision
+                    showFiles &&
+                    ENDED.includes(run.status) && (
+                      <RunResume
                         key={run.id}
                         run={run}
+                        allowEditedRevision={
+                          !segments.find((segment) => segment.id === run.id)
+                            ?.chain.later_segments
+                        }
                         busy={busy}
-                        onResume={(body) => action('resume', body)}
+                        onAction={action}
                       />
                     )
                   }
                 />
-                {showFiles && (
-                  <SavedStates
-                    key={`states-${run.id}`}
-                    runId={run.id}
-                    config={run.job.config}
-                    canResume={ENDED.includes(run.status)}
-                    busy={busy}
-                    onRestore={(stateId, steps) =>
-                      action('restore-state', {
-                        state_id: stateId,
-                        target_steps: steps,
-                        confirmed: true,
-                      })
-                    }
-                  />
-                )}
-                <RunCaching run={run} chained={segments.length > 1} />
-                {showFiles && (
-                  <RunComparison
-                    key={`compare-${run.id}`}
-                    runId={run.id}
-                    outputs={outputs}
-                  />
-                )}
                 <RunRecords
                   run={run}
                   logText={current?.text}
-                  refreshOutputs={
-                    showFiles && (
-                      <button disabled={outputs.busy} onClick={outputs.reload}>
-                        Refresh outputs
-                      </button>
-                    )
-                  }
                   performanceAvailable={current?.performance_available}
                 />
               </div>

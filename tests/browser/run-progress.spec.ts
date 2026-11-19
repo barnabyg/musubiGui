@@ -40,7 +40,7 @@ test('live progress steps through stages, reports steps and loss, and shows a fa
     const steps = page.getByRole('list', { name: 'Run stages' });
     const step = (index: number) => steps.getByRole('listitem').nth(index);
     await expect(step(0)).toHaveClass('completed');
-    await expect(step(0)).toContainText('Caching');
+    await expect(step(0)).toContainText('Prepare training data');
     await expect(step(1)).toHaveClass('pending');
     await expect(step(3)).toContainText('Done');
     await expect(page.getByLabel('Training progress')).toHaveCount(0);
@@ -53,10 +53,12 @@ test('live progress steps through stages, reports steps and loss, and shows a fa
     await expect(progress).toContainText(/Step [1-5]\/6/);
     await expect(progress).toContainText('Loss 0.0');
     // The fixture reports no timing, so both reported and estimated ETA stay unknown.
-    await expect(progress).toContainText('ETA unknown');
-    await expect(progress).toContainText(
-      'Estimated training remaining to max steps: unknown',
-    );
+    await expect(
+      page.getByLabel('Training ETA', { exact: true }),
+    ).toContainText('Unknown');
+    await expect(
+      page.getByLabel('Estimated training remaining', { exact: true }),
+    ).toContainText('Unknown');
     await expect(page.getByLabel('Training steps')).toHaveAttribute('max', '6');
     await expect(page.getByLabel('Run logs')).toBeHidden();
 
@@ -88,7 +90,7 @@ test('live progress steps through stages, reports steps and loss, and shows a fa
     await expect(step(1)).toContainText('Exit code 3');
     await expect(step(3)).toHaveClass('pending');
     await expect(
-      page.getByText('Step progress unknown', { exact: false }),
+      page.getByText('Waiting for the first training step.'),
     ).toBeVisible();
     await expect(page.getByLabel('Run logs')).toContainText(
       'Deliberate fixture failure',
@@ -214,8 +216,11 @@ test('Runs read as labels and local times, and the GPU line links to the Run usi
       page.getByText(`Run ${run.id.slice(0, 8)}`, { exact: true }),
     ).toBeVisible();
     await expect(page.getByText(run.id, { exact: true })).toBeHidden();
-    await page.getByText('Full Run ID').click();
-    await expect(page.getByText(run.id, { exact: true })).toBeVisible();
+    await expect(page.getByText('Full Run ID')).toHaveCount(0);
+    await expect(
+      page.getByRole('status').filter({ hasText: /GPU/ }),
+    ).toHaveCount(0);
+    await page.getByRole('button', { name: 'Back to runs' }).click();
 
     // Work outside this instance has no Run to name.
     await page.unroute('**/api/runs/capabilities');

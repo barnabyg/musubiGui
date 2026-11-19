@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { mkdtemp, readFile, rm, unlink, utimes } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { localBackend, python } from './backend';
@@ -12,7 +12,7 @@ type FixtureRun = {
   directory: string;
 };
 
-test('Wan and H3 output playback comparison and missing states retain run provenance', async ({
+test('Wan and H3 output playback and missing outputs retain run provenance', async ({
   page,
 }) => {
   const parent = await mkdtemp(path.join(tmpdir(), 'musubi-outputs-'));
@@ -30,27 +30,15 @@ test('Wan and H3 output playback comparison and missing states retain run proven
     const h3 = records.runs.find(
       (run) => run.family === 'h3' && run.revision === 1,
     )!;
-    const nextH3 = records.runs.find(
-      (run) => run.family === 'h3' && run.revision === 2,
-    )!;
-    // Make the video the newest of several samples, independent of filename ordering.
-    const latest = new Date(Date.now() + 60_000);
-    await utimes(
-      path.join(h3.directory, 'samples', 'sample.mp4'),
-      latest,
-      latest,
-    );
     await start();
     await page.goto(url);
     await page.getByRole('button', { name: 'Runs', exact: true }).click();
     await page
       .getByRole('button', { name: 'h3-revision-1 · H3 · r1', exact: true })
       .click();
-    await expect(
-      page.getByRole('button', { name: 'Copy output folder' }),
-    ).toBeVisible();
+    await openRunTab(page, 'samples');
     await page
-      .getByRole('button', { name: 'View sample', exact: true })
+      .getByRole('button', { name: 'sample.mp4 · available', exact: true })
       .click();
     const video = page.getByLabel('Output video', { exact: true });
     await video.evaluate(async (element) => {
@@ -90,19 +78,6 @@ test('Wan and H3 output playback comparison and missing states retain run proven
     // Returning to Overview preserves the audio selection.
     await openRunTab(page, 'samples');
     await expect(audio).toBeVisible();
-    await openRunTab(page, 'overview');
-    await page
-      .getByRole('combobox', { name: 'Compare with run', exact: true })
-      .selectOption(nextH3.id);
-    await page
-      .getByRole('button', { name: 'Compare inputs', exact: true })
-      .click();
-    const comparison = page.getByLabel('Run comparison', { exact: true });
-    await expect(comparison).toContainText('job.config.rank');
-    await expect(comparison).toContainText(
-      'dataset.items.fixture-item.caption.text',
-    );
-    await expect(comparison).toContainText('provenance.upstream_revision');
     const listed = (await (
       await page.request.get(`${url}/api/runs/${h3.id}/outputs`)
     ).json()) as { outputs: { kind: string; file_url: string }[] };
@@ -113,6 +88,7 @@ test('Wan and H3 output playback comparison and missing states retain run proven
     await page
       .getByRole('button', { name: 'Refresh outputs', exact: true })
       .click();
+    await openRunTab(page, 'overview');
     await expect(
       page.getByText(/fixture\.safetensors: Output is missing or moved/),
     ).toBeVisible();

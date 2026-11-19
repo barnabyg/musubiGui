@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { runWorkspace } from './runHarness';
+import { openRunDiagnostics, runWorkspace } from './runHarness';
 
 test('training elapsed spans expert switches and survives reload independently of phase ETA', async ({
   page,
@@ -54,13 +54,19 @@ test('training elapsed spans expert switches and survives reload independently o
       }),
     );
     await page.goto(`${app.url}/#/runs/${run.id}`);
-    const progress = page.getByLabel('Training progress');
-    await expect(progress).toContainText('Training elapsed 01:30');
+    const timing = page.getByLabel('Run timing', { exact: true });
+    const elapsed = timing.getByLabel('Training elapsed');
+    await expect(elapsed).toContainText('01:30');
     await expect(page.getByLabel('Run elapsed')).toContainText('02:30');
-    await expect(progress).not.toContainText('Phase ETA');
-    await expect(progress).toContainText('Seconds per step: 83.20 s/step');
+    await expect(timing).not.toContainText('Phase ETA');
+    await expect(timing.getByLabel('Seconds per step')).toContainText(
+      '83.20 s/step',
+    );
+    await expect(page.getByLabel('Training progress')).toContainText(
+      'Step 6/8 · Loss 0.5',
+    );
     await page.reload();
-    await expect(progress).toContainText('Training elapsed 01:30');
+    await expect(elapsed).toContainText('01:30');
     await expect(page.getByLabel('Run elapsed')).toContainText('02:30');
     await page.unroute(`**/api/runs/${run.id}/logs`);
     await page.route(`**/api/runs/${run.id}/logs`, (route) =>
@@ -72,12 +78,14 @@ test('training elapsed spans expert switches and survives reload independently o
       }),
     );
     await page.reload();
-    await expect(progress).toContainText('Training elapsed 01:30');
-    await expect(progress).not.toContainText('Training ETA');
-    await expect(progress).toContainText('Seconds per step: unknown');
+    await expect(elapsed).toContainText('01:30');
+    await expect(timing).not.toContainText('Training ETA');
+    await expect(timing.getByLabel('Seconds per step')).toContainText(
+      'Unknown',
+    );
     failedDuringLaunch = true;
     await page.reload();
-    await expect(progress).toContainText('Training elapsed 02:00');
+    await expect(elapsed).toContainText('02:00');
   } finally {
     await app.close();
   }
@@ -132,10 +140,10 @@ test('Run elapsed advances through final generation and freezes only at the Run 
     await expect(elapsed).toContainText('03:00');
     status = 'interrupted';
     await page.reload();
-    await expect(elapsed).toContainText('unknown (execution end unconfirmed)');
+    await expect(elapsed).toContainText('Unknown (execution end unconfirmed)');
     status = 'stopped';
     await page.reload();
-    await expect(elapsed).toContainText('unknown (execution end unconfirmed)');
+    await expect(elapsed).toContainText('Unknown (execution end unconfirmed)');
   } finally {
     await app.close();
   }
@@ -157,8 +165,9 @@ test('whole-Run forecast refreshes after a measured preview independently of Pha
       await route.fulfill({
         json: {
           ...record,
-          status: ended ? 'completed' : 'training',
+          status: ended ? 'stopped' : 'training',
           execution_started: '2026-11-15T10:00:00Z',
+          finished: ended ? '2026-11-15T10:20:00Z' : undefined,
         },
       });
     });
@@ -172,7 +181,11 @@ test('whole-Run forecast refreshes after a measured preview independently of Pha
             elapsed: '10:20',
             eta: '1:33:00',
             eta_scope: 'phase',
-            loss: null,
+            loss: '0.4',
+            expert: 'high',
+            phase_step: 1,
+            phase_total: 5,
+            expert_steps: { low: 5, high: 1 },
           },
           run_estimate: {
             remaining_seconds: measured && !finalUnmeasured ? 5580 : null,
@@ -193,30 +206,43 @@ test('whole-Run forecast refreshes after a measured preview independently of Pha
       }),
     );
     await page.goto(`${app.url}/#/runs/${run.id}`);
-    const forecast = page.getByLabel('Run completion estimate');
-    await expect(forecast).toContainText('Estimated Run remaining: unknown');
+    const timing = page.getByLabel('Run timing', { exact: true });
+    const remaining = timing.getByLabel('Estimated Run remaining');
+    await expect(remaining).toContainText('Unknown');
+    await expect(timing.getByLabel('Phase ETA')).toContainText('1:33:00');
+    await expect(
+      page
+        .getByLabel('Training progress')
+        .getByText(/^Active expert: high-noise/),
+    ).toContainText('Loss 0.4');
+    await expect(timing).not.toContainText('Loss');
+    await expect(timing).not.toContainText(
+      /Previews:|Time estimates|Timings vary between executions/,
+    );
     measured = true;
-    await expect(forecast).toContainText('Estimated Run remaining: 1h 33m 0s');
-    await expect(forecast).toContainText('1 completed · 9 outstanding');
-    await expect(forecast).toContainText(
-      'Unestimated or assumed: checkpoint/state saving',
-    );
+    await expect(remaining).toContainText('1h 33m 0s');
     await page.reload();
-    await expect(forecast).toContainText('Estimated Run remaining: 1h 33m 0s');
+    await expect(remaining).toContainText('1h 33m 0s');
     finalUnmeasured = true;
-    await expect(forecast).toContainText(
-      'Partial remaining estimate: 1h 33m 0s',
+    await expect(remaining).toContainText('1h 33m 0s (partial)');
+    await expect(timing.getByLabel('Estimated finish')).toContainText(
+      '(partial)',
     );
-    await expect(forecast).toContainText(
-      'Outstanding preview budget: 1h 30m 0s',
+    await expect(timing.getByLabel('Outstanding preview budget')).toContainText(
+      '1h 30m 0s',
     );
-    await expect(forecast).toContainText(
-      'Conditional finish for estimated components:',
-    );
-    await expect(forecast).toContainText('final sampling');
+    await page.setViewportSize({ width: 360, height: 800 });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
     ended = true;
     await page.reload();
-    await expect(forecast).toHaveCount(0);
+    await expect(timing).toBeVisible();
+    await expect(remaining).toHaveCount(0);
+    await expect(timing.getByLabel('Phase ETA')).toHaveCount(0);
+    await expect(timing.getByLabel('Run elapsed')).toContainText('20:00');
   } finally {
     await app.close();
   }
@@ -236,9 +262,7 @@ test('H3 diagnostics download contains measurements from the completed fixture r
     await expect(
       page.getByText('State: Completed', { exact: true }),
     ).toBeVisible({ timeout: 240_000 });
-    await expect(
-      page.getByRole('button', { name: 'Copy output folder' }),
-    ).toBeVisible();
+    await openRunDiagnostics(page);
     const link = page.getByRole('link', {
       name: 'Download performance diagnostics',
     });
@@ -263,6 +287,7 @@ test('H3 diagnostics download contains measurements from the completed fixture r
       ),
     ).toBe(true);
     await page.reload();
+    await openRunDiagnostics(page);
     await expect(link).toBeVisible();
   } finally {
     await app.close();

@@ -101,6 +101,27 @@
   margin: var(--space-2) 0;
   font-size: var(--text-base);
 }
+.run-timing {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  gap: var(--space-4) var(--space-6);
+  margin: var(--space-5) 0 0;
+}
+.run-timing dt {
+  color: var(--color-text-muted);
+}
+.run-timing dd {
+  margin: var(--space-1) 0 0;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.run-output-path {
+  overflow-wrap: anywhere;
+}
+.run-resume {
+  margin: var(--space-5) 0;
+  overflow-wrap: anywhere;
+}
 .run-tabs {
   display: flex;
   gap: 0.5rem;
@@ -117,10 +138,6 @@
 }
 .run-details-title h1 {
   margin: var(--space-2) 0 var(--space-1);
-}
-.run-status-line {
-  margin: 0;
-  overflow-wrap: anywhere;
 }
 .run-details details:not(.panel) {
   border-top: 0;

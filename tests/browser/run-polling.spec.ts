@@ -287,9 +287,6 @@ test('finished Runs transfer summaries without repeating frozen inputs or termin
     await expect(
       page.getByText('State: Completed', { exact: true }),
     ).toBeVisible({ timeout: 240_000 });
-    await expect(
-      page.getByRole('button', { name: 'Copy output folder' }),
-    ).toBeVisible();
     await expect(page).toHaveTitle(`Finished: ${job.name} — Musubi`);
   } finally {
     await app.close();
