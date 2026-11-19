@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 
 from musubi_gui.step_offset import OffsetStepName
-from musubi_gui.timed_trainer import observe_trainer
+from musubi_gui.timed_trainer import observe_trainer, route_saved_states
 from musubi_gui.trainer_control import HANDLED_FILE, REQUEST_FILE, StopAfterSave, TrainerControl, write_json
 from musubi_gui.training_timing import TrainingTiming
 
@@ -52,6 +52,9 @@ class Trainer:
     def sample_images(self, accelerator: Any, args: Any, epoch: Any, steps: int, *rest: Any) -> None:
         if should_sample_images(args, steps, epoch):
             self.samples.append(steps)
+            sample = Path(args.output_dir) / "sample" / f"Job_{steps:06d}_00.mp4"
+            sample.parent.mkdir(parents=True, exist_ok=True)
+            sample.write_bytes(b"preview")
 
     def train(self, args: Any, names: SimpleNamespace) -> None:
         global_step = 0
@@ -151,6 +154,40 @@ def test_sample_now_previews_the_current_step(tmp_path: Path) -> None:
     trainer, handled = run(tmp_path, {2: "sample"}, sample_every=5)
     assert trainer.samples == [2, 5]
     assert handled[0]["step"] == 2 and "error" not in handled[0]
+    assert sorted(file.name for file in (tmp_path / "samples" / "sample").iterdir()) == [
+        "Job_000002_00.mp4",
+        "Job_000005_00.mp4",
+    ]
+    assert not (tmp_path / "sample").exists()
+
+
+def test_state_saves_use_the_state_folder_and_restore_the_checkpoint_destination(tmp_path: Path) -> None:
+    def save(args: Any, name: str) -> None:
+        destination = Path(args.output_dir) / f"{name}-state"
+        destination.mkdir(parents=True)
+        if name == "failed":
+            raise OSError("save failed")
+
+    helpers = SimpleNamespace(
+        save_and_remove_state_stepwise=save,
+        save_and_remove_state_on_epoch_end=save,
+        save_state_on_train_end=save,
+    )
+    route_saved_states(helpers)
+    args = SimpleNamespace(output_dir=str(tmp_path))
+    helpers.save_and_remove_state_stepwise(args, "interval")
+    helpers.save_and_remove_state_on_epoch_end(args, "epoch")
+    helpers.save_state_on_train_end(args, "final")
+    with pytest.raises(OSError, match="save failed"):
+        helpers.save_state_on_train_end(args, "failed")
+    assert args.output_dir == str(tmp_path)
+    assert sorted(folder.name for folder in tmp_path.iterdir()) == ["state"]
+    assert sorted(folder.name for folder in (tmp_path / "state").iterdir()) == [
+        "epoch-state",
+        "failed-state",
+        "final-state",
+        "interval-state",
+    ]
 
 
 def test_sample_now_is_refused_without_preview_prompts(tmp_path: Path) -> None:

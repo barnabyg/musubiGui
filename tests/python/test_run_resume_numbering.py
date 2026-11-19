@@ -48,10 +48,10 @@ def test_restored_segment_names_saves_and_previews_by_global_step(tmp_path: Path
         train = next(stage for stage in restored["stages"] if stage["name"] == "train")
         assert train["args"][train["args"].index("--max_train_steps") + 1] == "5"
         resumed = wait_for(service, restored["id"], "completed", device_released=True)
-        checkpoints = Path(resumed["directory"]) / "checkpoints"
+        directory = Path(resumed["directory"])
 
         # Preview validation passed with previews named 4, 6 and 8.
-        previews = sorted(file.name.split("_")[1] for file in (checkpoints / "sample").iterdir())
+        previews = sorted(file.name.split("_")[1] for file in (directory / "samples" / "sample").iterdir())
         assert previews == ["000004", "000006", "000008"]
         # The last interval save repeats the final save and was removed as a duplicate;
         # retention (one historical save) pruned the save at 4.
@@ -63,18 +63,19 @@ def test_restored_segment_names_saves_and_previews_by_global_step(tmp_path: Path
             f"{name}-step00000004-state",
             f"{name}-step00000004.safetensors",
         ]
-        assert sorted(
-            path.name for path in checkpoints.iterdir() if path.name != "sample" and not path.name.startswith(".")
-        ) == [
-            f"{name}-state",
-            f"{name}-step00000006-state",
+        assert sorted(path.name for path in directory.iterdir() if path.is_file()) == [
             f"{name}-step00000006.safetensors",
             f"{name}.safetensors",
         ]
 
+        assert sorted(path.name for path in (directory / "state").iterdir()) == [
+            f"{name}-state",
+            f"{name}-step00000006-state",
+        ]
+
         progress = service.progress(restored["id"])
         assert progress is not None and (progress["step"], progress["total"]) == (8, 8)
-        timing = json.loads(Path(resumed["directory"], "timing-train.json").read_text(encoding="utf-8"))
+        timing = json.loads(Path(resumed["directory"], "logs", "timing-train.json").read_text(encoding="utf-8"))
         assert (timing["training"]["step"], timing["previews"]["completed"]) == (8, 3)
 
         states = {state["name"]: state for state in service.saved_states(restored["id"])}

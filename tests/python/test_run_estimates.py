@@ -62,8 +62,8 @@ def test_native_preview_forecast_uses_measured_wall_time_without_counting_it_twi
             ],
         ),
     )
-    (tmp_path / "run/train.log").write_text("steps: 2/20 [10:20<1:33:00, 310s/it]\n", encoding="utf-8")
-    (tmp_path / "run/timing-train.json").write_text(
+    (tmp_path / "run/logs/train.log").write_text("steps: 2/20 [10:20<1:33:00, 310s/it]\n", encoding="utf-8")
+    (tmp_path / "run/logs/timing-train.json").write_text(
         json.dumps(
             {
                 "version": 1,
@@ -165,6 +165,15 @@ def test_native_trainer_hooks_remove_preview_wall_time_from_observed_step_interv
     package = tmp_path / "musubi_tuner"
     package.mkdir()
     (package / "__init__.py").touch()
+    utils = package / "utils"
+    utils.mkdir()
+    (utils / "__init__.py").touch()
+    (utils / "train_utils.py").write_text(
+        "def save_and_remove_state_stepwise(*args): pass\n"
+        "def save_and_remove_state_on_epoch_end(*args): pass\n"
+        "def save_state_on_train_end(*args): pass\n",
+        encoding="utf-8",
+    )
     (package / "wan_train_network.py").write_text(
         "import time\nfrom pathlib import Path\nfrom types import SimpleNamespace\n"
         "class WanNetworkTrainer:\n"
@@ -172,13 +181,13 @@ def test_native_trainer_hooks_remove_preview_wall_time_from_observed_step_interv
         " def on_after_sample_images(self,*args): pass\n"
         " def on_post_optimizer_step(self,*args): pass\n"
         " def sample_images(self,*args):\n"
-        "  path=Path('checkpoints/sample/fixture_000002_00.mp4')\n"
+        "  path=Path(args[1].output_dir) / 'sample/fixture_000002_00.mp4'\n"
         "  path.parent.mkdir(parents=True,exist_ok=True)\n"
         "  path.write_bytes(b'synthetic')\n"
         "def main():\n"
         " trainer=WanNetworkTrainer()\n original=time.monotonic\n"
         " times=iter([0,10,10,610,620])\n time.monotonic=lambda:next(times)\n"
-        " ns=SimpleNamespace(output_dir='checkpoints',max_train_steps=20,save_every_n_steps=None,sample_every_n_steps=2)\n"
+        " ns=SimpleNamespace(output_dir='run',max_train_steps=20,save_every_n_steps=None,sample_every_n_steps=2)\n"
         " trainer.on_post_optimizer_step(ns,None,None,None,True,0)\n"
         " trainer.on_post_optimizer_step(ns,None,None,None,True,1)\n"
         " args=(None,ns,None,2)\n"
@@ -254,7 +263,7 @@ def test_single_update_wan_phases_budget_loading_and_final_save_once(tmp_path: P
         record["stages"][1].update(status="completed", started="2026-11-15T09:00:11Z", finished="2026-11-15T09:10:11Z")
 
     service.store.update(run["id"], update)
-    (tmp_path / "run/timing-train-low-00000000.json").write_text(
+    (tmp_path / "run/logs/timing-train-low-00000000.json").write_text(
         json.dumps(
             {
                 "version": 1,
@@ -309,7 +318,7 @@ def test_measured_loading_budget_remains_while_a_later_phase_starts(
         record["stages"][1].update(status=status, started="2026-11-15T10:00:00Z" if status == "running" else None)
 
     service.store.update(run["id"], update)
-    (tmp_path / "run/timing-train-low-00000000.json").write_text(
+    (tmp_path / "run/logs/timing-train-low-00000000.json").write_text(
         json.dumps(
             {
                 "version": 1,
@@ -356,8 +365,8 @@ def test_restored_segment_forecast_reads_global_timing_steps(tmp_path: Path, mon
             stages=[{**r["stages"][0], "status": "running", "started": "2026-11-15T10:00:00Z"}],
         ),
     )
-    (tmp_path / "run/train.log").write_text("steps: 3/5 [00:30<00:20, 10s/it]\n", encoding="utf-8")
-    (tmp_path / "run/timing-train.json").write_text(
+    (tmp_path / "run/logs/train.log").write_text("steps: 3/5 [00:30<00:20, 10s/it]\n", encoding="utf-8")
+    (tmp_path / "run/logs/timing-train.json").write_text(
         json.dumps(
             {
                 "version": 1,

@@ -84,7 +84,7 @@ test('Wan and H3 output playback and missing outputs retain run provenance', asy
     const checkpointUrl = listed.outputs.find(
       (output) => output.kind === 'checkpoint',
     )!.file_url;
-    await unlink(path.join(h3.directory, 'checkpoints', 'fixture.safetensors'));
+    await unlink(path.join(h3.directory, 'fixture.safetensors'));
     await page
       .getByRole('button', { name: 'Refresh outputs', exact: true })
       .click();

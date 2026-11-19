@@ -44,12 +44,12 @@ def cache_files(run: dict[str, Any]) -> dict[str, tuple[int, str]]:
 
 
 def train_log(run: dict[str, Any]) -> str:
-    return (Path(run["directory"]) / "train.log").read_text(encoding="utf-8", errors="replace")
+    return (Path(run["directory"]) / "logs" / "train.log").read_text(encoding="utf-8", errors="replace")
 
 
 def wait_for_log(run: dict[str, Any], text: str) -> None:
     deadline = time.monotonic() + 180
-    while text not in (train_log(run) if (Path(run["directory"]) / "train.log").is_file() else ""):
+    while text not in (train_log(run) if (Path(run["directory"]) / "logs" / "train.log").is_file() else ""):
         assert time.monotonic() < deadline, text
         time.sleep(0.02)
 
@@ -118,9 +118,9 @@ def test_save_and_stop_then_resume_with_an_edited_prompt_and_more_steps(tmp_path
         assert OLD_PROMPT not in log
         directory = Path(completed["directory"])
         train = next(stage for stage in completed["stages"] if stage["name"] == "train")
-        assert argument(train["args"], "--sample_prompts") == str(directory / "previews.json")
-        assert str(directory / "previews.json") in completed["input_files"]
-        assert str(Path(run["directory"]) / "previews.json") not in completed["input_files"]
+        assert argument(train["args"], "--sample_prompts") == str(directory / "config" / "previews.json")
+        assert str(directory / "config" / "previews.json") in completed["input_files"]
+        assert str(Path(run["directory"]) / "config" / "previews.json") not in completed["input_files"]
         outputs = OutputBrowser(service).scan(completed["id"])["outputs"]
         assert sorted(
             (output["metadata"]["preview"]["step"], output["metadata"]["preview"]["prompt"])
@@ -134,11 +134,11 @@ def test_save_and_stop_then_resume_with_an_edited_prompt_and_more_steps(tmp_path
 
         # Caches were reused, not rebuilt: no preparation ran and no cache file changed.
         assert completed["cache"] == stopped["cache"]
-        assert argument(train["args"], "--dataset_config") == str(Path(run["directory"]) / "dataset.toml")
+        assert argument(train["args"], "--dataset_config") == str(Path(run["directory"]) / "config" / "dataset.toml")
         assert [stage for stage in completed["stages"] if stage["name"] not in {"train", "generate"}] == [
             stage for stage in stopped["stages"] if stage["name"] not in {"train", "generate"}
         ]
-        assert not list(directory.glob("*cache*.log"))
+        assert not list((directory / "logs").glob("*cache*.log"))
         assert cache_files(completed) == caches
 
         # The source Run is unchanged and keeps its own revision.

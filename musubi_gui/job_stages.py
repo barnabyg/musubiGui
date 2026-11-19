@@ -5,7 +5,7 @@ from pathlib import Path
 from musubi_gui.h3 import add_image_flags, h3_stages
 from musubi_gui.job_models import Job
 from musubi_gui.recipe import Stage
-from musubi_gui.run_paths import job_folder
+from musubi_gui.run_paths import RunPaths, job_folder
 from musubi_gui.sampling import sample_geometry
 from musubi_gui.settings import Settings
 from musubi_gui.wan import wan_stages
@@ -47,6 +47,7 @@ def stage_templates(job: Job, settings: Settings, run: Path, cache: Path, kinds:
     from musubi_gui.preview_memory import resolve_preview_memory
     from musubi_gui.training_options import timestep_range_policy
 
+    paths = RunPaths(run)
     settings = effective_settings(job, settings)
     config = job.config
     output_name = f"{job_folder(job.name)}-r{job.revision}"
@@ -57,8 +58,11 @@ def stage_templates(job: Job, settings: Settings, run: Path, cache: Path, kinds:
         add_image_flags(stages, kinds)
     for stage in stages:
         args = stage.args
+        if "--dataset_config" in args:
+            _set_argument(args, "--dataset_config", str(paths.config / "dataset.toml"))
         if stage.name == "train":
             for flag, value in [
+                ("--output_dir", paths.directory),
                 ("--network_dim", config.rank),
                 ("--network_alpha", config.alpha),
                 ("--learning_rate", config.learning_rate),
@@ -102,7 +106,7 @@ def stage_templates(job: Job, settings: Settings, run: Path, cache: Path, kinds:
             _set_argument(args, "--video_length", str(sample_frames))
             index = args.index("--video_size")
             args[index + 1 : index + 3] = [str(sample_height), str(sample_width)]
-            _set_argument(args, "--lora_weight", str(run / "checkpoints" / f"{output_name}.safetensors"))
+            _set_argument(args, "--lora_weight", str(paths.directory / f"{output_name}.safetensors"))
             if stage.preview_memory["mode"] == "automatic":
                 args[4:4] = [
                     str(Path(__file__).with_name("preview_generate.py")),

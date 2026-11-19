@@ -157,7 +157,7 @@ test('a damaged final LoRA is called out in the Run summary', async ({
           {
             id: 'final',
             name: 'wan.safetensors',
-            path: 'checkpoints/wan.safetensors',
+            path: 'wan.safetensors',
             kind: 'checkpoint',
             status: 'incomplete',
             error: 'Output is empty.',
@@ -189,14 +189,14 @@ test('a partial Run shows the outputs it has, with their problems', async ({
           {
             id: 'early',
             name: 'wan-step00000002.safetensors',
-            path: 'checkpoints/wan-step00000002.safetensors',
+            path: 'wan-step00000002.safetensors',
             kind: 'checkpoint',
             status: 'available',
           },
           {
             id: 'later',
             name: 'wan-step00000010.safetensors',
-            path: 'checkpoints/wan-step00000010.safetensors',
+            path: 'wan-step00000010.safetensors',
             kind: 'checkpoint',
             status: 'available',
           },

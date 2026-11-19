@@ -1,7 +1,6 @@
 """Same-origin run operations; clients select records rather than commands or paths."""
 
 from contextlib import contextmanager
-from pathlib import Path
 from typing import Any, Iterator, Literal
 
 from fastapi import APIRouter, HTTPException
@@ -10,6 +9,7 @@ from pydantic import BaseModel, ConfigDict
 
 from musubi_gui.resume_compat import ResumeIncompatible
 from musubi_gui.run_estimate import completion_estimate
+from musubi_gui.run_paths import RunPaths
 from musubi_gui.run_store import utc_now
 from musubi_gui.runs import RunService
 
@@ -134,14 +134,14 @@ def runs_router(service: RunService) -> APIRouter:
                 "text": service.logs(run_id),
                 "progress": progress,
                 "run_estimate": completion_estimate(run, progress, utc_now()),
-                "performance_available": (Path(run["directory"]) / "performance.jsonl").is_file(),
+                "performance_available": (RunPaths.from_record(run).logs / "performance.jsonl").is_file(),
             }
 
     @router.get("/{run_id}/performance")
     def performance(run_id: str) -> Response:
         with run_errors():
             run = service.get(run_id)
-            path = Path(run["directory"]) / "performance.jsonl"
+            path = RunPaths.from_record(run).logs / "performance.jsonl"
             if not path.is_file():
                 raise HTTPException(404, "No performance diagnostics recorded for this Run.")
             # Snapshot complete lines: the collector may append while the browser downloads.

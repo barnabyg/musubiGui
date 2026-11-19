@@ -186,9 +186,7 @@ def test_stop_inside_first_phase_restores_partial_phase_before_starting_high(tmp
         deadline = time.monotonic() + 180
         checkpoint = None
         while time.monotonic() < deadline:
-            checkpoint = next(
-                (Path(run["directory"]) / "checkpoints").glob("*-step00000001-state/trainer_state.json"), None
-            )
+            checkpoint = next((Path(run["directory"]) / "state").glob("*-step00000001-state/trainer_state.json"), None)
             if checkpoint and checkpoint.is_file():
                 break
             time.sleep(0.02)

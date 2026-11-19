@@ -28,9 +28,15 @@ def synthetic_trainer(tmp_path: Path, family: str) -> Path:
     (package / "__init__.py").touch()
     (utils / "__init__.py").touch()
     (utils / "train_utils.py").write_text(
+        "from pathlib import Path\n"
         'STEP_FILE_NAME = "{}-step{:08d}"\nSTEP_STATE_NAME = "{}-step{:08d}-state"\n'
         'def get_step_ckpt_name(name, step): return STEP_FILE_NAME.format(name, step) + ".safetensors"\n'
-        'def get_last_ckpt_name(name): return name + ".safetensors"\n',
+        'def get_last_ckpt_name(name): return name + ".safetensors"\n'
+        "def save_and_remove_state_stepwise(args, step):\n"
+        " (Path(args.output_dir) / STEP_STATE_NAME.format(args.output_name, step)).mkdir(parents=True)\n"
+        "def save_and_remove_state_on_epoch_end(*args): pass\n"
+        "def save_state_on_train_end(args):\n"
+        " (Path(args.output_dir) / (args.output_name+'-state')).mkdir(parents=True)\n",
         encoding="utf-8",
     )
     (package / f"{module}.py").write_text(
@@ -45,15 +51,17 @@ def synthetic_trainer(tmp_path: Path, family: str) -> Path:
         " parser.add_argument('--output_name')\n"
         " parser.add_argument('--max_train_steps',type=int)\n"
         " parser.add_argument('--save_every_n_steps',type=int)\n"
-        f" args=parser.parse_args()\n trainer={trainer}()\n saves=[]\n"
+        f" args=parser.parse_args()\n args.output_dir='.'\n trainer={trainer}()\n saves=[]\n"
         " def save(name,state,step):\n"
-        "  Path(name).write_text(str(step))\n  Path(state).mkdir()\n  saves.append((name,state,step))\n"
+        "  (Path(args.output_dir) / name).write_text(str(step))\n  saves.append((name,state,step))\n"
         " for step in range(args.max_train_steps):\n"
         "  trainer.on_post_optimizer_step(args,None,None,None,False,step)\n"
         "  trainer.on_post_optimizer_step(args,None,None,None,True,step)\n"
         "  if args.save_every_n_steps and (step+1)%args.save_every_n_steps==0:\n"
+        "   train_utils.save_and_remove_state_stepwise(args,step+1)\n"
         "   save(train_utils.get_step_ckpt_name(args.output_name,step+1),\n"
         "        train_utils.STEP_STATE_NAME.format(args.output_name,step+1),step+1)\n"
+        " train_utils.save_state_on_train_end(args)\n"
         " save(train_utils.get_last_ckpt_name(args.output_name),args.output_name+'-state',args.max_train_steps)\n"
         " Path('saves.json').write_text(json.dumps(saves))\n",
         encoding="utf-8",
@@ -94,6 +102,9 @@ def run_entry_point(
     )
     assert result.returncode == 0, result.stderr
     saves: list[list[Any]] = json.loads((tmp_path / "saves.json").read_text())
+    for checkpoint, state, _ in saves:
+        assert (tmp_path / checkpoint).is_file()
+        assert (tmp_path / "state" / state).is_dir()
     return saves
 
 
@@ -140,9 +151,8 @@ def test_native_entry_point_names_interval_and_final_saves_after_completed_exper
         ]
         for step in (2, 4)
     ]
-    for name, state, step in saves:
+    for name, _, step in saves:
         assert (tmp_path / name).read_text() == str(step)
-        assert (tmp_path / state).is_dir()
 
 
 @pytest.mark.parametrize("suffix", [".safetensors", "-state"])

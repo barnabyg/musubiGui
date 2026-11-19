@@ -158,7 +158,7 @@ def submitted_history(tmp_path: Path, *, save_state: bool = False) -> tuple[RunS
                     "--output_name",
                     "lora",
                     "--output_dir",
-                    str(directory / "checkpoints"),
+                    str(directory),
                     "--max_train_steps",
                     "4",
                 ],
@@ -166,13 +166,13 @@ def submitted_history(tmp_path: Path, *, save_state: bool = False) -> tuple[RunS
         ],
     )
     run = service.submit(plan)
-    output = directory / "checkpoints"
+    output = directory
     for step in (1, 2, 3):
         file = output / f"lora-step{step:08d}.safetensors"
         checkpoint(file)
         if save_state:
-            state = file.with_name(file.stem + "-state")
-            state.mkdir()
+            state = output / "state" / (file.stem + "-state")
+            state.mkdir(parents=True)
             checkpoint(state / "model.safetensors")
             for name in ("optimizer.bin", "scheduler.bin", "random_states_0.pkl"):
                 (state / name).write_bytes(b"synthetic")
@@ -193,8 +193,8 @@ def test_incomplete_new_save_never_authorizes_pruning(tmp_path: Path) -> None:
 def test_retention_before_first_checkpoint_does_not_report_a_missing_path(tmp_path: Path) -> None:
     service, run, output = submitted_history(tmp_path)
     try:
-        # Real trainers create this folder at their first save, after caching and startup.
-        shutil.rmtree(output)
+        for file in output.glob("*.safetensors"):
+            file.unlink()
         service.retain_checkpoints(run["id"])
         status = service.get(run["id"])["retention"]
         assert status["errors"] == [], status
@@ -213,9 +213,9 @@ def test_retention_before_first_checkpoint_does_not_report_a_missing_path(tmp_pa
 
 def test_incomplete_optimizer_state_never_authorizes_pruning(tmp_path: Path) -> None:
     service, run, output = submitted_history(tmp_path, save_state=True)
-    (output / "lora-step00000003-state" / "scheduler.bin").unlink()
+    (output / "state" / "lora-step00000003-state" / "scheduler.bin").unlink()
     service.retain_checkpoints(run["id"])
-    assert (output / "lora-step00000001-state").is_dir()
+    assert (output / "state" / "lora-step00000001-state").is_dir()
     assert service.get(run["id"])["retention"]["removed"] == []
 
 
@@ -261,23 +261,23 @@ def test_failed_pruning_is_hidden_and_retried_without_losing_newer_state(
     service.retain_checkpoints(run["id"])
     status = service.get(run["id"])["retention"]
     assert status["errors"] and status["pending"] == ["lora-step00000001-state"]
-    assert not (output / "lora-step00000001-state").exists()
-    assert (output / "lora-step00000003-state").is_dir()
+    assert not (output / "state" / "lora-step00000001-state").exists()
+    assert (output / "state" / "lora-step00000003-state").is_dir()
     monkeypatch.setattr(shutil, "rmtree", remove)
     service.close()
     service = RunService(tmp_path / "state", fixture_mode=True, autostart=False, device_path=tmp_path / "gpu.sqlite")
     service.retain_checkpoints(run["id"])
     recovered = service.get(run["id"])["retention"]
     assert recovered["errors"] == [] and recovered["pending"] == []
-    assert not (output / ".retention" / "lora-step00000001-state").exists()
+    assert not (output / "logs" / ".retention" / "lora-step00000001-state").exists()
 
 
 def saves(output: Path, steps: tuple[int, ...]) -> None:
     for step in steps:
         file = output / f"lora-step{step:08d}.safetensors"
         checkpoint(file)
-        state = file.with_name(file.stem + "-state")
-        state.mkdir()
+        state = output / "state" / (file.stem + "-state")
+        state.mkdir(parents=True)
         checkpoint(state / "model.safetensors")
         for name in ("optimizer.bin", "scheduler.bin", "random_states_0.pkl"):
             (state / name).write_bytes(b"synthetic")
@@ -306,7 +306,7 @@ def resumed_segment(
                     "--output_name",
                     "lora",
                     "--output_dir",
-                    str(directory / "checkpoints"),
+                    str(directory),
                     "--max_train_steps",
                     "4",
                 ],
@@ -314,7 +314,7 @@ def resumed_segment(
         ],
     )
     run = service.submit(plan)
-    resumed = Path(source["directory"]) / "checkpoints" / "lora-step00000003-state"
+    resumed = Path(source["directory"]) / "state" / "lora-step00000003-state"
     segment = {"additional_steps": 4} if legacy else {"step_offset": 3, "target_steps": 7, "additional_steps": 4}
     run = service.store.update(
         run["id"],
@@ -325,7 +325,7 @@ def resumed_segment(
             state_source={"path": str(resumed), "files": {}},
         ),
     )
-    output = directory / "checkpoints"
+    output = directory
     saves(output, (1, 2, 3) if legacy else (4, 5, 6))
     return run, output
 
@@ -343,8 +343,8 @@ def test_retention_counts_a_chain_by_global_step_and_keeps_the_state_a_segment_r
         ]
         assert [path.name for path in first.glob("*.safetensors")] == ["lora-step00000003.safetensors"]
         # The segment resumed from step 3, so that save and its state stay beyond the limit.
-        assert (first / "lora-step00000003-state").is_dir()
-        assert not (first / "lora-step00000001-state").exists()
+        assert (first / "state" / "lora-step00000003-state").is_dir()
+        assert not (first / "state" / "lora-step00000001-state").exists()
         status = service.get(source["id"])["retention"]
         assert sorted(status["removed"]) == sorted(
             [f"lora-step0000000{step}{suffix}" for step in (1, 2) for suffix in (".safetensors", "-state")]

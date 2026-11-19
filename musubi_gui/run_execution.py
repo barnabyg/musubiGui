@@ -17,6 +17,7 @@ from musubi_gui.recipe import reference_environment
 from musubi_gui.redaction import redact
 from musubi_gui.run_cache import cache_artifacts, seed_wan_tokenizer, share_wan_tokenizer
 from musubi_gui.run_control import TRAINING_FINISHED, collect, drop, request_file, stopped_by_save
+from musubi_gui.run_paths import RunPaths
 from musubi_gui.run_performance import RunPerformance, start_performance
 from musubi_gui.run_stage_outputs import record_checkpoints, record_samples, remove_final_duplicate_saves
 from musubi_gui.run_store import DeviceLease, RunStore, utc_now
@@ -158,7 +159,9 @@ class RunExecution:
         """
         settings = Settings.model_validate(self.run["settings"])
         job_object = self._open_job_object(index)
-        log_file = Path(self.run["directory"]) / stage_log(stage)
+        logs = RunPaths.from_record(self.run).logs
+        logs.mkdir(exist_ok=True)
+        log_file = logs / stage_log(stage)
         with log_file.open("a", encoding="utf-8") as log:
             self.process = process = self._spawn(stage, settings, job_object, log)
             self.performance = start_performance(

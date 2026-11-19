@@ -30,9 +30,9 @@ and whitespace with hyphens, protect reserved names and limit the readable part
 to 60 characters. Repeated Runs and same-name Jobs never share a folder. Review
 shows `{timestamp}` until preparation allocates the folder; Run details show the
 actual output path. Retries and restored segments also keep the frozen name.
-Renaming a Job never moves older Runs, and existing folder layouts stay readable.
+Renaming a Job never moves its Run folders.
 
-Before copying media, each new snapshot writes a versioned `snapshot.json` containing
+Before copying media, each new snapshot writes a versioned `config/snapshot.json` containing
 its source manifest, settings and provenance. A directory with no published Run remains
 an incomplete snapshot; caught failures mark it `incomplete` and retain the evidence.
 The application preserves these directories for inspection rather than deleting their

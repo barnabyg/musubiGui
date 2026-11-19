@@ -15,7 +15,7 @@ from musubi_gui.job_models import Job
 from musubi_gui.job_review import review_job
 from musubi_gui.job_stages import build_stages, effective_settings
 from musubi_gui.job_store import JobStore, load_job
-from musubi_gui.run_paths import create_run_directory
+from musubi_gui.run_paths import RunPaths, create_run_directory
 from musubi_gui.safetensors_file import safetensors_header
 from musubi_gui.settings import Settings, atomic_json, training_settings, within_root
 from musubi_gui.training_sections import dataset_toml, layout_identity, plan_sections, section_folders
@@ -286,10 +286,12 @@ def materialize_snapshot(
         "cache": str(cache),
         "notice": "A snapshot without a published Run is incomplete; source files are preserved.",
     }
-    atomic_json(directory / "snapshot.json", snapshot_record)
+    config = RunPaths(directory).config
+    config.mkdir()
+    atomic_json(config / "snapshot.json", snapshot_record)
     files: dict[str, str] = {}
     try:
-        atomic_json(directory / "provenance.json", provenance)
+        atomic_json(config / "provenance.json", provenance)
         media_directory = directory / "media"
         media_directory.mkdir()
         sections = plan_sections(job, manifest["items"], directory, cache)
@@ -313,7 +315,7 @@ def materialize_snapshot(
             audio = item.get("audio") if job.family == "h3" else None
             if audio and audio.get("source") in {"explicit", "sidecar"}:
                 source_audio = Path(audio["audio_path"])
-                audio_directory = directory / "audio"
+                audio_directory = media_directory / "audio"
                 audio_directory.mkdir(exist_ok=True)
                 target_audio = audio_directory / (target.stem + source_audio.suffix.lower())
                 shutil.copyfile(source_audio, target_audio)
@@ -322,7 +324,7 @@ def materialize_snapshot(
                     raise ValueError(f"{item['name']}: audio changed while freezing the dataset. Rescan and retry.")
                 audio["snapshot_path"] = str(target_audio)
                 files[str(target_audio)] = actual_audio
-        native = directory / "dataset.toml"
+        native = config / "dataset.toml"
         native_text = dataset_toml(job, sections)
         for section in sections:
             if section.jsonl:
@@ -342,11 +344,11 @@ def materialize_snapshot(
         if job.config.preview_every:
             from musubi_gui.preview import preview_prompt
 
-            prompts = directory / "previews.json"
+            prompts = config / "previews.json"
             atomic_json(prompts, preview_prompt(job))
             files[str(prompts)] = digest_file(prompts)
         snapshot_record.update(status="materialized", input_files=files)
-        atomic_json(directory / "snapshot.json", snapshot_record)
+        atomic_json(config / "snapshot.json", snapshot_record)
         return {
             "job": job.model_dump(),
             "settings": settings,
@@ -361,9 +363,9 @@ def materialize_snapshot(
         }
     except BaseException:
         snapshot_record.update(status="incomplete")
-        atomic_json(directory / "snapshot.json", snapshot_record)
+        atomic_json(config / "snapshot.json", snapshot_record)
         atomic_json(
-            directory / SNAPSHOT_ERROR,
+            config / SNAPSHOT_ERROR,
             {
                 "status": "incomplete",
                 "message": "Snapshot creation failed; sources were preserved. Remove this incomplete run directory after inspecting it.",

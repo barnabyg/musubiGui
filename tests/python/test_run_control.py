@@ -56,7 +56,7 @@ def handled(service: RunService, run_id: str, count: int) -> dict[str, Any]:
 
 
 def no_request_files(run: dict[str, Any]) -> bool:
-    return not any((Path(run["directory"]) / name).exists() for name in (REQUEST_FILE, HANDLED_FILE))
+    return not any((Path(run["directory"]) / "logs" / name).exists() for name in (REQUEST_FILE, HANDLED_FILE))
 
 
 @pytest.mark.parametrize("family", ["wan", "h3"])
@@ -118,9 +118,9 @@ def test_save_now_and_sample_now_act_while_training_continues(tmp_path: Path) ->
 
         name = next(stage for stage in completed["stages"] if stage["name"] == "train")["args"]
         name = name[name.index("--output_name") + 1]
-        checkpoints = Path(completed["directory"]) / "checkpoints"
-        assert (checkpoints / f"{name}-step{saved['step']:08d}.safetensors").is_file()
-        assert (checkpoints / f"{name}-step{saved['step']:08d}-state").is_dir()
+        directory = Path(completed["directory"])
+        assert (directory / f"{name}-step{saved['step']:08d}.safetensors").is_file()
+        assert (directory / "state" / f"{name}-step{saved['step']:08d}-state").is_dir()
         outputs = OutputBrowser(service).scan(run["id"])["outputs"]
         previews = sorted(
             output["metadata"]["preview"]["step"] for output in outputs if "preview" in output.get("metadata", {})
@@ -153,8 +153,8 @@ def test_retention_counts_an_extra_save_like_an_interval_save(tmp_path: Path) ->
         assert sorted(completed["retention"]["removed"]) == sorted(
             [f"{name}-step{s:08d}.safetensors" for s in pruned] + [f"{name}-step{s:08d}-state" for s in pruned]
         )
-        checkpoints = Path(completed["directory"]) / "checkpoints"
-        assert (checkpoints / f"{name}-step{saves[-1]:08d}-state").is_dir()
+        directory = Path(completed["directory"])
+        assert (directory / "state" / f"{name}-step{saves[-1]:08d}-state").is_dir()
     finally:
         service.close()
 
@@ -172,7 +172,7 @@ def test_request_made_after_the_final_step_is_not_applied_and_the_run_completes(
         record_checkpoints(store, run, stage)
         # Requested after the last step, while the Run still shows training.
         run_control.request(store, run["id"], action)
-        assert (Path(run["directory"]) / REQUEST_FILE).is_file()
+        assert (Path(run["directory"]) / "logs" / REQUEST_FILE).is_file()
 
     monkeypatch.setattr("musubi_gui.run_execution.record_checkpoints", request_after_training)
     try:
@@ -205,9 +205,9 @@ def test_alternating_wan_save_now_and_save_and_stop_give_restorable_pairs(tmp_pa
         stopped = wait_for(service, run["id"], "stopped", device_released=True)
         assert stopped["stop_kind"] == "save"
         assert 0 < saved["step"] < stop["step"] < 12
-        checkpoints = Path(stopped["directory"]) / "checkpoints"
+        state_directory = Path(stopped["directory"]) / "state"
         # Named by the low expert's cumulative step, as interval saves are.
-        assert sorted(path.name for path in checkpoints.glob("*-low-step*-state")) == [
+        assert sorted(path.name for path in state_directory.glob("*-low-step*-state")) == [
             f"Paired-Wan-r1-low-step{saved['step']:08d}-state",
             f"Paired-Wan-r1-low-step{stop['step']:08d}-state",
         ]
@@ -243,7 +243,7 @@ def test_control_endpoint_refuses_a_run_that_is_not_training(tmp_path: Path) -> 
             f"/api/runs/{run['id']}/control", json={"action": "save"}, headers={"Origin": "http://example.test"}
         )
         assert foreign.status_code == 403
-        assert not (Path(client.get(f"/api/runs/{run['id']}").json()["directory"]) / REQUEST_FILE).exists()
+        assert not (Path(client.get(f"/api/runs/{run['id']}").json()["directory"]) / "logs" / REQUEST_FILE).exists()
 
 
 def test_sample_now_needs_previews() -> None:
@@ -262,10 +262,11 @@ def test_an_outcome_the_record_could_not_take_is_collected_later(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     store = RunStore(tmp_path)
+    (tmp_path / "logs").mkdir()
     run = store.create({"id": "run", "status": "training", "directory": str(tmp_path), "stages": []})
     run = run_control.request(store, run["id"], "save")
     pending = run["control_request"]
-    write_json(tmp_path / HANDLED_FILE, {"id": pending["id"], "action": "save", "step": 3})
+    write_json(tmp_path / "logs" / HANDLED_FILE, {"id": pending["id"], "action": "save", "step": 3})
     original = store.update
 
     def unavailable_record(run_id: str, change: Any) -> dict[str, Any]:
@@ -276,19 +277,20 @@ def test_an_outcome_the_record_could_not_take_is_collected_later(
         run_control.collect(store, run)
     monkeypatch.setattr(store, "update", original)
     # The outcome is kept for the next check, which records it and frees the controls.
-    assert (tmp_path / HANDLED_FILE).is_file()
+    assert (tmp_path / "logs" / HANDLED_FILE).is_file()
     assert run_control.collect(store, run) == {**store.get("run")["controls"][0]}
     collected = store.get("run")
     assert "control_request" not in collected
     assert [(entry["id"], entry["step"]) for entry in collected["controls"]] == [(pending["id"], 3)]
-    assert not (tmp_path / HANDLED_FILE).exists()
+    assert not (tmp_path / "logs" / HANDLED_FILE).exists()
 
 
 def test_collecting_an_outcome_again_records_it_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store = RunStore(tmp_path)
+    (tmp_path / "logs").mkdir()
     run = store.create({"id": "run", "status": "training", "directory": str(tmp_path), "stages": []})
     pending = run_control.request(store, run["id"], "save")["control_request"]
-    write_json(tmp_path / HANDLED_FILE, {"id": pending["id"], "action": "save", "step": 3})
+    write_json(tmp_path / "logs" / HANDLED_FILE, {"id": pending["id"], "action": "save", "step": 3})
     # The handled file survives the first collection, as when removing it failed.
     monkeypatch.setattr(Path, "unlink", lambda self, missing_ok=False: None)
     first = run_control.collect(store, run)

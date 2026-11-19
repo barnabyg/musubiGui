@@ -50,8 +50,8 @@ def add_run(service: RunService, token: str, status: str = "completed", **detail
     settings = load_settings(service.root)
     directory = Path(settings.output_root) / "runs" / token
     cache = Path(settings.cache_root) / "runs" / token
-    (directory / "checkpoints").mkdir(parents=True)
-    (directory / "checkpoints" / "trained.safetensors").write_bytes(b"x" * 1000)
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / "trained.safetensors").write_bytes(b"x" * 1000)
     cache.mkdir(parents=True)
     (cache / "latents.safetensors").write_bytes(b"y" * 500)
     run = service.submit(
@@ -158,7 +158,7 @@ def test_a_run_with_live_processes_to_reconcile_is_refused(state: Path, service:
 def test_a_run_that_a_waiting_segment_needs_is_refused(state: Path, service: RunService, status: str) -> None:
     client = client_for(state, service)
     source = add_run(service, "source")
-    state_path = str(Path(source["directory"]) / "checkpoints" / "lora-state")
+    state_path = str(Path(source["directory"]) / "state" / "lora-state")
     segment = add_run(
         service, "segment", status=status, resume_of=source["id"], state_source={"path": state_path, "files": {}}
     )
@@ -181,7 +181,7 @@ def test_a_stage_argument_counts_as_needing_the_run(state: Path, service: RunSer
     # A retry of a cancelled segment has no state_source; only its --resume argument points at the source.
     client = client_for(state, service)
     source = add_run(service, "source")
-    state_path = str(Path(source["directory"]) / "checkpoints" / "lora-state")
+    state_path = str(Path(source["directory"]) / "state" / "lora-state")
     stage = {"name": "train", "args": ["python", "--resume", state_path], "status": "pending"}
     add_run(service, "retry", status="prepared", stages=[stage])
     assert client.post(f"/api/runs/{source['id']}/delete", json={"confirmed": True}).status_code == 409
@@ -318,7 +318,7 @@ def test_a_locked_file_leaves_the_run_visible_and_it_can_be_deleted_again(
     client = client_for(state, service)
     run = add_run(service, "first", status="prepared")
     directory, cache = folders(run)
-    locked = directory / "checkpoints" / "trained.safetensors"
+    locked = directory / "trained.safetensors"
     (directory / "other.log").write_text("removed even though the checkpoint is locked", encoding="utf-8")
     with locked.open("rb"):
         result = client.post(f"/api/runs/{run['id']}/delete", json={"confirmed": True})
@@ -354,7 +354,7 @@ def test_a_locked_file_leaves_the_run_visible_and_it_can_be_deleted_again(
 def test_a_briefly_held_file_does_not_fail_the_delete(state: Path, service: RunService) -> None:
     client = client_for(state, service)
     run = add_run(service, "first")
-    stream = (Path(run["directory"]) / "checkpoints" / "trained.safetensors").open("rb")
+    stream = (Path(run["directory"]) / "trained.safetensors").open("rb")
     threading.Timer(0.2, stream.close).start()
     assert client.post(f"/api/runs/{run['id']}/delete", json={"confirmed": True}).json()["deleted"]
     assert not Path(run["directory"]).exists()
@@ -441,7 +441,7 @@ def test_a_run_under_a_root_no_longer_configured_is_refused_until_the_root_retur
     [
         ("directory", "output"),
         ("directory", "output/runs"),
-        ("directory", "output/runs/first/checkpoints"),
+        ("directory", "output/runs/first/config"),
         ("directory", "outside"),
         ("cache", "cache"),
         ("cache", "cache/runs"),
@@ -476,7 +476,7 @@ def test_a_run_folder_replaced_by_a_link_is_refused_and_its_target_survives(
     refused = client.post(f"/api/runs/{run['id']}/delete", json={"confirmed": True})
     assert refused.status_code == 409
     assert "link" in refused.json()["detail"]
-    assert (Path(other["directory"]) / "checkpoints" / "trained.safetensors").exists()
+    assert (Path(other["directory"]) / "trained.safetensors").exists()
 
 
 def test_a_link_inside_a_run_folder_is_removed_without_following_it(

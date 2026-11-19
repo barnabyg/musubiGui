@@ -1,10 +1,22 @@
 # Run outputs
 
 Open **Stage logs and diagnostics** in Run Overview. Select the output folder path and
-paste it into File Explorer. Open `checkpoints` to collect LoRAs. A checkpoint and its
-saved-state folder use the frozen Job name and revision, for example
-`My-Job-r2.safetensors` and `My-Job-r2-state`. Alternating Wan filenames identify each
-expert and its step or phase. Every Run has its own folder.
+paste it into File Explorer. Collect LoRAs directly from the Run folder. A checkpoint
+and its saved-state folder use the frozen Job name and revision, for example
+`My-Job-r2.safetensors` and `state/My-Job-r2-state/`. Alternating Wan filenames identify
+each expert and its step or phase.
+
+The Run creates subfolders as it needs them.
+
+| Subfolder  | Contents                                                             |
+| ---------- | -------------------------------------------------------------------- |
+| `media/`   | Frozen training media, captions and any separate audio               |
+| `samples/` | Generated media, including native previews under `samples/sample/`   |
+| `state/`   | Optimizer and training states used to resume                         |
+| `config/`  | Frozen inputs, dataset configuration, preview prompts and provenance |
+| `logs/`    | Stage logs, timing and performance reports, and training bookkeeping |
+
+Retries and resumed segments use the same layout.
 
 On **Samples**, select a generated image, video or audio file to view it, inspect its
 metadata or download it. Files the browser cannot preview still offer a download.
@@ -43,7 +55,8 @@ From the repository root in PowerShell 7, launch the isolated CPU fixture.
 
 Review and start a seeded Wan Job. Open its completed Run and expand **Stage logs and
 diagnostics**. Paste the output path into File Explorer and verify the low- and high-noise
-checkpoints are present. Choose **Samples**, play the generated video and use **Refresh
+checkpoint files are directly in the Run folder, with saved states under `state/` and
+generated videos under `samples/`. Choose **Samples**, play the generated video and use **Refresh
 outputs**. Expect the selected video to stay selected and keep playing. Repeat at a narrow
 viewport.
 

@@ -125,7 +125,7 @@ def test_review_toml_matches_the_materialized_file_after_path_substitution(works
         prepared = wait_for(service, run["id"], "prepared", device_released=True)
     finally:
         service.close()
-    executed = Path(prepared["directory"], "dataset.toml").read_text(encoding="utf-8")
+    executed = Path(prepared["directory"], "config", "dataset.toml").read_text(encoding="utf-8")
     expected = (
         review["dataset_toml"]
         .replace(review["paths"]["snapshot"].replace("\\", "/"), Path(prepared["directory"]).as_posix())
@@ -161,13 +161,13 @@ def test_h3_with_two_video_datasets_prepares_trains_and_retries_with_both_jsonl_
         completed = wait_for(service, run["id"], "completed", device_released=True)
         assert completed["checkpoints"]
         directory = Path(completed["directory"])
-        native = tomllib.loads((directory / "dataset.toml").read_text(encoding="utf-8"))
+        native = tomllib.loads((directory / "config" / "dataset.toml").read_text(encoding="utf-8"))
         assert [section["video_jsonl_file"] for section in native["datasets"]] == [
-            (directory / "dataset-1.jsonl").as_posix(),
-            (directory / "dataset-2.jsonl").as_posix(),
+            (directory / "config" / "dataset-1.jsonl").as_posix(),
+            (directory / "config" / "dataset-2.jsonl").as_posix(),
         ]
         assert [section.get("num_repeats") for section in native["datasets"]] == [None, 3]
-        lines = (directory / "dataset-2.jsonl").read_text(encoding="utf-8").splitlines()
+        lines = (directory / "config" / "dataset-2.jsonl").read_text(encoding="utf-8").splitlines()
         assert len(lines) == 2
         assert all(Path(json.loads(line)["audio_path"]).is_file() for line in lines)
         expected = tomllib.loads(
@@ -180,9 +180,9 @@ def test_h3_with_two_video_datasets_prepares_trains_and_retries_with_both_jsonl_
         service.store.update(run["id"], lambda record: record.update(status="failed"))
         retried = service.retry(run["id"])
         retry_directory = Path(retried["directory"])
-        retry_native = tomllib.loads((retry_directory / "dataset.toml").read_text(encoding="utf-8"))
+        retry_native = tomllib.loads((retry_directory / "config" / "dataset.toml").read_text(encoding="utf-8"))
         for number, section in enumerate(retry_native["datasets"], 1):
-            metadata = retry_directory / f"dataset-{number}.jsonl"
+            metadata = retry_directory / "config" / f"dataset-{number}.jsonl"
             assert section["video_jsonl_file"] == metadata.as_posix()
             assert str(metadata) in retried["input_files"]
             assert section["cache_directory"].startswith(Path(retried["cache"]).as_posix())
@@ -299,13 +299,13 @@ def test_h3_images_review_prepare_train_sample_and_retry_with_the_right_flags(
         run = service.prepare(job["id"], start=True)
         completed = wait_for(service, run["id"], "completed", device_released=True)
         directory = Path(completed["directory"])
-        native = tomllib.loads((directory / "dataset.toml").read_text(encoding="utf-8"))
+        native = tomllib.loads((directory / "config" / "dataset.toml").read_text(encoding="utf-8"))
         images = native["datasets"][0]
         assert images["image_directory"].endswith("/media/set-1" if combined else "/media")
         assert images["cache_directory"].endswith("/dataset-1-images" if combined else "/dataset-images")
         assert "video_jsonl_file" not in images
         if combined:
-            lines = (directory / "dataset-2.jsonl").read_text(encoding="utf-8").splitlines()
+            lines = (directory / "config" / "dataset-2.jsonl").read_text(encoding="utf-8").splitlines()
             assert [Path(json.loads(line)["video_path"]).suffix for line in lines] == [".mp4"]
             assert native["datasets"][1]["cache_directory"] != images["cache_directory"]
         # The sample stays a video with audio.
@@ -336,7 +336,7 @@ def test_a_mixed_folder_works_for_h3_with_its_clips_alone_in_the_jsonl(workspace
         run = wait_for(service, service.prepare(job["id"])["id"], "prepared", device_released=True)
     finally:
         service.close()
-    records = Path(run["directory"], "dataset.jsonl").read_text(encoding="utf-8").splitlines()
+    records = Path(run["directory"], "config", "dataset.jsonl").read_text(encoding="utf-8").splitlines()
     assert [Path(json.loads(line)["video_path"]).suffix for line in records] == [".mp4"]
 
 
@@ -351,8 +351,17 @@ def test_a_video_only_h3_jobs_arguments_match_a_fixed_regression_value() -> None
     stages = build_stages(job, settings, Path("run"), Path("cache"), {"video"})
     train = next(stage for stage in stages if stage.name == "train")
     assert train.args[train.args.index("--output_name") + 1] == "n-r1"
-    # Normalize only the intentional filename change, preserving the original recipe regression check.
-    text = json.dumps([[stage.name, stage.args] for stage in stages]).replace("n-r1", f"h3-{job.id}")
+    # Normalize the frozen Run's filename and layout changes, preserving the original recipe regression check.
+    output = Path("run")
+    checkpoint = output / "n-r1.safetensors"
+    legacy_paths = {
+        str(output / "config" / "dataset.toml"): str(output / "dataset.toml"),
+        str(output): str(output / "checkpoints"),
+        str(checkpoint): str(output / "checkpoints" / checkpoint.name),
+    }
+    text = json.dumps([[stage.name, [legacy_paths.get(arg, arg) for arg in stage.args]] for stage in stages]).replace(
+        "n-r1", f"h3-{job.id}"
+    )
     # Computed before H3 accepted images. The paths use this platform's separators; the suite runs on Windows.
     expected = "e272a88e6eee7d18141e853b952f88ec5c0aea54fab1995b6724e3d4dbb97c96"  # pragma: allowlist secret
     assert hashlib.sha256(text.encode()).hexdigest() == expected

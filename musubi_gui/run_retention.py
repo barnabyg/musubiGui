@@ -1,7 +1,6 @@
 """Applying each Run's frozen checkpoint retention policy, inline or coalesced on a background thread."""
 
 import threading
-from pathlib import Path
 from typing import Any
 
 from musubi_gui.checkpoint_retention import (
@@ -12,6 +11,7 @@ from musubi_gui.checkpoint_retention import (
     retention_scope,
 )
 from musubi_gui.redaction import redact
+from musubi_gui.run_paths import RunPaths
 from musubi_gui.run_store import RunStore, is_active
 
 
@@ -123,11 +123,17 @@ class RetentionScheduler:
     def _stamp(self, runs: list[dict[str, Any]]) -> tuple[tuple[str, int, int], ...]:
         stamp = []
         for run in runs:
-            root = Path(run["directory"]) / "checkpoints"
+            paths = RunPaths.from_record(run)
             stamp += [
                 (str(path), path.stat().st_mtime_ns, path.stat().st_size)
-                for path in root.rglob("*")
-                if path.is_file() and ".retention" not in path.parts
+                for path in paths.directory.glob("*.safetensors")
+                if path.is_file()
+            ]
+            stamp += [
+                (str(path), path.stat().st_mtime_ns, path.stat().st_size)
+                for folder in paths.state.glob("*-state")
+                for path in folder.rglob("*")
+                if path.is_file()
             ]
         return tuple(sorted(stamp))
 

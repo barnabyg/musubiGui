@@ -84,9 +84,9 @@ def test_logs_route_reports_progress_from_the_training_log_only(tmp_path: Path) 
     app.include_router(runs_router(service))
     client = TestClient(app)
     assert client.get(f"/api/runs/{run['id']}/logs").json()["progress"] is None
-    (tmp_path / "run" / "latent_cache.log").write_text("steps: 9/9\n", encoding="utf-8")
+    (tmp_path / "run" / "logs" / "latent_cache.log").write_text("steps: 9/9\n", encoding="utf-8")
     assert client.get(f"/api/runs/{run['id']}/logs").json()["progress"] is None
-    (tmp_path / "run" / "train.log").write_text("x" * 100_000 + "\nsteps: 1/2 loss=0.5\n", encoding="utf-8")
+    (tmp_path / "run" / "logs" / "train.log").write_text("x" * 100_000 + "\nsteps: 1/2 loss=0.5\n", encoding="utf-8")
     assert client.get(f"/api/runs/{run['id']}/logs").json()["progress"]["step"] == 1
 
 
@@ -116,7 +116,7 @@ def test_paired_progress_keeps_reported_eta_with_phase_scope(tmp_path: Path) -> 
             ]
         ),
     )
-    (tmp_path / "run" / "train-high-00000004.log").write_text(
+    (tmp_path / "run" / "logs" / "train-high-00000004.log").write_text(
         "steps: 50%| | 2/4 [00:20<00:20, 10s/it, loss=0.5]\n", encoding="utf-8"
     )
     progress = service.progress(run["id"])
@@ -185,7 +185,7 @@ def test_restored_segment_progress_reports_global_steps(
     service.store.update(
         run["id"], lambda r: r.update(segment=segment, stages=[{"name": "train", "status": "running", "args": []}])
     )
-    (tmp_path / "run" / "train.log").write_text("steps: 50%| | 1/2 [00:10<00:10, 10s/it]\n", encoding="utf-8")
+    (tmp_path / "run" / "logs" / "train.log").write_text("steps: 50%| | 1/2 [00:10<00:10, 10s/it]\n", encoding="utf-8")
     progress = service.progress(run["id"])
     assert progress is not None
     assert (progress["step"], progress["total"]) == expected

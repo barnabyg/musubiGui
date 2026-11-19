@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from musubi_gui.checkpoint_names import training_saves
+from musubi_gui.run_paths import RunPaths
 from musubi_gui.safetensors_file import complete_safetensors
 from musubi_gui.saved_state import inspect_state
 from musubi_gui.settings import within_root
@@ -66,7 +67,7 @@ def finish_phase(run: dict[str, Any], stage: dict[str, Any]) -> dict[str, Any]:
     expected = phase[f"{phase['expert']}_before"] + phase["steps"]
     checkpoint = Path(phase["checkpoint"])
     complete_safetensors(checkpoint)
-    directory = Path(argument(stage["args"], "--output_dir")) / (argument(stage["args"], "--output_name") + "-state")
+    directory = RunPaths.from_record(run).state / (argument(stage["args"], "--output_name") + "-state")
     state = sealed_state(run, directory, expected)
     state["checkpoint"] = {"path": str(checkpoint), "steps": expected, "sha256": digest_file(checkpoint)}
     return state
@@ -77,12 +78,12 @@ def paired_saved_states(run: dict[str, Any]) -> list[dict[str, Any]]:
     previous = {entry["id"]: entry for entry in run.get("saved_states", [])}
     latest = dict(run.get("pair_sources", {}))
     results = []
+    paths = RunPaths.from_record(run)
     for stage in run["stages"]:
         phase = stage.get("training")
         if not phase:
             continue
-        output = Path(argument(stage["args"], "--output_dir"))
-        for steps, directory in training_saves(stage, output, "-state"):
+        for steps, directory in training_saves(stage, paths.state, "-state"):
             identity = hashlib.sha256(str(directory).encode()).hexdigest()[:24]
             entry: dict[str, Any] = {
                 "id": identity,
@@ -97,7 +98,7 @@ def paired_saved_states(run: dict[str, Any]) -> list[dict[str, Any]]:
             try:
                 expected = phase[f"{phase['expert']}_before"] + steps
                 state = sealed_state(run, directory, expected)
-                checkpoint = directory.with_name(directory.name.removesuffix("-state") + ".safetensors")
+                checkpoint = paths.directory / (directory.name.removesuffix("-state") + ".safetensors")
                 complete_safetensors(checkpoint)
                 state["checkpoint"] = {"path": str(checkpoint), "steps": expected, "sha256": digest_file(checkpoint)}
                 old = previous.get(identity)

@@ -18,6 +18,7 @@ from pydantic import ValidationError
 
 from musubi_gui.job_models import Job
 from musubi_gui.run_chains import Chain, chains, step_range
+from musubi_gui.run_paths import RunPaths
 
 Tier = Literal["editable", "warned", "reprepare", "new_run"]
 
@@ -251,7 +252,7 @@ def _saved_step(run: dict[str, Any]) -> tuple[bool, int | None]:
 
 def _state_folders(run: dict[str, Any]) -> list[Path]:
     try:
-        folders = (Path(run["directory"]) / "checkpoints").glob("*-state")
+        folders = (RunPaths.from_record(run).state).glob("*-state")
         return [folder for folder in folders if folder.is_dir() and not folder.name.startswith(".")]
     except OSError:
         return []

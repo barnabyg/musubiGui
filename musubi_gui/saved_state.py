@@ -11,6 +11,7 @@ from typing import Any
 import psutil
 
 from musubi_gui.processes import matching_process, observed_tree, terminate_owned
+from musubi_gui.run_paths import RunPaths
 from musubi_gui.safetensors_file import safetensors_header
 from musubi_gui.settings import within_root
 from musubi_gui.snapshots import digest_file
@@ -30,7 +31,9 @@ def inspect_state(
         "error": "",
     }
     try:
-        within_root(directory, [Path(run["directory"]) / "checkpoints"])
+        paths = RunPaths.from_record(run)
+        within_root(directory, [paths.directory])
+        within_root(directory, [paths.state])
         files = {}
         for name in REQUIRED:
             path = within_root(directory / name, [directory])
@@ -114,7 +117,7 @@ def state_probe(args: list[str], cancelled: Event | None) -> tuple[int, str]:
 def discover_states(run: dict[str, Any]) -> list[dict[str, Any]]:
     previous = {entry["id"]: entry for entry in run.get("saved_states", [])}
     states = []
-    for directory in sorted((Path(run["directory"]) / "checkpoints").glob("*-state")):
+    for directory in sorted((RunPaths.from_record(run).state).glob("*-state")):
         if directory.is_dir():
             state_id = hashlib.sha256(directory.name.encode()).hexdigest()[:24]
             states.append(inspect_state(run, directory, previous.get(state_id)))

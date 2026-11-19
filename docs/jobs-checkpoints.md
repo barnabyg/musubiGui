@@ -15,8 +15,8 @@ can exceed the limit. Sampling results are never pruned.
 
 During training a separate worker checks about every five seconds and at phase completion. It
 only prunes older validated saves once a newer complete save exists. Incomplete saves and
-unknown files are kept. Files are first quarantined under the Run's checkpoints folder;
-a durable journal allows interrupted removals to resume at the next check or saved-state
+unknown files are kept. Files are first quarantined under the Run's `logs/.retention/` folder.
+A durable journal allows interrupted removals to resume at the next check or saved-state
 inspection. Run details show removal counts, protected exceptions and errors. A removal
 failure does not fail training; inspect its reported error before removing a quarantine
 remainder manually. Quarantined and intentionally pruned artifacts are not offered as outputs

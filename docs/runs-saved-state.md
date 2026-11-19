@@ -45,7 +45,7 @@ $resumeWorkspace = ".cache/resume-check-$([guid]::NewGuid().ToString('N'))"
 
 This isolated CPU fixture needs no models or GPU. In a fixture Job set 50 steps,
 save every step and enable Save optimizer/training state. Prepare and start,
-wait for interval states in the output folder's `checkpoints` subfolder, then
+wait for interval states in the output folder's `state/` subfolder, then
 choose **Stop now**. Close and
 relaunch the saved workspace with the command below, open the stopped Run and
 choose **Resume**. Open **Choose an earlier save** and select a valid state.
@@ -165,7 +165,7 @@ the Job, so the Job's current revision resumes with them. Resolution, frames, fr
 extraction and bucketing still need a new Run for now, though they only change caches.
 
 Such a segment takes a new snapshot of the datasets into its own folder, with its own
-`snapshot.json`, `dataset.toml` and cache folder, and records its own `manifest`,
+`config/snapshot.json`, `config/dataset.toml` and cache folder, and records its own `manifest`,
 `input_files` and `segment.dataset_changes`. It is queued to prepare and trains after it, from
 the saved step with the same step numbering as any resumed segment. Each cache stage first
 copies the source Run's verified cache files of every item whose cache inputs are unchanged,

@@ -56,7 +56,7 @@ def stage(run: dict[str, Any], name: str) -> dict[str, Any]:
 
 
 def stage_log(run: dict[str, Any], name: str) -> str:
-    return (Path(run["directory"]) / f"{name}.log").read_text(encoding="utf-8", errors="replace")
+    return (Path(run["directory"]) / "logs" / f"{name}.log").read_text(encoding="utf-8", errors="replace")
 
 
 def stopped_with_state(service: RunService, job_id: str) -> tuple[dict[str, Any], int]:
@@ -112,8 +112,10 @@ def test_editing_one_caption_recaches_only_that_items_text_and_continues_from_th
 
         # The segment records its own snapshot, with the new caption, and its own cache folder.
         directory = Path(completed["directory"])
-        assert (directory / "snapshot.json").is_file()
-        assert argument(stage(completed, "train")["args"], "--dataset_config") == str(directory / "dataset.toml")
+        assert (directory / "config" / "snapshot.json").is_file()
+        assert argument(stage(completed, "train")["args"], "--dataset_config") == str(
+            directory / "config" / "dataset.toml"
+        )
         edited = next(item for item in completed["manifest"]["items"] if item["name"] == "still0.png")
         assert edited["caption"]["text"] == NEW_CAPTION
         assert Path(edited["snapshot_path"]).with_suffix(".txt").read_text(encoding="utf-8") == NEW_CAPTION
@@ -131,7 +133,7 @@ def test_editing_one_caption_recaches_only_that_items_text_and_continues_from_th
         assert "cached 1 items, skipped 2 existing" in stage_log(completed, "text_cache")
         assert stage(completed, "latent_cache")["status"] == "reused"
         assert stage(completed, "latent_cache")["reused_from"] == stopped["id"]
-        assert not (directory / "latent_cache.log").exists()
+        assert not (directory / "logs" / "latent_cache.log").exists()
         assert stage(completed, "text_cache")["status"] == "completed"
         assert "Caching 1 changed items: still0.png." in stage(completed, "text_cache")["cache_reason"]
 
@@ -170,7 +172,9 @@ def test_added_media_is_cached_alone_and_moved_items_keep_their_caches(tmp_path:
         completed = wait_for(service, service.resume(stopped["id"], revision)["id"], "completed", device_released=True)
         assert completed["segment"]["step_offset"] == step
         assert completed["job"]["config"]["repeats"] == 2
-        assert "num_repeats = 2" in (Path(completed["directory"]) / "dataset.toml").read_text(encoding="utf-8")
+        assert "num_repeats = 2" in (Path(completed["directory"]) / "config" / "dataset.toml").read_text(
+            encoding="utf-8"
+        )
         caches = item_caches(completed)
         added = item_id(completed, "still05.png")
         assert {key for key in caches if key[0] == added} == {
@@ -241,7 +245,7 @@ def test_alternating_wan_resumes_its_paired_states_with_a_refreshed_caption(tmp_
         assert {key: value for key, value in caches.items() if key != changed} == {
             key: value for key, value in source_caches.items() if key != changed
         }
-        dataset = str(Path(completed["directory"]) / "dataset.toml")
+        dataset = str(Path(completed["directory"]) / "config" / "dataset.toml")
         assert {argument(entry["args"], "--dataset_config") for entry in completed["stages"]} == {dataset}
         assert {expert: state["optimizer_step"] for expert, state in completed["expert_states"].items()} == {
             "low": 30,

@@ -65,7 +65,10 @@ test('Wan and H3 prepare and train through the GUI with frozen captions cache re
         next.stages.find((stage) => stage.name === 'text_cache')?.status,
       ).toBe('completed');
       const frozen = JSON.parse(
-        await readFile(path.join(first.directory, 'inputs.json'), 'utf8'),
+        await readFile(
+          path.join(first.directory, 'config', 'inputs.json'),
+          'utf8',
+        ),
       ) as { manifest: { items: { caption: { text: string } }[] } };
       expect(frozen.manifest.items[0].caption.text).toBe(originalCaption);
       await page

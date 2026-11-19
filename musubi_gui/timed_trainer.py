@@ -6,6 +6,7 @@ import importlib.util
 import os
 import runpy
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +14,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from musubi_gui.checkpoint_names import expert_step_name  # noqa: E402
 from musubi_gui.resume_learning_rate import LearningRateOverride  # noqa: E402
+from musubi_gui.run_paths import RunPaths  # noqa: E402
 from musubi_gui.step_offset import ENVIRONMENT, OffsetStepName, StepSchedule  # noqa: E402
 from musubi_gui.trainer_control import ENVIRONMENT as CONTROL_ENVIRONMENT  # noqa: E402
 from musubi_gui.trainer_control import TrainerControl, post_optimizer_step  # noqa: E402
@@ -82,22 +84,23 @@ def observe_trainer(
     def on_sample(self: Any, *args: Any, **kwargs: Any) -> Any:
         nonlocal succeeded
         namespace, step = args[1], global_step(int(args[3]))
-        if step != int(args[3]):
-            # Preview filenames use the steps argument. Upstream rechecks it against the interval, so the
-            # interval briefly equals the global step being sampled.
-            interval = namespace.sample_every_n_steps
-            namespace.sample_every_n_steps = step
-            try:
-                result = sample(self, *args[:3], step, *args[4:], **kwargs)
-            finally:
-                namespace.sample_every_n_steps = interval
-        else:
-            result = sample(self, *args, **kwargs)
+        output = namespace.output_dir
+        paths = RunPaths(Path(output))
+        interval = namespace.sample_every_n_steps
+        try:
+            namespace.output_dir = str(paths.samples)
+            if step != int(args[3]):
+                # Upstream rechecks the interval using the step it puts in preview filenames.
+                namespace.sample_every_n_steps = step
+            result = sample(self, *args[:3], step, *args[4:], **kwargs)
+        finally:
+            namespace.output_dir = output
+            namespace.sample_every_n_steps = interval
         # Upstream can return successfully when no prompt/output exists.
         try:
             succeeded = any(
                 file.stat().st_size > 0
-                for file in (Path(namespace.output_dir) / "sample").glob(f"*_{step:06d}_*")
+                for file in paths.previews.glob(f"*_{step:06d}_*")
                 if file.suffix.lower() in {".mp4", ".png"}
             )
         except OSError:
@@ -145,6 +148,24 @@ def observe_trainer(
             setattr(trainer, name, stop_after_save(getattr(trainer, name)))
 
 
+def route_saved_states(train_utils: Any) -> None:
+    """Redirect pinned state helpers for the whole save, including their cleanup of older states."""
+
+    def route(save: Callable[..., None]) -> Callable[..., None]:
+        def save_in_state(args: argparse.Namespace, *rest: Any, **kwargs: Any) -> None:
+            output = args.output_dir
+            args.output_dir = str(RunPaths(Path(output)).state)
+            try:
+                save(args, *rest, **kwargs)
+            finally:
+                args.output_dir = output
+
+        return save_in_state
+
+    for name in ("save_and_remove_state_stepwise", "save_and_remove_state_on_epoch_end", "save_state_on_train_end"):
+        setattr(train_utils, name, route(getattr(train_utils, name)))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--timing-file", type=Path, required=True)
@@ -159,8 +180,8 @@ def main() -> None:
         offset = os.environ.get("MUSUBI_EXPERT_STEP_OFFSET") if options.family == "wan" else None
         # Alternating Wan phases already name saves by cumulative expert step.
         step_offset = int(os.environ.get(ENVIRONMENT) or 0) if offset is None else 0
-        if offset is not None or step_offset:
-            train_utils: Any = importlib.import_module("musubi_tuner.utils.train_utils")
+        train_utils: Any = importlib.import_module("musubi_tuner.utils.train_utils")
+        route_saved_states(train_utils)
         if offset is not None:
             # Pinned trainer formats these at the save boundary. output_name already
             # includes the cumulative expert step; str.format ignores the local step.

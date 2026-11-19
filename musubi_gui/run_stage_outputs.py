@@ -5,6 +5,7 @@ from typing import Any
 
 from musubi_gui.checkpoint_dedup import remove_final_duplicates
 from musubi_gui.media_probe import inspect as inspect_media
+from musubi_gui.run_paths import RunPaths
 from musubi_gui.run_store import RunStore
 from musubi_gui.snapshots import digest_file
 from musubi_gui.step_offset import segment_step_offset
@@ -18,9 +19,15 @@ def record_checkpoints(store: RunStore, run: dict[str, Any], stage: dict[str, An
     from musubi_gui.preview import validate_previews
 
     run_id = run["id"]
-    validate_previews(stage["args"], run["job"]["family"], segment_step_offset(run, stage))
+    paths = RunPaths.from_record(run)
+    validate_previews(
+        stage["args"],
+        run["job"]["family"],
+        segment_step_offset(run, stage),
+        directory=paths.previews,
+    )
     removed = remove_final_duplicate_saves(run, stage)
-    checkpoints = list((Path(run["directory"]) / "checkpoints").glob("*.safetensors"))
+    checkpoints = list(paths.directory.glob("*.safetensors"))
     if not any(file.stat().st_size > 0 for file in checkpoints):
         raise ValueError("Training exited successfully but no nonempty checkpoint was found.")
     store.update(
@@ -76,9 +83,10 @@ def remove_final_duplicate_saves(run: dict[str, Any], stage: dict[str, Any]) -> 
     args = stage["args"]
     if "--output_name" not in args or "--max_train_steps" not in args:
         return []
-    log_file = Path(run["directory"]) / stage_log(stage)
+    paths = RunPaths.from_record(run)
+    log_file = paths.logs / stage_log(stage)
     removed, problems = remove_final_duplicates(
-        Path(run["directory"]) / "checkpoints",
+        paths,
         args[args.index("--output_name") + 1],
         segment_step_offset(run, stage) + int(args[args.index("--max_train_steps") + 1]),
     )

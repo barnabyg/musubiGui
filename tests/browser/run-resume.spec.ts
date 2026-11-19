@@ -182,13 +182,13 @@ test('a stopped Run resumes saved optimizer state through the UI after a backend
     await expect
       .poll(
         async () => {
-          const checkpoints = path.join(original.directory, 'checkpoints');
-          const folders = await readdir(checkpoints).catch(() => []);
+          const stateFolder = path.join(original.directory, 'state');
+          const folders = await readdir(stateFolder).catch(() => []);
           const complete = await Promise.all(
             folders
               .filter((name) => name.endsWith('-state'))
               .map((name) =>
-                exists(path.join(checkpoints, name, 'scheduler.bin')),
+                exists(path.join(stateFolder, name, 'scheduler.bin')),
               ),
           );
           return complete.filter(Boolean).length >= 2;
@@ -251,9 +251,7 @@ test('a stopped Run resumes saved optimizer state through the UI after a backend
       step_offset: 1,
       additional_steps: 1,
     });
-    const segmentCheckpoints = await readdir(
-      path.join(detail.directory, 'checkpoints'),
-    );
+    const segmentCheckpoints = await readdir(detail.directory);
     // The segment's interval save at global step 2 repeated its final save and was removed.
     expect(detail.removed_duplicates).toEqual(
       expect.arrayContaining([expect.stringMatching(/-step00000002-state$/)]),

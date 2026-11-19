@@ -38,7 +38,7 @@ def test_native_previews_are_frozen_discovered_and_do_not_require_final_sampling
     try:
         run = service.prepare(job.id)
         prepared = wait_for(service, run["id"], "prepared")
-        prompts = Path(prepared["directory"], "previews.json")
+        prompts = Path(prepared["directory"], "config", "previews.json")
         assert str(prompts) in prepared["input_files"]
         assert json.loads(prompts.read_text(encoding="utf-8"))[0]["prompt"] == config.sample_prompt
         assert not any(stage["name"] == "generate" for stage in prepared["stages"])
@@ -50,7 +50,7 @@ def test_native_previews_are_frozen_discovered_and_do_not_require_final_sampling
         assert all(output["status"] == "available" for output in previews)
         assert all(output["kind"] == ("image" if frames == 1 else "video") for output in previews)
         assert completed["checkpoints"]
-        timing = json.loads(Path(completed["directory"], "timing-train.json").read_text(encoding="utf-8"))
+        timing = json.loads(Path(completed["directory"], "logs", "timing-train.json").read_text(encoding="utf-8"))
         assert timing["previews"]["completed"] == 3
         assert timing["previews"]["seconds"] > 0
         assert timing["previews"]["active"] is None
@@ -61,7 +61,7 @@ def test_native_previews_are_frozen_discovered_and_do_not_require_final_sampling
         last.unlink()
         args = next(stage["args"] for stage in completed["stages"] if stage["name"] == "train")
         with pytest.raises(ValueError, match="preview at step 6 is missing"):
-            validate_previews(args, family)
+            validate_previews(args, family, directory=last.parent)
         prompts.write_text("[]", encoding="utf-8")
         with pytest.raises(ValueError, match="Frozen dataset inputs changed"):
             verify_inputs(completed)
@@ -101,11 +101,11 @@ def test_retry_owns_a_separate_sealed_prompt_file(tmp_path: Path) -> None:
         original = service.prepare(job.id)
         service.cancel(original["id"])
         retried = service.retry(original["id"])
-        prompt = Path(retried["directory"], "previews.json")
+        prompt = Path(retried["directory"], "config", "previews.json")
         assert str(prompt) in retried["input_files"]
         args = next(stage["args"] for stage in retried["stages"] if stage["name"] == "train")
         assert args[args.index("--sample_prompts") + 1] == str(prompt)
-        Path(original["directory"], "previews.json").write_text("[]", encoding="utf-8")
+        Path(original["directory"], "config", "previews.json").write_text("[]", encoding="utf-8")
         verify_inputs(retried)
     finally:
         service.close()

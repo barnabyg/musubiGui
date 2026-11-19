@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from musubi_gui.recipe import Stage
-from musubi_gui.run_paths import create_run_directory
+from musubi_gui.run_paths import RunPaths, create_run_directory
 from musubi_gui.settings import Settings
 from musubi_gui.snapshots import digest_file
 from musubi_gui.wan_pair_runtime import is_paired
@@ -31,19 +31,18 @@ def retried_plan(previous: dict[str, Any], verify_inputs: Callable[[dict[str, An
     verify_inputs(previous)
     directory = create_run_directory(Path(previous["directory"]).parent, previous["job"]["name"], "retry")
     cache = create_run_directory(Path(previous["cache"]).parent, previous["job"]["name"], "retry")
-    input_files = _copy_native_inputs(previous, directory, cache)
+    input_files = _copy_native_inputs(previous, RunPaths(directory).config, cache)
     verify_inputs(previous)
+
+    def relocate(value: str) -> str:
+        return value.replace(previous["directory"], str(directory)).replace(previous["cache"], str(cache))
+
     stages = []
     for stage in previous["stages"]:
-        args = [
-            arg
-            if arg.endswith(".py")
-            else arg.replace(previous["directory"], str(directory)).replace(previous["cache"], str(cache))
-            for arg in stage["args"]
-        ]
+        args = [arg if arg.endswith(".py") else relocate(arg) for arg in stage["args"]]
         training = copy.deepcopy(stage.get("training"))
         if training:
-            training["checkpoint"] = training["checkpoint"].replace(previous["directory"], str(directory))
+            training["checkpoint"] = relocate(training["checkpoint"])
         stages.append(
             Stage(
                 stage["name"],
@@ -67,25 +66,27 @@ def retried_plan(previous: dict[str, Any], verify_inputs: Callable[[dict[str, An
     }
 
 
-def _copy_native_inputs(previous: dict[str, Any], directory: Path, cache: Path) -> dict[str, str]:
+def _copy_native_inputs(previous: dict[str, Any], config: Path, cache: Path) -> dict[str, str]:
     """Copy the dataset config and other native inputs, pointed at the new folders; returns the sealed input files."""
+    source_config = RunPaths.from_record(previous).config
     # An H3 Run has one metadata file per video section.
-    metadata = sorted(file.name for file in Path(previous["directory"]).glob("dataset*.jsonl"))
-    native_names = ["dataset.toml", *metadata, "samples.txt", "previews.json"]
-    old_native = {str(Path(previous["directory"]) / name) for name in native_names}
-    input_files = {path: value for path, value in previous.get("input_files", {}).items() if path not in old_native}
-    for name in native_names:
-        source = Path(previous["directory"]) / name
-        if source.is_file():
-            text = source.read_text(encoding="utf-8")
-            if name == "dataset.toml":
-                text = text.replace(previous["cache"].replace("\\", "/"), cache.as_posix())
-                for file in metadata:
-                    text = text.replace(
-                        json.dumps((Path(previous["directory"]) / file).as_posix(), ensure_ascii=False),
-                        json.dumps((directory / file).as_posix(), ensure_ascii=False),
-                    )
-            target = directory / name
-            target.write_text(text, encoding="utf-8")
-            input_files[str(target)] = digest_file(target)
+    metadata = sorted(source_config.glob("dataset*.jsonl"))
+    native = [source_config / "dataset.toml", source_config / "previews.json", *metadata]
+    input_files = dict(previous.get("input_files", {}))
+    config.mkdir()
+    for source in native:
+        if not source.is_file():
+            continue
+        text = source.read_text(encoding="utf-8")
+        if source.name == "dataset.toml":
+            text = text.replace(previous["cache"].replace("\\", "/"), cache.as_posix())
+            for file in metadata:
+                text = text.replace(
+                    json.dumps(file.as_posix(), ensure_ascii=False),
+                    json.dumps((config / file.name).as_posix(), ensure_ascii=False),
+                )
+        target = config / source.name
+        target.write_text(text, encoding="utf-8")
+        input_files.pop(str(source), None)
+        input_files[str(target)] = digest_file(target)
     return input_files
